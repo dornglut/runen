@@ -308,7 +308,7 @@ impl BasicBlock {
     }
 }
 
-/// One executable Core body before MIR admission.
+/// One raw Core body before MIR admission.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Body {
     pub types: TypeTable,
