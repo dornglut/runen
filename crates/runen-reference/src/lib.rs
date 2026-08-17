@@ -161,7 +161,7 @@ impl Machine {
     fn execute_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Init { dst, src } => self.initialize(dst, src),
-            Statement::Borrow { loan, kind, place } => self.begin_borrow(*loan, *kind, place),
+            Statement::Borrow { loan, kind, src } => self.begin_borrow(*loan, *kind, src),
             Statement::EndBorrow { loan } => self.end_borrow(*loan),
             Statement::Read { src } => self.read(src),
             Statement::Assign { dst, src } => self.assign(dst, src),
@@ -180,7 +180,8 @@ impl Machine {
         });
     }
 
-    fn begin_borrow(&mut self, loan: LoanId, kind: BorrowKind, place: &Place) {
+    fn begin_borrow(&mut self, loan: LoanId, kind: BorrowKind, src: &PlaceAccess) {
+        let place = self.resolve_access(src);
         let slot = self
             .active_loans
             .get_mut(loan.0 as usize)
@@ -193,11 +194,7 @@ impl Machine {
             place: place.clone(),
         });
         self.verification_events
-            .push(VerificationEvent::BorrowStart {
-                loan,
-                kind,
-                place: place.clone(),
-            });
+            .push(VerificationEvent::BorrowStart { loan, kind, place });
     }
 
     fn end_borrow(&mut self, loan: LoanId) {

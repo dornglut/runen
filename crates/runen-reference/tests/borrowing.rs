@@ -35,7 +35,7 @@ fn exclusive_loan_controls_storage_across_move_and_replacement() {
                 Statement::Borrow {
                     loan: LoanId(0),
                     kind: BorrowKind::Exclusive,
-                    place: value.clone(),
+                    src: value.clone().into(),
                 },
                 Statement::Init {
                     dst: taken.clone(),
@@ -116,7 +116,7 @@ fn loan_relative_projection_resolves_to_concrete_subplace() {
                 Statement::Borrow {
                     loan: LoanId(0),
                     kind: BorrowKind::Exclusive,
-                    place: root,
+                    src: root.into(),
                 },
                 Statement::Assign {
                     dst: PlaceAccess::loan(LoanId(0)).field(0),
@@ -169,7 +169,7 @@ fn defined_fault_ends_active_borrow_before_cleanup() {
                 Statement::Borrow {
                     loan: LoanId(0),
                     kind: BorrowKind::Shared,
-                    place: value.clone(),
+                    src: value.clone().into(),
                 },
             ],
             Terminator::Fault(Fault::new("BORROW_FAULT")),
