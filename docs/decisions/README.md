@@ -12,6 +12,8 @@ Every record identifies its current normative owner where one exists. If a decis
 - [0004 — Separate determinism and time concepts](0004-determinism-time.md)
 - [0005 — Staged rule commit and maintenance contracts](0005-rule-commit-maintenance.md)
 - [0006 — Source complexity budget](0006-source-complexity.md)
+- [0007 — Functional bias and explicit declarative boundaries](0007-authoring-bias.md)
+- [0008 — No universal realization mechanism](0008-realization-neutrality.md)
 
 ## Record format
 
