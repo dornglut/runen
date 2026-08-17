@@ -137,7 +137,7 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
 }
 
 #[test]
-fn assign_cannot_perform_first_initialization() {
+fn assign_can_initialize_never_initialized_mutable_storage() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let value = Place::local(LocalId(0));
@@ -145,19 +145,22 @@ fn assign_cannot_perform_first_initialization() {
     let body = one_block(
         types,
         vec![LocalDecl::new("value", i64_ty, true)],
-        vec![Statement::Assign {
-            dst: value.clone(),
-            src: Operand::Constant(Value::I64(1)),
-        }],
+        vec![
+            Statement::Assign {
+                dst: value.clone(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+            Statement::Read { src: value.clone() },
+        ],
     );
 
-    let error = Machine::new(body)
+    let report = Machine::new(body)
         .execute()
-        .expect_err("first initialization must use Init, even for mutable storage");
-    assert_eq!(
-        error.kind,
-        SemanticErrorKind::AssignRequiresPriorInitialization(value)
-    );
+        .expect("mutable assignment may initialize never-initialized storage");
+    assert!(report.trace.contains(&TraceEvent::Write {
+        place: value,
+        kind: WriteKind::Assign,
+    }));
 }
 
 #[test]
