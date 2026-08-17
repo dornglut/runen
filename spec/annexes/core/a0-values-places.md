@@ -70,8 +70,6 @@ First initialization does not require the containing local to be mutable.
 
 Reading a partially initialized or Dead place is invalid in safe A0 Core.
 
-`Read` is an A0 semantic operation; it does not freeze final source or later MIR read forms.
-
 ## Move
 
 `Move(src)` requires `src` to be fully initialized.
@@ -137,9 +135,9 @@ Each local is cleaned according to the destruction rules above, so partial initi
 
 For a fixed typed A0 body, A0 state transitions and destruction order are deterministic.
 
-No A0 semantic rule depends on allocator address, host-language destructor behavior, hash iteration, thread scheduling, or backend behavior.
+A0 semantics are independent of allocator addresses, host-language destruction behavior, container iteration order, thread scheduling, and backend behavior.
 
-A0 imposes no implicit execution-step budget. Cyclic control flow may diverge. A tool may externally stop an execution for resource control, but that limit is not a Runen semantic error.
+A0 imposes no implicit execution-step budget. Cyclic control flow may diverge.
 
 ## Exclusions
 
