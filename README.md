@@ -22,16 +22,21 @@ Explicitly excluded:
 - native/LLVM/GPU backends;
 - Exec and Model.
 
-See [`spec/annex-a-memory.md`](spec/annex-a-memory.md) for the A0 semantic contract.
+## Authority
 
-## Intended validation
+- [A0 semantic contract](spec/annex-a-memory.md)
+- [Architecture](ARCHITECTURE.md)
+- [Testing and validation](TESTING.md)
+- [Agent/contributor boundary](AGENTS.md)
 
-Once a Rust toolchain is available:
+## Validation
 
-```sh
-cargo fmt --all --check
-cargo test --workspace
-cargo clippy --workspace --all-targets -- -D warnings
+`cargo validate` is the single maintained local and CI validation command:
+
+```text
+cargo validate
 ```
+
+It checks locked workspace metadata, formatting, all-target tests, denied-warning all-target Clippy, diff hygiene, and that validation does not mutate repository state. GitHub Actions invokes the same command through the immutable Dornglut shared Rust validation workflow.
 
 The initial implementation has no third-party dependencies.
