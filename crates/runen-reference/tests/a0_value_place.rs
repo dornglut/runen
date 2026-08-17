@@ -1,8 +1,8 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Fault, Field, LocalDecl, LocalId, Operand, Place, ScalarType,
-    Statement, Terminator, TypeDef, TypeTable, Value,
+    BasicBlock, BasicBlockId, Body, Fault, Field, LocalDecl, LocalId, MirValidationErrorKind,
+    Operand, Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
 };
-use runen_reference::{Machine, SemanticErrorKind, TerminalStatus, TraceEvent};
+use runen_reference::{ExecutionViolationKind, Machine, TerminalStatus, TraceEvent};
 
 fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
     Body {
@@ -11,6 +11,10 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(statements, Terminator::Return)],
     }
+}
+
+fn machine(body: Body) -> Machine {
+    Machine::new(validate_body(body).expect("A0 test MIR must pass static admission"))
 }
 
 #[test]
@@ -39,12 +43,12 @@ fn move_invalidates_source() {
         ],
     );
 
-    let error = Machine::new(body)
+    let error = machine(body)
         .execute()
         .expect_err("read after move must fail");
     assert_eq!(
         error.kind,
-        SemanticErrorKind::UseOfUninitialized(Place::local(LocalId(0)))
+        ExecutionViolationKind::UseOfUninitialized(Place::local(LocalId(0)))
     );
 }
 
@@ -77,9 +81,7 @@ fn copy_preserves_source() {
         ],
     );
 
-    let report = Machine::new(body)
-        .execute()
-        .expect("copy program must execute");
+    let report = machine(body).execute().expect("copy program must execute");
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert!(
         report
@@ -124,7 +126,7 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
         ],
     );
 
-    let report = Machine::new(body)
+    let report = machine(body)
         .execute()
         .expect("partial move must execute");
     let drops: Vec<_> = report
@@ -160,7 +162,7 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
         ],
     );
 
-    let report = Machine::new(body)
+    let report = machine(body)
         .execute()
         .expect("explicit drop must execute");
     let drops = report
@@ -198,7 +200,7 @@ fn fault_unwinds_live_locals_once_in_reverse_declaration_order() {
         )],
     };
 
-    let report = Machine::new(body)
+    let report = machine(body)
         .execute()
         .expect("fault is a defined terminal status");
     assert_eq!(
@@ -243,7 +245,7 @@ fn fields_can_be_first_initialized_independently_before_whole_value_is_read() {
         ],
     );
 
-    Machine::new(body)
+    machine(body)
         .execute()
         .expect("independent field initialization must form a live aggregate");
 }
@@ -266,7 +268,7 @@ fn struct_fields_drop_in_reverse_declaration_order() {
         }],
     );
 
-    let report = Machine::new(body).execute().expect("pair must execute");
+    let report = machine(body).execute().expect("pair must execute");
     let ids: Vec<_> = report
         .trace
         .iter()
@@ -279,7 +281,7 @@ fn struct_fields_drop_in_reverse_declaration_order() {
 }
 
 #[test]
-fn copy_of_noncopy_value_is_rejected() {
+fn copy_of_noncopy_value_is_rejected_before_execution() {
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
 
@@ -301,8 +303,6 @@ fn copy_of_noncopy_value_is_rejected() {
         ],
     );
 
-    let error = Machine::new(body)
-        .execute()
-        .expect_err("Tracked values are not copyable in A0");
-    assert_eq!(error.kind, SemanticErrorKind::CopyOfNonCopy(tracked));
+    let error = validate_body(body).expect_err("Tracked values are not copyable in A0");
+    assert_eq!(error.kind, MirValidationErrorKind::CopyOfNonCopy(tracked));
 }
