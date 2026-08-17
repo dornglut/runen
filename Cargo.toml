@@ -2,6 +2,7 @@
 members = [
     "crates/runen-core-ir",
     "crates/runen-reference",
+    "tools/xtask",
 ]
 resolver = "2"
 
@@ -12,4 +13,3 @@ edition = "2024"
 unsafe_code = "forbid"
 unused_lifetimes = "deny"
 unused_qualifications = "deny"
-

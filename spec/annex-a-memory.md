@@ -34,7 +34,7 @@ A place reached by projecting a field from an aggregate place.
 
 ### Value
 
-An initialized semantic datum compatible with exactly one declared A0 type shape.
+An initialized semantic datum whose structure is compatible with the declared A0 type required by its use. A0 does not assign independent nominal type identity to the runtime-independent `Value` representation itself.
 
 ### Live
 
@@ -58,7 +58,7 @@ An aggregate place is fully initialized exactly when all of its recursively cont
 
 An aggregate may be partially initialized when only a strict subset of its leaves are `Live`.
 
-This representation is required so that a move from one field does not invalidate disjoint fields.
+This representation is required so that a move from one field does not invalidate disjoint fields. A partially initialized aggregate is not readable, movable, or copyable as a whole until every required leaf is live again.
 
 ## A0.4 First initialization
 
@@ -69,6 +69,8 @@ This representation is required so that a move from one field does not invalidat
 The value MUST structurally match the type of `dst`.
 
 A first initialization does not require the containing local to be mutable.
+
+`Init` expresses the stronger fact that the destination is wholly never-initialized. Mutable code may instead use `Assign` when that stronger fact is unnecessary or unavailable.
 
 ## A0.5 Read
 
@@ -111,6 +113,8 @@ This marker is deliberately provisional. General trait semantics are not part of
 
 `Assign(dst, value)` requires the local containing `dst` to be mutable.
 
+Unlike `Init`, `Assign` is path-state tolerant: `dst` may be wholly never-initialized, partially initialized, fully live, or contain dead subobjects. This allows one mutable write operation to remain valid across control-flow joins where the destination's initialization history differs by path.
+
 Evaluation is conceptually:
 
 1. evaluate the source operand;
@@ -118,7 +122,7 @@ Evaluation is conceptually:
 3. write the new value into `dst`;
 4. mark all written leaves live.
 
-`Assign` may therefore reinitialize storage that became dead after a move.
+`Assign` may therefore perform a mutable first write, replace a live value, complete/replace partial storage, or reinitialize storage that became dead after a move. Never-initialized or dead subobjects have nothing to destroy before the write.
 
 The source value MUST match the type of `dst`.
 
@@ -133,7 +137,7 @@ For a scalar:
 
 For a struct, live fields are destroyed in **reverse declaration order**.
 
-An explicit `Drop(place)` requires at least one live leaf in `place`; it destroys all currently live subobjects of that place and leaves them dead.
+An explicit `Drop(place)` requires at least one live leaf in `place`; it destroys all currently live subobjects of that place and leaves those subobjects dead. Never-initialized subobjects remain never-initialized.
 
 A moved or already-dropped subobject MUST NOT be destroyed a second time.
 
@@ -147,11 +151,13 @@ Each local is cleaned according to A0.9, so partial initialization is respected 
 
 `Fault` is a defined terminal state. It is not undefined behavior.
 
-## A0.11 Determinism
+## A0.11 Determinism and continued execution
 
 For a fixed typed A0 body, all A0 state transitions, destruction order, and terminal cleanup are deterministic.
 
 No rule depends on allocator address, host-language drop behavior, hash iteration, thread scheduling, or backend behavior.
+
+A0 imposes no implicit execution-step budget. A cyclic control-flow body may continue indefinitely. Tooling MAY externally bound or stop a reference execution for testing or resource control, but such a bound is not a Runen semantic error and MUST NOT be represented as one.
 
 ## A0.12 Reference-machine independence
 
@@ -172,11 +178,19 @@ The A0 gate requires at least:
 
 1. move invalidates the source;
 2. copy preserves the source;
-3. a partial move leaves disjoint fields live;
-4. an explicit drop is not repeated during scope cleanup;
-5. fault cleanup destroys each live value exactly once in reverse declaration order;
-6. assignment to immutable storage is rejected;
-7. assignment drops a live replacement target before writing the new value.
+3. a partial move leaves disjoint fields live while making the containing aggregate unreadable as a whole;
+4. independently initialized fields can form a fully initialized aggregate;
+5. non-copy values cannot be copied;
+6. `Init` cannot reinitialize storage that became dead after move;
+7. `Assign` can reinitialize mutable storage that became dead after move;
+8. `Assign` can initialize wholly never-initialized mutable storage;
+9. `Assign` can replace partially initialized mutable aggregate storage while destroying only its live old subobjects;
+10. assignment to immutable storage is rejected;
+11. assignment drops a live replacement target before writing the new value;
+12. explicit drop of a partially initialized aggregate destroys only its live subobjects;
+13. an explicit drop is not repeated during scope cleanup;
+14. struct fields are destroyed in reverse declaration order;
+15. fault cleanup destroys each live local value exactly once in reverse declaration order.
 
 ## A0.14 Explicitly deferred
 

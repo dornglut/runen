@@ -253,7 +253,7 @@ pub enum Statement {
     Init { dst: Place, src: Operand },
     /// Non-consuming semantic observation of an initialized place.
     Read { src: Place },
-    /// Mutable replacement/re-initialization, dropping live old contents first.
+    /// Mutable write/replacement/re-initialization, dropping any live old contents first.
     Assign { dst: Place, src: Operand },
     /// Explicit destruction of all currently live subobjects in the place.
     Drop { place: Place },
