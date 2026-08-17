@@ -37,6 +37,10 @@ pub enum MirValidationErrorKind {
     BorrowOfUninitialized(Place),
     LoanAlreadyActive(LoanId),
     LoanNotActive(LoanId),
+    LoanHasActiveChild {
+        loan: LoanId,
+        child: LoanId,
+    },
     BorrowConflict {
         place: Place,
         loan: LoanId,
@@ -44,6 +48,11 @@ pub enum MirValidationErrorKind {
     DirectAccessConflict {
         place: Place,
         loan: LoanId,
+    },
+    LoanAccessDelegated {
+        loan: LoanId,
+        child: LoanId,
+        place: Place,
     },
     ExclusiveLoanRequired(LoanId),
 }
@@ -74,7 +83,7 @@ impl ValidatedBody {
 /// Validates raw Core MIR before it may enter the reference machine.
 ///
 /// The boundary covers all structural, typing, copyability, mutability,
-/// initialization-state, root-borrow, and place-access rules expressible by the
+/// initialization-state, borrow-tree, and place-access rules expressible by the
 /// currently represented Core MIR. Later language domains extend validation in
 /// their owning slices rather than being anticipated here.
 pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
@@ -203,9 +212,9 @@ fn validate_static_statement(
             let expected = place_type(body, dst, point)?;
             validate_operand_type(body, src, expected, point)
         }
-        Statement::Borrow { loan, place, .. } => {
+        Statement::Borrow { loan, src, .. } => {
             let declaration = loan_decl(body, *loan, point)?;
-            let actual = place_type(body, place, point)?;
+            let actual = access_type(body, src, point)?;
             require_type_match(actual, declaration.ty, point)
         }
         Statement::EndBorrow { loan } => {
@@ -428,6 +437,7 @@ impl ObjectState {
 struct ActiveLoan {
     kind: BorrowKind,
     place: Place,
+    parent: Option<LoanId>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -449,7 +459,7 @@ fn validate_path_state(body: &Body) -> Result<(), MirValidationError> {
     loop {
         if !seen.insert((current, locals.clone(), active_loans.clone())) {
             // The current MIR has one control-flow successor per block. Reaching the
-            // same block with the same abstract storage and root-loan state therefore
+            // same block with the same abstract storage and active-loan forest state
             // proves that future validation repeats forever without exposing a new
             // invalid state.
             return Ok(());
@@ -490,10 +500,10 @@ fn validate_state_statement(
                     MirValidationErrorKind::InitRequiresNeverInitialized(dst.clone()),
                 ));
             }
-            validate_operand_state(body, locals, active_loans, src, point)?;
+            validate_operand_state(locals, active_loans, src, point)?;
             place_state_mut(locals, dst).mark_live();
         }
-        Statement::Borrow { loan, kind, place } => {
+        Statement::Borrow { loan, kind, src } => {
             let loan_index = loan.0 as usize;
             if active_loans
                 .get(loan_index)
@@ -506,38 +516,64 @@ fn validate_state_statement(
                 ));
             }
 
-            if !place_state(locals, place).fully_live() {
-                return Err(point_error(
-                    point,
-                    MirValidationErrorKind::BorrowOfUninitialized(place.clone()),
-                ));
-            }
+            let (place, parent) = match src {
+                PlaceAccess::Direct(place) => {
+                    if let Some(conflicting) = borrow_conflict(active_loans, place, *kind) {
+                        return Err(point_error(
+                            point,
+                            MirValidationErrorKind::BorrowConflict {
+                                place: place.clone(),
+                                loan: conflicting,
+                            },
+                        ));
+                    }
+                    (place.clone(), None)
+                }
+                PlaceAccess::Loan { loan: parent, .. } => {
+                    let mode = match kind {
+                        BorrowKind::Shared => AccessMode::Read,
+                        BorrowKind::Exclusive => AccessMode::Consume,
+                    };
+                    (
+                        resolve_authorized_access(active_loans, src, mode, point)?,
+                        Some(*parent),
+                    )
+                }
+            };
 
-            if let Some(conflicting) = borrow_conflict(active_loans, place, *kind) {
+            if !place_state(locals, &place).fully_live() {
                 return Err(point_error(
                     point,
-                    MirValidationErrorKind::BorrowConflict {
-                        place: place.clone(),
-                        loan: conflicting,
-                    },
+                    MirValidationErrorKind::BorrowOfUninitialized(place),
                 ));
             }
 
             active_loans[loan_index] = Some(ActiveLoan {
                 kind: *kind,
-                place: place.clone(),
+                place,
+                parent,
             });
         }
         Statement::EndBorrow { loan } => {
-            let slot = active_loans
-                .get_mut(loan.0 as usize)
-                .expect("static validation guarantees a declared loan identity");
-            if slot.take().is_none() {
+            if active_loans
+                .get(loan.0 as usize)
+                .expect("static validation guarantees a declared loan identity")
+                .is_none()
+            {
                 return Err(point_error(
                     point,
                     MirValidationErrorKind::LoanNotActive(*loan),
                 ));
             }
+
+            if let Some(child) = active_child(active_loans, *loan) {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::LoanHasActiveChild { loan: *loan, child },
+                ));
+            }
+
+            active_loans[loan.0 as usize] = None;
         }
         Statement::Read { src } => {
             let place = resolve_authorized_access(active_loans, src, AccessMode::Read, point)?;
@@ -549,7 +585,7 @@ fn validate_state_statement(
             // preserving the accepted source-first value-state transition order.
             let place = resolve_authorized_access(active_loans, dst, AccessMode::Consume, point)?;
             require_mutable_local(body, &place, point)?;
-            validate_operand_state(body, locals, active_loans, src, point)?;
+            validate_operand_state(locals, active_loans, src, point)?;
             place_state_mut(locals, &place).mark_live();
         }
         Statement::Drop { place } => {
@@ -567,7 +603,6 @@ fn validate_state_statement(
 }
 
 fn validate_operand_state(
-    _body: &Body,
     locals: &mut [ObjectState],
     active_loans: &[Option<ActiveLoan>],
     operand: &Operand,
@@ -601,6 +636,28 @@ fn borrow_conflict(
     })
 }
 
+fn active_child(active_loans: &[Option<ActiveLoan>], parent: LoanId) -> Option<LoanId> {
+    active_loans.iter().enumerate().find_map(|(index, active)| {
+        (active.as_ref()?.parent == Some(parent))
+            .then(|| LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")))
+    })
+}
+
+fn delegated_child(
+    active_loans: &[Option<ActiveLoan>],
+    parent: LoanId,
+    place: &Place,
+    mode: AccessMode,
+) -> Option<LoanId> {
+    active_loans.iter().enumerate().find_map(|(index, active)| {
+        let active = active.as_ref()?;
+        let blocks = active.parent == Some(parent)
+            && active.place.overlaps(place)
+            && (mode == AccessMode::Consume || active.kind == BorrowKind::Exclusive);
+        blocks.then(|| LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")))
+    })
+}
+
 fn resolve_authorized_access(
     active_loans: &[Option<ActiveLoan>],
     access: &PlaceAccess,
@@ -627,6 +684,18 @@ fn resolve_authorized_access(
 
             let mut place = active.place.clone();
             place.projections.extend(projections.iter().copied());
+
+            if let Some(child) = delegated_child(active_loans, *loan, &place, mode) {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::LoanAccessDelegated {
+                        loan: *loan,
+                        child,
+                        place,
+                    },
+                ));
+            }
+
             Ok(place)
         }
     }
