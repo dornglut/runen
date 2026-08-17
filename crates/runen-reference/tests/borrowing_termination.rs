@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId, Operand, Place,
-    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
+    BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId, Operand,
+    Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
 };
 use runen_reference::{Machine, TerminalStatus, VerificationEvent};
 
@@ -12,7 +12,6 @@ fn defined_return_ends_active_borrow_before_cleanup() {
         ScalarType::TrackedFixture,
     ));
     let value = Place::local(LocalId(0));
-
     let body = Body {
         types,
         locals: vec![LocalDecl::new("value", tracked, false)],
@@ -34,14 +33,23 @@ fn defined_return_ends_active_borrow_before_cleanup() {
         )],
     };
 
-    let report = Machine::new(validate_body(body).expect("return borrow MIR must validate")).execute();
+    let report =
+        Machine::new(validate_body(body).expect("return borrow MIR must validate")).execute();
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert!(report.verification_events.contains(&VerificationEvent::BorrowStart {
-        loan: LoanId(0),
-        kind: BorrowKind::Shared,
-        place: value,
-    }));
-    assert!(!report.verification_events.contains(&VerificationEvent::BorrowEnd(LoanId(0))));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::BorrowStart {
+                loan: LoanId(0),
+                kind: BorrowKind::Shared,
+                place: value,
+            })
+    );
+    assert!(
+        !report
+            .verification_events
+            .contains(&VerificationEvent::BorrowEnd(LoanId(0)))
+    );
     assert_eq!(
         report
             .verification_events
