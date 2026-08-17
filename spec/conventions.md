@@ -23,9 +23,11 @@ This is distinct from **permitted variation**: when normative text explicitly pe
 
 ## Ownership and conflicts
 
-Each normative rule has one canonical owner. Normative files may reference each other, but they SHOULD NOT restate another file's rule merely for convenience.
+Each normative rule has exactly one canonical owner.
 
-If two normative artifacts appear to define conflicting rules for the same scope, that is a specification defect requiring explicit correction. There is no general "more specific file silently wins" rule.
+A normative artifact MAY reference another normative owner or state a relationship between separately owned concepts. It MUST NOT independently restate, redefine, or duplicate another owner's normative rule merely for convenience or local completeness.
+
+If two normative artifacts appear to define rules for the same semantic responsibility, that is a specification defect requiring explicit ownership correction. A conflict is not resolved by file order, path depth, apparent specificity, or implementation behavior.
 
 Non-normative material never overrides normative text.
 
