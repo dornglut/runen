@@ -6,9 +6,11 @@ This file is the index of the normative Runen specification. Interpretation rule
 
 ## General semantics
 
+- [Semantic strata](language/strata.md)
 - [Program behavior](language/behavior.md)
 - [Correctness relations](language/correctness.md)
 - [Language lifecycle](language/lifecycle.md)
+- [Capability, authority, and information flow](language/authority.md)
 - [Clock domains](language/time.md)
 - [Remote boundaries](language/remote.md)
 - [Cross-stratum bridge laws](language/bridges.md)
