@@ -9,5 +9,3 @@ A library namespace, runtime service, or common realization technique does not b
 A profile that requires a Standard Environment facility MUST state that dependency explicitly.
 
 A Standard Environment contract may expose language-level concepts but MUST preserve their normative language semantics rather than redefine them.
-
-A facility belongs in the Standard Environment only when interoperability or common portable source requires a shared contract and the contract can be standardized without making one incidental realization architecture normative.
