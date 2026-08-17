@@ -1,78 +1,57 @@
 #![forbid(unsafe_code)]
-//! Executable reference semantics for the Runen A0 Core kernel.
+//! Executable reference semantics for validated Runen A0 Core MIR.
 
 use runen_core_ir::{
-    BasicBlockId, Body, LocalId, MirPoint, Operand, Place, Projection, ScalarType, Statement,
-    Terminator, TypeId, TypeKind, TypeTable, ValidatedBody, Value,
+    LocalId, Operand, Place, Projection, ScalarType, Statement, Terminator, TypeId, TypeKind,
+    TypeTable, ValidatedBody, Value,
 };
 
-/// Path-state violation encountered while exercising admitted A0 proving MIR.
-///
-/// These violations are not defined Runen `Fault` outcomes. They exist so the
-/// executable oracle can exercise negative A0 state-transition cases directly.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ExecutionViolationKind {
-    InitRequiresNeverInitialized(Place),
-    UseOfUninitialized(Place),
-    DropOfUninitialized(Place),
-}
-
-/// Structured execution-time proving violation.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ExecutionViolation {
-    pub point: MirPoint,
-    pub kind: ExecutionViolationKind,
-}
-
-/// Why a write occurred in the verification trace.
+/// Why a write occurred in verification instrumentation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum WriteKind {
+pub enum VerificationWriteKind {
     Init,
     Assign,
 }
 
-/// Verification-only trace event emitted by the A0 executable oracle.
+/// Verification-only event emitted by the A0 executable oracle.
 ///
 /// These events expose internal semantic transitions to conformance tests. They
 /// are not the observable program trace defined by the Runen language semantics.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum TraceEvent {
+pub enum VerificationEvent {
     Read(Place),
     Move(Place),
     Copy(Place),
     Write {
         place: Place,
-        kind: WriteKind,
+        kind: VerificationWriteKind,
     },
-    /// Verification event for destruction of the synthetic `Tracked` fixture.
-    DropTracked {
+    /// Verification event for destruction of the synthetic `TrackedFixture` fixture.
+    DropTrackedFixture {
         place: Place,
         id: u64,
     },
 }
 
-/// Terminal status of a successful defined reference execution.
+/// Terminal status of a defined reference execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TerminalStatus {
     Returned,
     Faulted(String),
 }
 
-/// Complete result of a successful defined reference execution.
+/// Complete result of a terminating defined reference execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutionReport {
     pub terminal: TerminalStatus,
     /// Verification instrumentation, not Runen-observable program behavior.
-    pub trace: Vec<TraceEvent>,
+    pub verification_events: Vec<VerificationEvent>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum LeafState {
-    /// This storage path has never been initialized in the current object lifetime.
     NeverInitialized,
-    /// The value is currently alive.
     Live(Value),
-    /// The path was initialized previously and has since been moved/dropped.
     Dead,
 }
 
@@ -84,11 +63,10 @@ enum ObjectState {
 
 impl ObjectState {
     fn uninitialized(types: &TypeTable, ty: TypeId) -> Self {
-        let def = types
+        let definition = types
             .get(ty)
-            .expect("validated Core MIR references an unknown type");
-
-        match &def.kind {
+            .expect("validated Core MIR references only known types");
+        match &definition.kind {
             TypeKind::Scalar(_) => Self::Leaf(LeafState::NeverInitialized),
             TypeKind::Struct(fields) => Self::Aggregate(
                 fields
@@ -98,108 +76,73 @@ impl ObjectState {
             ),
         }
     }
-
-    fn all_never_initialized(&self) -> bool {
-        match self {
-            Self::Leaf(LeafState::NeverInitialized) => true,
-            Self::Leaf(LeafState::Live(_) | LeafState::Dead) => false,
-            Self::Aggregate(fields) => fields.iter().all(Self::all_never_initialized),
-        }
-    }
-
-    fn fully_live(&self) -> bool {
-        match self {
-            Self::Leaf(LeafState::Live(_)) => true,
-            Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => false,
-            Self::Aggregate(fields) => fields.iter().all(Self::fully_live),
-        }
-    }
-
-    fn any_live(&self) -> bool {
-        match self {
-            Self::Leaf(LeafState::Live(_)) => true,
-            Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => false,
-            Self::Aggregate(fields) => fields.iter().any(Self::any_live),
-        }
-    }
 }
 
-/// Small executable abstract machine for admitted A0 Core MIR.
+/// Small executable abstract machine for validated A0 Core MIR.
 pub struct Machine {
-    body: Body,
+    body: ValidatedBody,
     locals: Vec<ObjectState>,
-    trace: Vec<TraceEvent>,
-    point: MirPoint,
+    verification_events: Vec<VerificationEvent>,
 }
 
 impl Machine {
-    /// Constructs the reference machine from Core MIR that has passed admission.
+    /// Constructs the reference machine from Core MIR that passed language validation.
     #[must_use]
     pub fn new(body: ValidatedBody) -> Self {
-        let body = body.into_body();
         let locals = body
+            .as_body()
             .locals
             .iter()
-            .map(|local| ObjectState::uninitialized(&body.types, local.ty))
+            .map(|local| ObjectState::uninitialized(&body.as_body().types, local.ty))
             .collect();
 
         Self {
-            point: MirPoint {
-                block: body.entry,
-                statement: None,
-            },
             body,
             locals,
-            trace: Vec::new(),
+            verification_events: Vec::new(),
         }
     }
 
-    pub fn execute(mut self) -> Result<ExecutionReport, ExecutionViolation> {
-        let mut current = self.body.entry;
+    /// Executes validated MIR until defined `Return` or defined `Fault` termination.
+    ///
+    /// Cyclic MIR may diverge and therefore never return an `ExecutionReport`.
+    #[must_use]
+    pub fn execute(mut self) -> ExecutionReport {
+        let mut current = self.body.as_body().entry;
 
         loop {
             let block = self
                 .body
+                .as_body()
                 .block(current)
-                .expect("validated Core MIR reached an unknown basic block")
+                .expect("validated Core MIR reaches only known basic blocks")
                 .clone();
 
-            for (statement_index, statement) in block.statements.iter().enumerate() {
-                self.point = MirPoint {
-                    block: current,
-                    statement: Some(statement_index),
-                };
-                self.execute_statement(statement)?;
+            for statement in &block.statements {
+                self.execute_statement(statement);
             }
 
-            self.point = MirPoint {
-                block: current,
-                statement: None,
-            };
-
             match block.terminator {
-                Terminator::Goto(target) => {
-                    current = target;
-                }
+                Terminator::Goto(target) => current = target,
                 Terminator::Return => {
                     self.cleanup_all_locals();
-                    return Ok(ExecutionReport {
+                    return ExecutionReport {
                         terminal: TerminalStatus::Returned,
-                        trace: self.trace,
-                    });
+                        verification_events: self.verification_events,
+                    };
                 }
                 Terminator::Fault(fault) => {
                     self.cleanup_all_locals();
-                    return Ok(ExecutionReport {
+                    return ExecutionReport {
                         terminal: TerminalStatus::Faulted(fault.code),
-                        trace: self.trace,
-                    });
+                        verification_events: self.verification_events,
+                    };
                 }
             }
         }
     }
 
-    fn execute_statement(&mut self, statement: &Statement) -> Result<(), ExecutionViolation> {
+    fn execute_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Init { dst, src } => self.initialize(dst, src),
             Statement::Read { src } => self.read(src),
@@ -208,81 +151,60 @@ impl Machine {
         }
     }
 
-    fn initialize(&mut self, dst: &Place, src: &Operand) -> Result<(), ExecutionViolation> {
+    fn initialize(&mut self, dst: &Place, src: &Operand) {
         let dst_ty = self.place_type(dst);
-        if !self.place_state(dst).all_never_initialized() {
-            return Err(self.violation(ExecutionViolationKind::InitRequiresNeverInitialized(
-                dst.clone(),
-            )));
-        }
-
-        let value = self.evaluate_operand(src)?;
+        let value = self.evaluate_operand(src);
         let dst_state = place_state_mut(&mut self.locals, dst);
-        write_value(&self.body.types, dst_ty, dst_state, value);
-        self.trace.push(TraceEvent::Write {
+        write_value(&self.body.as_body().types, dst_ty, dst_state, value);
+        self.verification_events.push(VerificationEvent::Write {
             place: dst.clone(),
-            kind: WriteKind::Init,
+            kind: VerificationWriteKind::Init,
         });
-        Ok(())
     }
 
-    fn assign(&mut self, dst: &Place, src: &Operand) -> Result<(), ExecutionViolation> {
+    fn assign(&mut self, dst: &Place, src: &Operand) {
         let dst_ty = self.place_type(dst);
-        let value = self.evaluate_operand(src)?;
+        let value = self.evaluate_operand(src);
 
         self.drop_place_contents(dst);
         let dst_state = place_state_mut(&mut self.locals, dst);
-        write_value(&self.body.types, dst_ty, dst_state, value);
-        self.trace.push(TraceEvent::Write {
+        write_value(&self.body.as_body().types, dst_ty, dst_state, value);
+        self.verification_events.push(VerificationEvent::Write {
             place: dst.clone(),
-            kind: WriteKind::Assign,
+            kind: VerificationWriteKind::Assign,
         });
-        Ok(())
     }
 
-    fn read(&mut self, src: &Place) -> Result<(), ExecutionViolation> {
-        if !self.place_state(src).fully_live() {
-            return Err(self.violation(ExecutionViolationKind::UseOfUninitialized(src.clone())));
-        }
-        self.trace.push(TraceEvent::Read(src.clone()));
-        Ok(())
+    fn read(&mut self, src: &Place) {
+        self.verification_events
+            .push(VerificationEvent::Read(src.clone()));
     }
 
-    fn drop_explicit(&mut self, place: &Place) -> Result<(), ExecutionViolation> {
-        if !self.place_state(place).any_live() {
-            return Err(self.violation(ExecutionViolationKind::DropOfUninitialized(
-                place.clone(),
-            )));
-        }
+    fn drop_explicit(&mut self, place: &Place) {
         self.drop_place_contents(place);
-        Ok(())
     }
 
-    fn evaluate_operand(&mut self, operand: &Operand) -> Result<Value, ExecutionViolation> {
+    fn evaluate_operand(&mut self, operand: &Operand) -> Value {
         match operand {
-            Operand::Constant(value) => Ok(value.clone()),
+            Operand::Constant(value) => value.clone(),
             Operand::Move(src) => {
-                if !self.place_state(src).fully_live() {
-                    return Err(
-                        self.violation(ExecutionViolationKind::UseOfUninitialized(src.clone()))
-                    );
-                }
                 let src_ty = self.place_type(src);
                 let src_state = place_state_mut(&mut self.locals, src);
-                let value = take_value(&self.body.types, src_ty, src_state);
-                self.trace.push(TraceEvent::Move(src.clone()));
-                Ok(value)
+                let value = take_value(&self.body.as_body().types, src_ty, src_state);
+                self.verification_events
+                    .push(VerificationEvent::Move(src.clone()));
+                value
             }
             Operand::Copy(src) => {
-                if !self.place_state(src).fully_live() {
-                    return Err(
-                        self.violation(ExecutionViolationKind::UseOfUninitialized(src.clone()))
-                    );
-                }
                 let src_ty = self.place_type(src);
-                let value = clone_value(&self.body.types, src_ty, self.place_state(src));
-                self.trace.push(TraceEvent::Copy(src.clone()));
-                Ok(value)
+                let value = clone_value(
+                    &self.body.as_body().types,
+                    src_ty,
+                    place_state(&self.locals, src),
+                );
+                self.verification_events
+                    .push(VerificationEvent::Copy(src.clone()));
+                value
             }
         }
     }
@@ -291,71 +213,60 @@ impl Machine {
         for local_index in (0..self.locals.len()).rev() {
             let local_id =
                 LocalId(u32::try_from(local_index).expect("local index exceeds u32::MAX"));
-            let place = Place::local(local_id);
-            self.drop_place_contents(&place);
+            self.drop_place_contents(&Place::local(local_id));
         }
     }
 
     fn drop_place_contents(&mut self, place: &Place) {
         let ty = self.place_type(place);
         let state = place_state_mut(&mut self.locals, place);
-        drop_live_values(&self.body.types, ty, state, place, &mut self.trace);
+        drop_live_values(
+            &self.body.as_body().types,
+            ty,
+            state,
+            place,
+            &mut self.verification_events,
+        );
     }
 
     fn place_type(&self, place: &Place) -> TypeId {
         let local = self
             .body
+            .as_body()
             .local(place.local)
-            .expect("validated Core MIR references an unknown local");
+            .expect("validated Core MIR references only known locals");
         self.body
+            .as_body()
             .types
             .project_type(local.ty, &place.projections)
-            .expect("validated Core MIR contains an invalid projection")
-    }
-
-    fn place_state(&self, place: &Place) -> &ObjectState {
-        let mut state = self
-            .locals
-            .get(place.local.0 as usize)
-            .expect("validated Core MIR references an unknown local state");
-
-        for projection in &place.projections {
-            match (state, projection) {
-                (ObjectState::Aggregate(fields), Projection::Field(index)) => {
-                    state = fields
-                        .get(*index as usize)
-                        .expect("validated Core MIR projection exceeds state shape");
-                }
-                (ObjectState::Leaf(_), Projection::Field(_)) => {
-                    unreachable!("validated Core MIR projects a field from scalar state");
-                }
-            }
-        }
-        state
-    }
-
-    fn violation(&self, kind: ExecutionViolationKind) -> ExecutionViolation {
-        ExecutionViolation {
-            point: self.point.clone(),
-            kind,
-        }
+            .expect("validated Core MIR contains only valid projections")
     }
 }
 
-fn place_state_mut<'a>(locals: &'a mut [ObjectState], place: &Place) -> &'a mut ObjectState {
-    let mut state = locals
-        .get_mut(place.local.0 as usize)
-        .expect("validated Core MIR references an unknown local state");
-
+fn place_state<'a>(locals: &'a [ObjectState], place: &Place) -> &'a ObjectState {
+    let mut state = &locals[place.local.0 as usize];
     for projection in &place.projections {
         match (state, projection) {
             (ObjectState::Aggregate(fields), Projection::Field(index)) => {
-                state = fields
-                    .get_mut(*index as usize)
-                    .expect("validated Core MIR projection exceeds state shape");
+                state = &fields[*index as usize];
             }
             (ObjectState::Leaf(_), Projection::Field(_)) => {
-                unreachable!("validated Core MIR projects a field from scalar state");
+                unreachable!("validated Core MIR cannot project a field from scalar state");
+            }
+        }
+    }
+    state
+}
+
+fn place_state_mut<'a>(locals: &'a mut [ObjectState], place: &Place) -> &'a mut ObjectState {
+    let mut state = &mut locals[place.local.0 as usize];
+    for projection in &place.projections {
+        match (state, projection) {
+            (ObjectState::Aggregate(fields), Projection::Field(index)) => {
+                state = &mut fields[*index as usize];
+            }
+            (ObjectState::Leaf(_), Projection::Field(_)) => {
+                unreachable!("validated Core MIR cannot project a field from scalar state");
             }
         }
     }
@@ -363,19 +274,23 @@ fn place_state_mut<'a>(locals: &'a mut [ObjectState], place: &Place) -> &'a mut 
 }
 
 fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Value) {
-    let def = types
+    let definition = types
         .get(ty)
-        .expect("validated Core MIR references an unknown type");
+        .expect("validated Core MIR references only known types");
 
-    match (&def.kind, state, value) {
+    match (&definition.kind, state, value) {
         (TypeKind::Scalar(ScalarType::Bool), ObjectState::Leaf(leaf), Value::Bool(value)) => {
             *leaf = LeafState::Live(Value::Bool(value));
         }
         (TypeKind::Scalar(ScalarType::I64), ObjectState::Leaf(leaf), Value::I64(value)) => {
             *leaf = LeafState::Live(Value::I64(value));
         }
-        (TypeKind::Scalar(ScalarType::Tracked), ObjectState::Leaf(leaf), Value::Tracked(value)) => {
-            *leaf = LeafState::Live(Value::Tracked(value));
+        (
+            TypeKind::Scalar(ScalarType::TrackedFixture),
+            ObjectState::Leaf(leaf),
+            Value::TrackedFixture(value),
+        ) => {
+            *leaf = LeafState::Live(Value::TrackedFixture(value));
         }
         (TypeKind::Struct(fields), ObjectState::Aggregate(states), Value::Struct(values))
             if fields.len() == states.len() && fields.len() == values.len() =>
@@ -384,16 +299,16 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Va
                 write_value(types, field.ty, field_state, field_value);
             }
         }
-        _ => unreachable!("validated Core MIR produced a value/state type mismatch"),
+        _ => unreachable!("validated Core MIR guarantees value/type compatibility"),
     }
 }
 
 fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> Value {
-    let def = types
+    let definition = types
         .get(ty)
-        .expect("validated Core MIR references an unknown type");
+        .expect("validated Core MIR references only known types");
 
-    match (&def.kind, state) {
+    match (&definition.kind, state) {
         (TypeKind::Scalar(_), ObjectState::Leaf(LeafState::Live(value))) => value.clone(),
         (TypeKind::Struct(fields), ObjectState::Aggregate(states))
             if fields.len() == states.len() =>
@@ -406,21 +321,21 @@ fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> Value {
                     .collect(),
             )
         }
-        _ => unreachable!("fully-live validated state is structurally inconsistent"),
+        _ => unreachable!("validated Core MIR guarantees copied state is fully live"),
     }
 }
 
 fn take_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState) -> Value {
-    let def = types
+    let definition = types
         .get(ty)
-        .expect("validated Core MIR references an unknown type");
+        .expect("validated Core MIR references only known types");
 
-    match (&def.kind, state) {
+    match (&definition.kind, state) {
         (TypeKind::Scalar(_), ObjectState::Leaf(leaf)) => {
             match std::mem::replace(leaf, LeafState::Dead) {
                 LeafState::Live(value) => value,
                 LeafState::NeverInitialized | LeafState::Dead => {
-                    unreachable!("take_value called for state that is not fully live")
+                    unreachable!("validated Core MIR guarantees moved state is fully live")
                 }
             }
         }
@@ -435,7 +350,7 @@ fn take_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState) -> Value {
                     .collect(),
             )
         }
-        _ => unreachable!("fully-live validated state is structurally inconsistent"),
+        _ => unreachable!("validated Core MIR guarantees moved state matches its type"),
     }
 }
 
@@ -444,18 +359,18 @@ fn drop_live_values(
     ty: TypeId,
     state: &mut ObjectState,
     place: &Place,
-    trace: &mut Vec<TraceEvent>,
+    trace: &mut Vec<VerificationEvent>,
 ) {
-    let def = types
+    let definition = types
         .get(ty)
-        .expect("validated Core MIR references an unknown type");
+        .expect("validated Core MIR references only known types");
 
-    match (&def.kind, state) {
+    match (&definition.kind, state) {
         (TypeKind::Scalar(_), ObjectState::Leaf(leaf)) => {
             let previous = std::mem::replace(leaf, LeafState::Dead);
             match previous {
-                LeafState::Live(Value::Tracked(id)) => {
-                    trace.push(TraceEvent::DropTracked {
+                LeafState::Live(Value::TrackedFixture(id)) => {
+                    trace.push(VerificationEvent::DropTrackedFixture {
                         place: place.clone(),
                         id,
                     });
@@ -476,6 +391,6 @@ fn drop_live_values(
                 drop_live_values(types, field.ty, &mut states[index], &field_place, trace);
             }
         }
-        _ => unreachable!("validated Core MIR state shape does not match its declared type"),
+        _ => unreachable!("validated Core MIR guarantees state shape matches its type"),
     }
 }
