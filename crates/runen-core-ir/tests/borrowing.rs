@@ -495,7 +495,7 @@ fn borrowing_uninitialized_storage_is_rejected() {
 }
 
 #[test]
-fn exclusive_borrow_of_immutable_local_is_rejected() {
+fn exclusive_borrow_of_immutable_local_is_valid() {
     let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
     let body = one_block(
@@ -512,12 +512,44 @@ fn exclusive_borrow_of_immutable_local_is_rejected() {
                 kind: BorrowKind::Exclusive,
                 place: value,
             },
+            Statement::Read {
+                src: PlaceAccess::loan(LoanId(0)),
+            },
+            Statement::EndBorrow { loan: LoanId(0) },
+        ],
+    );
+
+    validate_body(body).expect("exclusive access does not imply assignment mutability");
+}
+
+#[test]
+fn assignment_through_exclusive_loan_requires_mutable_local() {
+    let (types, ty) = i64_type();
+    let value = Place::local(LocalId(0));
+    let body = one_block(
+        types,
+        vec![LocalDecl::new("value", ty, false)],
+        vec![LoanDecl::new("exclusive", ty)],
+        vec![
+            Statement::Init {
+                dst: value.clone(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+            Statement::Borrow {
+                loan: LoanId(0),
+                kind: BorrowKind::Exclusive,
+                place: value,
+            },
+            Statement::Assign {
+                dst: PlaceAccess::loan(LoanId(0)),
+                src: Operand::Constant(Value::I64(2)),
+            },
         ],
     );
 
     assert_eq!(
         error_kind(body),
-        MirValidationErrorKind::ExclusiveBorrowOfImmutable(LocalId(0))
+        MirValidationErrorKind::AssignToImmutable(LocalId(0))
     );
 }
 
