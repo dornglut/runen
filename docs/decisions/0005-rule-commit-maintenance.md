@@ -1,15 +1,23 @@
-# 0005 — Staged Rule Commit and Maintenance Contracts
+# 0005 — Staged Rule Commit and Explicit Maintenance Contracts
 
-Status: **accepted design rationale**
+Status: **accepted**  
+Recorded: **2026-08-17**  
+Normative owners: [`spec/language/model/rules.md`](../../spec/language/model/rules.md), [`spec/language/model/maintenance.md`](../../spec/language/model/maintenance.md)  
+Supersedes: none  
+Superseded by: none
 
 ## Context
 
-If rule mutations, irreversible effects, and logical events become visible independently, observers may see events for state that never committed or state whose defining event is missing. Likewise, “keep synchronized” is meaningless without freshness, failure, and visibility rules.
+Reactive logical state becomes incoherent if pre-commit effects escape as though committed or if a maintenance request silently promises unspecified freshness, retry, or distributed transaction behavior.
 
 ## Decision
 
-Stage rule state proposals and logical events before admission. Make transition state changes and their logical events acquire logical existence together at successful commit. Require `maintain` targets to define observation identity, admission, freshness, progress, failure/reconciliation, and visibility contracts.
+Stage rule proposals and logical events until state-domain admission, couple transition state and logical events at commit, and require maintenance targets to publish the contracts needed to define correspondence.
+
+## Alternatives considered
+
+Immediate mutation or event emission would make reaction ordering part of observable semantics. A universal synchronization promise for `maintain` would overstate portable guarantees.
 
 ## Consequences
 
-Ordinary rule semantics do not become a universal distributed transaction system, and maintenance does not silently promise reliable zero-latency synchronization.
+Rule evaluation has a clear commit boundary and maintenance semantics can vary by target without becoming undefined.

@@ -1,15 +1,23 @@
 # 0002 — State Domains and Explicit Observation
 
-Status: **accepted design rationale**
+Status: **accepted**  
+Recorded: **2026-08-17**  
+Normative owners: [`spec/language/model/state-domains.md`](../../spec/language/model/state-domains.md), [`spec/language/model/observation.md`](../../spec/language/model/observation.md), [`spec/language/bridges.md`](../../spec/language/bridges.md)  
+Supersedes: none  
+Superseded by: none
 
 ## Context
 
-Logical state may be realized by relational storage, ECS layouts, incremental engines, replicated services, or other structures. Ordinary lexical borrows into such storage would couple Core alias/lifetime semantics to one physical realization. The word `authority` is also needed for security/capability semantics.
+Logical state may have realizations whose storage lifetime, layout, replication, or indexing does not match Core lexical borrowing. The word `authority` is also needed for security semantics.
 
 ## Decision
 
-Use **state domain** for the unit controlling coherent logical state, revisions, admission, and commit. Reify Model observations as immutable Core values/snapshots or explicit logical handles rather than implicit lexical borrows into internal storage. Use immutable `ObservationSet` values to identify multi-domain observations without claiming a global distributed snapshot.
+Use `state domain` for coherent logical-state responsibility, make multi-domain observation explicit through immutable `ObservationSet` values, and avoid implicit Core borrows into arbitrary Model storage.
+
+## Alternatives considered
+
+Direct lexical borrows into Model storage would couple Core lifetime rules to physical Model realization. A universal global snapshot would impose a distributed consistency guarantee that many valid state domains cannot provide.
 
 ## Consequences
 
-Model storage may evolve independently of Core memory layout. Security authority stays terminologically distinct. Cross-domain evaluation has an explicit observation identity.
+Model storage can vary independently of Core layout, multi-domain evaluation has explicit observation identity, and security authority remains a separate concept.

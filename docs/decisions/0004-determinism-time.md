@@ -1,15 +1,23 @@
-# 0004 — Separate Determinism and Time Concepts
+# 0004 — Separate Determinism and Ordering Concepts
 
-Status: **accepted design rationale**
+Status: **accepted**  
+Recorded: **2026-08-17**  
+Normative owners: [`spec/language/correctness.md`](../../spec/language/correctness.md), [`spec/language/time.md`](../../spec/language/time.md), [`spec/language/model/state-domains.md`](../../spec/language/model/state-domains.md), [`spec/language/remote.md`](../../spec/language/remote.md)  
+Supersedes: none  
+Superseded by: none
 
 ## Context
 
-Physical schedule order, numerical reproducibility, simulation clocks, state versions, and causal ordering are related in some programs but are not the same semantic property.
+Earlier designs risked treating physical schedule, heterogeneous numeric agreement, temporal clocks, state revisions, and causal ordering as variants of one ordering concept.
 
 ## Decision
 
-Keep semantic determinism, schedule independence, and heterogeneous reproducibility distinct. Keep clock domain, state revision, and causal frontier distinct. Require explicit contracts when a system relates any of these concepts.
+Keep semantic determinism, schedule independence, heterogeneous reproducibility, clock domains, state revisions, and causal frontiers distinct unless an explicit contract relates them.
+
+## Alternatives considered
+
+One universal ordering or clock abstraction would simplify vocabulary but create false equivalences and overly constrain realizations.
 
 ## Consequences
 
-Parallel execution can be unordered yet deterministic, and a state revision need not become an artificial universal clock. Numeric portability can be strengthened without over-constraining scheduling.
+Contracts can state exactly which kind of order or reproducibility they require without importing unrelated guarantees.

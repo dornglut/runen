@@ -1,15 +1,23 @@
 # 0006 — Source Complexity Budget
 
-Status: **accepted design rationale**
+Status: **accepted design constraint**  
+Recorded: **2026-08-17**  
+Normative owner: none; this constrains future design review rather than current program behavior  
+Supersedes: none  
+Superseded by: none
 
 ## Context
 
-Runen uses sophisticated semantic machinery to support safety, heterogeneous realization, and logical state. Exposing that machinery routinely would defeat the intended language ergonomics.
+The implementation may need rich internal models for provenance, effects, placement, clocks, revisions, coherence, and scheduling. Exposing all of that machinery in routine source would defeat the intended language ergonomics.
 
 ## Decision
 
-Ordinary source should primarily express problem concepts. Provenance, effect details, placement, clocks, revisions, coherence state, regions, numeric relaxations, and scheduling controls should surface only where they represent a real semantic, optimization, or unsafe boundary.
+Treat routine source complexity as an explicit design constraint: implementation proof machinery should surface only where it represents a real semantic or control choice for the programmer.
+
+## Alternatives considered
+
+Making all internal proof state explicit would simplify some compiler reasoning but transfer complexity to every user. Hiding every advanced control would prevent low-level and performance-sensitive work.
 
 ## Consequences
 
-When routine application code becomes dominated by proof or realization machinery, simplification has priority over adding another abstraction layer.
+Future features must justify source-level machinery by user-visible semantics or control, not merely compiler convenience. If that boundary cannot be maintained, simplification is preferred over another abstraction layer.

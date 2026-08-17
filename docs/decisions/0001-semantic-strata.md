@@ -1,15 +1,23 @@
 # 0001 — Core, Exec, and Model Semantic Strata
 
-Status: **accepted design rationale**
+Status: **accepted**  
+Recorded: **2026-08-17**  
+Normative owners: [`spec/language/strata.md`](../../spec/language/strata.md), [`spec/language/bridges.md`](../../spec/language/bridges.md)  
+Supersedes: none  
+Superseded by: none
 
 ## Context
 
-Runen must cover ordinary systems values/memory, heterogeneous execution, and logical/declarative state without forcing one domain's implementation mechanism into another domain's source model.
+Runen must cover ordinary systems values and memory, heterogeneous execution, and logical or declarative state without forcing one domain's realization mechanism into another domain's source model.
 
 ## Decision
 
-Use exactly three top-level semantic strata: Core, Exec, and Model. Require explicit semantics where values/resources cross their boundaries. Treat the strata as semantic responsibilities, not required runtimes or compiler crates.
+Separate those responsibilities into Core, Exec, and Model, with explicit semantics at their boundaries.
+
+## Alternatives considered
+
+A single universal semantic layer would reduce visible categories but would also merge memory ownership, execution placement, and logical-state concerns. Separate languages or disconnected libraries would avoid that merge but lose one coherent type and bridge model.
 
 ## Consequences
 
-The language can preserve domain-specific reasoning while allowing implementations to erase boundaries physically when behavior is preserved. Cross-stratum questions must be designed explicitly rather than delegated to runtime convenience.
+Each stratum can evolve with domain-specific invariants while shared physical realizations remain possible. Cross-stratum behavior must be designed rather than inherited from implementation coincidence.
