@@ -4,7 +4,13 @@
 //! This crate deliberately contains no interpreter, backend, platform model,
 //! or source-syntax concerns.
 
+mod validation;
+
 use std::fmt;
+
+pub use validation::{
+    MirPoint, MirValidationError, MirValidationErrorKind, ValidatedBody, validate_body,
+};
 
 /// Stable-in-one-body identifier for a type definition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,12 +24,13 @@ pub struct LocalId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BasicBlockId(pub u32);
 
-/// Scalar kinds supported by the A0 semantic kernel.
+/// Scalar kinds supported by the A0 proving kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarType {
     Bool,
     I64,
-    /// A non-copy scalar with observable destruction, used by semantic tests.
+    /// Verification-only non-copy scalar used to make destruction observable to tests.
+    /// This is not a Runen language scalar primitive.
     Tracked,
 }
 
@@ -164,7 +171,8 @@ impl TypeTable {
 pub enum Value {
     Bool(bool),
     I64(i64),
-    /// Identity whose destruction is visible in the reference trace.
+    /// Verification-only fixture identity whose destruction is visible in the oracle trace.
+    /// This is not a Runen language value primitive.
     Tracked(u64),
     Struct(Vec<Value>),
 }
@@ -251,7 +259,10 @@ pub enum Operand {
 pub enum Statement {
     /// First initialization of a place. Re-initialization uses `Assign`.
     Init { dst: Place, src: Operand },
-    /// Non-consuming semantic observation of an initialized place.
+    /// Proving-kernel action that exercises the normative Core read precondition.
+    ///
+    /// The zero-result statement form exists to test readability without adding later
+    /// computation semantics. It is not itself a Runen-observable event.
     Read { src: Place },
     /// Mutable write/replacement/re-initialization, dropping any live old contents first.
     Assign { dst: Place, src: Operand },
@@ -297,7 +308,7 @@ impl BasicBlock {
     }
 }
 
-/// One executable Core body.
+/// One executable Core body before MIR admission.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Body {
     pub types: TypeTable,
