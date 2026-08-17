@@ -11,7 +11,7 @@ This file is the index of the normative Runen specification. Interpretation rule
 - [Correctness relations](language/correctness.md)
 - [Language lifecycle](language/lifecycle.md)
 - [Capability, authority, and information flow](language/authority.md)
-- [Clock domains](language/time.md)
+- [Clock domains](language/clocks.md)
 - [Remote boundaries](language/remote.md)
 - [Cross-stratum bridge laws](language/bridges.md)
 
@@ -21,8 +21,10 @@ This file is the index of the normative Runen specification. Interpretation rule
 - [Borrowing](language/core/borrowing.md)
 - [Pointers and provenance](language/core/pointers.md)
 - [Unsafe semantics](language/core/unsafe.md)
-- [Effects and faults](language/core/effects-faults.md)
-- [Numerics](language/core/numerics.md)
+- [Effects](language/core/effects.md)
+- [Faults](language/core/faults.md)
+- [Integer semantics](language/core/numerics/integers.md)
+- [Floating-point semantics](language/core/numerics/floating-point.md)
 - [Layout and ABI](language/core/layout-abi.md)
 
 ## Exec

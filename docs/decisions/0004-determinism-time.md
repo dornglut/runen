@@ -2,7 +2,7 @@
 
 Status: **accepted**  
 Recorded: **2026-08-17**  
-Normative owners: [`spec/language/correctness.md`](../../spec/language/correctness.md), [`spec/language/time.md`](../../spec/language/time.md), [`spec/language/model/state-domains.md`](../../spec/language/model/state-domains.md), [`spec/language/remote.md`](../../spec/language/remote.md)  
+Normative owners: [`spec/language/correctness.md`](../../spec/language/correctness.md), [`spec/language/clocks.md`](../../spec/language/clocks.md), [`spec/language/model/state-domains.md`](../../spec/language/model/state-domains.md), [`spec/language/remote.md`](../../spec/language/remote.md)  
 Supersedes: none  
 Superseded by: none
 
