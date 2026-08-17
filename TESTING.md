@@ -35,6 +35,7 @@ The current A0 suite must cover at least:
 - `Init` cannot reinitialize storage that became dead after move;
 - mutable `Assign` can initialize never-initialized storage;
 - mutable `Assign` can reinitialize dead storage after move;
+- mutable `Assign` can replace partially initialized aggregate storage while destroying only live old subobjects;
 - immutable assignment is rejected;
 - assignment destroys a live target before replacement;
 - explicit drop of a partially initialized aggregate destroys only live subobjects;
