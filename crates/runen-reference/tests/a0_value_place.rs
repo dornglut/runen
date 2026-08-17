@@ -8,6 +8,7 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
     Body {
         types,
         locals,
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(statements, Terminator::Return)],
     }
@@ -38,10 +39,10 @@ fn move_invalidates_source() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Move(Place::local(LocalId(0))),
+                src: Operand::Move(Place::local(LocalId(0)).into()),
             },
             Statement::Read {
-                src: Place::local(LocalId(0)),
+                src: Place::local(LocalId(0)).into(),
             },
         ],
     );
@@ -71,13 +72,13 @@ fn copy_preserves_source() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Copy(Place::local(LocalId(0))),
+                src: Operand::Copy(Place::local(LocalId(0)).into()),
             },
             Statement::Read {
-                src: Place::local(LocalId(0)),
+                src: Place::local(LocalId(0)).into(),
             },
             Statement::Read {
-                src: Place::local(LocalId(1)),
+                src: Place::local(LocalId(1)).into(),
             },
         ],
     );
@@ -127,9 +128,11 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Move(left.clone()),
+                src: Operand::Move(left.clone().into()),
             },
-            Statement::Read { src: right.clone() },
+            Statement::Read {
+                src: right.clone().into(),
+            },
         ],
     );
 
@@ -165,7 +168,7 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
                 src: Operand::Constant(Value::TrackedFixture(99)),
             },
             Statement::Drop {
-                place: Place::local(LocalId(0)),
+                place: Place::local(LocalId(0)).into(),
             },
         ],
     );
@@ -193,6 +196,7 @@ fn fault_unwinds_live_locals_once_in_reverse_declaration_order() {
             LocalDecl::new("first", tracked, false),
             LocalDecl::new("second", tracked, false),
         ],
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![
@@ -248,6 +252,7 @@ fn fault_cleanup_uses_the_current_partial_destruction_domain() {
             LocalDecl::new("pair", pair, false),
             LocalDecl::new("taken", tracked, false),
         ],
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![
@@ -260,10 +265,10 @@ fn fault_cleanup_uses_the_current_partial_destruction_domain() {
                 },
                 Statement::Init {
                     dst: taken.clone(),
-                    src: Operand::Move(left),
+                    src: Operand::Move(left.into()),
                 },
                 Statement::Drop {
-                    place: right.clone(),
+                    place: right.clone().into(),
                 },
             ],
             Terminator::Fault(Fault::new("PARTIAL_FAULT")),
@@ -312,7 +317,7 @@ fn fields_can_be_first_initialized_independently_before_whole_value_is_read() {
                 dst: root.clone().field(1),
                 src: Operand::Constant(Value::I64(2)),
             },
-            Statement::Read { src: root },
+            Statement::Read { src: root.into() },
         ],
     );
 
@@ -376,7 +381,7 @@ fn copy_of_noncopy_value_is_rejected_before_execution() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Copy(Place::local(LocalId(0))),
+                src: Operand::Copy(Place::local(LocalId(0)).into()),
             },
         ],
     );
