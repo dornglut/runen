@@ -29,13 +29,17 @@ The current A0 suite must cover at least:
 
 - move invalidates the source;
 - copy preserves the source;
-- partial moves preserve disjoint live sub-places;
+- a partial move preserves disjoint live sub-places and makes the containing aggregate unreadable as a whole;
+- independently initialized fields can form a fully initialized aggregate;
+- non-copy values cannot be copied;
+- `Init` cannot reinitialize storage that became dead after move;
+- mutable `Assign` can initialize never-initialized storage;
+- mutable `Assign` can reinitialize dead storage after move;
+- immutable assignment is rejected;
+- assignment destroys a live target before replacement;
+- explicit drop of a partially initialized aggregate destroys only live subobjects;
 - moved or explicitly dropped values are not destroyed twice;
 - field and local cleanup order is deterministic and reversed as specified;
-- defined fault cleanup destroys each live value exactly once;
-- independent field initialization can form a fully initialized aggregate;
-- non-copy values cannot be copied;
-- immutable assignment is rejected;
-- assignment destroys a live target before replacement.
+- defined fault cleanup destroys each live value exactly once.
 
 No test should use Rust destructor behavior, pointer addresses, allocator behavior, or hash/container iteration order as a Runen semantic oracle.
