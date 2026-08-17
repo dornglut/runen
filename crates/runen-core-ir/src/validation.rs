@@ -55,7 +55,7 @@ impl ValidatedBody {
 /// Validates raw Core MIR before it may enter the reference machine.
 ///
 /// The boundary covers all structural, typing, copyability, mutability, and
-/// initialization-state rules expressible by the currently represented A0 MIR.
+/// initialization-state rules expressible by the currently represented Core MIR.
 /// Later language domains extend validation in their owning slices rather than
 /// being anticipated here.
 pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
