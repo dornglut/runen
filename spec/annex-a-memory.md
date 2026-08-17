@@ -34,7 +34,7 @@ A place reached by projecting a field from an aggregate place.
 
 ### Value
 
-An initialized semantic datum compatible with exactly one declared A0 type shape.
+An initialized semantic datum whose structure is compatible with the declared A0 type required by its use. A0 does not assign independent nominal type identity to the runtime-independent `Value` representation itself.
 
 ### Live
 
@@ -58,7 +58,7 @@ An aggregate place is fully initialized exactly when all of its recursively cont
 
 An aggregate may be partially initialized when only a strict subset of its leaves are `Live`.
 
-This representation is required so that a move from one field does not invalidate disjoint fields.
+This representation is required so that a move from one field does not invalidate disjoint fields. A partially initialized aggregate is not readable, movable, or copyable as a whole until every required leaf is live again.
 
 ## A0.4 First initialization
 
@@ -118,7 +118,7 @@ Evaluation is conceptually:
 3. write the new value into `dst`;
 4. mark all written leaves live.
 
-`Assign` may therefore reinitialize storage that became dead after a move.
+`Assign` may therefore reinitialize storage that became dead after a move. `Init` may not be substituted for that reinitialization.
 
 The source value MUST match the type of `dst`.
 
@@ -133,7 +133,7 @@ For a scalar:
 
 For a struct, live fields are destroyed in **reverse declaration order**.
 
-An explicit `Drop(place)` requires at least one live leaf in `place`; it destroys all currently live subobjects of that place and leaves them dead.
+An explicit `Drop(place)` requires at least one live leaf in `place`; it destroys all currently live subobjects of that place and leaves those subobjects dead. Never-initialized subobjects remain never-initialized.
 
 A moved or already-dropped subobject MUST NOT be destroyed a second time.
 
@@ -172,11 +172,17 @@ The A0 gate requires at least:
 
 1. move invalidates the source;
 2. copy preserves the source;
-3. a partial move leaves disjoint fields live;
-4. an explicit drop is not repeated during scope cleanup;
-5. fault cleanup destroys each live value exactly once in reverse declaration order;
-6. assignment to immutable storage is rejected;
-7. assignment drops a live replacement target before writing the new value.
+3. a partial move leaves disjoint fields live while making the containing aggregate unreadable as a whole;
+4. independently initialized fields can form a fully initialized aggregate;
+5. non-copy values cannot be copied;
+6. `Init` cannot reinitialize storage that became dead after move;
+7. `Assign` can reinitialize mutable storage that became dead after move;
+8. assignment to immutable storage is rejected;
+9. assignment drops a live replacement target before writing the new value;
+10. explicit drop of a partially initialized aggregate destroys only its live subobjects;
+11. an explicit drop is not repeated during scope cleanup;
+12. struct fields are destroyed in reverse declaration order;
+13. fault cleanup destroys each live local value exactly once in reverse declaration order.
 
 ## A0.14 Explicitly deferred
 
