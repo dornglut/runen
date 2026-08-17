@@ -6,15 +6,17 @@ This document owns the structure and dependency boundaries of the Runen reposito
 
 ### `crates/runen-core-ir`
 
-Owns semantic data structures for the currently implemented Core subset and the admission checks that establish structural and statically decidable well-formedness for that MIR.
+Owns semantic data structures for the currently implemented Core subset and MIR validation for the structural and language-validity rules expressible by that subset.
 
-It does not execute programs or define path-state behavior.
+MIR validation is a language-validation concern. It is not the environment-admission phase defined by `spec/language/lifecycle.md`.
+
+The crate does not execute programs or define host/runtime behavior.
 
 It MUST NOT depend on the reference machine, a production backend, host platform services, or repository tooling.
 
 ### `crates/runen-reference`
 
-Owns executable reference semantics for admitted Core MIR represented by `runen-core-ir`.
+Owns executable reference semantics for validated Core MIR represented by `runen-core-ir`. Invalid MIR is rejected before this boundary.
 
 It may depend on `runen-core-ir`.
 
