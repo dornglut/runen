@@ -7,6 +7,7 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
     Body {
         types,
         locals,
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(statements, Terminator::Return)],
     }
@@ -34,6 +35,7 @@ fn invalid_entry_block_is_rejected() {
     let body = Body {
         types: TypeTable::new(),
         locals: Vec::new(),
+        loans: Vec::new(),
         entry: BasicBlockId(1),
         blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return)],
     };
@@ -50,6 +52,7 @@ fn invalid_goto_target_is_rejected() {
     let body = Body {
         types: TypeTable::new(),
         locals: Vec::new(),
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             Vec::new(),
@@ -84,7 +87,7 @@ fn statement_referencing_unknown_local_is_rejected() {
         types,
         vec![LocalDecl::new("value", i64_ty, false)],
         vec![Statement::Read {
-            src: Place::local(LocalId(8)),
+            src: Place::local(LocalId(8)).into(),
         }],
     );
 
@@ -135,15 +138,15 @@ fn recursive_by_value_type_is_rejected() {
 fn invalid_projection_is_rejected() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let place = Place::local(LocalId(0)).field(0);
     let body = one_block(
         types,
         vec![LocalDecl::new("value", i64_ty, false)],
         vec![Statement::Read {
-            src: Place::local(LocalId(0)).field(0),
+            src: place.clone().into(),
         }],
     );
 
-    let place = Place::local(LocalId(0)).field(0);
     let error = validate_body(body).expect_err("field projection from scalar must be rejected");
     assert_eq!(error.kind, MirValidationErrorKind::InvalidProjection(place));
 }
@@ -183,7 +186,7 @@ fn copy_of_noncopy_type_is_rejected_by_validation() {
         ],
         vec![Statement::Init {
             dst: Place::local(LocalId(1)),
-            src: Operand::Copy(Place::local(LocalId(0))),
+            src: Operand::Copy(Place::local(LocalId(0)).into()),
         }],
     );
 
@@ -199,7 +202,7 @@ fn assignment_through_immutable_local_is_rejected_by_validation() {
         types,
         vec![LocalDecl::new("value", i64_ty, false)],
         vec![Statement::Assign {
-            dst: Place::local(LocalId(0)),
+            dst: Place::local(LocalId(0)).into(),
             src: Operand::Constant(Value::I64(2)),
         }],
     );
@@ -233,10 +236,10 @@ fn read_after_move_is_rejected_by_validation() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Move(source.clone()),
+                src: Operand::Move(source.clone().into()),
             },
             Statement::Read {
-                src: source.clone(),
+                src: source.clone().into(),
             },
         ],
     );
@@ -269,7 +272,7 @@ fn init_after_move_is_rejected_by_validation() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Move(source.clone()),
+                src: Operand::Move(source.clone().into()),
             },
             Statement::Init {
                 dst: source.clone(),
@@ -294,7 +297,7 @@ fn drop_without_live_subobject_is_rejected_by_validation() {
         types,
         vec![LocalDecl::new("value", i64_ty, false)],
         vec![Statement::Drop {
-            place: place.clone(),
+            place: place.clone().into(),
         }],
     );
 
@@ -313,6 +316,7 @@ fn validation_checks_repeated_loop_state_transitions() {
     let body = Body {
         types,
         locals: vec![LocalDecl::new("value", i64_ty, false)],
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![Statement::Init {
@@ -338,10 +342,11 @@ fn stable_valid_loop_state_is_accepted_as_possible_divergence() {
     let body = Body {
         types,
         locals: vec![LocalDecl::new("value", i64_ty, true)],
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![Statement::Assign {
-                dst: place,
+                dst: place.into(),
                 src: Operand::Constant(Value::I64(1)),
             }],
             Terminator::Goto(BasicBlockId(0)),
