@@ -128,10 +128,7 @@ fn recursive_by_value_type_is_rejected() {
     );
 
     let error = validate_body(body).expect_err("recursive value type must be rejected");
-    assert_eq!(
-        error.kind,
-        MirValidationErrorKind::RecursiveType(recursive)
-    );
+    assert_eq!(error.kind, MirValidationErrorKind::RecursiveType(recursive));
 }
 
 #[test]
