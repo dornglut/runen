@@ -104,7 +104,10 @@ fn validate_documentation(root: &Path) -> Result<(), String> {
 
             if is_spec {
                 let resolved = fs::canonicalize(&candidate).map_err(|error| {
-                    format!("failed to resolve Markdown link {target} in {}: {error}", file.display())
+                    format!(
+                        "failed to resolve Markdown link {target} in {}: {error}",
+                        file.display()
+                    )
                 })?;
                 if !resolved.starts_with(&spec_root) {
                     return Err(format!(
