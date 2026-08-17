@@ -25,7 +25,6 @@ pub enum SemanticErrorKind {
     InconsistentState(TypeId),
     TypeMismatch { expected: TypeId },
     InitRequiresNeverInitialized(Place),
-    AssignRequiresPriorInitialization(Place),
     UseOfUninitialized(Place),
     CopyOfNonCopy(TypeId),
     AssignToImmutable(LocalId),
@@ -286,14 +285,6 @@ impl Machine {
         }
 
         let dst_ty = self.place_type(dst)?;
-        {
-            let dst_state = self.place_state(dst)?;
-            if dst_state.all_never_initialized() {
-                return Err(self.error(SemanticErrorKind::AssignRequiresPriorInitialization(
-                    dst.clone(),
-                )));
-            }
-        }
         let value = self.evaluate_operand(src, dst_ty)?;
 
         self.drop_place_contents(dst, false)?;
