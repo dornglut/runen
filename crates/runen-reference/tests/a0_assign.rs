@@ -1,13 +1,20 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, LocalDecl, LocalId, Operand, Place, ScalarType, Statement,
-    Terminator, TypeDef, TypeTable, Value,
+    BasicBlock, BasicBlockId, Body, LocalDecl, LocalId, MirValidationErrorKind, Operand, Place,
+    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
 };
-use runen_reference::{Machine, SemanticErrorKind, TraceEvent, WriteKind};
+use runen_reference::{Machine, VerificationEvent, VerificationWriteKind};
+
+fn machine(body: Body) -> Machine {
+    Machine::new(validate_body(body).expect("A0 test MIR must pass validation"))
+}
 
 #[test]
 fn assignment_drops_live_old_value_then_writes_replacement() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let place = Place::local(LocalId(0));
 
     let body = Body {
@@ -18,44 +25,46 @@ fn assignment_drops_live_old_value_then_writes_replacement() {
             vec![
                 Statement::Init {
                     dst: place.clone(),
-                    src: Operand::Constant(Value::Tracked(1)),
+                    src: Operand::Constant(Value::TrackedFixture(1)),
                 },
                 Statement::Assign {
                     dst: place.clone(),
-                    src: Operand::Constant(Value::Tracked(2)),
+                    src: Operand::Constant(Value::TrackedFixture(2)),
                 },
             ],
             Terminator::Return,
         )],
     };
 
-    let report = Machine::new(body)
-        .execute()
-        .expect("mutable assignment must execute");
+    let report = machine(body).execute();
     assert_eq!(
         report
-            .trace
+            .verification_events
             .iter()
-            .filter(|event| matches!(event, TraceEvent::DropTracked { id: 1, .. }))
+            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 1, .. }))
             .count(),
         1
     );
     assert_eq!(
         report
-            .trace
+            .verification_events
             .iter()
-            .filter(|event| matches!(event, TraceEvent::DropTracked { id: 2, .. }))
+            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 2, .. }))
             .count(),
         1
     );
-    assert!(report.trace.contains(&TraceEvent::Write {
-        place,
-        kind: WriteKind::Assign,
-    }));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
 }
 
 #[test]
-fn immutable_local_cannot_be_assigned_after_initialization() {
+fn immutable_local_assignment_is_rejected_before_execution() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let place = Place::local(LocalId(0));
@@ -79,8 +88,9 @@ fn immutable_local_cannot_be_assigned_after_initialization() {
         )],
     };
 
-    let error = Machine::new(body)
-        .execute()
-        .expect_err("immutable assignment must fail");
-    assert_eq!(error.kind, SemanticErrorKind::AssignToImmutable(LocalId(0)));
+    let error = validate_body(body).expect_err("immutable assignment must fail MIR validation");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::AssignToImmutable(LocalId(0))
+    );
 }

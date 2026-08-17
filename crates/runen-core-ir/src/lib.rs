@@ -4,7 +4,13 @@
 //! This crate deliberately contains no interpreter, backend, platform model,
 //! or source-syntax concerns.
 
+mod validation;
+
 use std::fmt;
+
+pub use validation::{
+    MirPoint, MirValidationError, MirValidationErrorKind, ValidatedBody, validate_body,
+};
 
 /// Stable-in-one-body identifier for a type definition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -18,13 +24,14 @@ pub struct LocalId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BasicBlockId(pub u32);
 
-/// Scalar kinds supported by the A0 semantic kernel.
+/// Scalar kinds represented by the Core proving kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarType {
     Bool,
     I64,
-    /// A non-copy scalar with observable destruction, used by semantic tests.
-    Tracked,
+    /// Verification-only non-copy scalar used to make destruction observable to tests.
+    /// This is not a Runen language scalar primitive.
+    TrackedFixture,
 }
 
 /// A field in a structural Core type.
@@ -109,12 +116,12 @@ impl TypeTable {
         self.defs.is_empty()
     }
 
-    /// A0 copyability is structural and compiler-known.
+    /// Copyability in the represented Core subset is structural and compiler-known.
     #[must_use]
     pub fn is_copy(&self, ty: TypeId) -> bool {
         match self.get(ty).map(|def| &def.kind) {
             Some(TypeKind::Scalar(ScalarType::Bool | ScalarType::I64)) => true,
-            Some(TypeKind::Scalar(ScalarType::Tracked)) | None => false,
+            Some(TypeKind::Scalar(ScalarType::TrackedFixture)) | None => false,
             Some(TypeKind::Struct(fields)) => fields.iter().all(|field| self.is_copy(field.ty)),
         }
     }
@@ -146,7 +153,7 @@ impl TypeTable {
         match (&def.kind, value) {
             (TypeKind::Scalar(ScalarType::Bool), Value::Bool(_))
             | (TypeKind::Scalar(ScalarType::I64), Value::I64(_))
-            | (TypeKind::Scalar(ScalarType::Tracked), Value::Tracked(_)) => true,
+            | (TypeKind::Scalar(ScalarType::TrackedFixture), Value::TrackedFixture(_)) => true,
             (TypeKind::Struct(fields), Value::Struct(values)) => {
                 fields.len() == values.len()
                     && fields
@@ -159,13 +166,14 @@ impl TypeTable {
     }
 }
 
-/// Runtime-independent semantic value used by A0 MIR.
+/// Value representation used by Core proving MIR and its verification fixtures.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Bool(bool),
     I64(i64),
-    /// Identity whose destruction is visible in the reference trace.
-    Tracked(u64),
+    /// Verification-only fixture identity whose destruction is visible in the oracle trace.
+    /// This is not a Runen language value primitive.
+    TrackedFixture(u64),
     Struct(Vec<Value>),
 }
 
@@ -246,12 +254,15 @@ pub enum Operand {
     Copy(Place),
 }
 
-/// A0 Core MIR operations.
+/// Core MIR operations represented by the current proving kernel.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
     /// First initialization of a place. Re-initialization uses `Assign`.
     Init { dst: Place, src: Operand },
-    /// Non-consuming semantic observation of an initialized place.
+    /// Non-consuming Core read. The current proving MIR discards the resulting value.
+    ///
+    /// Readability and its lack of ownership transfer are semantic. Recording the
+    /// operation in reference-oracle instrumentation is verification-only.
     Read { src: Place },
     /// Mutable write/replacement/re-initialization, dropping any live old contents first.
     Assign { dst: Place, src: Operand },
@@ -259,7 +270,7 @@ pub enum Statement {
     Drop { place: Place },
 }
 
-/// Defined fault reason for the A0 reference machine.
+/// Defined fault reason for the reference machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fault {
     pub code: String,
@@ -297,7 +308,7 @@ impl BasicBlock {
     }
 }
 
-/// One executable Core body.
+/// One raw Core body before MIR validation.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Body {
     pub types: TypeTable,

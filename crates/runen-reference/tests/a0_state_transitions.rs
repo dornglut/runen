@@ -1,8 +1,8 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Field, LocalDecl, LocalId, Operand, Place, ScalarType,
-    Statement, Terminator, TypeDef, TypeTable, Value,
+    BasicBlock, BasicBlockId, Body, Field, LocalDecl, LocalId, MirValidationErrorKind, Operand,
+    Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
 };
-use runen_reference::{Machine, SemanticErrorKind, TraceEvent, WriteKind};
+use runen_reference::{Machine, VerificationEvent, VerificationWriteKind};
 
 fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
     Body {
@@ -13,10 +13,17 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
     }
 }
 
+fn machine(body: Body) -> Machine {
+    Machine::new(validate_body(body).expect("A0 test MIR must pass validation"))
+}
+
 #[test]
 fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let pair = types.push(TypeDef::structure(
         "Pair",
         vec![Field::new("left", tracked), Field::new("right", tracked)],
@@ -32,7 +39,10 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
         vec![
             Statement::Init {
                 dst: root.clone(),
-                src: Operand::Constant(Value::Struct(vec![Value::Tracked(10), Value::Tracked(20)])),
+                src: Operand::Constant(Value::Struct(vec![
+                    Value::TrackedFixture(10),
+                    Value::TrackedFixture(20),
+                ])),
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
@@ -42,16 +52,18 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
         ],
     );
 
-    let error = Machine::new(body)
-        .execute()
-        .expect_err("a partially moved aggregate must not be readable as a whole");
-    assert_eq!(error.kind, SemanticErrorKind::UseOfUninitialized(root));
+    let error = validate_body(body)
+        .expect_err("a partially moved aggregate must be rejected before execution");
+    assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(root));
 }
 
 #[test]
 fn assign_reinitializes_storage_that_became_dead_after_move() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let value = Place::local(LocalId(0));
 
     let body = one_block(
@@ -63,7 +75,7 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
         vec![
             Statement::Init {
                 dst: value.clone(),
-                src: Operand::Constant(Value::Tracked(1)),
+                src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
@@ -71,25 +83,27 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
             },
             Statement::Assign {
                 dst: value.clone(),
-                src: Operand::Constant(Value::Tracked(2)),
+                src: Operand::Constant(Value::TrackedFixture(2)),
             },
             Statement::Read { src: value.clone() },
         ],
     );
 
-    let report = Machine::new(body)
-        .execute()
-        .expect("assignment must be able to reinitialize mutable dead storage");
+    let report = machine(body).execute();
 
-    assert!(report.trace.contains(&TraceEvent::Write {
-        place: value,
-        kind: WriteKind::Assign,
-    }));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place: value,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
     let dropped_ids = report
-        .trace
+        .verification_events
         .iter()
         .filter_map(|event| match event {
-            TraceEvent::DropTracked { id, .. } => Some(*id),
+            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -99,7 +113,10 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
 #[test]
 fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let value = Place::local(LocalId(0));
 
     let body = one_block(
@@ -111,7 +128,7 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
         vec![
             Statement::Init {
                 dst: value.clone(),
-                src: Operand::Constant(Value::Tracked(1)),
+                src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
@@ -119,17 +136,16 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
             },
             Statement::Init {
                 dst: value.clone(),
-                src: Operand::Constant(Value::Tracked(2)),
+                src: Operand::Constant(Value::TrackedFixture(2)),
             },
         ],
     );
 
-    let error = Machine::new(body)
-        .execute()
-        .expect_err("dead storage must be reinitialized with Assign, not Init");
+    let error =
+        validate_body(body).expect_err("dead storage must be reinitialized with Assign, not Init");
     assert_eq!(
         error.kind,
-        SemanticErrorKind::InitRequiresNeverInitialized(value)
+        MirValidationErrorKind::InitRequiresNeverInitialized(value)
     );
 }
 
@@ -151,19 +167,24 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
         ],
     );
 
-    let report = Machine::new(body)
-        .execute()
-        .expect("mutable assignment may initialize never-initialized storage");
-    assert!(report.trace.contains(&TraceEvent::Write {
-        place: value,
-        kind: WriteKind::Assign,
-    }));
+    let report = machine(body).execute();
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place: value,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
 }
 
 #[test]
 fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let pair = types.push(TypeDef::structure(
         "Pair",
         vec![Field::new("left", tracked), Field::new("right", tracked)],
@@ -176,39 +197,47 @@ fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts
         vec![
             Statement::Init {
                 dst: root.clone().field(0),
-                src: Operand::Constant(Value::Tracked(1)),
+                src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Assign {
                 dst: root.clone(),
-                src: Operand::Constant(Value::Struct(vec![Value::Tracked(2), Value::Tracked(3)])),
+                src: Operand::Constant(Value::Struct(vec![
+                    Value::TrackedFixture(2),
+                    Value::TrackedFixture(3),
+                ])),
             },
             Statement::Read { src: root.clone() },
         ],
     );
 
-    let report = Machine::new(body)
-        .execute()
-        .expect("mutable assignment must replace partially initialized aggregate storage");
+    let report = machine(body).execute();
     let dropped_ids = report
-        .trace
+        .verification_events
         .iter()
         .filter_map(|event| match event {
-            TraceEvent::DropTracked { id, .. } => Some(*id),
+            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect::<Vec<_>>();
 
     assert_eq!(dropped_ids, vec![1, 3, 2]);
-    assert!(report.trace.contains(&TraceEvent::Write {
-        place: root,
-        kind: WriteKind::Assign,
-    }));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place: root,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
 }
 
 #[test]
 fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let pair = types.push(TypeDef::structure(
         "Pair",
         vec![Field::new("left", tracked), Field::new("right", tracked)],
@@ -222,7 +251,7 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
         vec![
             Statement::Init {
                 dst: left.clone(),
-                src: Operand::Constant(Value::Tracked(7)),
+                src: Operand::Constant(Value::TrackedFixture(7)),
             },
             Statement::Drop {
                 place: root.clone(),
@@ -230,14 +259,12 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
         ],
     );
 
-    let report = Machine::new(body)
-        .execute()
-        .expect("a partial aggregate with a live subobject can be explicitly dropped");
+    let report = machine(body).execute();
     let drops = report
-        .trace
+        .verification_events
         .iter()
         .filter_map(|event| match event {
-            TraceEvent::DropTracked { place, id } => Some((place.clone(), *id)),
+            VerificationEvent::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
             _ => None,
         })
         .collect::<Vec<_>>();
