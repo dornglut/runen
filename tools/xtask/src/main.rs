@@ -98,7 +98,9 @@ fn run(root: &Path, label: &str, program: &str, arguments: &[&str]) -> Result<()
     } else {
         Err(format!(
             "{label} failed with status {}",
-            status.code().map_or_else(|| "signal".to_owned(), |code| code.to_string())
+            status
+                .code()
+                .map_or_else(|| "signal".to_owned(), |code| code.to_string())
         ))
     }
 }
