@@ -20,6 +20,10 @@ pub struct TypeId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LocalId(pub u32);
 
+/// Stable-in-one-body identifier for a semantic loan declaration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct LoanId(pub u32);
+
 /// Stable-in-one-body identifier for a basic block.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BasicBlockId(pub u32);
@@ -177,7 +181,7 @@ pub enum Value {
     Struct(Vec<Value>),
 }
 
-/// Projection from a local place to a nested sub-place.
+/// Projection from a local place or loan root to a nested sub-place.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Projection {
     Field(u32),
@@ -211,6 +215,17 @@ impl Place {
         projected.projections.push(projection);
         projected
     }
+
+    /// Whether two structural places denote overlapping storage.
+    ///
+    /// The current field-only place model overlaps exactly when both places have
+    /// the same local root and either projection sequence is a prefix of the other.
+    #[must_use]
+    pub fn overlaps(&self, other: &Self) -> bool {
+        self.local == other.local
+            && (self.projections.starts_with(&other.projections)
+                || other.projections.starts_with(&self.projections))
+    }
 }
 
 impl fmt::Display for Place {
@@ -222,6 +237,74 @@ impl fmt::Display for Place {
             }
         }
         Ok(())
+    }
+}
+
+/// Shared or exclusive semantic access permission for one root place.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BorrowKind {
+    Shared,
+    Exclusive,
+}
+
+/// Declaration for one stable MIR loan identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LoanDecl {
+    pub name: String,
+    pub ty: TypeId,
+}
+
+impl LoanDecl {
+    #[must_use]
+    pub fn new(name: impl Into<String>, ty: TypeId) -> Self {
+        Self {
+            name: name.into(),
+            ty,
+        }
+    }
+}
+
+/// How a Core operation is authorized to reach storage.
+///
+/// `Direct` names storage through its local place. `Loan` names a place relative
+/// to an active semantic loan root. This is proving-MIR access authority, not a
+/// source-language reference value or pointer representation.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum PlaceAccess {
+    Direct(Place),
+    Loan {
+        loan: LoanId,
+        projections: Vec<Projection>,
+    },
+}
+
+impl PlaceAccess {
+    #[must_use]
+    pub fn direct(place: Place) -> Self {
+        Self::Direct(place)
+    }
+
+    #[must_use]
+    pub fn loan(loan: LoanId) -> Self {
+        Self::Loan {
+            loan,
+            projections: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn field(mut self, index: u32) -> Self {
+        match &mut self {
+            Self::Direct(place) => place.projections.push(Projection::Field(index)),
+            Self::Loan { projections, .. } => projections.push(Projection::Field(index)),
+        }
+        self
+    }
+}
+
+impl From<Place> for PlaceAccess {
+    fn from(place: Place) -> Self {
+        Self::Direct(place)
     }
 }
 
@@ -248,26 +331,34 @@ impl LocalDecl {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operand {
     Constant(Value),
-    /// Ownership transfer. The source becomes uninitialized/dead.
-    Move(Place),
+    /// Ownership transfer. The source stored-value lifetime ends.
+    Move(PlaceAccess),
     /// Non-consuming owned duplication. Requires a copyable type.
-    Copy(Place),
+    Copy(PlaceAccess),
 }
 
 /// Core MIR operations represented by the current proving kernel.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
-    /// First initialization of a place. Re-initialization uses `Assign`.
+    /// First initialization of direct storage. Re-initialization uses `Assign`.
     Init { dst: Place, src: Operand },
+    /// Begins a root borrow interval over a fully Live direct place.
+    Borrow {
+        loan: LoanId,
+        kind: BorrowKind,
+        place: Place,
+    },
+    /// Ends one active root borrow interval.
+    EndBorrow { loan: LoanId },
     /// Non-consuming Core read. The current proving MIR discards the resulting value.
     ///
     /// Readability and its lack of ownership transfer are semantic. Recording the
     /// operation in reference-oracle instrumentation is verification-only.
-    Read { src: Place },
+    Read { src: PlaceAccess },
     /// Mutable write/replacement/re-initialization, dropping any live old contents first.
-    Assign { dst: Place, src: Operand },
-    /// Explicit destruction of all currently live subobjects in the place.
-    Drop { place: Place },
+    Assign { dst: PlaceAccess, src: Operand },
+    /// Explicit destruction of all currently live subobjects in the accessed place.
+    Drop { place: PlaceAccess },
 }
 
 /// Defined fault reason for the reference machine.
@@ -313,6 +404,7 @@ impl BasicBlock {
 pub struct Body {
     pub types: TypeTable,
     pub locals: Vec<LocalDecl>,
+    pub loans: Vec<LoanDecl>,
     pub entry: BasicBlockId,
     pub blocks: Vec<BasicBlock>,
 }
@@ -321,6 +413,11 @@ impl Body {
     #[must_use]
     pub fn local(&self, id: LocalId) -> Option<&LocalDecl> {
         self.locals.get(id.0 as usize)
+    }
+
+    #[must_use]
+    pub fn loan(&self, id: LoanId) -> Option<&LoanDecl> {
+        self.loans.get(id.0 as usize)
     }
 
     #[must_use]
