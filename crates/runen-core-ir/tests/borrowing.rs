@@ -112,7 +112,10 @@ fn disjoint_exclusive_field_loans_are_valid() {
     let body = one_block(
         types,
         vec![LocalDecl::new("pair", pair, true)],
-        vec![LoanDecl::new("left", scalar), LoanDecl::new("right", scalar)],
+        vec![
+            LoanDecl::new("left", scalar),
+            LoanDecl::new("right", scalar),
+        ],
         vec![
             Statement::Init {
                 dst: root.clone(),
