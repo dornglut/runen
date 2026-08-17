@@ -25,6 +25,35 @@ fn i64_type() -> (TypeTable, TypeId) {
     (types, ty)
 }
 
+fn scalar_body(mutable: bool, loan_count: u32, rest: Vec<Statement>) -> Body {
+    let (types, ty) = i64_type();
+    let value = Place::local(LocalId(0));
+    let mut statements = vec![Statement::Init {
+        dst: value,
+        src: Operand::Constant(Value::I64(1)),
+    }];
+    statements.extend(rest);
+    let loans = (0..loan_count)
+        .map(|index| LoanDecl::new(format!("loan{index}"), ty))
+        .collect();
+    one_block(
+        types,
+        vec![LocalDecl::new("value", ty, mutable)],
+        loans,
+        statements,
+    )
+}
+
+fn pair_types() -> (TypeTable, TypeId, TypeId) {
+    let mut types = TypeTable::new();
+    let scalar = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pair = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", scalar), Field::new("right", scalar)],
+    ));
+    (types, scalar, pair)
+}
+
 fn error_kind(body: Body) -> MirValidationErrorKind {
     validate_body(body).expect_err("invalid MIR").kind
 }
@@ -46,74 +75,34 @@ fn child(loan: u32, kind: BorrowKind, parent: u32) -> Statement {
 }
 
 #[test]
-fn shared_child_from_shared_parent_is_valid() {
-    let (types, ty) = i64_type();
+fn shared_child_is_valid_from_shared_or_exclusive_parent() {
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
-        vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
-            root(0, BorrowKind::Shared, value),
-            child(1, BorrowKind::Shared, 0),
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(0)),
-            },
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(1)),
-            },
-            Statement::EndBorrow { loan: LoanId(1) },
-            Statement::EndBorrow { loan: LoanId(0) },
-        ],
-    );
-
-    validate_body(body).expect("shared authority may be reborrowed as shared");
-}
-
-#[test]
-fn shared_child_from_exclusive_parent_downgrades_only_overlapping_authority() {
-    let (types, ty) = i64_type();
-    let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, true)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
-        vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
-            root(0, BorrowKind::Exclusive, value),
-            child(1, BorrowKind::Shared, 0),
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(0)),
-            },
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(1)),
-            },
-        ],
-    );
-
-    validate_body(body).expect("shared child leaves overlapping parent read authority");
+    for parent_kind in [BorrowKind::Shared, BorrowKind::Exclusive] {
+        let body = scalar_body(
+            false,
+            2,
+            vec![
+                root(0, parent_kind, value.clone()),
+                child(1, BorrowKind::Shared, 0),
+                Statement::Read {
+                    src: PlaceAccess::loan(LoanId(0)),
+                },
+                Statement::Read {
+                    src: PlaceAccess::loan(LoanId(1)),
+                },
+            ],
+        );
+        validate_body(body).expect("shared child preserves read authority");
+    }
 }
 
 #[test]
 fn exclusive_child_requires_exclusive_parent() {
-    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+    let body = scalar_body(
+        false,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
             root(0, BorrowKind::Shared, value),
             child(1, BorrowKind::Exclusive, 0),
         ],
@@ -127,17 +116,11 @@ fn exclusive_child_requires_exclusive_parent() {
 
 #[test]
 fn parent_cannot_end_before_child() {
-    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+    let body = scalar_body(
+        false,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
             root(0, BorrowKind::Shared, value),
             child(1, BorrowKind::Shared, 0),
             Statement::EndBorrow { loan: LoanId(0) },
@@ -155,17 +138,11 @@ fn parent_cannot_end_before_child() {
 
 #[test]
 fn ending_child_restores_exclusive_parent_authority() {
-    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, true)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+    let body = scalar_body(
+        true,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
             root(0, BorrowKind::Exclusive, value),
             child(1, BorrowKind::Shared, 0),
             Statement::EndBorrow { loan: LoanId(1) },
@@ -176,22 +153,16 @@ fn ending_child_restores_exclusive_parent_authority() {
         ],
     );
 
-    validate_body(body).expect("ending the child restores delegated parent authority");
+    validate_body(body).expect("child end restores delegated parent authority");
 }
 
 #[test]
 fn exclusive_child_suspends_overlapping_parent_access() {
-    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+    let body = scalar_body(
+        false,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
             root(0, BorrowKind::Exclusive, value.clone()),
             child(1, BorrowKind::Exclusive, 0),
             Statement::Read {
@@ -211,18 +182,25 @@ fn exclusive_child_suspends_overlapping_parent_access() {
 }
 
 #[test]
-fn shared_child_blocks_parent_consuming_access() {
-    let (types, ty) = i64_type();
+fn shared_child_downgrades_exclusive_parent_to_read_only() {
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, true)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+    let readable = scalar_body(
+        true,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
+            root(0, BorrowKind::Exclusive, value.clone()),
+            child(1, BorrowKind::Shared, 0),
+            Statement::Read {
+                src: PlaceAccess::loan(LoanId(0)),
             },
+        ],
+    );
+    validate_body(readable).expect("shared child retains parent read authority");
+
+    let consuming = scalar_body(
+        true,
+        2,
+        vec![
             root(0, BorrowKind::Exclusive, value.clone()),
             child(1, BorrowKind::Shared, 0),
             Statement::Assign {
@@ -231,9 +209,8 @@ fn shared_child_blocks_parent_consuming_access() {
             },
         ],
     );
-
     assert_eq!(
-        error_kind(body),
+        error_kind(consuming),
         MirValidationErrorKind::LoanAccessDelegated {
             loan: LoanId(0),
             child: LoanId(1),
@@ -243,113 +220,9 @@ fn shared_child_blocks_parent_consuming_access() {
 }
 
 #[test]
-fn disjoint_parent_authority_remains_available() {
-    let mut types = TypeTable::new();
-    let scalar = types.push(TypeDef::scalar("i64", ScalarType::I64));
-    let pair = types.push(TypeDef::structure(
-        "Pair",
-        vec![Field::new("left", scalar), Field::new("right", scalar)],
-    ));
-    let root_place = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("pair", pair, true)],
-        vec![LoanDecl::new("parent", pair), LoanDecl::new("left", scalar)],
-        vec![
-            Statement::Init {
-                dst: root_place.clone(),
-                src: Operand::Constant(Value::Struct(vec![Value::I64(1), Value::I64(2)])),
-            },
-            root(0, BorrowKind::Exclusive, root_place),
-            Statement::Borrow {
-                loan: LoanId(1),
-                kind: BorrowKind::Exclusive,
-                src: PlaceAccess::loan(LoanId(0)).field(0),
-            },
-            Statement::Assign {
-                dst: PlaceAccess::loan(LoanId(0)).field(1),
-                src: Operand::Constant(Value::I64(3)),
-            },
-        ],
-    );
-
-    validate_body(body).expect("delegation over left does not suspend disjoint right authority");
-}
-
-#[test]
-fn overlapping_shared_children_may_coexist() {
-    let (types, ty) = i64_type();
+fn disjoint_child_preserves_parent_authority_and_allows_exclusive_sibling() {
+    let (types, scalar, pair) = pair_types();
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![
-            LoanDecl::new("parent", ty),
-            LoanDecl::new("a", ty),
-            LoanDecl::new("b", ty),
-        ],
-        vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
-            root(0, BorrowKind::Exclusive, value),
-            child(1, BorrowKind::Shared, 0),
-            child(2, BorrowKind::Shared, 0),
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(1)),
-            },
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(2)),
-            },
-        ],
-    );
-
-    validate_body(body).expect("multiple shared delegations may overlap");
-}
-
-#[test]
-fn existing_shared_child_blocks_exclusive_sibling() {
-    let (types, ty) = i64_type();
-    let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![
-            LoanDecl::new("parent", ty),
-            LoanDecl::new("shared", ty),
-            LoanDecl::new("exclusive", ty),
-        ],
-        vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
-            root(0, BorrowKind::Exclusive, value.clone()),
-            child(1, BorrowKind::Shared, 0),
-            child(2, BorrowKind::Exclusive, 0),
-        ],
-    );
-
-    assert_eq!(
-        error_kind(body),
-        MirValidationErrorKind::LoanAccessDelegated {
-            loan: LoanId(0),
-            child: LoanId(1),
-            place: value,
-        }
-    );
-}
-
-#[test]
-fn disjoint_exclusive_children_may_coexist() {
-    let mut types = TypeTable::new();
-    let scalar = types.push(TypeDef::scalar("i64", ScalarType::I64));
-    let pair = types.push(TypeDef::structure(
-        "Pair",
-        vec![Field::new("left", scalar), Field::new("right", scalar)],
-    ));
-    let root_place = Place::local(LocalId(0));
     let body = one_block(
         types,
         vec![LocalDecl::new("pair", pair, true)],
@@ -360,57 +233,73 @@ fn disjoint_exclusive_children_may_coexist() {
         ],
         vec![
             Statement::Init {
-                dst: root_place.clone(),
+                dst: value.clone(),
                 src: Operand::Constant(Value::Struct(vec![Value::I64(1), Value::I64(2)])),
             },
-            root(0, BorrowKind::Exclusive, root_place),
+            root(0, BorrowKind::Exclusive, value),
             Statement::Borrow {
                 loan: LoanId(1),
                 kind: BorrowKind::Exclusive,
                 src: PlaceAccess::loan(LoanId(0)).field(0),
+            },
+            Statement::Assign {
+                dst: PlaceAccess::loan(LoanId(0)).field(1),
+                src: Operand::Constant(Value::I64(3)),
             },
             Statement::Borrow {
                 loan: LoanId(2),
                 kind: BorrowKind::Exclusive,
                 src: PlaceAccess::loan(LoanId(0)).field(1),
             },
-            Statement::Assign {
-                dst: PlaceAccess::loan(LoanId(1)),
-                src: Operand::Constant(Value::I64(3)),
-            },
-            Statement::Assign {
-                dst: PlaceAccess::loan(LoanId(2)),
-                src: Operand::Constant(Value::I64(4)),
-            },
         ],
     );
 
-    validate_body(body).expect("disjoint exclusive child delegations may coexist");
+    validate_body(body).expect("disjoint delegation preserves parent authority");
 }
 
 #[test]
-fn grandchild_delegation_composes_recursively() {
-    let (types, ty) = i64_type();
+fn overlapping_shared_children_coexist_but_block_exclusive_sibling() {
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
+    let coexist = scalar_body(
+        false,
+        3,
         vec![
-            LoanDecl::new("root", ty),
-            LoanDecl::new("child", ty),
-            LoanDecl::new("grandchild", ty),
+            root(0, BorrowKind::Exclusive, value.clone()),
+            child(1, BorrowKind::Shared, 0),
+            child(2, BorrowKind::Shared, 0),
         ],
+    );
+    validate_body(coexist).expect("overlapping shared children may coexist");
+
+    let blocked = scalar_body(
+        false,
+        3,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
+            root(0, BorrowKind::Exclusive, value.clone()),
+            child(1, BorrowKind::Shared, 0),
+            child(2, BorrowKind::Exclusive, 0),
+        ],
+    );
+    assert_eq!(
+        error_kind(blocked),
+        MirValidationErrorKind::LoanAccessDelegated {
+            loan: LoanId(0),
+            child: LoanId(1),
+            place: value,
+        }
+    );
+}
+
+#[test]
+fn grandchild_delegation_restores_authority_leaf_to_root() {
+    let value = Place::local(LocalId(0));
+    let body = scalar_body(
+        false,
+        3,
+        vec![
             root(0, BorrowKind::Exclusive, value),
             child(1, BorrowKind::Exclusive, 0),
             child(2, BorrowKind::Shared, 1),
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(2)),
-            },
             Statement::EndBorrow { loan: LoanId(2) },
             Statement::Read {
                 src: PlaceAccess::loan(LoanId(1)),
@@ -422,22 +311,16 @@ fn grandchild_delegation_composes_recursively() {
         ],
     );
 
-    validate_body(body).expect("nested delegation restores authority leaf-to-root");
+    validate_body(body).expect("nested delegation composes recursively");
 }
 
 #[test]
-fn loan_cycle_cannot_be_created_by_reusing_active_declaration() {
-    let (types, ty) = i64_type();
+fn active_declaration_reuse_cannot_create_a_loan_cycle() {
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![LoanDecl::new("root", ty), LoanDecl::new("child", ty)],
+    let body = scalar_body(
+        false,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
             root(0, BorrowKind::Exclusive, value),
             child(1, BorrowKind::Exclusive, 0),
             Statement::Borrow {
@@ -486,7 +369,7 @@ fn child_source_must_be_fully_live() {
 }
 
 #[test]
-fn exclusive_child_can_replace_value_without_ending_interval() {
+fn exclusive_child_controls_storage_across_value_replacement() {
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar(
         "TrackedFixture",
@@ -499,7 +382,10 @@ fn exclusive_child_can_replace_value_without_ending_interval() {
             LocalDecl::new("value", tracked, true),
             LocalDecl::new("taken", tracked, false),
         ],
-        vec![LoanDecl::new("parent", tracked), LoanDecl::new("child", tracked)],
+        vec![
+            LoanDecl::new("parent", tracked),
+            LoanDecl::new("child", tracked),
+        ],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -515,37 +401,44 @@ fn exclusive_child_can_replace_value_without_ending_interval() {
                 dst: PlaceAccess::loan(LoanId(1)),
                 src: Operand::Constant(Value::TrackedFixture(2)),
             },
-            Statement::Read {
-                src: PlaceAccess::loan(LoanId(1)),
-            },
         ],
     );
 
-    validate_body(body).expect("exclusive child controls storage across value replacement");
+    validate_body(body).expect("exclusive child authority spans stored-value lifetimes");
 }
 
 #[test]
 fn immutable_storage_supports_exclusive_reborrow_without_assignment_privilege() {
-    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+    let valid = scalar_body(
+        false,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
-            root(0, BorrowKind::Exclusive, value),
+            root(0, BorrowKind::Exclusive, value.clone()),
             child(1, BorrowKind::Exclusive, 0),
             Statement::Read {
                 src: PlaceAccess::loan(LoanId(1)),
             },
         ],
     );
+    validate_body(valid).expect("exclusive delegation is independent from mutability");
 
-    validate_body(body).expect("exclusive delegation is independent from assignment mutability");
+    let invalid = scalar_body(
+        false,
+        2,
+        vec![
+            root(0, BorrowKind::Exclusive, value),
+            child(1, BorrowKind::Exclusive, 0),
+            Statement::Assign {
+                dst: PlaceAccess::loan(LoanId(1)),
+                src: Operand::Constant(Value::I64(2)),
+            },
+        ],
+    );
+    assert_eq!(
+        error_kind(invalid),
+        MirValidationErrorKind::AssignToImmutable(LocalId(0))
+    );
 }
 
 #[test]
@@ -580,17 +473,11 @@ fn reborrow_source_projection_is_typed_even_when_unreachable() {
 
 #[test]
 fn sequential_loan_id_reuse_gets_fresh_parentage() {
-    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = one_block(
-        types,
-        vec![LocalDecl::new("value", ty, false)],
-        vec![LoanDecl::new("a", ty), LoanDecl::new("b", ty)],
+    let body = scalar_body(
+        false,
+        2,
         vec![
-            Statement::Init {
-                dst: value.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            },
             root(0, BorrowKind::Exclusive, value.clone()),
             child(1, BorrowKind::Shared, 0),
             Statement::EndBorrow { loan: LoanId(1) },
@@ -602,7 +489,7 @@ fn sequential_loan_id_reuse_gets_fresh_parentage() {
         ],
     );
 
-    validate_body(body).expect("each dynamic interval replaces stale parentage");
+    validate_body(body).expect("each activation receives fresh parentage");
 }
 
 #[test]
