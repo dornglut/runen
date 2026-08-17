@@ -22,7 +22,10 @@ fn child_borrow_source_resolves_to_concrete_subplace() {
     let body = Body {
         types,
         locals: vec![LocalDecl::new("pair", pair, true)],
-        loans: vec![LoanDecl::new("parent", pair), LoanDecl::new("child", scalar)],
+        loans: vec![
+            LoanDecl::new("parent", pair),
+            LoanDecl::new("child", scalar),
+        ],
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![
@@ -87,7 +90,10 @@ fn exclusive_child_controls_storage_across_move_and_replacement() {
             LocalDecl::new("value", tracked, true),
             LocalDecl::new("taken", tracked, false),
         ],
-        loans: vec![LoanDecl::new("parent", tracked), LoanDecl::new("child", tracked)],
+        loans: vec![
+            LoanDecl::new("parent", tracked),
+            LoanDecl::new("child", tracked),
+        ],
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![
@@ -141,7 +147,10 @@ fn exclusive_child_controls_storage_across_move_and_replacement() {
             .count(),
         1
     );
-    assert!(events.contains(&VerificationEvent::DropTrackedFixture { place: taken, id: 1 }));
+    assert!(events.contains(&VerificationEvent::DropTrackedFixture {
+        place: taken,
+        id: 1
+    }));
 }
 
 #[test]
@@ -210,7 +219,10 @@ fn defined_fault_terminates_nested_forest_before_cleanup() {
     let body = Body {
         types,
         locals: vec![LocalDecl::new("value", tracked, false)],
-        loans: vec![LoanDecl::new("parent", tracked), LoanDecl::new("child", tracked)],
+        loans: vec![
+            LoanDecl::new("parent", tracked),
+            LoanDecl::new("child", tracked),
+        ],
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![
