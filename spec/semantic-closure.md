@@ -155,42 +155,56 @@ A parser implementation is not proof that this gate is closed unless the grammar
 
 ---
 
-## P0-E — Minimal Model algebra
+## P0-E — Minimal Model algebra completion
 
 **Depends on:** Core value/type semantics and the relevant bridge/resource contracts.
 
 ### Purpose
 
-Define the declarative Model stratum precisely without importing a database, ECS, graph, or incremental implementation as semantics.
+Finish the declarative Model stratum precisely without importing a database, ECS, graph, or incremental implementation as semantics.
 
-### Required topics
+### Already accepted in the provisional language specification
 
-- logical type checking;
-- logical record semantics;
+The following are **not** open P0-E design questions anymore unless later proving deliberately revises them:
+
+- `Relation<T>` is an unordered set;
+- `Bag<T>` is an unordered multiset;
+- `Sequence<T>` is an ordered sequence;
+- query results preserve multiplicity by default (bag semantics);
+- `distinct` removes multiplicity explicitly;
+- Relation/Bag do not gain semantic iteration order from storage;
+- `order by` produces a Sequence;
+- tied ordering keys leave relative tie order unspecified unless further semantic keys distinguish them;
+- the base query vocabulary is `from`, `where`, `select`, `derive`, `join`, `group`, `aggregate`, `distinct`, and `order`;
+- Graph/Field/path/window/general set-combination algebras are deferred rather than silently part of the base Model algebra;
+- `ObservationSet` is immutable for an evaluation/reaction wave and does not imply a global distributed snapshot;
+- rule proposals/events are staged before commit;
+- transition state changes and logical events acquire logical existence together with successful commit;
+- ordinary rules may read many state domains but mutate one;
+- incremental equivalence is measured against from-scratch evaluation of the corresponding source `ObservationSet`.
+
+### Required remaining topics
+
+- exact logical type checking;
+- logical record typing/identity details;
 - absence/null/optional semantics;
-- Relation/Bag/Sequence distinctions;
-- multiplicity;
-- order and tie behavior;
-- selection/projection;
-- joins;
-- union/except/distinct;
-- grouping;
-- aggregation;
-- query cardinality inference;
-- identity and stable logical keys;
-- state-domain interface;
-- revisions/commit semantics;
-- immutable `ObservationSet` compatibility;
-- event/reaction-wave semantics;
-- freshness representation;
-- `observe` contract;
-- `materialize` contract;
-- `maintain` target/failure/progress contracts;
-- incremental equivalence oracle.
+- complete join semantics;
+- grouping semantics;
+- aggregation semantics;
+- query type/cardinality inference;
+- identity and stable logical keys beyond declared uniqueness constraints;
+- exact state-domain interface;
+- revision ordering/visibility contracts where not domain-specific;
+- immutable `ObservationSet` compatibility rules across state domains;
+- exact freshness representation;
+- complete `observe` observation protocol where needed;
+- complete `materialize` observation/retention contract where needed;
+- maintenance target admission/failure/retry/reconciliation/visibility contracts;
+- a from-scratch reference evaluator/oracle for the accepted Model subset.
 
 ### Gate
 
-P0-E is closed only when a from-scratch reference evaluator can determine Model query/rule results independently of storage/index/incremental implementation choices.
+P0-E is closed only when a from-scratch reference evaluator can determine Model query/rule results independently of storage/index/incremental implementation choices and when multi-domain observation/maintenance behavior is precise enough for independent implementations to agree.
 
 ---
 
