@@ -8,4 +8,4 @@ Purity does not imply termination, absence of defined faults, safe speculation, 
 
 Defined faults are distinct from undefined behavior and from ordinary recoverable result values.
 
-The complete panic/fault/unwind/catch model and exact source-level effect system are unspecified in this revision.
+The complete panic, fault, unwind, catch, and source-level effect-system rules are not defined by this revision.
