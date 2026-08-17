@@ -86,7 +86,6 @@ impl ObjectState {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ActiveLoan {
-    kind: BorrowKind,
     place: Place,
 }
 
@@ -191,7 +190,6 @@ impl Machine {
             "validated Core MIR cannot begin an already-active loan"
         );
         *slot = Some(ActiveLoan {
-            kind,
             place: place.clone(),
         });
         self.verification_events
