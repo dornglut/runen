@@ -360,34 +360,25 @@ fn assign_starts_a_new_stored_value_lifetime_after_drop() {
 }
 
 #[test]
-fn assignment_destruction_domain_is_computed_after_source_move() {
+fn self_move_assignment_uses_the_post_source_destruction_domain() {
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar(
         "TrackedFixture",
         ScalarType::TrackedFixture,
     ));
-    let pair = types.push(TypeDef::structure(
-        "Pair",
-        vec![Field::new("left", tracked), Field::new("right", tracked)],
-    ));
-    let root = Place::local(LocalId(0));
-    let left = root.clone().field(0);
-    let right = root.clone().field(1);
+    let value = Place::local(LocalId(0));
 
     let body = one_block(
         types,
-        vec![LocalDecl::new("pair", pair, true)],
+        vec![LocalDecl::new("value", tracked, true)],
         vec![
             Statement::Init {
-                dst: root.clone(),
-                src: Operand::Constant(Value::Struct(vec![
-                    Value::TrackedFixture(1),
-                    Value::TrackedFixture(2),
-                ])),
+                dst: value.clone(),
+                src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Assign {
-                dst: left.clone(),
-                src: Operand::Move(right.clone()),
+                dst: value.clone(),
+                src: Operand::Move(value.clone()),
             },
         ],
     );
@@ -397,19 +388,18 @@ fn assignment_destruction_domain_is_computed_after_source_move() {
         report.verification_events,
         vec![
             VerificationEvent::Write {
-                place: root,
+                place: value.clone(),
                 kind: VerificationWriteKind::Init,
             },
-            VerificationEvent::Move(right),
-            VerificationEvent::DropTrackedFixture {
-                place: left.clone(),
-                id: 1,
-            },
+            VerificationEvent::Move(value.clone()),
             VerificationEvent::Write {
-                place: left.clone(),
+                place: value.clone(),
                 kind: VerificationWriteKind::Assign,
             },
-            VerificationEvent::DropTrackedFixture { place: left, id: 2 },
+            VerificationEvent::DropTrackedFixture {
+                place: value,
+                id: 1,
+            },
         ]
     );
 }
