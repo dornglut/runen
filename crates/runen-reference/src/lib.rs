@@ -2,8 +2,8 @@
 //! Executable reference semantics for validated Runen Core MIR.
 
 use runen_core_ir::{
-    LocalId, Operand, Place, Projection, ScalarType, Statement, Terminator, TypeId, TypeKind,
-    TypeTable, ValidatedBody, Value,
+    BorrowKind, LoanId, LocalId, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
+    Terminator, TypeId, TypeKind, TypeTable, ValidatedBody, Value,
 };
 
 /// Why a write occurred in verification instrumentation.
@@ -19,6 +19,12 @@ pub enum VerificationWriteKind {
 /// are not the observable program trace defined by the Runen language semantics.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerificationEvent {
+    BorrowStart {
+        loan: LoanId,
+        kind: BorrowKind,
+        place: Place,
+    },
+    BorrowEnd(LoanId),
     Read(Place),
     Move(Place),
     Copy(Place),
@@ -78,10 +84,16 @@ impl ObjectState {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+struct ActiveLoan {
+    place: Place,
+}
+
 /// Small executable abstract machine for validated Core MIR.
 pub struct Machine {
     body: ValidatedBody,
     locals: Vec<ObjectState>,
+    active_loans: Vec<Option<ActiveLoan>>,
     verification_events: Vec<VerificationEvent>,
 }
 
@@ -95,10 +107,12 @@ impl Machine {
             .iter()
             .map(|local| ObjectState::uninitialized(&body.as_body().types, local.ty))
             .collect();
+        let active_loans = vec![None; body.as_body().loans.len()];
 
         Self {
             body,
             locals,
+            active_loans,
             verification_events: Vec::new(),
         }
     }
@@ -125,6 +139,7 @@ impl Machine {
             match block.terminator {
                 Terminator::Goto(target) => current = target,
                 Terminator::Return => {
+                    self.end_all_borrows();
                     self.cleanup_all_locals();
                     return ExecutionReport {
                         terminal: TerminalStatus::Returned,
@@ -132,6 +147,7 @@ impl Machine {
                     };
                 }
                 Terminator::Fault(fault) => {
+                    self.end_all_borrows();
                     self.cleanup_all_locals();
                     return ExecutionReport {
                         terminal: TerminalStatus::Faulted(fault.code),
@@ -145,6 +161,8 @@ impl Machine {
     fn execute_statement(&mut self, statement: &Statement) {
         match statement {
             Statement::Init { dst, src } => self.initialize(dst, src),
+            Statement::Borrow { loan, kind, place } => self.begin_borrow(*loan, *kind, place),
+            Statement::EndBorrow { loan } => self.end_borrow(*loan),
             Statement::Read { src } => self.read(src),
             Statement::Assign { dst, src } => self.assign(dst, src),
             Statement::Drop { place } => self.drop_explicit(place),
@@ -162,51 +180,106 @@ impl Machine {
         });
     }
 
-    fn assign(&mut self, dst: &Place, src: &Operand) {
-        let dst_ty = self.place_type(dst);
-        let value = self.evaluate_operand(src);
+    fn begin_borrow(&mut self, loan: LoanId, kind: BorrowKind, place: &Place) {
+        let slot = self
+            .active_loans
+            .get_mut(loan.0 as usize)
+            .expect("validated Core MIR references only declared loans");
+        assert!(
+            slot.is_none(),
+            "validated Core MIR cannot begin an already-active loan"
+        );
+        *slot = Some(ActiveLoan {
+            place: place.clone(),
+        });
+        self.verification_events
+            .push(VerificationEvent::BorrowStart {
+                loan,
+                kind,
+                place: place.clone(),
+            });
+    }
 
-        self.drop_place_contents(dst);
-        let dst_state = place_state_mut(&mut self.locals, dst);
+    fn end_borrow(&mut self, loan: LoanId) {
+        let slot = self
+            .active_loans
+            .get_mut(loan.0 as usize)
+            .expect("validated Core MIR references only declared loans");
+        assert!(
+            slot.take().is_some(),
+            "validated Core MIR cannot end an inactive loan"
+        );
+        self.verification_events
+            .push(VerificationEvent::BorrowEnd(loan));
+    }
+
+    fn assign(&mut self, dst: &PlaceAccess, src: &Operand) {
+        let value = self.evaluate_operand(src);
+        let dst = self.resolve_access(dst);
+        let dst_ty = self.place_type(&dst);
+
+        self.drop_place_contents(&dst);
+        let dst_state = place_state_mut(&mut self.locals, &dst);
         write_value(&self.body.as_body().types, dst_ty, dst_state, value);
         self.verification_events.push(VerificationEvent::Write {
-            place: dst.clone(),
+            place: dst,
             kind: VerificationWriteKind::Assign,
         });
     }
 
-    fn read(&mut self, src: &Place) {
-        self.verification_events
-            .push(VerificationEvent::Read(src.clone()));
+    fn read(&mut self, src: &PlaceAccess) {
+        let src = self.resolve_access(src);
+        self.verification_events.push(VerificationEvent::Read(src));
     }
 
-    fn drop_explicit(&mut self, place: &Place) {
-        self.drop_place_contents(place);
+    fn drop_explicit(&mut self, access: &PlaceAccess) {
+        let place = self.resolve_access(access);
+        self.drop_place_contents(&place);
     }
 
     fn evaluate_operand(&mut self, operand: &Operand) -> Value {
         match operand {
             Operand::Constant(value) => value.clone(),
             Operand::Move(src) => {
-                let src_ty = self.place_type(src);
-                let src_state = place_state_mut(&mut self.locals, src);
+                let src = self.resolve_access(src);
+                let src_ty = self.place_type(&src);
+                let src_state = place_state_mut(&mut self.locals, &src);
                 let value = take_value(&self.body.as_body().types, src_ty, src_state);
-                self.verification_events
-                    .push(VerificationEvent::Move(src.clone()));
+                self.verification_events.push(VerificationEvent::Move(src));
                 value
             }
             Operand::Copy(src) => {
-                let src_ty = self.place_type(src);
+                let src = self.resolve_access(src);
+                let src_ty = self.place_type(&src);
                 let value = clone_value(
                     &self.body.as_body().types,
                     src_ty,
-                    place_state(&self.locals, src),
+                    place_state(&self.locals, &src),
                 );
-                self.verification_events
-                    .push(VerificationEvent::Copy(src.clone()));
+                self.verification_events.push(VerificationEvent::Copy(src));
                 value
             }
         }
+    }
+
+    fn resolve_access(&self, access: &PlaceAccess) -> Place {
+        match access {
+            PlaceAccess::Direct(place) => place.clone(),
+            PlaceAccess::Loan { loan, projections } => {
+                let active = self
+                    .active_loans
+                    .get(loan.0 as usize)
+                    .and_then(Option::as_ref)
+                    .expect("validated Core MIR uses only active loans");
+                let mut place = active.place.clone();
+                place.projections.extend(projections.iter().copied());
+                place
+            }
+        }
+    }
+
+    fn end_all_borrows(&mut self) {
+        self.active_loans.fill(None);
     }
 
     fn cleanup_all_locals(&mut self) {

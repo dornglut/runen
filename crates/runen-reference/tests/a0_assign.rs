@@ -20,6 +20,7 @@ fn assignment_drops_live_old_value_then_writes_replacement() {
     let body = Body {
         types,
         locals: vec![LocalDecl::new("value", tracked, true)],
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![
@@ -28,7 +29,7 @@ fn assignment_drops_live_old_value_then_writes_replacement() {
                     src: Operand::Constant(Value::TrackedFixture(1)),
                 },
                 Statement::Assign {
-                    dst: place.clone(),
+                    dst: place.clone().into(),
                     src: Operand::Constant(Value::TrackedFixture(2)),
                 },
             ],
@@ -72,6 +73,7 @@ fn immutable_local_assignment_is_rejected_before_execution() {
     let body = Body {
         types,
         locals: vec![LocalDecl::new("value", i64_ty, false)],
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(
             vec![
@@ -80,7 +82,7 @@ fn immutable_local_assignment_is_rejected_before_execution() {
                     src: Operand::Constant(Value::I64(1)),
                 },
                 Statement::Assign {
-                    dst: place,
+                    dst: place.into(),
                     src: Operand::Constant(Value::I64(2)),
                 },
             ],

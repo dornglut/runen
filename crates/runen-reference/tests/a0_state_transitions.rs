@@ -8,6 +8,7 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
     Body {
         types,
         locals,
+        loans: Vec::new(),
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(statements, Terminator::Return)],
     }
@@ -46,9 +47,11 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Move(root.clone().field(0)),
+                src: Operand::Move(root.clone().field(0).into()),
             },
-            Statement::Read { src: root.clone() },
+            Statement::Read {
+                src: root.clone().into(),
+            },
         ],
     );
 
@@ -79,13 +82,15 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Move(value.clone()),
+                src: Operand::Move(value.clone().into()),
             },
             Statement::Assign {
-                dst: value.clone(),
+                dst: value.clone().into(),
                 src: Operand::Constant(Value::TrackedFixture(2)),
             },
-            Statement::Read { src: value.clone() },
+            Statement::Read {
+                src: value.clone().into(),
+            },
         ],
     );
 
@@ -132,7 +137,7 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
-                src: Operand::Move(value.clone()),
+                src: Operand::Move(value.clone().into()),
             },
             Statement::Init {
                 dst: value.clone(),
@@ -160,10 +165,12 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
         vec![LocalDecl::new("value", i64_ty, true)],
         vec![
             Statement::Assign {
-                dst: value.clone(),
+                dst: value.clone().into(),
                 src: Operand::Constant(Value::I64(1)),
             },
-            Statement::Read { src: value.clone() },
+            Statement::Read {
+                src: value.clone().into(),
+            },
         ],
     );
 
@@ -200,13 +207,15 @@ fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts
                 src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Assign {
-                dst: root.clone(),
+                dst: root.clone().into(),
                 src: Operand::Constant(Value::Struct(vec![
                     Value::TrackedFixture(2),
                     Value::TrackedFixture(3),
                 ])),
             },
-            Statement::Read { src: root.clone() },
+            Statement::Read {
+                src: root.clone().into(),
+            },
         ],
     );
 
@@ -254,7 +263,7 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
                 src: Operand::Constant(Value::TrackedFixture(7)),
             },
             Statement::Drop {
-                place: root.clone(),
+                place: root.clone().into(),
             },
         ],
     );
@@ -290,7 +299,7 @@ fn init_cannot_start_a_second_stored_value_lifetime_after_drop() {
                 src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Drop {
-                place: value.clone(),
+                place: value.clone().into(),
             },
             Statement::Init {
                 dst: value.clone(),
@@ -324,13 +333,15 @@ fn assign_starts_a_new_stored_value_lifetime_after_drop() {
                 src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Drop {
-                place: value.clone(),
+                place: value.clone().into(),
             },
             Statement::Assign {
-                dst: value.clone(),
+                dst: value.clone().into(),
                 src: Operand::Constant(Value::TrackedFixture(2)),
             },
-            Statement::Read { src: value.clone() },
+            Statement::Read {
+                src: value.clone().into(),
+            },
         ],
     );
 
@@ -377,8 +388,8 @@ fn self_move_assignment_uses_the_post_source_destruction_domain() {
                 src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Assign {
-                dst: value.clone(),
-                src: Operand::Move(value.clone()),
+                dst: value.clone().into(),
+                src: Operand::Move(value.clone().into()),
             },
         ],
     );
