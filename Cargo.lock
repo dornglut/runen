@@ -12,3 +12,7 @@ version = "0.0.0"
 dependencies = [
  "runen-core-ir",
 ]
+
+[[package]]
+name = "xtask"
+version = "0.0.0"
