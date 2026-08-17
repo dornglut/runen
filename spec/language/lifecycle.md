@@ -16,8 +16,6 @@ Realization
 Execution
 ```
 
-An implementation need not literally implement five runtime/compiler stages.
-
 ## Language validation
 
 Language validation determines whether a program satisfies the rules of the claimed language/profile, including applicable syntax, names, types, ownership, effects, resources, and statically checkable unsafe preconditions.
