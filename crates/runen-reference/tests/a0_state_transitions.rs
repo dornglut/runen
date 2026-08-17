@@ -161,6 +161,51 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
 }
 
 #[test]
+fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts() {
+    let mut types = TypeTable::new();
+    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let pair = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", tracked), Field::new("right", tracked)],
+    ));
+    let root = Place::local(LocalId(0));
+
+    let body = one_block(
+        types,
+        vec![LocalDecl::new("pair", pair, true)],
+        vec![
+            Statement::Init {
+                dst: root.clone().field(0),
+                src: Operand::Constant(Value::Tracked(1)),
+            },
+            Statement::Assign {
+                dst: root.clone(),
+                src: Operand::Constant(Value::Struct(vec![Value::Tracked(2), Value::Tracked(3)])),
+            },
+            Statement::Read { src: root.clone() },
+        ],
+    );
+
+    let report = Machine::new(body)
+        .execute()
+        .expect("mutable assignment must replace partially initialized aggregate storage");
+    let dropped_ids = report
+        .trace
+        .iter()
+        .filter_map(|event| match event {
+            TraceEvent::DropTracked { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(dropped_ids, vec![1, 3, 2]);
+    assert!(report.trace.contains(&TraceEvent::Write {
+        place: root,
+        kind: WriteKind::Assign,
+    }));
+}
+
+#[test]
 fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
