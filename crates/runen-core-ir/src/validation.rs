@@ -1,15 +1,18 @@
+use std::collections::HashSet;
+
 use crate::{
-    BasicBlockId, Body, LocalId, Operand, Place, Statement, Terminator, TypeId, TypeKind, TypeTable,
+    BasicBlockId, Body, LocalId, Operand, Place, Projection, Statement, Terminator, TypeId,
+    TypeKind, TypeTable,
 };
 
-/// Location within Core MIR used by validation and reference-execution diagnostics.
+/// Location within Core MIR used by validation diagnostics.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MirPoint {
     pub block: BasicBlockId,
     pub statement: Option<usize>,
 }
 
-/// Statically decidable reasons that raw Core MIR cannot be admitted for execution.
+/// Reasons that raw Core MIR is not valid for the currently represented Core subset.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MirValidationErrorKind {
     InvalidEntryBlock(BasicBlockId),
@@ -21,19 +24,22 @@ pub enum MirValidationErrorKind {
     TypeMismatch { expected: TypeId },
     CopyOfNonCopy(TypeId),
     AssignToImmutable(LocalId),
+    InitRequiresNeverInitialized(Place),
+    UseOfUninitialized(Place),
+    DropOfUninitialized(Place),
 }
 
-/// Diagnostic produced while admitting raw Core MIR.
+/// Diagnostic produced while validating raw Core MIR.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MirValidationError {
     pub point: Option<MirPoint>,
     pub kind: MirValidationErrorKind,
 }
 
-/// Core MIR that passed all statically decidable checks represented by this revision.
+/// Core MIR that passed the structural and language-validity checks represented here.
 ///
-/// The wrapper is intentionally constructible only through [`validate_body`]. Exposing
-/// the body read-only preserves the admission guarantee until the wrapper is consumed.
+/// The wrapper is intentionally constructible only through [`validate_body`] and
+/// exposes the validated body read-only so execution cannot invalidate the proof.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ValidatedBody {
     body: Body,
@@ -44,55 +50,19 @@ impl ValidatedBody {
     pub fn as_body(&self) -> &Body {
         &self.body
     }
-
-    #[must_use]
-    pub fn into_body(self) -> Body {
-        self.body
-    }
 }
 
-/// Validates raw Core MIR before it may enter an executable semantic oracle.
+/// Validates raw Core MIR before it may enter the reference machine.
 ///
-/// This boundary is deliberately limited to structural and statically decidable
-/// constraints of the currently represented MIR. Path-state legality remains an
-/// execution-time proving concern until a later owning slice explicitly moves it.
+/// The boundary covers all structural, typing, copyability, mutability, and
+/// initialization-state rules expressible by the currently represented A0 MIR.
+/// Later language domains extend validation in their owning slices rather than
+/// being anticipated here.
 pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
     validate_type_table(&body.types)?;
     validate_local_declarations(&body)?;
-
-    if body.block(body.entry).is_none() {
-        return Err(MirValidationError {
-            point: None,
-            kind: MirValidationErrorKind::InvalidEntryBlock(body.entry),
-        });
-    }
-
-    for (block_index, block) in body.blocks.iter().enumerate() {
-        let block_id = BasicBlockId(
-            u32::try_from(block_index).expect("basic block index exceeds u32::MAX"),
-        );
-
-        for (statement_index, statement) in block.statements.iter().enumerate() {
-            let point = MirPoint {
-                block: block_id,
-                statement: Some(statement_index),
-            };
-            validate_statement(&body, statement, &point)?;
-        }
-
-        if let Terminator::Goto(target) = &block.terminator
-            && body.block(*target).is_none()
-        {
-            return Err(MirValidationError {
-                point: Some(MirPoint {
-                    block: block_id,
-                    statement: None,
-                }),
-                kind: MirValidationErrorKind::InvalidTargetBlock(*target),
-            });
-        }
-    }
-
+    validate_structure_and_static_rules(&body)?;
+    validate_path_state(&body)?;
     Ok(ValidatedBody { body })
 }
 
@@ -111,9 +81,9 @@ fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
 
         while let Some((current, next_field)) = stack.pop() {
             let current_index = current.0 as usize;
-            let Some(definition) = types.get(current) else {
-                return Err(type_error(MirValidationErrorKind::UnknownType(current)));
-            };
+            let definition = types
+                .get(current)
+                .expect("type-validation stack contains a known table index");
 
             match &definition.kind {
                 TypeKind::Scalar(_) => {
@@ -159,7 +129,42 @@ fn validate_local_declarations(body: &Body) -> Result<(), MirValidationError> {
     Ok(())
 }
 
-fn validate_statement(
+fn validate_structure_and_static_rules(body: &Body) -> Result<(), MirValidationError> {
+    if body.block(body.entry).is_none() {
+        return Err(MirValidationError {
+            point: None,
+            kind: MirValidationErrorKind::InvalidEntryBlock(body.entry),
+        });
+    }
+
+    for (block_index, block) in body.blocks.iter().enumerate() {
+        let block_id = block_id(block_index);
+
+        for (statement_index, statement) in block.statements.iter().enumerate() {
+            let point = MirPoint {
+                block: block_id,
+                statement: Some(statement_index),
+            };
+            validate_static_statement(body, statement, &point)?;
+        }
+
+        if let Terminator::Goto(target) = &block.terminator {
+            if body.block(*target).is_none() {
+                return Err(MirValidationError {
+                    point: Some(MirPoint {
+                        block: block_id,
+                        statement: None,
+                    }),
+                    kind: MirValidationErrorKind::InvalidTargetBlock(*target),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn validate_static_statement(
     body: &Body,
     statement: &Statement,
     point: &MirPoint,
@@ -167,25 +172,24 @@ fn validate_statement(
     match statement {
         Statement::Init { dst, src } => {
             let expected = place_type(body, dst, point)?;
-            validate_operand(body, src, expected, point)
+            validate_operand_type(body, src, expected, point)
         }
         Statement::Read { src } => {
             place_type(body, src, point)?;
             Ok(())
         }
         Statement::Assign { dst, src } => {
-            let local = body.local(dst.local).ok_or_else(|| MirValidationError {
-                point: Some(point.clone()),
-                kind: MirValidationErrorKind::InvalidLocal(dst.local),
-            })?;
+            let expected = place_type(body, dst, point)?;
+            let local = body
+                .local(dst.local)
+                .expect("validated place references a known containing local");
             if !local.mutable {
                 return Err(MirValidationError {
                     point: Some(point.clone()),
                     kind: MirValidationErrorKind::AssignToImmutable(dst.local),
                 });
             }
-            let expected = place_type(body, dst, point)?;
-            validate_operand(body, src, expected, point)
+            validate_operand_type(body, src, expected, point)
         }
         Statement::Drop { place } => {
             place_type(body, place, point)?;
@@ -194,7 +198,7 @@ fn validate_statement(
     }
 }
 
-fn validate_operand(
+fn validate_operand_type(
     body: &Body,
     operand: &Operand,
     expected: TypeId,
@@ -256,6 +260,229 @@ fn place_type(body: &Body, place: &Place, point: &MirPoint) -> Result<TypeId, Mi
             point: Some(point.clone()),
             kind: MirValidationErrorKind::InvalidProjection(place.clone()),
         })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+enum LeafState {
+    NeverInitialized,
+    Live,
+    Dead,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum ObjectState {
+    Leaf(LeafState),
+    Aggregate(Vec<ObjectState>),
+}
+
+impl ObjectState {
+    fn uninitialized(types: &TypeTable, ty: TypeId) -> Self {
+        let definition = types
+            .get(ty)
+            .expect("validated type graph references only known types");
+        match &definition.kind {
+            TypeKind::Scalar(_) => Self::Leaf(LeafState::NeverInitialized),
+            TypeKind::Struct(fields) => Self::Aggregate(
+                fields
+                    .iter()
+                    .map(|field| Self::uninitialized(types, field.ty))
+                    .collect(),
+            ),
+        }
+    }
+
+    fn all_never_initialized(&self) -> bool {
+        match self {
+            Self::Leaf(LeafState::NeverInitialized) => true,
+            Self::Leaf(LeafState::Live | LeafState::Dead) => false,
+            Self::Aggregate(fields) => fields.iter().all(Self::all_never_initialized),
+        }
+    }
+
+    fn fully_live(&self) -> bool {
+        match self {
+            Self::Leaf(LeafState::Live) => true,
+            Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => false,
+            Self::Aggregate(fields) => fields.iter().all(Self::fully_live),
+        }
+    }
+
+    fn any_live(&self) -> bool {
+        match self {
+            Self::Leaf(LeafState::Live) => true,
+            Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => false,
+            Self::Aggregate(fields) => fields.iter().any(Self::any_live),
+        }
+    }
+
+    fn mark_live(&mut self) {
+        match self {
+            Self::Leaf(state) => *state = LeafState::Live,
+            Self::Aggregate(fields) => fields.iter_mut().for_each(Self::mark_live),
+        }
+    }
+
+    fn mark_dead(&mut self) {
+        match self {
+            Self::Leaf(state) => *state = LeafState::Dead,
+            Self::Aggregate(fields) => fields.iter_mut().for_each(Self::mark_dead),
+        }
+    }
+
+    fn drop_live(&mut self) {
+        match self {
+            Self::Leaf(state) => {
+                if *state == LeafState::Live {
+                    *state = LeafState::Dead;
+                }
+            }
+            Self::Aggregate(fields) => fields.iter_mut().for_each(Self::drop_live),
+        }
+    }
+}
+
+fn validate_path_state(body: &Body) -> Result<(), MirValidationError> {
+    let mut locals = body
+        .locals
+        .iter()
+        .map(|local| ObjectState::uninitialized(&body.types, local.ty))
+        .collect::<Vec<_>>();
+    let mut current = body.entry;
+    let mut seen = HashSet::new();
+
+    loop {
+        if !seen.insert((current, locals.clone())) {
+            // The current MIR has one control-flow successor per block. Reaching the
+            // same block with the same abstract storage state therefore proves that
+            // future validation repeats forever without exposing a new invalid state.
+            return Ok(());
+        }
+
+        let block = body
+            .block(current)
+            .expect("structurally validated Core MIR reaches only known blocks");
+
+        for (statement_index, statement) in block.statements.iter().enumerate() {
+            let point = MirPoint {
+                block: current,
+                statement: Some(statement_index),
+            };
+            validate_state_statement(&mut locals, statement, &point)?;
+        }
+
+        match &block.terminator {
+            Terminator::Goto(target) => current = *target,
+            Terminator::Return | Terminator::Fault(_) => return Ok(()),
+        }
+    }
+}
+
+fn validate_state_statement(
+    locals: &mut [ObjectState],
+    statement: &Statement,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    match statement {
+        Statement::Init { dst, src } => {
+            if !place_state(locals, dst).all_never_initialized() {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::InitRequiresNeverInitialized(dst.clone()),
+                ));
+            }
+            validate_operand_state(locals, src, point)?;
+            place_state_mut(locals, dst).mark_live();
+        }
+        Statement::Read { src } => {
+            require_fully_live(locals, src, point)?;
+        }
+        Statement::Assign { dst, src } => {
+            validate_operand_state(locals, src, point)?;
+            place_state_mut(locals, dst).mark_live();
+        }
+        Statement::Drop { place } => {
+            if !place_state(locals, place).any_live() {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::DropOfUninitialized(place.clone()),
+                ));
+            }
+            place_state_mut(locals, place).drop_live();
+        }
+    }
+    Ok(())
+}
+
+fn validate_operand_state(
+    locals: &mut [ObjectState],
+    operand: &Operand,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    match operand {
+        Operand::Constant(_) => Ok(()),
+        Operand::Move(src) => {
+            require_fully_live(locals, src, point)?;
+            place_state_mut(locals, src).mark_dead();
+            Ok(())
+        }
+        Operand::Copy(src) => require_fully_live(locals, src, point),
+    }
+}
+
+fn require_fully_live(
+    locals: &[ObjectState],
+    place: &Place,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    if place_state(locals, place).fully_live() {
+        Ok(())
+    } else {
+        Err(point_error(
+            point,
+            MirValidationErrorKind::UseOfUninitialized(place.clone()),
+        ))
+    }
+}
+
+fn place_state<'a>(locals: &'a [ObjectState], place: &Place) -> &'a ObjectState {
+    let mut state = &locals[place.local.0 as usize];
+    for projection in &place.projections {
+        match (state, projection) {
+            (ObjectState::Aggregate(fields), Projection::Field(index)) => {
+                state = &fields[*index as usize];
+            }
+            (ObjectState::Leaf(_), Projection::Field(_)) => {
+                unreachable!("structural validation rejects projections from scalar state");
+            }
+        }
+    }
+    state
+}
+
+fn place_state_mut<'a>(locals: &'a mut [ObjectState], place: &Place) -> &'a mut ObjectState {
+    let mut state = &mut locals[place.local.0 as usize];
+    for projection in &place.projections {
+        match (state, projection) {
+            (ObjectState::Aggregate(fields), Projection::Field(index)) => {
+                state = &mut fields[*index as usize];
+            }
+            (ObjectState::Leaf(_), Projection::Field(_)) => {
+                unreachable!("structural validation rejects projections from scalar state");
+            }
+        }
+    }
+    state
+}
+
+fn block_id(index: usize) -> BasicBlockId {
+    BasicBlockId(u32::try_from(index).expect("basic block index exceeds u32::MAX"))
+}
+
+fn point_error(point: &MirPoint, kind: MirValidationErrorKind) -> MirValidationError {
+    MirValidationError {
+        point: Some(point.clone()),
+        kind,
+    }
 }
 
 fn type_error(kind: MirValidationErrorKind) -> MirValidationError {
