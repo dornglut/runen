@@ -271,3 +271,135 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
 
     assert_eq!(drops, vec![(left, 7)]);
 }
+
+#[test]
+fn init_cannot_start_a_second_stored_value_lifetime_after_drop() {
+    let mut types = TypeTable::new();
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
+    let value = Place::local(LocalId(0));
+
+    let body = one_block(
+        types,
+        vec![LocalDecl::new("value", tracked, false)],
+        vec![
+            Statement::Init {
+                dst: value.clone(),
+                src: Operand::Constant(Value::TrackedFixture(1)),
+            },
+            Statement::Drop {
+                place: value.clone(),
+            },
+            Statement::Init {
+                dst: value.clone(),
+                src: Operand::Constant(Value::TrackedFixture(2)),
+            },
+        ],
+    );
+
+    let error = validate_body(body).expect_err("Drop leaves Dead storage, not fresh storage");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::InitRequiresNeverInitialized(value)
+    );
+}
+
+#[test]
+fn assign_starts_a_new_stored_value_lifetime_after_drop() {
+    let mut types = TypeTable::new();
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
+    let value = Place::local(LocalId(0));
+
+    let body = one_block(
+        types,
+        vec![LocalDecl::new("value", tracked, true)],
+        vec![
+            Statement::Init {
+                dst: value.clone(),
+                src: Operand::Constant(Value::TrackedFixture(1)),
+            },
+            Statement::Drop {
+                place: value.clone(),
+            },
+            Statement::Assign {
+                dst: value.clone(),
+                src: Operand::Constant(Value::TrackedFixture(2)),
+            },
+            Statement::Read { src: value.clone() },
+        ],
+    );
+
+    let report = machine(body).execute();
+    assert_eq!(
+        report.verification_events,
+        vec![
+            VerificationEvent::Write {
+                place: value.clone(),
+                kind: VerificationWriteKind::Init,
+            },
+            VerificationEvent::DropTrackedFixture {
+                place: value.clone(),
+                id: 1,
+            },
+            VerificationEvent::Write {
+                place: value.clone(),
+                kind: VerificationWriteKind::Assign,
+            },
+            VerificationEvent::Read(value.clone()),
+            VerificationEvent::DropTrackedFixture {
+                place: value,
+                id: 2,
+            },
+        ]
+    );
+}
+
+#[test]
+fn self_move_assignment_uses_the_post_source_destruction_domain() {
+    let mut types = TypeTable::new();
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
+    let value = Place::local(LocalId(0));
+
+    let body = one_block(
+        types,
+        vec![LocalDecl::new("value", tracked, true)],
+        vec![
+            Statement::Init {
+                dst: value.clone(),
+                src: Operand::Constant(Value::TrackedFixture(1)),
+            },
+            Statement::Assign {
+                dst: value.clone(),
+                src: Operand::Move(value.clone()),
+            },
+        ],
+    );
+
+    let report = machine(body).execute();
+    assert_eq!(
+        report.verification_events,
+        vec![
+            VerificationEvent::Write {
+                place: value.clone(),
+                kind: VerificationWriteKind::Init,
+            },
+            VerificationEvent::Move(value.clone()),
+            VerificationEvent::Write {
+                place: value.clone(),
+                kind: VerificationWriteKind::Assign,
+            },
+            VerificationEvent::DropTrackedFixture {
+                place: value,
+                id: 1,
+            },
+        ]
+    );
+}

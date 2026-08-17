@@ -227,6 +227,70 @@ fn fault_unwinds_live_locals_once_in_reverse_declaration_order() {
 }
 
 #[test]
+fn fault_cleanup_uses_the_current_partial_destruction_domain() {
+    let mut types = TypeTable::new();
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
+    let pair = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", tracked), Field::new("right", tracked)],
+    ));
+    let root = Place::local(LocalId(0));
+    let left = root.clone().field(0);
+    let right = root.clone().field(1);
+    let taken = Place::local(LocalId(1));
+
+    let body = Body {
+        types,
+        locals: vec![
+            LocalDecl::new("pair", pair, false),
+            LocalDecl::new("taken", tracked, false),
+        ],
+        entry: BasicBlockId(0),
+        blocks: vec![BasicBlock::new(
+            vec![
+                Statement::Init {
+                    dst: root,
+                    src: Operand::Constant(Value::Struct(vec![
+                        Value::TrackedFixture(10),
+                        Value::TrackedFixture(20),
+                    ])),
+                },
+                Statement::Init {
+                    dst: taken.clone(),
+                    src: Operand::Move(left),
+                },
+                Statement::Drop {
+                    place: right.clone(),
+                },
+            ],
+            Terminator::Fault(Fault::new("PARTIAL_FAULT")),
+        )],
+    };
+
+    let report = machine(body).execute();
+    assert_eq!(
+        report.terminal,
+        TerminalStatus::Faulted("PARTIAL_FAULT".into())
+    );
+
+    let drops = report
+        .verification_events
+        .iter()
+        .filter_map(|event| match event {
+            VerificationEvent::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    // `pair.right` is destroyed explicitly before the fault. Fault cleanup then
+    // destroys `taken` and skips both Dead fields of `pair`.
+    assert_eq!(drops, vec![(right, 20), (taken, 10)]);
+}
+
+#[test]
 fn fields_can_be_first_initialized_independently_before_whole_value_is_read() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
