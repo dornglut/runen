@@ -1,0 +1,11 @@
+[package]
+name = "runen-reference"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+runen-core-ir = { path = "../runen-core-ir" }
+
+[lints]
+workspace = true
