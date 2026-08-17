@@ -54,10 +54,7 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
 
     let error = validate_body(body)
         .expect_err("a partially moved aggregate must be rejected before execution");
-    assert_eq!(
-        error.kind,
-        MirValidationErrorKind::UseOfUninitialized(root)
-    );
+    assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(root));
 }
 
 #[test]
@@ -94,10 +91,14 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
 
     let report = machine(body).execute();
 
-    assert!(report.verification_events.contains(&VerificationEvent::Write {
-        place: value,
-        kind: VerificationWriteKind::Assign,
-    }));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place: value,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
     let dropped_ids = report
         .verification_events
         .iter()
@@ -140,8 +141,8 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
         ],
     );
 
-    let error = validate_body(body)
-        .expect_err("dead storage must be reinitialized with Assign, not Init");
+    let error =
+        validate_body(body).expect_err("dead storage must be reinitialized with Assign, not Init");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::InitRequiresNeverInitialized(value)
@@ -167,10 +168,14 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
     );
 
     let report = machine(body).execute();
-    assert!(report.verification_events.contains(&VerificationEvent::Write {
-        place: value,
-        kind: VerificationWriteKind::Assign,
-    }));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place: value,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
 }
 
 #[test]
@@ -216,10 +221,14 @@ fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts
         .collect::<Vec<_>>();
 
     assert_eq!(dropped_ids, vec![1, 3, 2]);
-    assert!(report.verification_events.contains(&VerificationEvent::Write {
-        place: root,
-        kind: VerificationWriteKind::Assign,
-    }));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place: root,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
 }
 
 #[test]
