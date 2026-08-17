@@ -148,16 +148,16 @@ fn validate_structure_and_static_rules(body: &Body) -> Result<(), MirValidationE
             validate_static_statement(body, statement, &point)?;
         }
 
-        if let Terminator::Goto(target) = &block.terminator {
-            if body.block(*target).is_none() {
-                return Err(MirValidationError {
-                    point: Some(MirPoint {
-                        block: block_id,
-                        statement: None,
-                    }),
-                    kind: MirValidationErrorKind::InvalidTargetBlock(*target),
-                });
-            }
+        if let Terminator::Goto(target) = &block.terminator
+            && body.block(*target).is_none()
+        {
+            return Err(MirValidationError {
+                point: Some(MirPoint {
+                    block: block_id,
+                    statement: None,
+                }),
+                kind: MirValidationErrorKind::InvalidTargetBlock(*target),
+            });
         }
     }
 
