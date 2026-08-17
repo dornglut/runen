@@ -211,7 +211,9 @@ fn local_markdown_target(target: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{local_markdown_target, markdown_link_targets, reference_style_local_targets, validate};
+    use super::{
+        local_markdown_target, markdown_link_targets, reference_style_local_targets, validate,
+    };
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::sync::atomic::{AtomicUsize, Ordering};
