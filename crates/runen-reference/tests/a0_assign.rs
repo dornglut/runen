@@ -53,10 +53,14 @@ fn assignment_drops_live_old_value_then_writes_replacement() {
             .count(),
         1
     );
-    assert!(report.verification_events.contains(&VerificationEvent::Write {
-        place,
-        kind: VerificationWriteKind::Assign,
-    }));
+    assert!(
+        report
+            .verification_events
+            .contains(&VerificationEvent::Write {
+                place,
+                kind: VerificationWriteKind::Assign,
+            })
+    );
 }
 
 #[test]
