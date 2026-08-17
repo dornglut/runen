@@ -26,7 +26,7 @@ fn i64_type() -> (TypeTable, TypeId) {
 }
 
 fn error_kind(body: Body) -> MirValidationErrorKind {
-    validate_body(body).expect_err("test MIR must be rejected").kind
+    validate_body(body).expect_err("invalid MIR").kind
 }
 
 #[test]
