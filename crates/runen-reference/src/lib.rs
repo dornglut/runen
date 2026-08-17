@@ -2,50 +2,39 @@
 //! Executable reference semantics for the Runen A0 Core kernel.
 
 use runen_core_ir::{
-    BasicBlockId, Body, LocalId, Operand, Place, Projection, ScalarType, Statement, Terminator,
-    TypeId, TypeKind, TypeTable, Value,
+    BasicBlockId, Body, LocalId, MirPoint, Operand, Place, Projection, ScalarType, Statement,
+    Terminator, TypeId, TypeKind, TypeTable, ValidatedBody, Value,
 };
 
-/// A precise location in Core MIR used by semantic diagnostics.
+/// Path-state violation encountered while exercising admitted A0 proving MIR.
+///
+/// These violations are not defined Runen `Fault` outcomes. They exist so the
+/// executable oracle can exercise negative A0 state-transition cases directly.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ProgramPoint {
-    pub block: BasicBlockId,
-    pub statement: Option<usize>,
-}
-
-/// Stable semantic failure categories for A0.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum SemanticErrorKind {
-    InvalidEntryBlock,
-    InvalidTargetBlock(BasicBlockId),
-    InvalidLocal(LocalId),
-    InvalidProjection(Place),
-    UnknownType(TypeId),
-    RecursiveType(TypeId),
-    InconsistentState(TypeId),
-    TypeMismatch { expected: TypeId },
+pub enum ExecutionViolationKind {
     InitRequiresNeverInitialized(Place),
     UseOfUninitialized(Place),
-    CopyOfNonCopy(TypeId),
-    AssignToImmutable(LocalId),
     DropOfUninitialized(Place),
 }
 
-/// Structured reference-machine diagnostic.
+/// Structured execution-time proving violation.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct SemanticError {
-    pub point: ProgramPoint,
-    pub kind: SemanticErrorKind,
+pub struct ExecutionViolation {
+    pub point: MirPoint,
+    pub kind: ExecutionViolationKind,
 }
 
-/// Why a write occurred in the semantic trace.
+/// Why a write occurred in the verification trace.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WriteKind {
     Init,
     Assign,
 }
 
-/// Observable semantic trace used by A0 conformance tests.
+/// Verification-only trace event emitted by the A0 executable oracle.
+///
+/// These events expose internal semantic transitions to conformance tests. They
+/// are not the observable program trace defined by the Runen language semantics.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TraceEvent {
     Read(Place),
@@ -55,24 +44,25 @@ pub enum TraceEvent {
         place: Place,
         kind: WriteKind,
     },
-    /// Observable destructor event for `Tracked` values.
+    /// Verification event for destruction of the synthetic `Tracked` fixture.
     DropTracked {
         place: Place,
         id: u64,
     },
 }
 
-/// Terminal status of a successful reference execution.
+/// Terminal status of a successful defined reference execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum TerminalStatus {
     Returned,
     Faulted(String),
 }
 
-/// Complete result of a successful reference execution.
+/// Complete result of a successful defined reference execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutionReport {
     pub terminal: TerminalStatus,
+    /// Verification instrumentation, not Runen-observable program behavior.
     pub trace: Vec<TraceEvent>,
 }
 
@@ -93,35 +83,19 @@ enum ObjectState {
 }
 
 impl ObjectState {
-    fn uninitialized(types: &TypeTable, ty: TypeId) -> Result<Self, SemanticErrorKind> {
-        Self::uninitialized_inner(types, ty, &mut Vec::new())
-    }
-
-    fn uninitialized_inner(
-        types: &TypeTable,
-        ty: TypeId,
-        active: &mut Vec<TypeId>,
-    ) -> Result<Self, SemanticErrorKind> {
-        if active.contains(&ty) {
-            return Err(SemanticErrorKind::RecursiveType(ty));
-        }
-
-        let Some(def) = types.get(ty) else {
-            return Err(SemanticErrorKind::UnknownType(ty));
-        };
+    fn uninitialized(types: &TypeTable, ty: TypeId) -> Self {
+        let def = types
+            .get(ty)
+            .expect("validated Core MIR references an unknown type");
 
         match &def.kind {
-            TypeKind::Scalar(_) => Ok(Self::Leaf(LeafState::NeverInitialized)),
-            TypeKind::Struct(fields) => {
-                active.push(ty);
-                let result = fields
+            TypeKind::Scalar(_) => Self::Leaf(LeafState::NeverInitialized),
+            TypeKind::Struct(fields) => Self::Aggregate(
+                fields
                     .iter()
-                    .map(|field| Self::uninitialized_inner(types, field.ty, active))
-                    .collect::<Result<Vec<_>, _>>()
-                    .map(Self::Aggregate);
-                active.pop();
-                result
-            }
+                    .map(|field| Self::uninitialized(types, field.ty))
+                    .collect(),
+            ),
         }
     }
 
@@ -150,76 +124,72 @@ impl ObjectState {
     }
 }
 
-/// Small executable abstract machine for typed A0 Core MIR.
+/// Small executable abstract machine for admitted A0 Core MIR.
 pub struct Machine {
     body: Body,
     locals: Vec<ObjectState>,
     trace: Vec<TraceEvent>,
-    point: ProgramPoint,
+    point: MirPoint,
 }
 
 impl Machine {
-    /// Constructs a reference machine. Type-shape failures are reported on execution.
+    /// Constructs the reference machine from Core MIR that has passed admission.
     #[must_use]
-    pub fn new(body: Body) -> Self {
+    pub fn new(body: ValidatedBody) -> Self {
+        let body = body.into_body();
+        let locals = body
+            .locals
+            .iter()
+            .map(|local| ObjectState::uninitialized(&body.types, local.ty))
+            .collect();
+
         Self {
-            point: ProgramPoint {
+            point: MirPoint {
                 block: body.entry,
                 statement: None,
             },
             body,
-            locals: Vec::new(),
+            locals,
             trace: Vec::new(),
         }
     }
 
-    pub fn execute(mut self) -> Result<ExecutionReport, SemanticError> {
-        self.initialize_locals()?;
-
-        if self.body.block(self.body.entry).is_none() {
-            return Err(self.error(SemanticErrorKind::InvalidEntryBlock));
-        }
-
+    pub fn execute(mut self) -> Result<ExecutionReport, ExecutionViolation> {
         let mut current = self.body.entry;
 
         loop {
-            let Some(block) = self.body.block(current).cloned() else {
-                self.point = ProgramPoint {
-                    block: current,
-                    statement: None,
-                };
-                return Err(self.error(SemanticErrorKind::InvalidTargetBlock(current)));
-            };
+            let block = self
+                .body
+                .block(current)
+                .expect("validated Core MIR reached an unknown basic block")
+                .clone();
 
             for (statement_index, statement) in block.statements.iter().enumerate() {
-                self.point = ProgramPoint {
+                self.point = MirPoint {
                     block: current,
                     statement: Some(statement_index),
                 };
                 self.execute_statement(statement)?;
             }
 
-            self.point = ProgramPoint {
+            self.point = MirPoint {
                 block: current,
                 statement: None,
             };
 
             match block.terminator {
                 Terminator::Goto(target) => {
-                    if self.body.block(target).is_none() {
-                        return Err(self.error(SemanticErrorKind::InvalidTargetBlock(target)));
-                    }
                     current = target;
                 }
                 Terminator::Return => {
-                    self.cleanup_all_locals()?;
+                    self.cleanup_all_locals();
                     return Ok(ExecutionReport {
                         terminal: TerminalStatus::Returned,
                         trace: self.trace,
                     });
                 }
                 Terminator::Fault(fault) => {
-                    self.cleanup_all_locals()?;
+                    self.cleanup_all_locals();
                     return Ok(ExecutionReport {
                         terminal: TerminalStatus::Faulted(fault.code),
                         trace: self.trace,
@@ -229,18 +199,7 @@ impl Machine {
         }
     }
 
-    fn initialize_locals(&mut self) -> Result<(), SemanticError> {
-        let mut locals = Vec::with_capacity(self.body.locals.len());
-        for local in &self.body.locals {
-            let state = ObjectState::uninitialized(&self.body.types, local.ty)
-                .map_err(|kind| self.error(kind))?;
-            locals.push(state);
-        }
-        self.locals = locals;
-        Ok(())
-    }
-
-    fn execute_statement(&mut self, statement: &Statement) -> Result<(), SemanticError> {
+    fn execute_statement(&mut self, statement: &Statement) -> Result<(), ExecutionViolation> {
         match statement {
             Statement::Init { dst, src } => self.initialize(dst, src),
             Statement::Read { src } => self.read(src),
@@ -249,25 +208,17 @@ impl Machine {
         }
     }
 
-    fn initialize(&mut self, dst: &Place, src: &Operand) -> Result<(), SemanticError> {
-        let dst_ty = self.place_type(dst)?;
-        {
-            let dst_state = self.place_state(dst)?;
-            if !dst_state.all_never_initialized() {
-                return Err(
-                    self.error(SemanticErrorKind::InitRequiresNeverInitialized(dst.clone()))
-                );
-            }
+    fn initialize(&mut self, dst: &Place, src: &Operand) -> Result<(), ExecutionViolation> {
+        let dst_ty = self.place_type(dst);
+        if !self.place_state(dst).all_never_initialized() {
+            return Err(self.violation(ExecutionViolationKind::InitRequiresNeverInitialized(
+                dst.clone(),
+            )));
         }
 
-        let value = self.evaluate_operand(src, dst_ty)?;
-        let point = self.point.clone();
-        let types = &self.body.types;
-        let dst_state = place_state_mut(&mut self.locals, dst, &point)?;
-        write_value(types, dst_ty, dst_state, value).map_err(|kind| SemanticError {
-            point: point.clone(),
-            kind,
-        })?;
+        let value = self.evaluate_operand(src)?;
+        let dst_state = place_state_mut(&mut self.locals, dst);
+        write_value(&self.body.types, dst_ty, dst_state, value);
         self.trace.push(TraceEvent::Write {
             place: dst.clone(),
             kind: WriteKind::Init,
@@ -275,26 +226,13 @@ impl Machine {
         Ok(())
     }
 
-    fn assign(&mut self, dst: &Place, src: &Operand) -> Result<(), SemanticError> {
-        let local = self
-            .body
-            .local(dst.local)
-            .ok_or_else(|| self.error(SemanticErrorKind::InvalidLocal(dst.local)))?;
-        if !local.mutable {
-            return Err(self.error(SemanticErrorKind::AssignToImmutable(dst.local)));
-        }
+    fn assign(&mut self, dst: &Place, src: &Operand) -> Result<(), ExecutionViolation> {
+        let dst_ty = self.place_type(dst);
+        let value = self.evaluate_operand(src)?;
 
-        let dst_ty = self.place_type(dst)?;
-        let value = self.evaluate_operand(src, dst_ty)?;
-
-        self.drop_place_contents(dst, false)?;
-        let point = self.point.clone();
-        let types = &self.body.types;
-        let dst_state = place_state_mut(&mut self.locals, dst, &point)?;
-        write_value(types, dst_ty, dst_state, value).map_err(|kind| SemanticError {
-            point: point.clone(),
-            kind,
-        })?;
+        self.drop_place_contents(dst);
+        let dst_state = place_state_mut(&mut self.locals, dst);
+        write_value(&self.body.types, dst_ty, dst_state, value);
         self.trace.push(TraceEvent::Write {
             place: dst.clone(),
             kind: WriteKind::Assign,
@@ -302,263 +240,202 @@ impl Machine {
         Ok(())
     }
 
-    fn read(&mut self, src: &Place) -> Result<(), SemanticError> {
-        let state = self.place_state(src)?;
-        if !state.fully_live() {
-            return Err(self.error(SemanticErrorKind::UseOfUninitialized(src.clone())));
+    fn read(&mut self, src: &Place) -> Result<(), ExecutionViolation> {
+        if !self.place_state(src).fully_live() {
+            return Err(self.violation(ExecutionViolationKind::UseOfUninitialized(src.clone())));
         }
         self.trace.push(TraceEvent::Read(src.clone()));
         Ok(())
     }
 
-    fn drop_explicit(&mut self, place: &Place) -> Result<(), SemanticError> {
-        let state = self.place_state(place)?;
-        if !state.any_live() {
-            return Err(self.error(SemanticErrorKind::DropOfUninitialized(place.clone())));
+    fn drop_explicit(&mut self, place: &Place) -> Result<(), ExecutionViolation> {
+        if !self.place_state(place).any_live() {
+            return Err(self.violation(ExecutionViolationKind::DropOfUninitialized(
+                place.clone(),
+            )));
         }
-        self.drop_place_contents(place, false)
+        self.drop_place_contents(place);
+        Ok(())
     }
 
-    fn evaluate_operand(
-        &mut self,
-        operand: &Operand,
-        expected: TypeId,
-    ) -> Result<Value, SemanticError> {
+    fn evaluate_operand(&mut self, operand: &Operand) -> Result<Value, ExecutionViolation> {
         match operand {
-            Operand::Constant(value) => {
-                if !self.body.types.value_matches(expected, value) {
-                    return Err(self.error(SemanticErrorKind::TypeMismatch { expected }));
-                }
-                Ok(value.clone())
-            }
+            Operand::Constant(value) => Ok(value.clone()),
             Operand::Move(src) => {
-                let src_ty = self.place_type(src)?;
-                if src_ty != expected {
-                    return Err(self.error(SemanticErrorKind::TypeMismatch { expected }));
+                if !self.place_state(src).fully_live() {
+                    return Err(
+                        self.violation(ExecutionViolationKind::UseOfUninitialized(src.clone()))
+                    );
                 }
-                let point = self.point.clone();
-                let types = &self.body.types;
-                let src_state = place_state_mut(&mut self.locals, src, &point)?;
-                if !src_state.fully_live() {
-                    return Err(SemanticError {
-                        point,
-                        kind: SemanticErrorKind::UseOfUninitialized(src.clone()),
-                    });
-                }
-                let value = take_value(types, src_ty, src_state).map_err(|kind| SemanticError {
-                    point: point.clone(),
-                    kind,
-                })?;
+                let src_ty = self.place_type(src);
+                let src_state = place_state_mut(&mut self.locals, src);
+                let value = take_value(&self.body.types, src_ty, src_state);
                 self.trace.push(TraceEvent::Move(src.clone()));
                 Ok(value)
             }
             Operand::Copy(src) => {
-                let src_ty = self.place_type(src)?;
-                if src_ty != expected {
-                    return Err(self.error(SemanticErrorKind::TypeMismatch { expected }));
+                if !self.place_state(src).fully_live() {
+                    return Err(
+                        self.violation(ExecutionViolationKind::UseOfUninitialized(src.clone()))
+                    );
                 }
-                if !self.body.types.is_copy(src_ty) {
-                    return Err(self.error(SemanticErrorKind::CopyOfNonCopy(src_ty)));
-                }
-                let src_state = self.place_state(src)?;
-                if !src_state.fully_live() {
-                    return Err(self.error(SemanticErrorKind::UseOfUninitialized(src.clone())));
-                }
-                let value = clone_value(&self.body.types, src_ty, src_state)
-                    .map_err(|kind| self.error(kind))?;
+                let src_ty = self.place_type(src);
+                let value = clone_value(&self.body.types, src_ty, self.place_state(src));
                 self.trace.push(TraceEvent::Copy(src.clone()));
                 Ok(value)
             }
         }
     }
 
-    fn cleanup_all_locals(&mut self) -> Result<(), SemanticError> {
+    fn cleanup_all_locals(&mut self) {
         for local_index in (0..self.locals.len()).rev() {
             let local_id =
                 LocalId(u32::try_from(local_index).expect("local index exceeds u32::MAX"));
             let place = Place::local(local_id);
-            self.drop_place_contents(&place, true)?;
+            self.drop_place_contents(&place);
         }
-        Ok(())
     }
 
-    fn drop_place_contents(&mut self, place: &Place, cleanup: bool) -> Result<(), SemanticError> {
-        let ty = self.place_type(place)?;
-        let point = self.point.clone();
-        let types = &self.body.types;
-        let state = place_state_mut(&mut self.locals, place, &point)?;
-
-        if !cleanup && !state.any_live() {
-            return Ok(());
-        }
-
-        drop_live_values(types, ty, state, place, &mut self.trace)
-            .map_err(|kind| SemanticError { point, kind })
+    fn drop_place_contents(&mut self, place: &Place) {
+        let ty = self.place_type(place);
+        let state = place_state_mut(&mut self.locals, place);
+        drop_live_values(&self.body.types, ty, state, place, &mut self.trace);
     }
 
-    fn place_type(&self, place: &Place) -> Result<TypeId, SemanticError> {
+    fn place_type(&self, place: &Place) -> TypeId {
         let local = self
             .body
             .local(place.local)
-            .ok_or_else(|| self.error(SemanticErrorKind::InvalidLocal(place.local)))?;
+            .expect("validated Core MIR references an unknown local");
         self.body
             .types
             .project_type(local.ty, &place.projections)
-            .ok_or_else(|| self.error(SemanticErrorKind::InvalidProjection(place.clone())))
+            .expect("validated Core MIR contains an invalid projection")
     }
 
-    fn place_state(&self, place: &Place) -> Result<&ObjectState, SemanticError> {
+    fn place_state(&self, place: &Place) -> &ObjectState {
         let mut state = self
             .locals
             .get(place.local.0 as usize)
-            .ok_or_else(|| self.error(SemanticErrorKind::InvalidLocal(place.local)))?;
+            .expect("validated Core MIR references an unknown local state");
 
         for projection in &place.projections {
             match (state, projection) {
                 (ObjectState::Aggregate(fields), Projection::Field(index)) => {
-                    state = fields.get(*index as usize).ok_or_else(|| {
-                        self.error(SemanticErrorKind::InvalidProjection(place.clone()))
-                    })?;
+                    state = fields
+                        .get(*index as usize)
+                        .expect("validated Core MIR projection exceeds state shape");
                 }
                 (ObjectState::Leaf(_), Projection::Field(_)) => {
-                    return Err(self.error(SemanticErrorKind::InvalidProjection(place.clone())));
+                    unreachable!("validated Core MIR projects a field from scalar state");
                 }
             }
         }
-        Ok(state)
+        state
     }
 
-    fn error(&self, kind: SemanticErrorKind) -> SemanticError {
-        SemanticError {
+    fn violation(&self, kind: ExecutionViolationKind) -> ExecutionViolation {
+        ExecutionViolation {
             point: self.point.clone(),
             kind,
         }
     }
 }
 
-fn place_state_mut<'a>(
-    locals: &'a mut [ObjectState],
-    place: &Place,
-    point: &ProgramPoint,
-) -> Result<&'a mut ObjectState, SemanticError> {
-    let Some(mut state) = locals.get_mut(place.local.0 as usize) else {
-        return Err(SemanticError {
-            point: point.clone(),
-            kind: SemanticErrorKind::InvalidLocal(place.local),
-        });
-    };
+fn place_state_mut<'a>(locals: &'a mut [ObjectState], place: &Place) -> &'a mut ObjectState {
+    let mut state = locals
+        .get_mut(place.local.0 as usize)
+        .expect("validated Core MIR references an unknown local state");
 
     for projection in &place.projections {
         match (state, projection) {
             (ObjectState::Aggregate(fields), Projection::Field(index)) => {
-                let Some(next) = fields.get_mut(*index as usize) else {
-                    return Err(SemanticError {
-                        point: point.clone(),
-                        kind: SemanticErrorKind::InvalidProjection(place.clone()),
-                    });
-                };
-                state = next;
+                state = fields
+                    .get_mut(*index as usize)
+                    .expect("validated Core MIR projection exceeds state shape");
             }
             (ObjectState::Leaf(_), Projection::Field(_)) => {
-                return Err(SemanticError {
-                    point: point.clone(),
-                    kind: SemanticErrorKind::InvalidProjection(place.clone()),
-                });
+                unreachable!("validated Core MIR projects a field from scalar state");
             }
         }
     }
-    Ok(state)
+    state
 }
 
-fn write_value(
-    types: &TypeTable,
-    ty: TypeId,
-    state: &mut ObjectState,
-    value: Value,
-) -> Result<(), SemanticErrorKind> {
-    let Some(def) = types.get(ty) else {
-        return Err(SemanticErrorKind::UnknownType(ty));
-    };
+fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Value) {
+    let def = types
+        .get(ty)
+        .expect("validated Core MIR references an unknown type");
 
     match (&def.kind, state, value) {
         (TypeKind::Scalar(ScalarType::Bool), ObjectState::Leaf(leaf), Value::Bool(value)) => {
             *leaf = LeafState::Live(Value::Bool(value));
-            Ok(())
         }
         (TypeKind::Scalar(ScalarType::I64), ObjectState::Leaf(leaf), Value::I64(value)) => {
             *leaf = LeafState::Live(Value::I64(value));
-            Ok(())
         }
         (TypeKind::Scalar(ScalarType::Tracked), ObjectState::Leaf(leaf), Value::Tracked(value)) => {
             *leaf = LeafState::Live(Value::Tracked(value));
-            Ok(())
         }
         (TypeKind::Struct(fields), ObjectState::Aggregate(states), Value::Struct(values))
             if fields.len() == states.len() && fields.len() == values.len() =>
         {
             for ((field, field_state), field_value) in fields.iter().zip(states).zip(values) {
-                write_value(types, field.ty, field_state, field_value)?;
+                write_value(types, field.ty, field_state, field_value);
             }
-            Ok(())
         }
-        _ => Err(SemanticErrorKind::TypeMismatch { expected: ty }),
+        _ => unreachable!("validated Core MIR produced a value/state type mismatch"),
     }
 }
 
-fn clone_value(
-    types: &TypeTable,
-    ty: TypeId,
-    state: &ObjectState,
-) -> Result<Value, SemanticErrorKind> {
-    let Some(def) = types.get(ty) else {
-        return Err(SemanticErrorKind::UnknownType(ty));
-    };
+fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> Value {
+    let def = types
+        .get(ty)
+        .expect("validated Core MIR references an unknown type");
 
     match (&def.kind, state) {
-        (TypeKind::Scalar(_), ObjectState::Leaf(LeafState::Live(value))) => Ok(value.clone()),
+        (TypeKind::Scalar(_), ObjectState::Leaf(LeafState::Live(value))) => value.clone(),
         (TypeKind::Struct(fields), ObjectState::Aggregate(states))
             if fields.len() == states.len() =>
         {
-            let values = fields
-                .iter()
-                .zip(states)
-                .map(|(field, state)| clone_value(types, field.ty, state))
-                .collect::<Result<Vec<_>, _>>()?;
-            Ok(Value::Struct(values))
+            Value::Struct(
+                fields
+                    .iter()
+                    .zip(states)
+                    .map(|(field, state)| clone_value(types, field.ty, state))
+                    .collect(),
+            )
         }
-        _ => Err(SemanticErrorKind::InconsistentState(ty)),
+        _ => unreachable!("fully-live validated state is structurally inconsistent"),
     }
 }
 
-fn take_value(
-    types: &TypeTable,
-    ty: TypeId,
-    state: &mut ObjectState,
-) -> Result<Value, SemanticErrorKind> {
-    let Some(def) = types.get(ty) else {
-        return Err(SemanticErrorKind::UnknownType(ty));
-    };
+fn take_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState) -> Value {
+    let def = types
+        .get(ty)
+        .expect("validated Core MIR references an unknown type");
 
     match (&def.kind, state) {
         (TypeKind::Scalar(_), ObjectState::Leaf(leaf)) => {
             match std::mem::replace(leaf, LeafState::Dead) {
-                LeafState::Live(value) => Ok(value),
-                previous @ (LeafState::NeverInitialized | LeafState::Dead) => {
-                    *leaf = previous;
-                    Err(SemanticErrorKind::InconsistentState(ty))
+                LeafState::Live(value) => value,
+                LeafState::NeverInitialized | LeafState::Dead => {
+                    unreachable!("take_value called for state that is not fully live")
                 }
             }
         }
         (TypeKind::Struct(fields), ObjectState::Aggregate(states))
             if fields.len() == states.len() =>
         {
-            let mut values = Vec::with_capacity(fields.len());
-            for (field, state) in fields.iter().zip(states) {
-                values.push(take_value(types, field.ty, state)?);
-            }
-            Ok(Value::Struct(values))
+            Value::Struct(
+                fields
+                    .iter()
+                    .zip(states)
+                    .map(|(field, state)| take_value(types, field.ty, state))
+                    .collect(),
+            )
         }
-        _ => Err(SemanticErrorKind::TypeMismatch { expected: ty }),
+        _ => unreachable!("fully-live validated state is structurally inconsistent"),
     }
 }
 
@@ -568,10 +445,10 @@ fn drop_live_values(
     state: &mut ObjectState,
     place: &Place,
     trace: &mut Vec<TraceEvent>,
-) -> Result<(), SemanticErrorKind> {
-    let Some(def) = types.get(ty) else {
-        return Err(SemanticErrorKind::UnknownType(ty));
-    };
+) {
+    let def = types
+        .get(ty)
+        .expect("validated Core MIR references an unknown type");
 
     match (&def.kind, state) {
         (TypeKind::Scalar(_), ObjectState::Leaf(leaf)) => {
@@ -587,7 +464,6 @@ fn drop_live_values(
                 LeafState::NeverInitialized => *leaf = LeafState::NeverInitialized,
                 LeafState::Dead => *leaf = LeafState::Dead,
             }
-            Ok(())
         }
         (TypeKind::Struct(fields), ObjectState::Aggregate(states))
             if fields.len() == states.len() =>
@@ -597,10 +473,9 @@ fn drop_live_values(
                 let field_place = place.with_projection(Projection::Field(
                     u32::try_from(index).expect("field index exceeds u32::MAX"),
                 ));
-                drop_live_values(types, field.ty, &mut states[index], &field_place, trace)?;
+                drop_live_values(types, field.ty, &mut states[index], &field_place, trace);
             }
-            Ok(())
         }
-        _ => Err(SemanticErrorKind::TypeMismatch { expected: ty }),
+        _ => unreachable!("validated Core MIR state shape does not match its declared type"),
     }
 }
