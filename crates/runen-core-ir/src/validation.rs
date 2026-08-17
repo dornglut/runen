@@ -26,7 +26,9 @@ pub enum MirValidationErrorKind {
     },
     UnknownType(TypeId),
     RecursiveType(TypeId),
-    TypeMismatch { expected: TypeId },
+    TypeMismatch {
+        expected: TypeId,
+    },
     CopyOfNonCopy(TypeId),
     AssignToImmutable(LocalId),
     ExclusiveBorrowOfImmutable(LocalId),
@@ -36,8 +38,14 @@ pub enum MirValidationErrorKind {
     BorrowOfUninitialized(Place),
     LoanAlreadyActive(LoanId),
     LoanNotActive(LoanId),
-    BorrowConflict { place: Place, loan: LoanId },
-    DirectAccessConflict { place: Place, loan: LoanId },
+    BorrowConflict {
+        place: Place,
+        loan: LoanId,
+    },
+    DirectAccessConflict {
+        place: Place,
+        loan: LoanId,
+    },
     ExclusiveLoanRequired(LoanId),
 }
 
@@ -545,8 +553,7 @@ fn validate_state_statement(
             place_state_mut(locals, &place).mark_live();
         }
         Statement::Drop { place } => {
-            let place =
-                resolve_authorized_access(active_loans, place, AccessMode::Consume, point)?;
+            let place = resolve_authorized_access(active_loans, place, AccessMode::Consume, point)?;
             if !place_state(locals, &place).any_live() {
                 return Err(point_error(
                     point,
@@ -586,15 +593,12 @@ fn borrow_conflict(
     place: &Place,
     requested: BorrowKind,
 ) -> Option<LoanId> {
-    active_loans
-        .iter()
-        .enumerate()
-        .find_map(|(index, active)| {
-            let active = active.as_ref()?;
-            let conflicts = active.place.overlaps(place)
-                && (requested == BorrowKind::Exclusive || active.kind == BorrowKind::Exclusive);
-            conflicts.then(|| LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")))
-        })
+    active_loans.iter().enumerate().find_map(|(index, active)| {
+        let active = active.as_ref()?;
+        let conflicts = active.place.overlaps(place)
+            && (requested == BorrowKind::Exclusive || active.kind == BorrowKind::Exclusive);
+        conflicts.then(|| LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")))
+    })
 }
 
 fn resolve_authorized_access(
