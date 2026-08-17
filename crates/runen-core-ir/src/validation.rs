@@ -31,7 +31,6 @@ pub enum MirValidationErrorKind {
     },
     CopyOfNonCopy(TypeId),
     AssignToImmutable(LocalId),
-    ExclusiveBorrowOfImmutable(LocalId),
     InitRequiresNeverInitialized(Place),
     UseOfUninitialized(Place),
     DropOfUninitialized(Place),
@@ -204,23 +203,10 @@ fn validate_static_statement(
             let expected = place_type(body, dst, point)?;
             validate_operand_type(body, src, expected, point)
         }
-        Statement::Borrow { loan, kind, place } => {
+        Statement::Borrow { loan, place, .. } => {
             let declaration = loan_decl(body, *loan, point)?;
             let actual = place_type(body, place, point)?;
-            require_type_match(actual, declaration.ty, point)?;
-
-            if *kind == BorrowKind::Exclusive {
-                let local = body
-                    .local(place.local)
-                    .expect("validated place references a known containing local");
-                if !local.mutable {
-                    return Err(MirValidationError {
-                        point: Some(point.clone()),
-                        kind: MirValidationErrorKind::ExclusiveBorrowOfImmutable(place.local),
-                    });
-                }
-            }
-            Ok(())
+            require_type_match(actual, declaration.ty, point)
         }
         Statement::EndBorrow { loan } => {
             loan_decl(body, *loan, point)?;
@@ -233,15 +219,7 @@ fn validate_static_statement(
         Statement::Assign { dst, src } => {
             let expected = access_type(body, dst, point)?;
             if let PlaceAccess::Direct(place) = dst {
-                let local = body
-                    .local(place.local)
-                    .expect("validated place references a known containing local");
-                if !local.mutable {
-                    return Err(MirValidationError {
-                        point: Some(point.clone()),
-                        kind: MirValidationErrorKind::AssignToImmutable(place.local),
-                    });
-                }
+                require_mutable_local(body, place, point)?;
             }
             validate_operand_type(body, src, expected, point)
         }
@@ -298,6 +276,24 @@ fn require_type_match(
         Err(MirValidationError {
             point: Some(point.clone()),
             kind: MirValidationErrorKind::TypeMismatch { expected },
+        })
+    }
+}
+
+fn require_mutable_local(
+    body: &Body,
+    place: &Place,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    let local = body
+        .local(place.local)
+        .expect("validated place references a known containing local");
+    if local.mutable {
+        Ok(())
+    } else {
+        Err(MirValidationError {
+            point: Some(point.clone()),
+            kind: MirValidationErrorKind::AssignToImmutable(place.local),
         })
     }
 }
@@ -548,8 +544,12 @@ fn validate_state_statement(
             require_fully_live(locals, &place, point)?;
         }
         Statement::Assign { dst, src } => {
-            validate_operand_state(body, locals, active_loans, src, point)?;
+            // Authorization and mutability are properties of the destination access,
+            // not effects on storage. Resolve them before source evaluation while
+            // preserving the accepted source-first value-state transition order.
             let place = resolve_authorized_access(active_loans, dst, AccessMode::Consume, point)?;
+            require_mutable_local(body, &place, point)?;
+            validate_operand_state(body, locals, active_loans, src, point)?;
             place_state_mut(locals, &place).mark_live();
         }
         Statement::Drop { place } => {
