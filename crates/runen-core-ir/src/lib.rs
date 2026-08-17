@@ -24,7 +24,7 @@ pub struct LocalId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BasicBlockId(pub u32);
 
-/// Scalar kinds represented by the A0 proving kernel.
+/// Scalar kinds represented by the Core proving kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarType {
     Bool,
@@ -116,7 +116,7 @@ impl TypeTable {
         self.defs.is_empty()
     }
 
-    /// A0 copyability is structural and compiler-known.
+    /// Copyability in the represented Core subset is structural and compiler-known.
     #[must_use]
     pub fn is_copy(&self, ty: TypeId) -> bool {
         match self.get(ty).map(|def| &def.kind) {
@@ -166,7 +166,7 @@ impl TypeTable {
     }
 }
 
-/// Value representation used by A0 proving MIR and its verification fixtures.
+/// Value representation used by Core proving MIR and its verification fixtures.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Bool(bool),
@@ -254,7 +254,7 @@ pub enum Operand {
     Copy(Place),
 }
 
-/// A0 Core MIR operations.
+/// Core MIR operations represented by the current proving kernel.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
     /// First initialization of a place. Re-initialization uses `Assign`.
@@ -270,7 +270,7 @@ pub enum Statement {
     Drop { place: Place },
 }
 
-/// Defined fault reason for the A0 reference machine.
+/// Defined fault reason for the reference machine.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Fault {
     pub code: String,
