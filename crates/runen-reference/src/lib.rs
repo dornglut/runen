@@ -254,9 +254,9 @@ impl Machine {
         {
             let dst_state = self.place_state(dst)?;
             if !dst_state.all_never_initialized() {
-                return Err(self.error(SemanticErrorKind::InitRequiresNeverInitialized(
-                    dst.clone(),
-                )));
+                return Err(
+                    self.error(SemanticErrorKind::InitRequiresNeverInitialized(dst.clone()))
+                );
             }
         }
 
