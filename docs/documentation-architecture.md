@@ -34,6 +34,18 @@ If a concept change would require editing multiple documents that claim to defin
 
 README files are indexes and orientation pages. They list destinations and may state the scope of a directory; they do not become shadow specifications, roadmaps, or architecture documents.
 
+Navigation should be local. A root index routes to subsystem indexes; it should not accumulate every leaf document in the repository as the tree grows.
+
+## Link convention
+
+Repository-internal documentation links use inline relative Markdown syntax, for example `[Core](language/core/README.md)`.
+
+Reference-style local links are not used. This keeps link ownership explicit at the point of use and permits the repository validator to check local link targets without requiring a general-purpose Markdown parser.
+
+Links inside fenced code blocks are examples and are excluded from link validation.
+
+Normative documents under `spec/` may link only to targets under `spec/`.
+
 ## Growth rule
 
 Split a document when two parts can evolve independently under different correctness or review obligations. Do not split merely to reduce line count or pre-create empty taxonomy.
