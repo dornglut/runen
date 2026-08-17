@@ -245,8 +245,7 @@ impl Machine {
                 let src_ty = self.place_type(&src);
                 let src_state = place_state_mut(&mut self.locals, &src);
                 let value = take_value(&self.body.as_body().types, src_ty, src_state);
-                self.verification_events
-                    .push(VerificationEvent::Move(src));
+                self.verification_events.push(VerificationEvent::Move(src));
                 value
             }
             Operand::Copy(src) => {
@@ -257,8 +256,7 @@ impl Machine {
                     src_ty,
                     place_state(&self.locals, &src),
                 );
-                self.verification_events
-                    .push(VerificationEvent::Copy(src));
+                self.verification_events.push(VerificationEvent::Copy(src));
                 value
             }
         }
