@@ -1,3 +1,5 @@
+mod documentation;
+
 use std::env;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -28,6 +30,7 @@ fn validate() -> Result<(), String> {
         "cargo",
         &["metadata", "--format-version", "1", "--locked", "--no-deps"],
     )?;
+    documentation::validate(&root)?;
     run(
         &root,
         "formatting",
