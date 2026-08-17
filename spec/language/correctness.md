@@ -22,7 +22,7 @@ Safety and typing do not imply eventual completion. Fairness, deadlines, bounded
 
 ## Numeric equivalence
 
-Two otherwise legal realizations may differ numerically. The applicable numeric contract determines which differences are permitted.
+Two otherwise legal realizations can differ numerically. The applicable numeric contract determines which differences are permitted.
 
 ## Incremental equivalence
 
@@ -30,7 +30,7 @@ Incremental equivalence is distinct from ordinary behavior refinement. Model mai
 
 ## Security properties
 
-Confidentiality and integrity properties may relate multiple executions or traces. A contract that defines such hyperproperties must state obligations not reducible to single-trace behavior refinement.
+Confidentiality and integrity properties can relate multiple executions or traces. A contract that defines such hyperproperties MUST state obligations not reducible to single-trace behavior refinement.
 
 ## Determinism
 
@@ -44,6 +44,6 @@ These are distinct properties. None implies the others without an explicit rule.
 
 ## Intentional nondeterminism
 
-Source may explicitly admit multiple results through operations whose contracts expose nondeterminism.
+Source MAY explicitly admit multiple results through operations whose contracts expose nondeterminism.
 
 Incidental implementation order MUST NOT create nondeterminism when source semantics do not admit it.

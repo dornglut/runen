@@ -211,7 +211,47 @@ fn local_markdown_target(target: &str) -> Option<&str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{local_markdown_target, markdown_link_targets, reference_style_local_targets};
+    use super::{local_markdown_target, markdown_link_targets, reference_style_local_targets, validate};
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    static NEXT_TEST_REPOSITORY: AtomicUsize = AtomicUsize::new(0);
+
+    struct TestRepository {
+        root: PathBuf,
+    }
+
+    impl TestRepository {
+        fn new(name: &str) -> Self {
+            let sequence = NEXT_TEST_REPOSITORY.fetch_add(1, Ordering::Relaxed);
+            let root = std::env::temp_dir().join(format!(
+                "runen-documentation-{name}-{}-{sequence}",
+                std::process::id()
+            ));
+            let _ = fs::remove_dir_all(&root);
+            fs::create_dir_all(root.join("spec")).expect("create test spec directory");
+            Self { root }
+        }
+
+        fn write(&self, relative: &str, content: &str) {
+            let path = self.root.join(relative);
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).expect("create test document parent");
+            }
+            fs::write(path, content).expect("write test document");
+        }
+
+        fn root(&self) -> &Path {
+            &self.root
+        }
+    }
+
+    impl Drop for TestRepository {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.root);
+        }
+    }
 
     #[test]
     fn extracts_inline_markdown_links_outside_fences() {
@@ -239,5 +279,30 @@ mod tests {
         assert_eq!(local_markdown_target("a.md#section"), Some("a.md"));
         assert_eq!(local_markdown_target("#section"), None);
         assert_eq!(local_markdown_target("https://example.com"), None);
+    }
+
+    #[test]
+    fn accepts_internal_spec_link() {
+        let repository = TestRepository::new("internal-spec-link");
+        repository.write("spec/a.md", "[B](b.md)\n");
+        repository.write("spec/b.md", "# B\n");
+        validate(repository.root()).expect("internal spec link should validate");
+    }
+
+    #[test]
+    fn rejects_spec_link_that_escapes_spec() {
+        let repository = TestRepository::new("spec-link-escape");
+        repository.write("outside.md", "# Outside\n");
+        repository.write("spec/a.md", "[Outside](../outside.md)\n");
+        let error = validate(repository.root()).expect_err("escaping spec link must fail");
+        assert!(error.contains("normative spec link escapes spec/"));
+    }
+
+    #[test]
+    fn rejects_repository_marker_in_spec() {
+        let repository = TestRepository::new("spec-marker");
+        repository.write("spec/a.md", "P0-A must not appear here.\n");
+        let error = validate(repository.root()).expect_err("repository marker must fail");
+        assert!(error.contains("normative spec contains repository/planning marker"));
     }
 }

@@ -139,6 +139,8 @@ The semantics defined here do not depend on physical addresses, host destruction
 
 There is no implicit execution-step budget. Cyclic control flow may diverge.
 
-## Open semantic surface
+## Separate semantic owners
 
-This revision does not define heap or raw allocation, deallocation, borrowing, interior mutability, raw pointers, provenance, pinning, atomics, custom destructors, panic catching, asynchronous cancellation, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing, interior mutability, raw pointers, provenance, pinning, atomics, custom destructors, panic catching, asynchronous cancellation, ABI/layout guarantees, or source grammar.
+
+Where this revision defines boundaries or partial contracts for those concerns, their canonical owners govern them. Details that those owners mark as not defined by this revision remain open specification items.

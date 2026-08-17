@@ -18,7 +18,7 @@ It may depend on `runen-core-ir`.
 
 ### `tools/xtask`
 
-Owns repository validation orchestration only.
+Owns repository validation tooling and orchestration. It owns no Runen language semantics.
 
 ## Top-level artifact areas
 

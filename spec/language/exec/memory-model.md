@@ -1,6 +1,6 @@
 # Exec Memory Model
 
-Status: **provisional normative; formal model incomplete**
+Status: **provisional normative; incomplete**
 
 Safe Runen does not permit conflicting ordinary non-atomic accesses unless the applicable permission and synchronization relationships make those accesses legal.
 
