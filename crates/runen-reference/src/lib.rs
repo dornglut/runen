@@ -24,12 +24,12 @@ pub enum SemanticErrorKind {
     RecursiveType(TypeId),
     InconsistentState(TypeId),
     TypeMismatch { expected: TypeId },
-    FirstInitializationRequired(Place),
+    InitRequiresNeverInitialized(Place),
+    AssignRequiresPriorInitialization(Place),
     UseOfUninitialized(Place),
     CopyOfNonCopy(TypeId),
     AssignToImmutable(LocalId),
     DropOfUninitialized(Place),
-    StepLimitExceeded,
 }
 
 /// Structured reference-machine diagnostic.
@@ -157,7 +157,6 @@ pub struct Machine {
     locals: Vec<ObjectState>,
     trace: Vec<TraceEvent>,
     point: ProgramPoint,
-    step_limit: usize,
 }
 
 impl Machine {
@@ -172,15 +171,7 @@ impl Machine {
             body,
             locals: Vec::new(),
             trace: Vec::new(),
-            step_limit: 100_000,
         }
-    }
-
-    /// Overrides the control-flow step budget used to catch accidental infinite test programs.
-    #[must_use]
-    pub fn with_step_limit(mut self, step_limit: usize) -> Self {
-        self.step_limit = step_limit;
-        self
     }
 
     pub fn execute(mut self) -> Result<ExecutionReport, SemanticError> {
@@ -191,18 +182,8 @@ impl Machine {
         }
 
         let mut current = self.body.entry;
-        let mut steps = 0usize;
 
         loop {
-            if steps >= self.step_limit {
-                self.point = ProgramPoint {
-                    block: current,
-                    statement: None,
-                };
-                return Err(self.error(SemanticErrorKind::StepLimitExceeded));
-            }
-            steps += 1;
-
             let Some(block) = self.body.block(current).cloned() else {
                 self.point = ProgramPoint {
                     block: current,
@@ -274,7 +255,9 @@ impl Machine {
         {
             let dst_state = self.place_state(dst)?;
             if !dst_state.all_never_initialized() {
-                return Err(self.error(SemanticErrorKind::FirstInitializationRequired(dst.clone())));
+                return Err(self.error(SemanticErrorKind::InitRequiresNeverInitialized(
+                    dst.clone(),
+                )));
             }
         }
 
@@ -303,6 +286,14 @@ impl Machine {
         }
 
         let dst_ty = self.place_type(dst)?;
+        {
+            let dst_state = self.place_state(dst)?;
+            if dst_state.all_never_initialized() {
+                return Err(self.error(SemanticErrorKind::AssignRequiresPriorInitialization(
+                    dst.clone(),
+                )));
+            }
+        }
         let value = self.evaluate_operand(src, dst_ty)?;
 
         self.drop_place_contents(dst, false)?;
