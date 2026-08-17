@@ -224,7 +224,8 @@ mod tests {
 
     #[test]
     fn finds_reference_style_local_targets_outside_fences() {
-        let content = "[local]: ./local.md\n[web]: https://example.com\n```md\n[fake]: ./fake.md\n```";
+        let content =
+            "[local]: ./local.md\n[web]: https://example.com\n```md\n[fake]: ./fake.md\n```";
         assert_eq!(reference_style_local_targets(content), vec!["./local.md"]);
     }
 
