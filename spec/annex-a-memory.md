@@ -70,6 +70,8 @@ The value MUST structurally match the type of `dst`.
 
 A first initialization does not require the containing local to be mutable.
 
+`Init` expresses the stronger fact that the destination is wholly never-initialized. Mutable code may instead use `Assign` when that stronger fact is unnecessary or unavailable.
+
 ## A0.5 Read
 
 `Read(src)` requires `src` to be fully initialized.
@@ -109,12 +111,9 @@ This marker is deliberately provisional. General trait semantics are not part of
 
 ## A0.8 Assignment
 
-`Assign(dst, value)` requires:
+`Assign(dst, value)` requires the local containing `dst` to be mutable.
 
-1. the local containing `dst` is mutable; and
-2. `dst` is not wholly `Never-initialized`.
-
-A first write to wholly never-initialized storage MUST use `Init`, even when the containing local is mutable. `Assign` is reserved for replacement or reinitialization of storage that already has initialization history.
+Unlike `Init`, `Assign` is path-state tolerant: `dst` may be wholly never-initialized, partially initialized, fully live, or contain dead subobjects. This allows one mutable write operation to remain valid across control-flow joins where the destination's initialization history differs by path.
 
 Evaluation is conceptually:
 
@@ -123,7 +122,7 @@ Evaluation is conceptually:
 3. write the new value into `dst`;
 4. mark all written leaves live.
 
-`Assign` may therefore reinitialize storage that became dead after a move. `Init` may not be substituted for that reinitialization.
+`Assign` may therefore perform a mutable first write, replace a live value, complete/replace partial storage, or reinitialize storage that became dead after a move. Never-initialized or dead subobjects have nothing to destroy before the write.
 
 The source value MUST match the type of `dst`.
 
@@ -184,7 +183,7 @@ The A0 gate requires at least:
 5. non-copy values cannot be copied;
 6. `Init` cannot reinitialize storage that became dead after move;
 7. `Assign` can reinitialize mutable storage that became dead after move;
-8. `Assign` cannot perform the first initialization of wholly never-initialized storage;
+8. `Assign` can initialize wholly never-initialized mutable storage;
 9. assignment to immutable storage is rejected;
 10. assignment drops a live replacement target before writing the new value;
 11. explicit drop of a partially initialized aggregate destroys only its live subobjects;
