@@ -32,10 +32,7 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
         vec![
             Statement::Init {
                 dst: root.clone(),
-                src: Operand::Constant(Value::Struct(vec![
-                    Value::Tracked(10),
-                    Value::Tracked(20),
-                ])),
+                src: Operand::Constant(Value::Struct(vec![Value::Tracked(10), Value::Tracked(20)])),
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
