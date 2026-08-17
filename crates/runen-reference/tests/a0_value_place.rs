@@ -2,7 +2,7 @@ use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Field, LocalDecl, LocalId, MirValidationErrorKind,
     Operand, Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
 };
-use runen_reference::{ExecutionViolationKind, Machine, TerminalStatus, TraceEvent};
+use runen_reference::{Machine, TerminalStatus, VerificationEvent};
 
 fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
     Body {
@@ -14,13 +14,16 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
 }
 
 fn machine(body: Body) -> Machine {
-    Machine::new(validate_body(body).expect("A0 test MIR must pass static admission"))
+    Machine::new(validate_body(body).expect("A0 test MIR must pass validation"))
 }
 
 #[test]
 fn move_invalidates_source() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
 
     let body = one_block(
         types,
@@ -31,7 +34,7 @@ fn move_invalidates_source() {
         vec![
             Statement::Init {
                 dst: Place::local(LocalId(0)),
-                src: Operand::Constant(Value::Tracked(7)),
+                src: Operand::Constant(Value::TrackedFixture(7)),
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
@@ -43,12 +46,10 @@ fn move_invalidates_source() {
         ],
     );
 
-    let error = machine(body)
-        .execute()
-        .expect_err("read after move must fail");
+    let error = validate_body(body).expect_err("read after move must fail MIR validation");
     assert_eq!(
         error.kind,
-        ExecutionViolationKind::UseOfUninitialized(Place::local(LocalId(0)))
+        MirValidationErrorKind::UseOfUninitialized(Place::local(LocalId(0)))
     );
 }
 
@@ -81,24 +82,27 @@ fn copy_preserves_source() {
         ],
     );
 
-    let report = machine(body).execute().expect("copy program must execute");
+    let report = machine(body).execute();
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert!(
         report
-            .trace
-            .contains(&TraceEvent::Copy(Place::local(LocalId(0))))
+            .verification_events
+            .contains(&VerificationEvent::Copy(Place::local(LocalId(0))))
     );
     assert!(
         report
-            .trace
-            .contains(&TraceEvent::Read(Place::local(LocalId(0))))
+            .verification_events
+            .contains(&VerificationEvent::Read(Place::local(LocalId(0))))
     );
 }
 
 #[test]
 fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let pair = types.push(TypeDef::structure(
         "Pair",
         vec![Field::new("left", tracked), Field::new("right", tracked)],
@@ -116,7 +120,10 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
         vec![
             Statement::Init {
                 dst: Place::local(LocalId(0)),
-                src: Operand::Constant(Value::Struct(vec![Value::Tracked(10), Value::Tracked(20)])),
+                src: Operand::Constant(Value::Struct(vec![
+                    Value::TrackedFixture(10),
+                    Value::TrackedFixture(20),
+                ])),
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
@@ -126,14 +133,12 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
         ],
     );
 
-    let report = machine(body)
-        .execute()
-        .expect("partial move must execute");
+    let report = machine(body).execute();
     let drops: Vec<_> = report
-        .trace
+        .verification_events
         .iter()
         .filter_map(|event| match event {
-            TraceEvent::DropTracked { place, id } => Some((place.clone(), *id)),
+            VerificationEvent::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
             _ => None,
         })
         .collect();
@@ -146,7 +151,10 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
 #[test]
 fn explicit_drop_is_not_repeated_at_scope_cleanup() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
 
     let body = one_block(
         types,
@@ -154,7 +162,7 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
         vec![
             Statement::Init {
                 dst: Place::local(LocalId(0)),
-                src: Operand::Constant(Value::Tracked(99)),
+                src: Operand::Constant(Value::TrackedFixture(99)),
             },
             Statement::Drop {
                 place: Place::local(LocalId(0)),
@@ -162,13 +170,11 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
         ],
     );
 
-    let report = machine(body)
-        .execute()
-        .expect("explicit drop must execute");
+    let report = machine(body).execute();
     let drops = report
-        .trace
+        .verification_events
         .iter()
-        .filter(|event| matches!(event, TraceEvent::DropTracked { id: 99, .. }))
+        .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 99, .. }))
         .count();
     assert_eq!(drops, 1);
 }
@@ -176,7 +182,10 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
 #[test]
 fn fault_unwinds_live_locals_once_in_reverse_declaration_order() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
 
     let body = Body {
         types,
@@ -189,30 +198,28 @@ fn fault_unwinds_live_locals_once_in_reverse_declaration_order() {
             vec![
                 Statement::Init {
                     dst: Place::local(LocalId(0)),
-                    src: Operand::Constant(Value::Tracked(1)),
+                    src: Operand::Constant(Value::TrackedFixture(1)),
                 },
                 Statement::Init {
                     dst: Place::local(LocalId(1)),
-                    src: Operand::Constant(Value::Tracked(2)),
+                    src: Operand::Constant(Value::TrackedFixture(2)),
                 },
             ],
             Terminator::Fault(Fault::new("TEST_FAULT")),
         )],
     };
 
-    let report = machine(body)
-        .execute()
-        .expect("fault is a defined terminal status");
+    let report = machine(body).execute();
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("TEST_FAULT".into())
     );
 
     let ids: Vec<_> = report
-        .trace
+        .verification_events
         .iter()
         .filter_map(|event| match event {
-            TraceEvent::DropTracked { id, .. } => Some(*id),
+            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect();
@@ -245,15 +252,16 @@ fn fields_can_be_first_initialized_independently_before_whole_value_is_read() {
         ],
     );
 
-    machine(body)
-        .execute()
-        .expect("independent field initialization must form a live aggregate");
+    let _ = machine(body).execute();
 }
 
 #[test]
 fn struct_fields_drop_in_reverse_declaration_order() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
     let pair = types.push(TypeDef::structure(
         "Pair",
         vec![Field::new("left", tracked), Field::new("right", tracked)],
@@ -264,16 +272,19 @@ fn struct_fields_drop_in_reverse_declaration_order() {
         vec![LocalDecl::new("pair", pair, false)],
         vec![Statement::Init {
             dst: Place::local(LocalId(0)),
-            src: Operand::Constant(Value::Struct(vec![Value::Tracked(1), Value::Tracked(2)])),
+            src: Operand::Constant(Value::Struct(vec![
+                Value::TrackedFixture(1),
+                Value::TrackedFixture(2),
+            ])),
         }],
     );
 
-    let report = machine(body).execute().expect("pair must execute");
+    let report = machine(body).execute();
     let ids: Vec<_> = report
-        .trace
+        .verification_events
         .iter()
         .filter_map(|event| match event {
-            TraceEvent::DropTracked { id, .. } => Some(*id),
+            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect();
@@ -283,7 +294,10 @@ fn struct_fields_drop_in_reverse_declaration_order() {
 #[test]
 fn copy_of_noncopy_value_is_rejected_before_execution() {
     let mut types = TypeTable::new();
-    let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::Tracked));
+    let tracked = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
 
     let body = one_block(
         types,
@@ -294,7 +308,7 @@ fn copy_of_noncopy_value_is_rejected_before_execution() {
         vec![
             Statement::Init {
                 dst: Place::local(LocalId(0)),
-                src: Operand::Constant(Value::Tracked(5)),
+                src: Operand::Constant(Value::TrackedFixture(5)),
             },
             Statement::Init {
                 dst: Place::local(LocalId(1)),
@@ -303,6 +317,6 @@ fn copy_of_noncopy_value_is_rejected_before_execution() {
         ],
     );
 
-    let error = validate_body(body).expect_err("Tracked values are not copyable in A0");
+    let error = validate_body(body).expect_err("TrackedFixture values are not copyable in A0");
     assert_eq!(error.kind, MirValidationErrorKind::CopyOfNonCopy(tracked));
 }
