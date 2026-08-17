@@ -28,17 +28,21 @@ A loan is a semantic access permission over one root place.
 
 A loan has a kind: **shared** or **exclusive**.
 
+Shared versus exclusive describes competing-access and consuming-access authority. It is not itself a declaration that the containing local is mutable for assignment.
+
 A loan is not defined by this revision as a numeric address, pointer bit pattern, source-language reference value, allocation identity, or provenance token.
 
 ### Borrow interval
 
-A borrow interval is the interval of execution during which one loan is active.
+A borrow interval is the interval of execution during which one loan activation is active.
 
 Borrow interval, storage extent, and stored-value lifetime are distinct concepts.
 
 Ending a borrow interval does not by itself end the target storage extent or the currently active stored-value lifetime.
 
-Conversely, an exclusive loan may remain active while an operation through that loan ends one stored-value lifetime and later begins another in the same storage extent.
+Conversely, an exclusive loan may remain active while an operation through that loan ends one stored-value lifetime and later begins another in the same storage extent when the ordinary assignment rule permits that replacement.
+
+The current proving MIR gives a loan declaration a stable body-local identity. That identity may be activated again after an earlier borrow interval has ended; distinct activations are distinct borrow intervals even when they reuse the same declaration.
 
 ### Place access
 
@@ -56,7 +60,7 @@ A root shared borrow may begin when no active exclusive loan overlaps the target
 
 A root exclusive borrow may begin only when no active loan of either kind overlaps the target place.
 
-An exclusive root borrow also requires the containing local to be mutable under the current Core mutability model.
+Exclusive borrowing does not by itself require the containing local to be mutable. The existing assignment-mutability rule remains a separate requirement applied when `Assign` is attempted, including when assignment is authorized through an exclusive loan.
 
 A loan identity MUST NOT be started while that loan is already active.
 
@@ -92,18 +96,20 @@ An active exclusive loan permits access to its root place or structural sub-plac
 - `Read`;
 - `Copy`, when the selected type is copyable;
 - `Move`;
-- `Assign`;
+- `Assign`, when the existing assignment rule permits assignment to the containing local;
 - `Drop`.
 
-The ordinary initialization-state, type, assignment, and destruction-domain rules still apply to the concrete selected place.
+The ordinary initialization-state, type, assignment-mutability, and destruction-domain rules still apply to the concrete selected place. Exclusive access does not weaken those independent rules.
+
+In particular, an exclusive loan over an immutable local may authorize reading, copying, moving, or dropping according to their ordinary rules, but it does not make assignment to that local legal.
 
 An exclusive loan controls access to storage rather than to one immutable stored-value identity. Therefore:
 
 1. `Move` or `Drop` through an exclusive loan may end the selected stored-value lifetime and leave that storage Dead;
 2. the exclusive borrow interval may remain active because the underlying storage extent still exists;
-3. a later legal `Assign` through the same active exclusive loan may begin a new stored-value lifetime in that storage.
+3. when the containing local is mutable, a later legal `Assign` through the same active exclusive loan may begin a new stored-value lifetime in that storage.
 
-This distinction is intentional and follows the separation between storage extent, stored-value lifetime, and borrow interval.
+This distinction is intentional and follows the separation between storage extent, stored-value lifetime, borrow interval, and assignment mutability.
 
 ## Borrow end and termination
 
