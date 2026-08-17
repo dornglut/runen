@@ -178,6 +178,9 @@ fn inline_link_targets(line: &str) -> Vec<String> {
 fn reference_definition_target(line: &str) -> Option<String> {
     let trimmed = line.trim_start();
     let rest = trimmed.strip_prefix('[')?;
+    if rest.starts_with('^') {
+        return None;
+    }
     let marker_end = rest.find("]:")?;
     normalized_markdown_target(&rest[marker_end + 2..]).map(str::to_owned)
 }
@@ -223,6 +226,11 @@ mod tests {
     fn finds_reference_style_local_targets_outside_fences() {
         let content = "[local]: ./local.md\n[web]: https://example.com\n```md\n[fake]: ./fake.md\n```";
         assert_eq!(reference_style_local_targets(content), vec!["./local.md"]);
+    }
+
+    #[test]
+    fn ignores_footnote_definitions() {
+        assert!(reference_style_local_targets("[^note]: explanatory text").is_empty());
     }
 
     #[test]
