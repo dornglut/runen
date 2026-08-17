@@ -490,20 +490,22 @@ fn validate_state_statement(
             place_state_mut(locals, dst).mark_live();
         }
         Statement::Borrow { loan, kind, place } => {
-            require_fully_live(locals, place, point).map_err(|_| {
-                point_error(
-                    point,
-                    MirValidationErrorKind::BorrowOfUninitialized(place.clone()),
-                )
-            })?;
-
-            let slot = active_loans
-                .get_mut(loan.0 as usize)
-                .expect("static validation guarantees a declared loan identity");
-            if slot.is_some() {
+            let loan_index = loan.0 as usize;
+            if active_loans
+                .get(loan_index)
+                .expect("static validation guarantees a declared loan identity")
+                .is_some()
+            {
                 return Err(point_error(
                     point,
                     MirValidationErrorKind::LoanAlreadyActive(*loan),
+                ));
+            }
+
+            if !place_state(locals, place).fully_live() {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::BorrowOfUninitialized(place.clone()),
                 ));
             }
 
@@ -517,7 +519,7 @@ fn validate_state_statement(
                 ));
             }
 
-            *slot = Some(ActiveLoan {
+            active_loans[loan_index] = Some(ActiveLoan {
                 kind: *kind,
                 place: place.clone(),
             });
