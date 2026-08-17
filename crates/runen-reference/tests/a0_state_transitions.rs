@@ -132,7 +132,31 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
         .expect_err("dead storage must be reinitialized with Assign, not Init");
     assert_eq!(
         error.kind,
-        SemanticErrorKind::FirstInitializationRequired(value)
+        SemanticErrorKind::InitRequiresNeverInitialized(value)
+    );
+}
+
+#[test]
+fn assign_cannot_perform_first_initialization() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let value = Place::local(LocalId(0));
+
+    let body = one_block(
+        types,
+        vec![LocalDecl::new("value", i64_ty, true)],
+        vec![Statement::Assign {
+            dst: value.clone(),
+            src: Operand::Constant(Value::I64(1)),
+        }],
+    );
+
+    let error = Machine::new(body)
+        .execute()
+        .expect_err("first initialization must use Init, even for mutable storage");
+    assert_eq!(
+        error.kind,
+        SemanticErrorKind::AssignRequiresPriorInitialization(value)
     );
 }
 
