@@ -1,8 +1,8 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Field, LocalDecl, LocalId, Operand, Place, ScalarType,
-    Statement, Terminator, TypeDef, TypeTable, Value,
+    Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
 };
-use runen_reference::{Machine, SemanticErrorKind, TraceEvent, WriteKind};
+use runen_reference::{ExecutionViolationKind, Machine, TraceEvent, WriteKind};
 
 fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
     Body {
@@ -11,6 +11,10 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(statements, Terminator::Return)],
     }
+}
+
+fn machine(body: Body) -> Machine {
+    Machine::new(validate_body(body).expect("A0 test MIR must pass static admission"))
 }
 
 #[test]
@@ -42,10 +46,13 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
         ],
     );
 
-    let error = Machine::new(body)
+    let error = machine(body)
         .execute()
         .expect_err("a partially moved aggregate must not be readable as a whole");
-    assert_eq!(error.kind, SemanticErrorKind::UseOfUninitialized(root));
+    assert_eq!(
+        error.kind,
+        ExecutionViolationKind::UseOfUninitialized(root)
+    );
 }
 
 #[test]
@@ -77,7 +84,7 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
         ],
     );
 
-    let report = Machine::new(body)
+    let report = machine(body)
         .execute()
         .expect("assignment must be able to reinitialize mutable dead storage");
 
@@ -124,12 +131,12 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
         ],
     );
 
-    let error = Machine::new(body)
+    let error = machine(body)
         .execute()
         .expect_err("dead storage must be reinitialized with Assign, not Init");
     assert_eq!(
         error.kind,
-        SemanticErrorKind::InitRequiresNeverInitialized(value)
+        ExecutionViolationKind::InitRequiresNeverInitialized(value)
     );
 }
 
@@ -151,7 +158,7 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
         ],
     );
 
-    let report = Machine::new(body)
+    let report = machine(body)
         .execute()
         .expect("mutable assignment may initialize never-initialized storage");
     assert!(report.trace.contains(&TraceEvent::Write {
@@ -186,7 +193,7 @@ fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts
         ],
     );
 
-    let report = Machine::new(body)
+    let report = machine(body)
         .execute()
         .expect("mutable assignment must replace partially initialized aggregate storage");
     let dropped_ids = report
@@ -230,7 +237,7 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
         ],
     );
 
-    let report = Machine::new(body)
+    let report = machine(body)
         .execute()
         .expect("a partial aggregate with a live subobject can be explicitly dropped");
     let drops = report
