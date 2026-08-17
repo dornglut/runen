@@ -26,7 +26,7 @@ fn defined_return_ends_active_borrow_before_cleanup() {
                 Statement::Borrow {
                     loan: LoanId(0),
                     kind: BorrowKind::Shared,
-                    place: value.clone(),
+                    src: value.clone().into(),
                 },
             ],
             Terminator::Return,
