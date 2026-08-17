@@ -109,7 +109,12 @@ This marker is deliberately provisional. General trait semantics are not part of
 
 ## A0.8 Assignment
 
-`Assign(dst, value)` requires the local containing `dst` to be mutable.
+`Assign(dst, value)` requires:
+
+1. the local containing `dst` is mutable; and
+2. `dst` is not wholly `Never-initialized`.
+
+A first write to wholly never-initialized storage MUST use `Init`, even when the containing local is mutable. `Assign` is reserved for replacement or reinitialization of storage that already has initialization history.
 
 Evaluation is conceptually:
 
@@ -147,11 +152,13 @@ Each local is cleaned according to A0.9, so partial initialization is respected 
 
 `Fault` is a defined terminal state. It is not undefined behavior.
 
-## A0.11 Determinism
+## A0.11 Determinism and continued execution
 
 For a fixed typed A0 body, all A0 state transitions, destruction order, and terminal cleanup are deterministic.
 
 No rule depends on allocator address, host-language drop behavior, hash iteration, thread scheduling, or backend behavior.
+
+A0 imposes no implicit execution-step budget. A cyclic control-flow body may continue indefinitely. Tooling MAY externally bound or stop a reference execution for testing or resource control, but such a bound is not a Runen semantic error and MUST NOT be represented as one.
 
 ## A0.12 Reference-machine independence
 
@@ -177,12 +184,13 @@ The A0 gate requires at least:
 5. non-copy values cannot be copied;
 6. `Init` cannot reinitialize storage that became dead after move;
 7. `Assign` can reinitialize mutable storage that became dead after move;
-8. assignment to immutable storage is rejected;
-9. assignment drops a live replacement target before writing the new value;
-10. explicit drop of a partially initialized aggregate destroys only its live subobjects;
-11. an explicit drop is not repeated during scope cleanup;
-12. struct fields are destroyed in reverse declaration order;
-13. fault cleanup destroys each live local value exactly once in reverse declaration order.
+8. `Assign` cannot perform the first initialization of wholly never-initialized storage;
+9. assignment to immutable storage is rejected;
+10. assignment drops a live replacement target before writing the new value;
+11. explicit drop of a partially initialized aggregate destroys only its live subobjects;
+12. an explicit drop is not repeated during scope cleanup;
+13. struct fields are destroyed in reverse declaration order;
+14. fault cleanup destroys each live local value exactly once in reverse declaration order.
 
 ## A0.14 Explicitly deferred
 
