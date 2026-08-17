@@ -342,13 +342,13 @@ pub enum Operand {
 pub enum Statement {
     /// First initialization of direct storage. Re-initialization uses `Assign`.
     Init { dst: Place, src: Operand },
-    /// Begins a root borrow interval over a fully Live direct place.
+    /// Begins a root borrow from direct access or a child borrow from loan access.
     Borrow {
         loan: LoanId,
         kind: BorrowKind,
-        place: Place,
+        src: PlaceAccess,
     },
-    /// Ends one active root borrow interval.
+    /// Ends one active borrow interval. Active children must end first.
     EndBorrow { loan: LoanId },
     /// Non-consuming Core read. The current proving MIR discards the resulting value.
     ///
