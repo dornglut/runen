@@ -1,6 +1,6 @@
 # Repository Architecture
 
-This document owns the structure and dependency boundaries of the Runen repository. It does not define Runen language semantics or project sequencing.
+This document owns the structure and dependency boundaries of the Runen repository.
 
 ## Packages
 
@@ -12,7 +12,7 @@ It MUST NOT depend on the reference machine, a production backend, host platform
 
 ### `crates/runen-reference`
 
-Owns executable reference semantics for the subset implemented by `runen-core-ir`.
+Owns executable reference semantics for the subset represented by `runen-core-ir`.
 
 It may depend on `runen-core-ir`.
 
@@ -20,7 +20,12 @@ It may depend on `runen-core-ir`.
 
 Owns repository validation orchestration only.
 
-It MUST NOT own language semantics.
+## Top-level artifact areas
+
+- `crates/` — implementation packages;
+- `tools/` — repository tooling;
+- `spec/` — normative specification artifacts;
+- `docs/` — non-normative engineering and design artifacts.
 
 ## Dependency direction
 
@@ -32,7 +37,3 @@ runen-reference
 
 repository tooling is orthogonal
 ```
-
-Normative specifications live under `spec/`; non-normative compiler, verification, and design material lives under `docs/`.
-
-Repository code MUST NOT become an alternative source of normative language authority.

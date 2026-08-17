@@ -2,49 +2,37 @@
 
 Status: **provisional normative**
 
-A conforming implementation MUST implement the normative semantics of every profile and profile version it claims.
+This document owns profile taxonomy, composition, and claim rules. It does not restate the semantics owned by the language specification.
 
-Extensions MUST NOT silently weaken or redefine a claimed Runen profile.
+A conforming implementation MUST implement every normative rule included by each profile and profile version it claims.
 
-Unsupported profile facilities must be identified rather than treated as unspecified language behavior.
+Extensions MUST NOT silently weaken or redefine a claimed profile.
 
 ## Core
 
-Runen Core is the base profile required by every conforming implementation.
+Runen Core is the base profile required by every conforming Runen implementation.
 
-A freestanding implementation may claim Core without Hosted, Exec, Model, Network, Security, or Realtime.
+A Core claim includes the general language semantics, Core semantics, and bridge rules applicable to Core values and interactions.
+
+Core is freestanding: claiming Core alone MUST NOT require an operating system, heap allocation, filesystem, networking, threads, an async runtime, a GPU runtime, a Model runtime, or hosted application frameworks.
 
 ## Exec
 
-Runen Exec depends on Core and adds execution-visible tasks/resources, structured parallelism, Buffer/resources, heterogeneous realization contracts, synchronization, and the Exec memory model.
+Runen Exec extends Core with the normative Exec semantics and applicable bridge rules.
 
-Exec does not imply that a GPU is present.
+An Exec claim does not imply that any particular accelerator is present; environment requirements are handled by admission contracts.
 
 ## Model
 
-Runen Model depends on Core and on any explicit bridge facilities it uses. It adds logical data/query/state-domain/rule/observation/maintenance semantics.
+Runen Model extends Core with the normative Model semantics and applicable bridge rules.
 
-Model does not require one database, ECS, incremental engine, or storage architecture.
+A Model claim does not imply one physical storage or incremental realization.
 
-## Hosted
+## Additional profile families
 
-Runen Hosted identifies a Standard Environment contract. Hosted is a profile, not a fourth semantic stratum.
+Hosted, Network, Security, and Realtime are reserved profile families in the provisional architecture.
 
-## Network
-
-Runen Network defines the remote communication, failure, ordering, identity, serialization, observation, authority, and consistency contracts it claims.
-
-Network MUST NOT reinterpret Core references or pointers as remote shared-memory references by default.
-
-## Security
-
-Runen Security defines additional authority, confidentiality/integrity, information-flow, isolation, sandbox, or related contracts.
-
-## Realtime
-
-Runen Realtime defines the environment assumptions, admission requirements, scheduling/progress guarantees, deadlines, and failure behavior of realtime claims.
-
-A hard guarantee MUST be rejected when the environment cannot establish it rather than silently becoming a preference.
+This revision does not define complete claimable contracts for those profile families. A standardized conformance claim requires a normative profile contract that identifies the rules it adds.
 
 ## Composition
 
@@ -60,4 +48,4 @@ An implementation MUST state the profiles and profile versions it claims.
 
 Language and optional profile versions may evolve independently.
 
-The compatibility/stability policy of future stable releases is not specified by this provisional version.
+The compatibility policy for future stable releases is not defined by this revision.

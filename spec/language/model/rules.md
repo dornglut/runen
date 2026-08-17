@@ -9,15 +9,15 @@ A rule is a declarative or reactive state transition evaluated against admitted 
 Conceptually:
 
 ```text
-admitted triggers/events
+admitted triggers or events
         ↓
 immutable ObservationSet
         ↓
-match/query
+match or query
         ↓
 pure derivation
         ↓
-staged proposals/events
+staged proposals and events
         ↓
 state-domain admission
         ↓
@@ -30,7 +30,7 @@ A reaction wave is a logical instant; physical execution may take nonzero wall t
 
 ## Staging and commit
 
-Mutation proposals are staged. They are not immediately visible to other matching or derivation in the same reaction wave unless a later normative rule explicitly permits that behavior.
+Mutation proposals are staged. They are not immediately visible to other matching or derivation in the same reaction wave unless a normative rule explicitly permits that behavior.
 
 Before commit, rule evaluation may read admitted observations, perform pure calculation, create state proposals, and stage logical events.
 
@@ -38,11 +38,11 @@ Pre-commit rule evaluation MUST NOT perform arbitrary irreversible external effe
 
 For a successful state-domain commit, the admitted state changes and logical events defined as part of that transition acquire logical existence together.
 
-Later delivery of a committed event may have a separate profile-defined failure or retry contract.
+Later delivery of a committed event may have a separate failure or retry contract.
 
 ## Mutation scope
 
-An ordinary rule may read observations from multiple state domains but mutates at most one state domain per commit/reaction transition.
+An ordinary rule may read observations from multiple state domains but mutates at most one state domain per commit or reaction transition.
 
 Cross-domain coordination requires an explicit contract.
 
@@ -53,3 +53,7 @@ Conflicting proposals MUST NOT be resolved by incidental worker or scheduler ord
 Resolution must be explicit: rejection, deterministic arbitration, algebraic accumulation, or a published state-domain conflict rule.
 
 If arbitration intentionally permits nondeterminism, that nondeterminism MUST be part of the semantic contract.
+
+## Progress
+
+A well-typed and memory-safe rule system is not guaranteed to reach quiescence. Rule-system progress or termination guarantees require an explicit contract.
