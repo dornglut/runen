@@ -6,7 +6,15 @@ Runen does not collapse distinct correctness questions into one universal relati
 
 ## Behavior refinement
 
-A realization or transformation must not add forbidden observable behaviors. See [Program Behavior](behavior.md).
+A correctness-preserving lowering or transformation MUST NOT introduce an observable behavior forbidden by its source semantics.
+
+Conceptually:
+
+```text
+Behaviors(lowered) ⊆ Behaviors(source)
+```
+
+under the applicable abstraction mapping.
 
 ## Progress and liveness
 
@@ -18,11 +26,11 @@ Two otherwise legal realizations may differ numerically. The applicable numeric 
 
 ## Incremental equivalence
 
-At an observation point admitted by a freshness contract, a materialized or maintained result MUST be observationally equivalent to evaluating its defining logical computation from scratch over the corresponding admitted source observation.
+Incremental equivalence is distinct from ordinary behavior refinement. Model maintenance semantics define the concrete relation between an observed maintained result and evaluation of its defining logical computation.
 
 ## Security properties
 
-Confidentiality and integrity properties may relate multiple executions or traces. Profiles that define such hyperproperties must state obligations that are not reducible to single-trace behavior refinement.
+Confidentiality and integrity properties may relate multiple executions or traces. A contract that defines such hyperproperties must state obligations not reducible to single-trace behavior refinement.
 
 ## Determinism
 
@@ -30,12 +38,12 @@ Confidentiality and integrity properties may relate multiple executions or trace
 
 **Schedule independence** means that changing the legal physical execution schedule does not change the observable result.
 
-**Heterogeneous reproducibility** means that distinct admitted realizations, such as CPU and GPU, satisfy the relation required by the applicable numeric contract.
+**Heterogeneous reproducibility** means that distinct admitted realizations satisfy the relation required by the applicable numeric contract.
 
 These are distinct properties. None implies the others without an explicit rule.
 
 ## Intentional nondeterminism
 
-Source may explicitly admit multiple results through operations whose contracts expose nondeterminism, such as random observation, external arrival order, or explicit arbitrary selection.
+Source may explicitly admit multiple results through operations whose contracts expose nondeterminism.
 
 Incidental implementation order MUST NOT create nondeterminism when source semantics do not admit it.

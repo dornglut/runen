@@ -2,34 +2,33 @@
 
 Status: **normative meta-specification**
 
-This file defines how Runen specification documents are interpreted. It does not define language operations.
+This document defines how normative Runen specification artifacts are interpreted. It does not define language operations.
 
-## Normative terms
+## Requirement terms
 
 Capitalized **MUST**, **MUST NOT**, **REQUIRED**, **SHOULD**, **SHOULD NOT**, **MAY**, and **OPTIONAL** express normative requirements.
 
 ## Document status
 
 - **normative** — constrains conforming implementations;
-- **provisional normative** — currently constrains the accepted pre-stability design and may change only through an explicit normative revision;
+- **provisional normative** — currently constrains the pre-stability design and may change only through an explicit normative revision;
 - **illustrative** — communicates intent without defining required syntax or API spelling;
-- **non-normative** — explanation, rationale, implementation guidance, planning, or verification guidance;
-- **unspecified in this revision** — this specification version deliberately provides no rule for the named detail.
+- **non-normative** — does not define Runen behavior.
 
-## Precedence
+## Open specification items
 
-When normative artifacts overlap, the more specific accepted normative rule governs its stated scope. A normative annex may therefore refine a general language rule for the subset the annex explicitly covers.
+Text that says a rule is **not defined by this revision** marks an open specification item. It is not a grant of implementation freedom and cannot be used to justify a standardized conformance claim for that detail.
+
+This is distinct from **permitted variation**: when normative text explicitly permits multiple outcomes, orders, or realizations, every permitted alternative is part of the language semantics.
+
+## Ownership and conflicts
+
+Each normative rule has one canonical owner. Normative files may reference each other, but they SHOULD NOT restate another file's rule merely for convenience.
+
+If two normative artifacts appear to define conflicting rules for the same scope, that is a specification defect requiring explicit correction. There is no general "more specific file silently wins" rule.
 
 Non-normative material never overrides normative text.
 
-Compiler behavior, repository code, tests, host-language behavior, examples, issue discussion, and research sources do not silently define Runen semantics.
-
 ## Illustrative syntax
 
-Unless a normative grammar document explicitly says otherwise, source spellings and examples are illustrative. Semantic names such as `task`, `each`, `Relation`, or `maintain` identify concepts; they do not by themselves freeze lexical or concrete grammar.
-
-## Unspecified behavior versus implementation freedom
-
-A detail described as unspecified in this revision is a specification gap for that detail, not permission to invent a conflicting language rule and call it conforming.
-
-Implementation freedom exists only inside behavior permitted by the normative specification.
+Unless a normative grammar document explicitly states otherwise, source spellings and examples are illustrative. Semantic names such as `task`, `each`, `Relation`, or `maintain` identify concepts; they do not by themselves freeze lexical or concrete grammar.

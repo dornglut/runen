@@ -4,8 +4,8 @@ Status: **provisional normative**
 
 Remote interaction is not shared memory.
 
-A Network or distributed profile must define the message/protocol, failure, ordering, identity, serialization, observation, authority, and consistency contracts it claims.
+Ordinary references, borrows, raw pointers, or Buffer physical addresses MUST NOT silently acquire remote-shared-memory meaning because communication is available.
 
-Ordinary references, borrows, raw pointers, or Buffer physical addresses MUST NOT silently acquire remote-shared-memory meaning merely because an implementation can communicate with another machine.
+A remote or distributed contract must define the failure, ordering, identity, serialization, observation, authority, and consistency properties on which programs may rely.
 
-Network protocols, CRDTs, replication strategies, RPC systems, and distributed transactions are optional mechanisms or profile facilities rather than universal Core or Model semantics.
+A **causal frontier** describes causal knowledge or ordering when such a contract defines one. A causal frontier is not a clock domain or state revision.

@@ -6,10 +6,9 @@ Core, Exec, and Model compose only through explicit semantic bridges.
 
 ## Model to Core
 
-A Model observation reifies as either:
+A Model observation reifies as either an ordinary immutable Core value or an explicit logical handle whose operations are defined by its contract.
 
-- an ordinary immutable Core value or snapshot representation; or
-- an explicit logical handle whose operations are defined by its contract.
+A Model logical value is not identified by the physical storage layout of its realization.
 
 Observing Model state MUST NOT implicitly create a lexical Core borrow directly into arbitrary state-domain internal storage.
 
@@ -17,27 +16,27 @@ Observing Model state MUST NOT implicitly create a lexical Core borrow directly 
 
 Ordinary lexical mutation MUST NOT directly mutate arbitrary state-domain internals through a Core reference.
 
-State-domain mutation crosses through explicit state-domain operations, transactions, rule proposals, or another defined bridge contract.
+State-domain mutation crosses through an explicit state-domain operation or transition contract.
 
 ## Core to Exec
 
-Exec tasks receive Core values, owned resources, or permission-bearing borrows/views according to explicit ownership and resource rules.
+Exec work receives Core values, owned resources, or permission-bearing borrows or views according to explicit ownership and resource rules.
 
 Execution placement does not change the logical ownership contract.
 
-A raw pointer valid in one physical realization MUST NOT be assumed valid after migration or relocation unless a mapping/pinning contract preserves that validity.
+A raw pointer valid in one physical realization MUST NOT be assumed valid after migration or relocation unless a contract preserves that validity.
 
 ## Exec to Core
 
-Exec completion reifies results into Core values/resources according to the task/resource contract.
+Exec completion reifies results into Core values or resources according to the applicable contract.
 
-A physical device result does not bypass Core validity or ownership rules merely because it was produced by a GPU or accelerator.
+A physical realization does not bypass Core validity or ownership rules.
 
 ## Model to Exec
 
-A live Model query or state-domain observation is not silently captured as mutable live state by an Exec task.
+A live Model query or state-domain observation is not silently captured as mutable live state by Exec work.
 
-Execution over Model-derived data requires an explicit bridge such as immutable Core snapshot values, materialization, Buffer/resource realization, or a logical handle with defined execution semantics.
+Execution over Model-derived data requires an explicit bridge such as an immutable Core value, materialization, a logical Exec resource, or a logical handle with defined execution semantics.
 
 ## Exec to Model
 
@@ -47,4 +46,4 @@ Changes to Model state re-enter through the applicable state-domain admission an
 
 ## Non-leakage
 
-An implementation MAY optimize a bridge away physically when it preserves the same semantics, but it MUST NOT expose an otherwise-forbidden borrow, address, mutation, observation, ordering, or authority merely because two strata share one runtime representation.
+A realization MAY erase a bridge physically when it preserves the same semantics, but it MUST NOT expose an otherwise-forbidden borrow, address, mutation, observation, ordering, or authority merely because two strata share one physical representation.
