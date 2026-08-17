@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef,
-    TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
+    Terminator, TypeDef, TypeId, TypeTable, Value, validate_body,
 };
 
 fn one_block(
@@ -17,6 +17,16 @@ fn one_block(
         entry: BasicBlockId(0),
         blocks: vec![BasicBlock::new(statements, Terminator::Return)],
     }
+}
+
+fn i64_type() -> (TypeTable, TypeId) {
+    let mut types = TypeTable::new();
+    let ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    (types, ty)
+}
+
+fn error_kind(body: Body) -> MirValidationErrorKind {
+    validate_body(body).expect_err("test MIR must be rejected").kind
 }
 
 #[test]
@@ -38,17 +48,12 @@ fn structural_place_overlap_is_address_independent() {
 
 #[test]
 fn overlapping_shared_root_loans_are_valid() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, false)],
-        vec![
-            LoanDecl::new("a", i64_ty),
-            LoanDecl::new("b", i64_ty),
-        ],
+        vec![LocalDecl::new("value", ty, false)],
+        vec![LoanDecl::new("a", ty), LoanDecl::new("b", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -64,30 +69,23 @@ fn overlapping_shared_root_loans_are_valid() {
                 kind: BorrowKind::Shared,
                 place: value.clone(),
             },
-            Statement::Read {
-                src: value.into(),
-            },
+            Statement::Read { src: value.into() },
             Statement::EndBorrow { loan: LoanId(1) },
             Statement::EndBorrow { loan: LoanId(0) },
         ],
     );
 
-    validate_body(body).expect("overlapping shared loans and direct reads are valid");
+    validate_body(body).expect("overlapping shared loans are valid");
 }
 
 #[test]
-fn exclusive_root_borrow_conflicts_with_active_shared_loan() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+fn exclusive_root_borrow_conflicts_with_shared_loan() {
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, true)],
-        vec![
-            LoanDecl::new("shared", i64_ty),
-            LoanDecl::new("exclusive", i64_ty),
-        ],
+        vec![LocalDecl::new("value", ty, true)],
+        vec![LoanDecl::new("shared", ty), LoanDecl::new("exclusive", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -106,9 +104,8 @@ fn exclusive_root_borrow_conflicts_with_active_shared_loan() {
         ],
     );
 
-    let error = validate_body(body).expect_err("exclusive borrow must conflict with shared loan");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::BorrowConflict {
             place: value,
             loan: LoanId(0),
@@ -117,18 +114,13 @@ fn exclusive_root_borrow_conflicts_with_active_shared_loan() {
 }
 
 #[test]
-fn shared_root_borrow_conflicts_with_active_exclusive_loan() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+fn shared_root_borrow_conflicts_with_exclusive_loan() {
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, true)],
-        vec![
-            LoanDecl::new("exclusive", i64_ty),
-            LoanDecl::new("shared", i64_ty),
-        ],
+        vec![LocalDecl::new("value", ty, true)],
+        vec![LoanDecl::new("exclusive", ty), LoanDecl::new("shared", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -147,9 +139,8 @@ fn shared_root_borrow_conflicts_with_active_exclusive_loan() {
         ],
     );
 
-    let error = validate_body(body).expect_err("shared borrow must conflict with exclusive loan");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::BorrowConflict {
             place: value,
             loan: LoanId(0),
@@ -160,19 +151,18 @@ fn shared_root_borrow_conflicts_with_active_exclusive_loan() {
 #[test]
 fn disjoint_exclusive_field_loans_are_valid() {
     let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let scalar = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pair = types.push(TypeDef::structure(
         "Pair",
-        vec![Field::new("left", i64_ty), Field::new("right", i64_ty)],
+        vec![Field::new("left", scalar), Field::new("right", scalar)],
     ));
     let root = Place::local(LocalId(0));
-
     let body = one_block(
         types,
         vec![LocalDecl::new("pair", pair, true)],
         vec![
-            LoanDecl::new("left", i64_ty),
-            LoanDecl::new("right", i64_ty),
+            LoanDecl::new("left", scalar),
+            LoanDecl::new("right", scalar),
         ],
         vec![
             Statement::Init {
@@ -200,23 +190,20 @@ fn disjoint_exclusive_field_loans_are_valid() {
         ],
     );
 
-    validate_body(body).expect("disjoint sibling fields may be borrowed exclusively");
+    validate_body(body).expect("disjoint sibling fields may be exclusive");
 }
 
 #[test]
 fn direct_read_and_copy_are_valid_under_shared_borrow() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let source = Place::local(LocalId(0));
-    let target = Place::local(LocalId(1));
-
     let body = one_block(
         types,
         vec![
-            LocalDecl::new("source", i64_ty, false),
-            LocalDecl::new("target", i64_ty, false),
+            LocalDecl::new("source", ty, false),
+            LocalDecl::new("target", ty, false),
         ],
-        vec![LoanDecl::new("shared", i64_ty)],
+        vec![LoanDecl::new("shared", ty)],
         vec![
             Statement::Init {
                 dst: source.clone(),
@@ -231,28 +218,26 @@ fn direct_read_and_copy_are_valid_under_shared_borrow() {
                 src: source.clone().into(),
             },
             Statement::Init {
-                dst: target,
+                dst: Place::local(LocalId(1)),
                 src: Operand::Copy(source.into()),
             },
         ],
     );
 
-    validate_body(body).expect("shared borrowing permits direct non-consuming access");
+    validate_body(body).expect("shared loan permits direct non-consuming access");
 }
 
 #[test]
 fn direct_move_is_rejected_under_shared_borrow() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let source = Place::local(LocalId(0));
-
     let body = one_block(
         types,
         vec![
-            LocalDecl::new("source", i64_ty, false),
-            LocalDecl::new("target", i64_ty, false),
+            LocalDecl::new("source", ty, false),
+            LocalDecl::new("target", ty, false),
         ],
-        vec![LoanDecl::new("shared", i64_ty)],
+        vec![LoanDecl::new("shared", ty)],
         vec![
             Statement::Init {
                 dst: source.clone(),
@@ -270,9 +255,8 @@ fn direct_move_is_rejected_under_shared_borrow() {
         ],
     );
 
-    let error = validate_body(body).expect_err("move must conflict with shared borrow");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::DirectAccessConflict {
             place: source,
             loan: LoanId(0),
@@ -282,14 +266,12 @@ fn direct_move_is_rejected_under_shared_borrow() {
 
 #[test]
 fn direct_assignment_is_rejected_under_shared_borrow() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, true)],
-        vec![LoanDecl::new("shared", i64_ty)],
+        vec![LocalDecl::new("value", ty, true)],
+        vec![LoanDecl::new("shared", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -307,9 +289,8 @@ fn direct_assignment_is_rejected_under_shared_borrow() {
         ],
     );
 
-    let error = validate_body(body).expect_err("assignment must conflict with shared borrow");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::DirectAccessConflict {
             place: value,
             loan: LoanId(0),
@@ -319,14 +300,12 @@ fn direct_assignment_is_rejected_under_shared_borrow() {
 
 #[test]
 fn direct_read_is_rejected_under_exclusive_borrow() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, true)],
-        vec![LoanDecl::new("exclusive", i64_ty)],
+        vec![LocalDecl::new("value", ty, true)],
+        vec![LoanDecl::new("exclusive", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -343,9 +322,8 @@ fn direct_read_is_rejected_under_exclusive_borrow() {
         ],
     );
 
-    let error = validate_body(body).expect_err("exclusive borrow blocks direct reads");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::DirectAccessConflict {
             place: value,
             loan: LoanId(0),
@@ -355,17 +333,15 @@ fn direct_read_is_rejected_under_exclusive_borrow() {
 
 #[test]
 fn shared_loan_rejects_consuming_access() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
         vec![
-            LocalDecl::new("value", i64_ty, true),
-            LocalDecl::new("target", i64_ty, false),
+            LocalDecl::new("value", ty, true),
+            LocalDecl::new("target", ty, false),
         ],
-        vec![LoanDecl::new("shared", i64_ty)],
+        vec![LoanDecl::new("shared", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -383,9 +359,8 @@ fn shared_loan_rejects_consuming_access() {
         ],
     );
 
-    let error = validate_body(body).expect_err("shared loan cannot consume storage");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::ExclusiveLoanRequired(LoanId(0))
     );
 }
@@ -398,7 +373,6 @@ fn exclusive_loan_survives_move_and_replacement() {
         ScalarType::TrackedFixture,
     ));
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
         vec![
@@ -431,19 +405,17 @@ fn exclusive_loan_survives_move_and_replacement() {
         ],
     );
 
-    validate_body(body).expect("exclusive loan controls storage across value replacement");
+    validate_body(body).expect("exclusive loan persists across replacement");
 }
 
 #[test]
 fn loan_access_after_explicit_end_is_rejected() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, false)],
-        vec![LoanDecl::new("shared", i64_ty)],
+        vec![LocalDecl::new("value", ty, false)],
+        vec![LoanDecl::new("shared", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -461,20 +433,20 @@ fn loan_access_after_explicit_end_is_rejected() {
         ],
     );
 
-    let error = validate_body(body).expect_err("ended loan cannot authorize access");
-    assert_eq!(error.kind, MirValidationErrorKind::LoanNotActive(LoanId(0)));
+    assert_eq!(
+        error_kind(body),
+        MirValidationErrorKind::LoanNotActive(LoanId(0))
+    );
 }
 
 #[test]
 fn inactive_loan_identity_may_be_reused() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, false)],
-        vec![LoanDecl::new("shared", i64_ty)],
+        vec![LocalDecl::new("value", ty, false)],
+        vec![LoanDecl::new("shared", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -498,19 +470,17 @@ fn inactive_loan_identity_may_be_reused() {
         ],
     );
 
-    validate_body(body).expect("inactive typed loan identity may begin another interval");
+    validate_body(body).expect("inactive typed loan identity may be reused");
 }
 
 #[test]
 fn borrowing_uninitialized_storage_is_rejected() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, false)],
-        vec![LoanDecl::new("shared", i64_ty)],
+        vec![LocalDecl::new("value", ty, false)],
+        vec![LoanDecl::new("shared", ty)],
         vec![Statement::Borrow {
             loan: LoanId(0),
             kind: BorrowKind::Shared,
@@ -518,20 +488,20 @@ fn borrowing_uninitialized_storage_is_rejected() {
         }],
     );
 
-    let error = validate_body(body).expect_err("borrow requires fully Live storage");
-    assert_eq!(error.kind, MirValidationErrorKind::BorrowOfUninitialized(value));
+    assert_eq!(
+        error_kind(body),
+        MirValidationErrorKind::BorrowOfUninitialized(value)
+    );
 }
 
 #[test]
 fn exclusive_borrow_of_immutable_local_is_rejected() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = one_block(
         types,
-        vec![LocalDecl::new("value", i64_ty, false)],
-        vec![LoanDecl::new("exclusive", i64_ty)],
+        vec![LocalDecl::new("value", ty, false)],
+        vec![LoanDecl::new("exclusive", ty)],
         vec![
             Statement::Init {
                 dst: value.clone(),
@@ -545,50 +515,48 @@ fn exclusive_borrow_of_immutable_local_is_rejected() {
         ],
     );
 
-    let error = validate_body(body).expect_err("exclusive borrow requires mutable local");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::ExclusiveBorrowOfImmutable(LocalId(0))
     );
 }
 
 #[test]
 fn loan_projection_is_typed_even_in_unreachable_mir() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
-    let access = PlaceAccess::loan(LoanId(0)).field(0);
-
+    let (types, ty) = i64_type();
     let body = Body {
         types,
         locals: Vec::new(),
-        loans: vec![LoanDecl::new("scalar", i64_ty)],
+        loans: vec![LoanDecl::new("scalar", ty)],
         entry: BasicBlockId(0),
         blocks: vec![
             BasicBlock::new(Vec::new(), Terminator::Return),
-            BasicBlock::new(vec![Statement::Read { src: access }], Terminator::Return),
+            BasicBlock::new(
+                vec![Statement::Read {
+                    src: PlaceAccess::loan(LoanId(0)).field(0),
+                }],
+                Terminator::Return,
+            ),
         ],
     };
 
-    let error = validate_body(body).expect_err("loan projection must be statically typed");
     assert_eq!(
-        error.kind,
+        error_kind(body),
         MirValidationErrorKind::InvalidLoanProjection {
             loan: LoanId(0),
-            projections: vec![runen_core_ir::Projection::Field(0)],
+            projections: vec![Projection::Field(0)],
         }
     );
 }
 
 #[test]
 fn stable_loop_state_includes_active_loans() {
-    let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-
     let body = Body {
         types,
-        locals: vec![LocalDecl::new("value", i64_ty, false)],
-        loans: vec![LoanDecl::new("shared", i64_ty)],
+        locals: vec![LocalDecl::new("value", ty, false)],
+        loans: vec![LoanDecl::new("shared", ty)],
         entry: BasicBlockId(0),
         blocks: vec![
             BasicBlock::new(
@@ -614,5 +582,5 @@ fn stable_loop_state_includes_active_loans() {
         ],
     };
 
-    validate_body(body).expect("repeated storage and active-loan state is valid divergence");
+    validate_body(body).expect("stable active-loan loop is valid divergence");
 }
