@@ -1,5 +1,5 @@
 #![forbid(unsafe_code)]
-//! Executable reference semantics for validated Runen A0 Core MIR.
+//! Executable reference semantics for validated Runen Core MIR.
 
 use runen_core_ir::{
     LocalId, Operand, Place, Projection, ScalarType, Statement, Terminator, TypeId, TypeKind,
@@ -13,7 +13,7 @@ pub enum VerificationWriteKind {
     Assign,
 }
 
-/// Verification-only event emitted by the A0 executable oracle.
+/// Verification-only event emitted by the executable reference oracle.
 ///
 /// These events expose internal semantic transitions to conformance tests. They
 /// are not the observable program trace defined by the Runen language semantics.
@@ -78,7 +78,7 @@ impl ObjectState {
     }
 }
 
-/// Small executable abstract machine for validated A0 Core MIR.
+/// Small executable abstract machine for validated Core MIR.
 pub struct Machine {
     body: ValidatedBody,
     locals: Vec<ObjectState>,
