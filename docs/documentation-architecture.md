@@ -38,7 +38,7 @@ Navigation should be local. A root index routes to subsystem indexes; it should 
 
 ## Link convention
 
-Repository-internal documentation links use inline relative Markdown syntax, for example `[Core](language/core/README.md)`.
+Repository-internal documentation links use inline relative Markdown syntax, for example [Core](../spec/language/core/README.md).
 
 Reference-style local links are not used. This keeps link ownership explicit at the point of use and permits the repository validator to check local link targets without requiring a general-purpose Markdown parser.
 
