@@ -87,6 +87,14 @@ fn validate_documentation(root: &Path) -> Result<(), String> {
             validate_spec_content(root, &file, &content)?;
         }
 
+        let reference_targets = reference_style_local_targets(&content);
+        if let Some(target) = reference_targets.first() {
+            return Err(format!(
+                "repository-local Markdown links must use inline relative syntax in {}: {target}",
+                file.strip_prefix(root).unwrap_or(&file).display()
+            ));
+        }
+
         for target in markdown_link_targets(&content) {
             let Some(local_target) = local_markdown_target(&target) else {
                 continue;
@@ -180,28 +188,78 @@ fn validate_spec_content(root: &Path, file: &Path, content: &str) -> Result<(), 
 }
 
 fn markdown_link_targets(content: &str) -> Vec<String> {
+    markdown_lines_outside_fences(content)
+        .flat_map(inline_link_targets)
+        .collect()
+}
+
+fn reference_style_local_targets(content: &str) -> Vec<String> {
+    markdown_lines_outside_fences(content)
+        .filter_map(reference_definition_target)
+        .filter(|target| local_markdown_target(target).is_some())
+        .collect()
+}
+
+fn markdown_lines_outside_fences(content: &str) -> impl Iterator<Item = &str> {
+    let mut active_fence: Option<&'static str> = None;
+
+    content.lines().filter(move |line| {
+        let trimmed = line.trim_start();
+        let marker = if trimmed.starts_with("```") {
+            Some("```")
+        } else if trimmed.starts_with("~~~") {
+            Some("~~~")
+        } else {
+            None
+        };
+
+        if let Some(marker) = marker {
+            match active_fence {
+                None => active_fence = Some(marker),
+                Some(active) if active == marker => active_fence = None,
+                Some(_) => {}
+            }
+            return false;
+        }
+
+        active_fence.is_none()
+    })
+}
+
+fn inline_link_targets(line: &str) -> Vec<String> {
     let mut targets = Vec::new();
     let mut cursor = 0;
 
-    while let Some(relative_start) = content[cursor..].find("](") {
+    while let Some(relative_start) = line[cursor..].find("](") {
         let start = cursor + relative_start + 2;
-        let Some(relative_end) = content[start..].find(')') else {
+        let Some(relative_end) = line[start..].find(')') else {
             break;
         };
         let end = start + relative_end;
-        let raw = content[start..end].trim();
-        let target = if raw.starts_with('<') && raw.ends_with('>') {
-            &raw[1..raw.len() - 1]
-        } else {
-            raw.split_whitespace().next().unwrap_or("")
-        };
-        if !target.is_empty() {
+        if let Some(target) = normalized_markdown_target(&line[start..end]) {
             targets.push(target.to_owned());
         }
         cursor = end + 1;
     }
 
     targets
+}
+
+fn reference_definition_target(line: &str) -> Option<String> {
+    let trimmed = line.trim_start();
+    let rest = trimmed.strip_prefix('[')?;
+    let marker_end = rest.find("]:")?;
+    normalized_markdown_target(&rest[marker_end + 2..]).map(str::to_owned)
+}
+
+fn normalized_markdown_target(raw: &str) -> Option<&str> {
+    let raw = raw.trim();
+    let target = if raw.starts_with('<') {
+        raw.strip_prefix('<')?.split_once('>')?.0
+    } else {
+        raw.split_whitespace().next()?
+    };
+    (!target.is_empty()).then_some(target)
 }
 
 fn local_markdown_target(target: &str) -> Option<&str> {
@@ -281,14 +339,21 @@ fn run_captured(
 
 #[cfg(test)]
 mod tests {
-    use super::{local_markdown_target, markdown_link_targets};
+    use super::{local_markdown_target, markdown_link_targets, reference_style_local_targets};
 
     #[test]
-    fn extracts_inline_markdown_links() {
+    fn extracts_inline_markdown_links_outside_fences() {
+        let content = "[one](a.md)\n```md\n[ignored](missing.md)\n```\n[two](../b.md#section)";
         assert_eq!(
-            markdown_link_targets("[one](a.md) and [two](../b.md#section)"),
+            markdown_link_targets(content),
             vec!["a.md", "../b.md#section"]
         );
+    }
+
+    #[test]
+    fn finds_reference_style_local_targets_outside_fences() {
+        let content = "[local]: ./local.md\n[web]: https://example.com\n```md\n[fake]: ./fake.md\n```";
+        assert_eq!(reference_style_local_targets(content), vec!["./local.md"]);
     }
 
     #[test]
