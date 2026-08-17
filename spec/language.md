@@ -500,42 +500,86 @@ No state domain is implicitly process-global.
 
 ### 9.2 Logical declarations
 
-The intended Model vocabulary includes concepts such as:
+The accepted base Model vocabulary contains these semantic concepts:
 
-- `record` — logical structured value;
-- `property` — typed subject-to-value fact;
-- `tag` — nominal unary fact;
-- `predicate` — derived logical fact;
-- `relation` — typed n-ary relationship;
-- `query` — pure logical derivation;
+- `record` — logical structured value whose physical layout is not semantic identity;
+- `property` — partial typed mapping from subject to at most one value;
+- `tag` — nominal unary membership/presence, conceptually a specialized unary relation;
+- `predicate` — pure logical derivation;
+- `relation` — typed n-ary unordered set of logical rows;
+- `query` — pure logical derivation over logical values/collections;
 - `rule` — declarative/reactive state transition;
 - `observe` — request logical change observation;
 - `materialize` — request retained realization;
 - `maintain` — request ongoing correspondence under an explicit target contract.
 
+Declared relation keys impose logical uniqueness constraints. Physical indexing/storage is not semantic identity.
+
 Exact surface syntax is illustrative.
 
 Graph and Field are **not** fundamental universal Model value categories. Specialized graph, spatial-field, ECS, rendering, UI, or domain systems may be built as libraries/profiles over the more general semantics.
 
-### 9.3 Relation, multiplicity, and order
+### 9.3 Fundamental collection families
 
-A relation is unordered unless an operation establishes order.
+The base Model algebra distinguishes:
 
-Operations whose result depends on an element being "first" therefore require an ordered input/contract.
+```text
+Relation<T>   unordered set
+Bag<T>        unordered multiset
+Sequence<T>   ordered sequence
+```
 
-Explicit arbitrary selection may exist, but MUST make the arbitrariness/nondeterministic allowance semantically visible.
+These distinctions are semantic, not physical storage choices.
 
-Bag and sequence semantics, complete join/group/aggregation rules, and cardinality inference remain P0-E.
+Relation and Bag values have no semantic iteration order.
 
-When an ordering key does not fully distinguish elements, equal-key order is not silently stable by physical storage order. A deterministic tie order requires an explicit semantic tie-breaker or stronger ordered-source contract.
+An operation whose result depends on a value being "first" therefore requires an ordered input such as a Sequence or another explicit ordering contract.
 
-### 9.4 Query purity
+Explicit arbitrary selection may exist, but MUST carry an arbitrary/nondeterministic contract rather than inventing storage order.
+
+### 9.4 Query multiplicity
+
+Queries use **bag semantics by default** unless an operation explicitly removes multiplicity.
+
+Projection therefore does not silently deduplicate equal output rows.
+
+`distinct` explicitly removes multiplicity and establishes set-style uniqueness for the result.
+
+### 9.5 Query vocabulary
+
+The accepted v0.9 core query vocabulary is limited to the semantic operations represented illustratively by:
+
+- `from`;
+- `where`;
+- `select`;
+- `derive`;
+- `join`;
+- `group`;
+- `aggregate`;
+- `distinct`;
+- `order` / `order by`.
+
+Recursive graph/path semantics, window semantics, and general set-combination operators are deferred until explicitly designed.
+
+The exact semantics of joins, grouping, aggregation, logical type checking, and cardinality inference remain P0-E work.
+
+### 9.6 Ordering and ties
+
+`order by` produces an ordered Sequence.
+
+If the ordering keys do not distinguish all elements, the relative order of tied elements remains unspecified unless further semantic keys are supplied.
+
+A deterministic total order therefore requires sufficient deterministic ordering keys or an explicitly stronger ordered-source contract.
+
+An implementation MUST NOT use hidden object addresses, hash iteration, physical storage order, entity/archetype layout, or query-plan accident as an implicit semantic tie-breaker.
+
+### 9.7 Query purity
 
 Queries are pure logical derivations unless an explicitly defined future operation/profile says otherwise.
 
 A query plan, index, ECS archetype, database table, GPU representation, differential-dataflow graph, or other physical structure is not the logical query semantics.
 
-### 9.5 ObservationSet
+### 9.8 ObservationSet
 
 A Model evaluation spanning state domains is evaluated relative to an explicit immutable **`ObservationSet`** identifying the admitted observations for that evaluation/reaction wave.
 
@@ -545,7 +589,7 @@ It does **not** imply one globally synchronized distributed snapshot and MUST NO
 
 Compatibility rules for composing observations from multiple state domains remain P0-E.
 
-### 9.6 Revisions and causal frontiers
+### 9.9 Revisions and causal frontiers
 
 A state revision identifies state-domain version/progress in that domain's state semantics.
 
@@ -553,7 +597,7 @@ A causal frontier describes causal knowledge/order where a profile requires it.
 
 Neither concept is a clock domain by definition.
 
-### 9.7 Rule reaction wave
+### 9.10 Rule reaction wave
 
 Conceptually, a rule reaction wave follows:
 
@@ -566,7 +610,7 @@ match/query
         ↓
 pure derivation
         ↓
-staged effect proposals
+staged proposals/events
         ↓
 state-domain admission
         ↓
@@ -577,13 +621,31 @@ committed logical events become available to later waves
 
 A reaction wave is a logical instant; physical execution may take nonzero wall time.
 
-### 9.8 Staged effects and commit-coupled events
+### 9.11 Staged effects, pre-commit purity, and commit-coupled events
 
 Rule mutation proposals such as set/insert/remove are staged. They are not immediately visible to other matching/derivation in the same reaction wave unless an explicit future semantic rule says otherwise.
 
-For a successful state-domain commit, the admitted state changes and logical events defined as part of that commit become committed together. An implementation MUST NOT expose the event as committed while the corresponding state transition is not, or vice versa, unless the event's contract explicitly defines different semantics.
+Before commit, rule evaluation may read admitted observations, perform pure calculation, create state proposals, and stage logical events.
 
-### 9.9 One mutable state domain
+Pre-commit rule evaluation MUST NOT perform an arbitrary irreversible external effect as though the transition were already committed. External effects SHOULD normally follow from committed logical events under their own delivery/failure contract.
+
+For a successful state-domain commit, the admitted state changes and logical events defined as part of that transition acquire logical existence together.
+
+Conceptually:
+
+```text
+Commit {
+    new revision
+    accepted state changes
+    emitted logical events
+}
+```
+
+An implementation MUST NOT expose a transition event as committed while the corresponding state transition is not, or expose the committed transition while dropping the event from the same logical commit, merely because of physical scheduling.
+
+Later delivery/transport of an already committed event may have separate profile-specific failure/retry semantics.
+
+### 9.12 One mutable state domain
 
 An ordinary rule may read observations from multiple state domains but mutates at most one state domain per commit/reaction transition.
 
@@ -591,43 +653,50 @@ This restriction prevents ordinary Rule semantics from silently becoming a unive
 
 Cross-domain coordination requires explicit contracts/profiles.
 
-### 9.10 Conflicts and accumulation
+### 9.13 Conflicts and accumulation
 
 Conflicting proposals MUST NOT be resolved by incidental worker/scheduler order.
 
-Resolution must be explicit: rejection, arbitration, accumulation, or a state-domain-defined conflict rule whose semantics are published.
+Resolution must be explicit: rejection, deterministic arbitration, algebraic accumulation, or a state-domain-defined conflict rule whose semantics are published.
+
+If arbitration is intentionally nondeterministic, that nondeterminism MUST be part of the operation's semantic contract.
 
 Multi-source accumulation requires the algebraic laws needed by legal parallel realization.
 
-### 9.11 Observe and materialize
+### 9.14 Observe and materialize
 
 `observe` requests observation semantics; it does not mandate one incremental implementation.
 
 `materialize` requests retained realization. Full recomputation, caching, indexes, incremental views, GPU representations, or dependency graphs may all be legal implementations when they preserve the defining semantics.
 
-### 9.12 Maintain
+### 9.15 Maintain
 
 `maintain` requests ongoing semantic correspondence between a defining source computation and a target.
 
+A maintenance request is valid only when the target exposes a maintenance contract sufficient to define the correspondence.
+
 Every maintenance target MUST publish the applicable:
 
-- source observation/revision relationship;
+- source observation/revision identity relationship;
+- update admission semantics;
 - freshness contract;
 - progress expectation;
-- failure behavior;
-- target commit/update semantics.
+- failure/reconciliation behavior;
+- target commit/update visibility semantics.
 
-`maintain` MUST NOT imply universal reliable synchronization, distributed transactions, or zero-latency propagation.
+`maintain` MUST NOT imply universal reliable synchronization, distributed transactions, automatic retries with unspecified duplicate behavior, or zero-latency propagation.
 
-### 9.13 Incremental equivalence
+### 9.16 Incremental equivalence
 
-At every observation point permitted by its freshness contract, an observed materialized or maintained result MUST be observationally equivalent to evaluating the defining logical computation from scratch over the corresponding admitted source observations.
+At every observation point permitted by its freshness contract, an observed materialized or maintained result MUST be observationally equivalent to evaluating the defining logical computation from scratch over the corresponding admitted source `ObservationSet`.
 
-### 9.14 Non-quiescent rule systems
+### 9.17 Non-quiescent rule systems
 
-Type/memory safety does not prove that a rule system reaches quiescence. Implementations and profiles may need budgets, diagnostics, quotas, cycle/causal reporting, or progress controls.
+Type/memory safety does not prove that a rule system reaches quiescence. Rule systems may diverge by repeatedly generating later-wave work.
 
-Those mechanisms do not change the logical rule meaning merely by existing.
+Environments SHOULD provide causal diagnostics, quotas/budgets, cycle indicators where discoverable, and progress inspection.
+
+Those operational safeguards do not redefine the logical rule result merely by existing.
 
 ---
 
@@ -645,13 +714,15 @@ Moving information between clock domains requires an explicit semantic operation
 
 State revision belongs to state-domain observation/commit semantics. It is not automatically wall time or a clock tick.
 
+Each committed state-domain state has an opaque semantic revision identity. Any ordering/persistence guarantee for revisions is defined by that state-domain contract; no universal integer revision representation is required.
+
 ### 10.3 Causal frontier
 
 A causal frontier belongs to causal/distributed ordering semantics when a profile defines it. It is not automatically a state revision or clock.
 
 ### 10.4 Freshness
 
-Freshness identifies how current an observation/materialization/maintenance result must be relative to its source observations.
+Freshness identifies which source observation/revision an observed materialization/maintenance result represents and how stale it may legally be.
 
 Freshness is distinct from correctness and distinct from propagation progress.
 
@@ -828,19 +899,22 @@ The following remain open and MUST NOT be inferred from implementation behavior 
 - stable layout/ABI mechanisms;
 - complete panic/fault semantics.
 
-### P0-E — minimal Model algebra
+### P0-E — minimal Model algebra completion
 
-- exact logical typing;
-- absence/null semantics;
-- Relation/Bag/Sequence completion;
-- joins;
-- grouping/aggregation;
-- identity/keys;
-- query cardinality/order inference;
-- state-domain interface;
-- ObservationSet compatibility;
+The fundamental collection distinctions, default query multiplicity, basic query vocabulary, and explicit ordering/tie rules in Section 9 are already part of the provisional normative architecture.
+
+Still open:
+
+- exact logical type checking;
+- absence/null/optional semantics;
+- complete join semantics;
+- grouping/aggregation semantics;
+- query cardinality/type inference;
+- identity and stable logical keys beyond declared uniqueness constraints;
+- state-domain interface details;
+- `ObservationSet` compatibility;
 - exact freshness representation;
-- maintenance target contracts.
+- complete maintenance target contracts.
 
 ### P0-F — integration/conformance
 
