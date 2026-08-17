@@ -45,12 +45,12 @@ fn overlapping_exclusive_root_loans_conflict() {
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Exclusive,
-                place: value.clone(),
+                src: value.clone().into(),
             },
             Statement::Borrow {
                 loan: LoanId(1),
                 kind: BorrowKind::Exclusive,
-                place: value.clone(),
+                src: value.clone().into(),
             },
         ],
     );
@@ -80,7 +80,7 @@ fn direct_drop_is_rejected_under_shared_borrow() {
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Shared,
-                place: value.clone(),
+                src: value.clone().into(),
             },
             Statement::Drop {
                 place: value.clone().into(),
@@ -116,7 +116,7 @@ fn shared_loan_allows_read_and_copy() {
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Shared,
-                place: value,
+                src: value.into(),
             },
             Statement::Read {
                 src: PlaceAccess::loan(LoanId(0)),
@@ -148,7 +148,7 @@ fn shared_loan_rejects_assignment() {
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Shared,
-                place: value,
+                src: value.into(),
             },
             Statement::Assign {
                 dst: PlaceAccess::loan(LoanId(0)),
@@ -179,7 +179,7 @@ fn shared_loan_rejects_drop() {
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Shared,
-                place: value,
+                src: value.into(),
             },
             Statement::Drop {
                 place: PlaceAccess::loan(LoanId(0)),
@@ -212,7 +212,7 @@ fn exclusive_loan_allows_read_copy_and_drop() {
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Exclusive,
-                place: value,
+                src: value.into(),
             },
             Statement::Read {
                 src: PlaceAccess::loan(LoanId(0)),
@@ -247,12 +247,12 @@ fn already_active_loan_cannot_begin_again() {
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Shared,
-                place: value.clone(),
+                src: value.clone().into(),
             },
             Statement::Borrow {
                 loan: LoanId(0),
                 kind: BorrowKind::Shared,
-                place: value,
+                src: value.into(),
             },
         ],
     );
