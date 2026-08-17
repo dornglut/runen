@@ -184,12 +184,13 @@ The A0 gate requires at least:
 6. `Init` cannot reinitialize storage that became dead after move;
 7. `Assign` can reinitialize mutable storage that became dead after move;
 8. `Assign` can initialize wholly never-initialized mutable storage;
-9. assignment to immutable storage is rejected;
-10. assignment drops a live replacement target before writing the new value;
-11. explicit drop of a partially initialized aggregate destroys only its live subobjects;
-12. an explicit drop is not repeated during scope cleanup;
-13. struct fields are destroyed in reverse declaration order;
-14. fault cleanup destroys each live local value exactly once in reverse declaration order.
+9. `Assign` can replace partially initialized mutable aggregate storage while destroying only its live old subobjects;
+10. assignment to immutable storage is rejected;
+11. assignment drops a live replacement target before writing the new value;
+12. explicit drop of a partially initialized aggregate destroys only its live subobjects;
+13. an explicit drop is not repeated during scope cleanup;
+14. struct fields are destroyed in reverse declaration order;
+15. fault cleanup destroys each live local value exactly once in reverse declaration order.
 
 ## A0.14 Explicitly deferred
 
