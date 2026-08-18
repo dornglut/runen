@@ -1,4 +1,4 @@
-use crate::{EachId, coverage::has_exact_unique_coverage};
+use crate::{IterationId, coverage::has_exact_unique_coverage};
 
 /// Verification-only opaque identity for one semantic atomic location.
 ///
@@ -65,13 +65,15 @@ pub enum AtomicExchangeSemantics {
 
 /// Verification-only synchronization-scope classification for one atomic exchange.
 ///
-/// `Root` consumes the identity of one dynamic `each` root cohort. These variants
+/// `Root` records the iteration that performs the scoped exchange. The selected
+/// root cohort is derived from that iteration's containing dynamic `each`; there is
+/// no independent root identity that can disagree with the producer. These variants
 /// are not source memory-scope spellings, a hardware scope lattice, hierarchy
 /// topology, or scheduling metadata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AtomicExchangeScope {
     Unscoped,
-    Root(EachId),
+    Root(IterationId),
 }
 
 /// Verification-only result of comparing two represented exchange scope forms.
@@ -279,8 +281,8 @@ impl AtomicExchangeRealization {
             (AtomicExchangeScope::Unscoped, AtomicExchangeScope::Unscoped) => {
                 AtomicScopeRelation::Compatible
             }
-            (AtomicExchangeScope::Root(left_each), AtomicExchangeScope::Root(right_each)) => {
-                if left_each == right_each {
+            (AtomicExchangeScope::Root(left_iteration), AtomicExchangeScope::Root(right_iteration)) => {
+                if left_iteration.each() == right_iteration.each() {
                     AtomicScopeRelation::Compatible
                 } else {
                     AtomicScopeRelation::Incompatible
