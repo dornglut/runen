@@ -60,30 +60,42 @@ A future hierarchy-sensitive operation MUST define how its relevant hierarchy is
 
 This revision defines no fixed group or subgroup sizes, dimensions, coordinates, local or global indices, ordering, contiguity, uniform-size requirement, launch geometry, or hardware topology.
 
-The existing full-`each` normal-completion and structured-barrier contracts continue to use the complete root cohort and are not reinterpreted as group- or subgroup-scoped operations by the existence of a hierarchy instance.
+The normal-completion contract of the enclosing `each` continues to use the complete root cohort. The structured barrier below may explicitly select the root cohort, one established group, or one established subgroup; hierarchy membership by itself does not reinterpret normal completion or create a barrier.
 
-## Full-`each` structured barrier
+## Cohort-scoped structured barrier
 
-A **structured barrier** in this revision is a phase boundary belonging to one dynamic `each` execution. It partitions every iteration required by that execution into one before-barrier phase and one after-barrier phase for that barrier instance.
+A **structured barrier** is a phase boundary belonging to one dynamic `each` execution and selecting exactly one participant cohort for that barrier instance.
 
-The required participants of the barrier are exactly the iterations required by the enclosing `each` execution. This first barrier form does not define a subgroup, partial cohort, workgroup, lane set, or independently selected participant set.
+The selected **barrier cohort** is exactly one of:
+
+- the complete root cohort of the enclosing `each` execution;
+- one group from an already-established hierarchy instance for that `each` execution; or
+- one subgroup from that already-established hierarchy instance.
+
+A root-cohort barrier does not require a hierarchy instance. A group- or subgroup-cohort barrier requires the selected group or subgroup to exist in the established hierarchy instance. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
+
+The participant set is exactly the selected barrier cohort and is fixed for the barrier instance. The root cohort is empty exactly when the enclosing `each` has no required iterations; such a root barrier has no participants. Group and subgroup cohorts are non-empty by the hierarchy contract above.
 
 For one structured barrier instance:
 
-1. every required iteration has one before-barrier phase and one after-barrier phase;
-2. the barrier boundary completes normally only after every required iteration has completed its before-barrier phase normally;
-3. no required iteration begins its after-barrier phase before the barrier boundary has completed normally;
-4. the boundary introduces no relative order among sibling before-barrier phases and no relative order among sibling after-barrier phases.
+1. every participant has one before-barrier phase and one after-barrier phase;
+2. the barrier boundary completes normally only after every participant has completed its before-barrier phase normally;
+3. no participant begins its after-barrier phase before the barrier boundary has completed normally;
+4. actions in every participant's before-barrier phase are therefore before actions in every participant's after-barrier phase;
+5. the boundary introduces no relative order among sibling participant before-barrier phases and no relative order among sibling participant after-barrier phases;
+6. an iteration outside the selected cohort is a nonparticipant: it has no phase or completion obligation for this barrier and receives no execution order from this barrier.
 
-The memory-ordering consequence of this completed phase boundary is owned by [Exec memory model](memory-model.md).
+The ordinary-access memory-ordering consequence of this completed phase boundary is owned by [Exec memory model](memory-model.md).
 
-Physical arrival order, release order, worker assignment, lane identity, queue order, chunking, and rendezvous implementation are not semantic input. A realization MAY implement the boundary using any mechanism that preserves the defined phase structure and applicable memory semantics.
+Selecting a group or subgroup for a barrier does not change hierarchy membership. Hierarchy membership still provides no synchronization by itself; the order above arises from the explicit structured barrier instance.
 
-Different dynamic barrier instances are distinct semantic boundaries. Barrier identity alone does not order actions around two different barriers; any such order must follow from their placement and other applicable semantics in the enclosing execution.
+Physical arrival order, release order, worker assignment, lane identity, queue order, chunking, and rendezvous implementation are not semantic input. A realization MAY implement the boundary using any mechanism that preserves the defined participant and phase structure plus all applicable memory semantics.
+
+Different dynamic barrier instances are distinct semantic boundaries. Barrier identity, cohort kind, or a relationship between their selected cohorts does not by itself order actions around two different barriers; any such order must follow from their placement and other applicable semantics in the enclosing execution.
 
 This revision defines the structured phase form rather than an imperative barrier call. Source syntax, lowering, and validation for any future imperative spelling are not defined here; such a future form requires its own rules establishing the structured participation represented by this barrier boundary.
 
-If a required iteration faults, is cancelled, diverges, or otherwise fails to complete its before-barrier phase normally, the barrier and enclosing `each` abnormal-completion behavior are not defined by this revision.
+If a participant faults, is cancelled, diverges, or otherwise fails to complete its before-barrier phase normally, the barrier and enclosing `each` abnormal-completion behavior are not defined by this revision.
 
 ## Identity-bearing unordered reduction
 
@@ -131,4 +143,4 @@ An unordered reduction is not an implicit structured barrier. It establishes no 
 
 The reduction result and partial-result behavior when an iteration faults, is cancelled, diverges, or otherwise fails to complete normally are not defined by this revision.
 
-Group-local storage, group/subgroup barriers, group/subgroup reductions or collectives, broadcast, shuffle, scans, atomics, and atomic/fence scopes remain not defined by this revision. The hierarchy above defines only their shared participant-domain foundation.
+Group-local storage, group/subgroup reductions or collectives, broadcast, shuffle, scans, atomics, and atomic/fence scopes remain not defined by this revision. The hierarchy above defines their shared participant-domain foundation where applicable; the structured barrier defines only its own cohort-scoped phase relation.
