@@ -24,7 +24,7 @@ Required cases:
 - Core interior mutability under shared aliases does not by itself legalize overlapping state-changing accesses from source-unordered Exec work;
 - for Core-origin structural storage, root/descendant overlap and sibling-field disjointness are consumed as Core-owned facts rather than redefined by Exec.
 
-These obligations do not authorize atomics, commutative accumulation, collectives, barriers, or other synchronization mechanisms whose normative contracts remain open. Identity-bearing unordered reduction is covered separately below.
+These obligations do not authorize atomics, commutative accumulation, collectives, or additional synchronization mechanisms whose normative contracts remain open. The accepted structured barrier and identity-bearing unordered reduction are covered separately below.
 
 ## Buffer logical-region boundary
 
@@ -76,7 +76,27 @@ Required cases:
 - the normal join boundary makes no claim about an iteration that faults, is cancelled, diverges, or otherwise fails to complete normally;
 - backend queue order, worker order, host thread timing, lane order, chunk order, and physical serialization are not semantic oracles for sibling iteration order.
 
-These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, barriers, collectives, or execution hierarchy.
+These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, collectives, or execution hierarchy. The full-`each` structured barrier is covered separately below.
+
+## Full-`each` structured barrier boundary
+
+These cases exercise the structured phase boundary owned by `spec/language/exec/parallelism.md` and the ordinary-access synchronization relation owned by `spec/language/exec/memory-model.md`. The barrier is modeled as a full-`each` phase cut rather than an imperative lane-level operation.
+
+Required cases:
+
+- the required participants of one barrier fixture are exactly the iterations required by the enclosing `each` fixture;
+- normal barrier completion requires exact before-phase completion by every required iteration, independent of participant completion-list order;
+- missing, duplicate, invented, or ambiguous duplicate fixture iteration identities reject exact before-phase completion coverage;
+- every before-barrier participant is ordered before every after-barrier participant of the same barrier instance;
+- sibling before phases receive no relative order from the barrier;
+- sibling after phases receive no relative order from the barrier;
+- distinct barrier fixture identities create no order by identity alone;
+- an overlapping ordinary read/write or write/write pair remains a conflict even when the same barrier orders the before-phase access before the after-phase access;
+- same-phase overlapping sibling state-changing accesses remain unordered and conflicting absent another interaction contract;
+- a permitted logical Buffer state change in a before phase is present in the logical state read by an ordered after-phase fixture;
+- physical arrival, release, worker, lane, chunk, queue, cache-fence, and rendezvous order are not semantic oracles.
+
+These obligations do not define source barrier syntax, dynamic divergent-barrier validation, groups/subgroups, partial-cohort barriers, atomics, fences, collectives, or physical barrier implementation.
 
 ## Identity-bearing unordered reduction boundary
 
@@ -127,13 +147,14 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
 - ordinary read/state-change conflict classification;
 - the cross-phase `each` normal entry/completion ordering relation, with no sibling or intra-iteration order;
+- full-`each` structured barrier phase ordering and exact before-phase participant completion coverage;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
 - complete unordered-reduction contract admission evidence and exact unordered semantic-contribution coverage;
 - structured task-scope attached-child ordering/completion coverage and detachment state-retention admissibility.
 
-Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, contribution tokens, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, barrier tokens, contribution tokens, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, barrier order/topology, contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
 
-The private generic exact-coverage helper used by reduction and task fixtures is mechanical oracle implementation. It owns no Runen semantic concept.
+The private generic exact-coverage helper used by barrier, reduction, and task fixtures is mechanical oracle implementation. It owns no Runen semantic concept.
 
 ## Future executable evidence
 
