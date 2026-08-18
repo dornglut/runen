@@ -38,6 +38,10 @@ pub enum VerificationEvent {
     },
     BorrowEnd(LoanId),
     Read(Place),
+    RawRead {
+        pointer: RawPointerValue,
+        target: Place,
+    },
     Move(Place),
     Copy(Place),
     Write {
@@ -75,6 +79,32 @@ pub enum TerminalStatus {
 pub struct ExecutionReport {
     pub terminal: TerminalStatus,
     /// Verification instrumentation, not Runen-observable program behavior.
+    pub verification_events: Vec<VerificationEvent>,
+}
+
+/// Verification-only classification of detected undefined behavior.
+///
+/// These variants diagnose concrete unsafe-precondition violations in the reference
+/// oracle. They are not Runen-observable outcomes and do not define a complete UB
+/// taxonomy for the language.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum UndefinedBehaviorKind {
+    RawReadTargetNotLive {
+        target: StorageRegion,
+    },
+    RawReadConflictsWithExclusiveLoan {
+        target: StorageRegion,
+        loan: LoanId,
+    },
+}
+
+/// Reference-oracle report for an execution that entered undefined behavior.
+///
+/// The accumulated events are verification evidence only. The oracle stops at the
+/// detected violation and does not perform defined Return/Fault cleanup.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct UndefinedBehavior {
+    pub kind: UndefinedBehaviorKind,
     pub verification_events: Vec<VerificationEvent>,
 }
 
@@ -126,6 +156,14 @@ impl ObjectState {
             ),
         }
     }
+
+    fn fully_live(&self) -> bool {
+        match self {
+            Self::Leaf(LeafState::Live(_)) => true,
+            Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => false,
+            Self::Aggregate(fields) => fields.iter().all(Self::fully_live),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -136,6 +174,7 @@ struct LocalStorage {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 struct ActiveLoan {
+    kind: BorrowKind,
     place: Place,
 }
 
@@ -180,11 +219,11 @@ impl Machine {
         }
     }
 
-    /// Executes validated MIR until defined `Return` or defined `Fault` termination.
+    /// Executes validated MIR until defined termination or detected undefined behavior.
     ///
-    /// Cyclic MIR may diverge and therefore never return an `ExecutionReport`.
-    #[must_use]
-    pub fn execute(mut self) -> ExecutionReport {
+    /// Cyclic MIR may diverge and therefore never return. `Err` is a verification-only
+    /// UB report, not a defined Runen `Fault` or observable program outcome.
+    pub fn execute(mut self) -> Result<ExecutionReport, UndefinedBehavior> {
         let mut current = self.body.as_body().entry;
 
         loop {
@@ -196,7 +235,12 @@ impl Machine {
                 .clone();
 
             for statement in &block.statements {
-                self.execute_statement(statement);
+                if let Err(kind) = self.execute_statement(statement) {
+                    return Err(UndefinedBehavior {
+                        kind,
+                        verification_events: self.verification_events,
+                    });
+                }
             }
 
             match block.terminator {
@@ -204,29 +248,30 @@ impl Machine {
                 Terminator::Return => {
                     self.end_all_borrows();
                     self.cleanup_all_locals();
-                    return ExecutionReport {
+                    return Ok(ExecutionReport {
                         terminal: TerminalStatus::Returned,
                         verification_events: self.verification_events,
-                    };
+                    });
                 }
                 Terminator::Fault(fault) => {
                     self.end_all_borrows();
                     self.cleanup_all_locals();
-                    return ExecutionReport {
+                    return Ok(ExecutionReport {
                         terminal: TerminalStatus::Faulted(fault.code),
                         verification_events: self.verification_events,
-                    };
+                    });
                 }
             }
         }
     }
 
-    fn execute_statement(&mut self, statement: &Statement) {
+    fn execute_statement(&mut self, statement: &Statement) -> Result<(), UndefinedBehaviorKind> {
         match statement {
             Statement::Init { dst, src } => self.initialize(dst, src),
             Statement::Borrow { loan, kind, src } => self.begin_borrow(*loan, *kind, src),
             Statement::EndBorrow { loan } => self.end_borrow(*loan),
             Statement::Read { src } => self.read(src),
+            Statement::RawRead { pointer } => return self.raw_read(pointer),
             Statement::Assign { dst, src } => {
                 self.replace(dst, src, VerificationWriteKind::Assign);
             }
@@ -235,6 +280,7 @@ impl Machine {
             }
             Statement::Drop { place } => self.drop_explicit(place),
         }
+        Ok(())
     }
 
     fn initialize(&mut self, dst: &Place, src: &Operand) {
@@ -259,6 +305,7 @@ impl Machine {
             "validated Core MIR cannot begin an already-active loan"
         );
         *slot = Some(ActiveLoan {
+            kind,
             place: place.clone(),
         });
         self.verification_events
@@ -295,6 +342,39 @@ impl Machine {
     fn read(&mut self, src: &PlaceAccess) {
         let src = self.resolve_access(src);
         self.verification_events.push(VerificationEvent::Read(src));
+    }
+
+    fn raw_read(&mut self, pointer_access: &PlaceAccess) -> Result<(), UndefinedBehaviorKind> {
+        // Validation already guarantees that pointer_access reaches a fully-live
+        // raw-pointer value with shared PlaceAccess authority. The target obligations
+        // below are the unsafe runtime boundary and deliberately are not reclassified
+        // as MIR-validation failures.
+        let pointer_place = self.resolve_access(pointer_access);
+        let pointer = self.raw_pointer_at(&pointer_place);
+        let target = self.place_for_storage_region(&pointer.target);
+
+        if !place_state(&self.locals, &target).fully_live() {
+            return Err(UndefinedBehaviorKind::RawReadTargetNotLive {
+                target: pointer.target,
+            });
+        }
+
+        if let Some((index, _)) = self.active_loans.iter().enumerate().find(|(_, active)| {
+            active.as_ref().is_some_and(|active| {
+                active.kind == BorrowKind::Exclusive && active.place.overlaps(&target)
+            })
+        }) {
+            return Err(UndefinedBehaviorKind::RawReadConflictsWithExclusiveLoan {
+                target: pointer.target,
+                loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
+            });
+        }
+
+        self.verification_events.push(VerificationEvent::RawRead {
+            pointer,
+            target,
+        });
+        Ok(())
     }
 
     fn drop_explicit(&mut self, access: &PlaceAccess) {
@@ -354,6 +434,13 @@ impl Machine {
         }
     }
 
+    fn raw_pointer_at(&self, place: &Place) -> RawPointerValue {
+        match place_state(&self.locals, place) {
+            ObjectState::Leaf(LeafState::Live(RuntimeValue::RawPointer(pointer))) => pointer.clone(),
+            _ => unreachable!("validated RawRead reaches a fully-live raw-pointer value"),
+        }
+    }
+
     fn resolve_access(&self, access: &PlaceAccess) -> Place {
         match access {
             PlaceAccess::Direct(place) => place.clone(),
@@ -378,6 +465,18 @@ impl Machine {
         StorageRegion {
             instance: local.instance,
             projections: place.projections.clone(),
+        }
+    }
+
+    fn place_for_storage_region(&self, region: &StorageRegion) -> Place {
+        let local_index = self
+            .locals
+            .iter()
+            .position(|local| local.instance == region.instance)
+            .expect("formed raw pointer targets a current local storage instance");
+        Place {
+            local: LocalId(u32::try_from(local_index).expect("local index exceeds u32::MAX")),
+            projections: region.projections.clone(),
         }
     }
 
