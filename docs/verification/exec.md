@@ -76,7 +76,7 @@ Required cases:
 - the normal join boundary makes no claim about an iteration that faults, is cancelled, diverges, or otherwise fails to complete normally;
 - backend queue order, worker order, host thread timing, lane order, chunk order, and physical serialization are not semantic oracles for sibling iteration order.
 
-These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, or collectives. The hierarchy and structured-barrier contracts are covered separately below.
+These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, or collectives. The hierarchy, structured-barrier, and unordered-reduction contracts are covered separately below.
 
 ## Group and subgroup hierarchy boundary
 
@@ -94,11 +94,11 @@ Required cases:
 - reordering the private finite membership storage does not change membership, same-group, or same-subgroup results;
 - group and subgroup identities expose equality only and do not become numeric indices, coordinates, lanes, hardware cohorts, or scheduling order;
 - hierarchy membership supplies no sibling iteration order and does not legalize an otherwise-conflicting ordinary sibling access;
-- root-barrier participation remains the complete required `each` set independent of hierarchy membership, while narrower barriers require an explicit group or subgroup selection.
+- root barrier and root reduction participation each remain the complete required `each` set independent of hierarchy membership, while narrower forms require an explicit group or subgroup selection.
 
 `GroupId`, group-scoped `SubgroupId`, `HierarchyMembership`, and the finite hierarchy fixture are verification representation only. They do not define source hierarchy syntax, hierarchy selection/admission, group or subgroup sizes, dimensions, coordinates, enumeration order, launch geometry, runtime worker topology, or hardware subgroup identity.
 
-These obligations do not define atomic or fence scope, collectives, group-local storage, broadcast, shuffle, scans, or any other hierarchy-sensitive operation beyond the structured barrier covered separately below. Such operations require their own normative contracts before executable evidence is extended to cover them.
+These obligations do not define atomic or fence scope, collectives beyond the unordered reduction covered separately below, group-local storage, broadcast, shuffle, scans, or another hierarchy-sensitive operation. Such operations require their own normative contracts before executable evidence is extended to cover them.
 
 ## Cohort-scoped structured barrier boundary
 
@@ -132,24 +132,36 @@ Required cases:
 
 These obligations do not define source barrier syntax, dynamic divergent-barrier validation, atomics, fences, collectives, group-local storage, or physical barrier implementation.
 
-## Identity-bearing unordered reduction boundary
+## Cohort-scoped identity-bearing unordered reduction boundary
 
-These cases exercise the reduction interaction owned by `spec/language/exec/parallelism.md`. Reduction contributions are not modeled as ordinary accesses to a shared accumulator, while ordinary accesses and other semantic actions outside the reduction interaction remain subject to their own applicable contracts.
+These cases exercise the selected-cohort reduction interaction owned by `spec/language/exec/parallelism.md`. Reduction contributions are not modeled as ordinary accesses to a shared accumulator, while ordinary accesses and other semantic actions outside the reduction interaction remain subject to their own applicable contracts.
 
 Required cases:
 
 - unordered reduction is admitted only when the represented combination contract establishes normal closed combination, result-only combination, two-sided identity, associativity, and commutativity;
 - failure to establish any one of those obligations rejects this unordered reduction form;
-- the empty semantic contribution collection yields the explicit identity value;
+- a root reduction selects exactly the complete required `each` iteration set without requiring a hierarchy, including an empty root cohort;
+- duplicate required root fixture iteration identities are rejected;
+- a group reduction selects exactly one existing group from a validated hierarchy and rejects an unknown group;
+- a subgroup reduction selects exactly one existing group-scoped subgroup and rejects an unknown subgroup;
+- equal private subgroup tokens under distinct groups select distinct reduction cohorts;
+- the exact participant set is private verification state and supplies no public enumeration order;
+- a semantic contribution token can be created only for an actual reduction participant; nonparticipants cannot fabricate contribution membership through the public oracle API;
+- one participant may produce multiple distinct semantic contribution occurrences when the enclosing reduction operation permits that cardinality;
+- a non-empty reduction cohort may produce zero semantic contributions, in which case the explicit identity remains the result;
 - every semantic contribution occurrence is incorporated exactly once, including distinct contributions that carry semantically equal values;
-- contribution coverage is insensitive to contribution ordering but rejects omitted, duplicated, invented, or ambiguous duplicate fixture identities;
+- contribution coverage is insensitive to incorporation ordering but rejects omitted, duplicated, invented, cross-reduction, or ambiguous duplicate occurrence identities;
+- duplicate required `ContributionId`s are invalid even when the duplicate tokens record different participant producers;
 - lawful test-local exact combination produces the same result across distinct contribution permutations and binary tree shapes;
 - additional identity-valued physical partial initialization is permitted only as neutral realization state and does not count as a semantic contribution;
 - permitted physical regrouping cannot change combination outcome or observable trace because the admitted combination contract requires normal result-only behavior;
 - physical worker, lane, chunk, queue, partial-accumulator, and tree order are not semantic input;
-- reduction admission does not legalize an overlapping ordinary sibling read/write or write/write conflict;
-- a normally completed `each` carrying a reduction exposes its result to normal continuation only after all required iterations complete normally and all produced semantic contributions are incorporated;
+- reduction cohort membership and reduction admission do not order sibling iterations or legalize an overlapping ordinary sibling read/write or write/write conflict;
+- a normally completed `each` carrying a reduction exposes the one reduction result only at its normal continuation after every required `each` iteration completes normally and every semantic contribution produced by reduction participants is incorporated;
+- no cohort-local continuation, participant-local result, leader/lane result, or automatic result distribution is inferred from selecting a group or subgroup cohort;
 - no result or partial-result contract is inferred for iteration fault, cancellation, divergence, or other abnormal completion.
+
+`ReductionFixture`, `ReductionId`, `ContributionId`, `ReductionContribution`, and finite participant/contribution collections are verification representation only. They do not define source reduction syntax, a runtime reduction object, collective result distribution, physical accumulator identity, a reduction tree, or participant enumeration order. The fixture replaces the prior free contribution-coverage helper; no compatibility reduction oracle is retained.
 
 Arithmetic used in an executable fixture is test-local evidence only. It must use values that avoid overflow or representation questions and does not define Runen integer, floating-point, or reduction-operator semantics.
 
@@ -184,12 +196,12 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - nested group/subgroup hierarchy membership, group-scoped subgroup identity, and order-neutral same-group/same-subgroup relations;
 - validated root/group/subgroup structured-barrier cohorts, participant-only phase construction, cross-phase ordering, and exact before-phase completion coverage;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
-- complete unordered-reduction contract admission evidence and exact unordered semantic-contribution coverage;
+- complete unordered-reduction contract admission evidence plus validated root/group/subgroup reduction cohorts, participant-only contribution construction, and exact unordered semantic-contribution coverage;
 - structured task-scope attached-child ordering/completion coverage and detachment state-retention admissibility.
 
-Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, contribution tokens, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, hierarchy enumeration order, barrier participant order/topology, contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
 
-The private generic exact-coverage helper used by hierarchy, barrier, reduction, and task fixtures and the crate-private hierarchy cohort collection used by barrier fixtures are mechanical oracle implementation. They own no Runen semantic concept.
+The private generic exact-coverage helper used by hierarchy, barrier, reduction, and task fixtures and the crate-private hierarchy cohort collection used by barrier and reduction fixtures are mechanical oracle implementation. They own no Runen semantic concept.
 
 ## Future executable evidence
 
