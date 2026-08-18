@@ -1,7 +1,7 @@
 use runen_exec_oracle::{
-    Access, AccessKind, BufferId, BufferRegion, ContributionId, EachPhase, GroupId,
-    HierarchyFixture, HierarchyMembership, IterationId, PositionId, ReductionError, ReductionFixture,
-    ReductionId, SubgroupId, UnorderedReductionEvidence, each_orders,
+    Access, AccessKind, BufferId, BufferRegion, EachPhase, GroupId, HierarchyFixture,
+    HierarchyMembership, IterationId, PositionId, ReductionError, ReductionFixture, ReductionId,
+    SubgroupId, UnorderedReductionEvidence, each_orders,
 };
 
 fn complete_reduction_evidence() -> UnorderedReductionEvidence {
@@ -89,29 +89,13 @@ fn root_reduction_preserves_full_each_participation_and_empty_behavior() {
     )
     .unwrap();
 
-    assert!(
-        reduction
-            .contribution(IterationId(1), ContributionId::new(1))
-            .is_some()
-    );
-    assert!(
-        reduction
-            .contribution(IterationId(3), ContributionId::new(2))
-            .is_some()
-    );
-    assert!(
-        reduction
-            .contribution(IterationId(4), ContributionId::new(3))
-            .is_none()
-    );
+    assert!(reduction.contribution(IterationId(1), 1).is_some());
+    assert!(reduction.contribution(IterationId(3), 2).is_some());
+    assert!(reduction.contribution(IterationId(4), 3).is_none());
 
     let empty = ReductionFixture::root(ReductionId::new(8), &[]).unwrap();
     assert!(empty.has_exact_contribution_coverage(&[], &[]));
-    assert!(
-        empty
-            .contribution(IterationId(1), ContributionId::new(1))
-            .is_none()
-    );
+    assert!(empty.contribution(IterationId(1), 1).is_none());
 
     assert!(matches!(
         ReductionFixture::root(
@@ -129,17 +113,9 @@ fn group_reduction_selects_exact_existing_group() {
         ReductionFixture::group(ReductionId::new(7), &hierarchy, GroupId::new(10)).unwrap();
 
     for participant in [IterationId(1), IterationId(2), IterationId(3)] {
-        assert!(
-            reduction
-                .contribution(participant, ContributionId::new(participant.0))
-                .is_some()
-        );
+        assert!(reduction.contribution(participant, participant.0).is_some());
     }
-    assert!(
-        reduction
-            .contribution(IterationId(4), ContributionId::new(4))
-            .is_none()
-    );
+    assert!(reduction.contribution(IterationId(4), 4).is_none());
 
     assert!(matches!(
         ReductionFixture::group(ReductionId::new(8), &hierarchy, GroupId::new(99)),
@@ -157,36 +133,12 @@ fn subgroup_reduction_selects_group_scoped_subgroup() {
         ReductionFixture::subgroup(ReductionId::new(8), &hierarchy, second_subgroup).unwrap();
 
     assert_ne!(first_subgroup, second_subgroup);
-    assert!(
-        first
-            .contribution(IterationId(1), ContributionId::new(1))
-            .is_some()
-    );
-    assert!(
-        first
-            .contribution(IterationId(2), ContributionId::new(2))
-            .is_some()
-    );
-    assert!(
-        first
-            .contribution(IterationId(3), ContributionId::new(3))
-            .is_none()
-    );
-    assert!(
-        first
-            .contribution(IterationId(4), ContributionId::new(4))
-            .is_none()
-    );
-    assert!(
-        second
-            .contribution(IterationId(4), ContributionId::new(5))
-            .is_some()
-    );
-    assert!(
-        second
-            .contribution(IterationId(1), ContributionId::new(6))
-            .is_none()
-    );
+    assert!(first.contribution(IterationId(1), 1).is_some());
+    assert!(first.contribution(IterationId(2), 2).is_some());
+    assert!(first.contribution(IterationId(3), 3).is_none());
+    assert!(first.contribution(IterationId(4), 4).is_none());
+    assert!(second.contribution(IterationId(4), 5).is_some());
+    assert!(second.contribution(IterationId(1), 6).is_none());
 
     assert!(matches!(
         ReductionFixture::subgroup(
@@ -201,12 +153,8 @@ fn subgroup_reduction_selects_group_scoped_subgroup() {
 #[test]
 fn one_participant_may_produce_multiple_distinct_contributions() {
     let reduction = ReductionFixture::root(ReductionId::new(7), &[IterationId(1)]).unwrap();
-    let first = reduction
-        .contribution(IterationId(1), ContributionId::new(1))
-        .unwrap();
-    let second = reduction
-        .contribution(IterationId(1), ContributionId::new(2))
-        .unwrap();
+    let first = reduction.contribution(IterationId(1), 1).unwrap();
+    let second = reduction.contribution(IterationId(1), 2).unwrap();
 
     assert_ne!(first, second);
     assert!(reduction.has_exact_contribution_coverage(&[first, second], &[second, first]));
@@ -219,23 +167,27 @@ fn contribution_coverage_is_exact_and_order_neutral() {
         &[IterationId(1), IterationId(2), IterationId(3)],
     )
     .unwrap();
-    let first = reduction
-        .contribution(IterationId(1), ContributionId::new(1))
-        .unwrap();
-    let second = reduction
-        .contribution(IterationId(2), ContributionId::new(2))
-        .unwrap();
-    let third = reduction
-        .contribution(IterationId(3), ContributionId::new(3))
-        .unwrap();
-    let invented = reduction
-        .contribution(IterationId(1), ContributionId::new(4))
-        .unwrap();
+    let first = reduction.contribution(IterationId(1), 1).unwrap();
+    let second = reduction.contribution(IterationId(2), 2).unwrap();
+    let third = reduction.contribution(IterationId(3), 3).unwrap();
+    let invented = reduction.contribution(IterationId(1), 4).unwrap();
 
-    assert!(reduction.has_exact_contribution_coverage(&[first, second, third], &[third, first, second]));
-    assert!(!reduction.has_exact_contribution_coverage(&[first, second, third], &[first, third]));
-    assert!(!reduction.has_exact_contribution_coverage(&[first, second, third], &[first, first, third]));
-    assert!(!reduction.has_exact_contribution_coverage(&[first, second, third], &[first, second, invented]));
+    assert!(reduction.has_exact_contribution_coverage(
+        &[first, second, third],
+        &[third, first, second]
+    ));
+    assert!(!reduction.has_exact_contribution_coverage(
+        &[first, second, third],
+        &[first, third]
+    ));
+    assert!(!reduction.has_exact_contribution_coverage(
+        &[first, second, third],
+        &[first, first, third]
+    ));
+    assert!(!reduction.has_exact_contribution_coverage(
+        &[first, second, third],
+        &[first, second, invented]
+    ));
 }
 
 #[test]
@@ -245,12 +197,8 @@ fn duplicate_required_occurrence_id_is_invalid_even_across_producers() {
         &[IterationId(1), IterationId(2)],
     )
     .unwrap();
-    let first = reduction
-        .contribution(IterationId(1), ContributionId::new(1))
-        .unwrap();
-    let conflicting_identity = reduction
-        .contribution(IterationId(2), ContributionId::new(1))
-        .unwrap();
+    let first = reduction.contribution(IterationId(1), 1).unwrap();
+    let conflicting_identity = reduction.contribution(IterationId(2), 1).unwrap();
 
     assert!(!reduction.has_exact_contribution_coverage(
         &[first, conflicting_identity],
@@ -263,12 +211,8 @@ fn cross_reduction_contributions_do_not_satisfy_coverage() {
     let required = [IterationId(1), IterationId(2)];
     let first_reduction = ReductionFixture::root(ReductionId::new(7), &required).unwrap();
     let second_reduction = ReductionFixture::root(ReductionId::new(8), &required).unwrap();
-    let first = first_reduction
-        .contribution(IterationId(1), ContributionId::new(1))
-        .unwrap();
-    let other = second_reduction
-        .contribution(IterationId(1), ContributionId::new(1))
-        .unwrap();
+    let first = first_reduction.contribution(IterationId(1), 1).unwrap();
+    let other = second_reduction.contribution(IterationId(1), 1).unwrap();
 
     assert!(!first_reduction.has_exact_contribution_coverage(&[first], &[other]));
     assert!(!first_reduction.has_exact_contribution_coverage(&[other], &[other]));
@@ -281,12 +225,8 @@ fn equal_valued_contributions_remain_distinct_occurrences() {
         &[IterationId(1), IterationId(2)],
     )
     .unwrap();
-    let first = reduction
-        .contribution(IterationId(1), ContributionId::new(7))
-        .unwrap();
-    let second = reduction
-        .contribution(IterationId(2), ContributionId::new(8))
-        .unwrap();
+    let first = reduction.contribution(IterationId(1), 7).unwrap();
+    let second = reduction.contribution(IterationId(2), 8).unwrap();
     let same_value_contributions = [(first, 5_i64), (second, 5_i64)];
 
     assert!(reduction.has_exact_contribution_coverage(&[first, second], &[second, first]));
@@ -328,12 +268,8 @@ fn reduction_cohort_membership_does_not_order_or_legalize_sibling_conflict() {
     let hierarchy = hierarchy();
     let reduction =
         ReductionFixture::group(ReductionId::new(7), &hierarchy, GroupId::new(10)).unwrap();
-    let first = reduction
-        .contribution(IterationId(1), ContributionId::new(1))
-        .unwrap();
-    let second = reduction
-        .contribution(IterationId(2), ContributionId::new(2))
-        .unwrap();
+    let first = reduction.contribution(IterationId(1), 1).unwrap();
+    let second = reduction.contribution(IterationId(2), 2).unwrap();
     let first_iteration = EachPhase::Iteration(IterationId(1));
     let second_iteration = EachPhase::Iteration(IterationId(2));
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
