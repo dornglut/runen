@@ -135,8 +135,10 @@ A language-valid `RawMove` proceeds conceptually as follows:
 2. resolve the snapshotted target to the corresponding concrete structural place in the continuing dynamic storage instance;
 3. require the complete target place to be fully Live;
 4. require the target ownership transfer to satisfy the active-loan **exclusive** compatibility rule defined by [Core borrowing](borrowing.md);
-5. apply the ordinary ownership-transfer semantics of `Move` defined by [Core value and storage semantics](value-storage.md) to the resolved target;
+5. apply the stored-value lifetime and ownership-transfer state transition defined for `Move` by [Core value and storage semantics](value-storage.md) to the resolved target;
 6. yield the transferred complete pointee value as the result of the operand.
+
+Step 5 reuses the value/storage transition of `Move`; it does **not** import ordinary `Move`'s `PlaceAccess` authorization requirement. Raw target alias legality is the distinct compatibility precondition in step 4 because the raw pointer carries no loan authority.
 
 The target snapshot in step 1 is semantically significant. Obtaining the pointer value does not itself consume or mutate that stored pointer value. If the pointer targets the storage containing that pointer value, target selection therefore occurs before the target's ordinary Move lifecycle consumes that stored value.
 
