@@ -1,6 +1,6 @@
 # Core Value and Storage Semantics
 
-Status: **provisional normative; interior replacement and dynamic local storage identity defined**
+Status: **provisional normative; incomplete**
 
 This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, assignment, destruction domains, and cleanup.
 

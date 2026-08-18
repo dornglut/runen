@@ -1,6 +1,6 @@
 # Core Borrowing
 
-Status: **provisional normative; root borrowing, reborrowing, interior-mutability interaction, and raw-pointer formation authorization defined**
+Status: **provisional normative; incomplete**
 
 This document defines structural place overlap, shared/exclusive borrowing, reborrow delegation, borrow intervals, and alias authority through active loans.
 

@@ -1,6 +1,6 @@
 # Core Pointers and Provenance
 
-Status: **provisional normative; raw-pointer formation and provenance root defined**
+Status: **provisional normative; incomplete**
 
 This document defines the currently represented Core semantics for raw-pointer types and values, symbolic pointer targets, provenance formation from existing storage, and preservation under ordinary pointer-value transport.
 
@@ -30,8 +30,7 @@ Pointer formation relies on the dynamic storage-instance and structural storage-
 - distinct simultaneously existing local storage extents have distinct identities;
 - a storage-instance identity remains stable while its storage extent continues even when stored-value lifetimes begin or end;
 - a structural storage region is that dynamic root identity plus a structural projection path;
-- neither the identity token nor the projection path is a physical address, byte offset, ABI layout, or relocation guarantee;
-- future dynamic storage owners must create their own dynamic instances rather than reinterpret static `LocalId` as globally unique storage identity.
+- neither the identity token nor the projection path is a physical address, byte offset, ABI layout, or relocation guarantee.
 
 ## Raw-pointer type
 
