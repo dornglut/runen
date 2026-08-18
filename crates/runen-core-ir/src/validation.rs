@@ -30,6 +30,7 @@ pub enum MirValidationErrorKind {
         expected: TypeId,
     },
     CopyOfNonCopy(TypeId),
+    RawReadRequiresPointer(TypeId),
     AssignToImmutable(LocalId),
     InteriorMutationRequiresMarkedRegion(Place),
     InitRequiresNeverInitialized(Place),
@@ -85,8 +86,11 @@ impl ValidatedBody {
 ///
 /// The boundary covers all structural, typing, copyability, assignment-mutability,
 /// interior-mutability, initialization-state, borrow-tree, and place-access rules
-/// expressible by the currently represented Core MIR. Later language domains extend
-/// validation in their owning slices rather than being anticipated here.
+/// expressible by the currently represented Core MIR. Unsafe `RawRead` target
+/// obligations are intentionally not modeled as validator pointer-provenance state;
+/// they are execution preconditions owned by the unsafe pointer-access semantics.
+/// Later language domains extend validation in their owning slices rather than being
+/// anticipated here.
 pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
     validate_type_table(&body.types)?;
     validate_local_declarations(&body)?;
@@ -234,6 +238,17 @@ fn validate_static_statement(
         Statement::Read { src } => {
             access_type(body, src, point)?;
             Ok(())
+        }
+        Statement::RawRead { pointer } => {
+            let actual = access_type(body, pointer, point)?;
+            if body.types.raw_pointer_pointee(actual).is_some() {
+                Ok(())
+            } else {
+                Err(point_error(
+                    point,
+                    MirValidationErrorKind::RawReadRequiresPointer(actual),
+                ))
+            }
         }
         Statement::Assign { dst, src } => {
             let expected = access_type(body, dst, point)?;
@@ -663,6 +678,17 @@ fn validate_state_statement(
         Statement::Read { src } => {
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
+            require_fully_live(locals, &place, point)?;
+        }
+        Statement::RawRead { pointer } => {
+            // Validation owns access to the pointer value itself. Pointee target
+            // liveness and target-loan compatibility are unsafe execution obligations.
+            let place = resolve_authorized_access(
+                active_loans,
+                pointer,
+                AccessRequirement::Shared,
+                point,
+            )?;
             require_fully_live(locals, &place, point)?;
         }
         Statement::Assign { dst, src } => {
