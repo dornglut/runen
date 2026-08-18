@@ -296,6 +296,8 @@ A local's storage extent and storage-instance identity continue through its clea
 
 Defined `Fault` uses the same stored-value lifetime and destruction-domain rules as defined `Return`. `Fault` is a defined terminal state, not undefined behavior.
 
+When an applicable non-Core semantic contract defines termination of a represented Core function execution by a distinct cancellation outcome, that termination MUST use the same reverse-local cleanup order, then-current destruction-domain rules, and storage-extent ending rule above. This paragraph defines only the Core storage consequence once cancellation termination has already been selected by another canonical owner. It does not define cancellation request or observation, propagation, catch or unwind policy, custom destructor bodies, or source cancellation syntax, and it does not reclassify cancellation as a Core `Fault`.
+
 For a cyclic execution that diverges, no termination cleanup occurs merely because execution has run for a long time; there is no implicit step budget that ends storage extents.
 
 ## Determinism
@@ -312,7 +314,7 @@ There is no implicit execution-step budget. Cyclic control flow may diverge.
 
 ## Separate semantic owners
 
-This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, pinning, atomics or concurrency, custom destructor bodies, panic catching, asynchronous cancellation, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
 
 Raw-pointer type/value formation and provenance derived from the storage-instance identity defined here are owned by [Core pointers and provenance](pointers.md). That pointer specification does not change the storage extent or stored-value lifetime rules in this document.
 
