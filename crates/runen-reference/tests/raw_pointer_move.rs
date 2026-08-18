@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl,
-    LocalId, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeId,
-    TypeTable, Value, validate_body,
+    BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
+    Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable,
+    Value, validate_body,
 };
 use runen_reference::{
     ExecutionReport, Machine, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
@@ -136,10 +136,12 @@ fn raw_move_of_never_initialized_target_is_undefined_behavior_without_enclosing_
         event,
         VerificationEvent::Write { place, .. } if place == &destination
     )));
-    assert!(!error
-        .verification_events
-        .iter()
-        .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. })));
+    assert!(
+        !error
+            .verification_events
+            .iter()
+            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
+    );
 }
 
 #[test]
@@ -731,8 +733,10 @@ fn raw_move_undefined_behavior_does_not_run_defined_cleanup() {
         error.kind,
         UndefinedBehaviorKind::RawMoveConflictsWithLoan { .. }
     ));
-    assert!(!error
-        .verification_events
-        .iter()
-        .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. })));
+    assert!(
+        !error
+            .verification_events
+            .iter()
+            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
+    );
 }
