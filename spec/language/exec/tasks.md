@@ -49,12 +49,39 @@ Detachment does not convert a borrow or view into ownership or independent reten
 
 The operation that performs detachment, whether every task form is detachable, and any later operation that explicitly waits for or reorders detached work are not defined by this revision.
 
+## Cooperative cancellation observation
+
+This revision defines the first task-cancellation contract only for an explicitly semantically sequenced history of cancellation requests and cancellation observations for one task.
+
+A **cancellation request** targets one task. The validity and authority by which a requester may target that task are not defined by this revision. When an applicable execution contract establishes a valid cancellation-request transition before a later cancellation observation of that task, cancellation is pending for that later observation.
+
+A pending cancellation request does not by itself terminate the task, interrupt its current semantic action, order sibling tasks, guarantee progress, or require the task ever to reach a cancellation observation point. Repeated valid requests established while cancellation is already pending add no further cancellation effect beyond leaving cancellation pending.
+
+A **cancellation observation point** is an explicit semantic point belonging to the target task.
+
+When the task reaches such a point in an explicitly sequenced history:
+
+- if no cancellation request is pending for that task, cancellation observation completes normally and the task may continue;
+- if a cancellation request is pending for that task, the task begins defined cancellation termination at that observation point.
+
+Defined cancellation termination consumes the function-termination cleanup consequence owned by [Core value and storage semantics](../core/value-storage.md) for represented active Core function storage. After that applicable cleanup, the task has the terminal **cancelled** outcome permitted by [Program Behavior](../behavior.md). Cancellation is not a Core `Fault`, normal completion, or divergence.
+
+After the task reaches the terminal cancelled outcome, it performs no further ordinary task-body actions. This rule does not define a general unwind stack, catch behavior, cancellation propagation, custom destructor bodies, task results, or fault aggregation.
+
+This cancellation contract supplies no semantic order between a cancellation request performed in one execution context and an observation performed in another. If request and observation are source-unordered and no other semantic contract orders or otherwise defines their interaction, their relative cancellation effect is **not defined by this revision**. Incidental host timing, worker scheduling, queue order, or physical arrival MUST NOT decide whether the observation sees the request.
+
+A cancelled attached child has not completed normally and therefore does not satisfy the structured scope's existing normal-completion obligation. This revision does not define whether its containing structured scope then cancels, faults, cancels siblings, aggregates failure, retries work, exposes a result, or reaches another completion mode.
+
+Detachment does not make a task immune from an otherwise valid cancellation request. Detachment still changes only the originating scope's normal-completion obligation and state-retention requirements; this revision does not define cancellation-request ownership or authority for detached work.
+
+No implicit cancellation point, asynchronous interruption, timer, deadline, polling frequency, fairness guarantee, cancellation masking, or guarantee of eventual cancellation is defined by this revision.
+
 ## Interaction with other Exec semantics
 
 Structured task-scope membership is not a synchronization mechanism between sibling child tasks.
 
-Ordinary accesses by child tasks remain governed by [Exec memory model](memory-model.md), and attachment does not legalize an otherwise-conflicting unordered ordinary interaction.
+Ordinary accesses by child tasks remain governed by [Exec memory model](memory-model.md), and attachment does not legalize an otherwise-conflicting unordered ordinary interaction. Cancellation request, pending state, and cancellation observation likewise do not by themselves legalize, order, or synchronize an otherwise-conflicting sibling interaction.
 
 Buffer logical coherence may consume the semantic order from an attached child's normal completion to the structured scope's normal continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue.
 
-The exact spawn, await, cancellation, task result, and task fault-propagation rules remain not defined by this revision.
+The exact spawn, await, task result, task fault-propagation, cancellation-request authority, source-unordered request/observation interaction, and containing-scope abnormal-completion rules remain not defined by this revision.
