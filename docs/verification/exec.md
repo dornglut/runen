@@ -10,17 +10,17 @@ The normative ordinary-access rules exercised here are owned by `spec/language/e
 
 The repository does not yet have an accepted executable Exec representation. The ordinary-access boundary is therefore evidenced with focused semantic litmus obligations rather than by inventing an Exec IR, scheduler, runtime, or backend model solely for testing.
 
-In the cases below, region identity and overlap come from the canonical owner of the accessed storage or resource. `unordered` means that the language semantics provide no relative order between the two pieces of work; incidental backend execution order is ignored.
+In the cases below, region identity and overlap come from the canonical owner of the accessed storage or resource. `unordered` means that the language semantics provide no relative order between the two pieces of work; incidental backend execution order is ignored. A case described as non-conflicting passes only the ordinary Exec conflict relation; every other applicable semantic contract still has to permit the accesses.
 
 Required cases:
 
-- unordered `read(A)` with `read(A)` is a legal ordinary interaction;
-- unordered state-changing access to `A` with state-changing access to disjoint `B` is legal;
+- unordered `read(A)` with `read(A)` is non-conflicting under the ordinary-access relation;
+- unordered state-changing access to `A` with state-changing access to disjoint `B` is non-conflicting under the ordinary-access relation;
 - unordered `read(A)` with a state-changing access to overlapping `A` is not a legal ordinary safe interaction when no separately defined mechanism applies;
 - unordered state-changing access to `A` with another state-changing access to overlapping `A` is not a legal ordinary safe interaction when no separately defined mechanism applies;
 - semantically ordered sequential accesses to the same region are not rejected merely because the corresponding unordered pair would conflict;
 - a backend that serializes source-unordered conflicting accesses does not make the interaction legal;
-- physically parallel execution of legal overlapping non-state-changing reads does not by itself introduce semantic nondeterminism;
+- physically parallel execution of a non-conflicting pair does not by itself make that pair conflicting;
 - Core interior mutability under shared aliases does not by itself legalize overlapping state-changing accesses from source-unordered Exec work;
 - for Core-origin structural storage, root/descendant overlap and sibling-field disjointness are consumed as Core-owned facts rather than redefined by Exec.
 
