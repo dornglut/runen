@@ -3,7 +3,9 @@ use runen_core_ir::{
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
     validate_body,
 };
-use runen_reference::{ExecutionReport, Machine, TerminalStatus, VerificationEvent, VerificationWriteKind};
+use runen_reference::{
+    ExecutionReport, Machine, TerminalStatus, VerificationEvent, VerificationWriteKind,
+};
 
 fn machine(body: Body) -> Machine {
     Machine::new(validate_body(body).expect("reborrow test MIR must validate"))
