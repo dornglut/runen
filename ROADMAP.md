@@ -10,15 +10,15 @@ The repository has an executable A0 Core value/place machine and a provisional d
 
 **Depends on:** accepted A0.
 
-The represented Core foundation closes object/storage lifetime, borrows/reborrows, interior mutability, raw-pointer formation and symbolic provenance root, defined raw target read/move/replacement behavior, unsafe-operation preconditions, undefined-behavior separation from defined outcomes, and the safe-abstraction soundness law needed by downstream phases.
+The represented Core foundation closes the P0-A obligations that A0 can express: object/storage lifetime, borrows/reborrows, interior mutability, raw-pointer formation and symbolic provenance root, defined raw target read/move/replacement behavior, unsafe-operation preconditions, undefined-behavior separation from defined outcomes, and the safe-abstraction soundness law needed by downstream phases.
 
-This closure applies to semantics that the accepted A0 Core can represent and observe. It does not predefine rules for operations or representations that do not yet exist.
+This closure applies only to semantics that the accepted A0 Core can represent and observe. It does not predefine rules for operations or representations that do not yet exist, change any normative document's status, or convert an open specification item into defined behavior.
 
 Consumer-dependent memory rules are introduced only with the first phase that can use them:
 
 - relocation, address stability, and pinning are closed when a later operation or realization can relocate storage, expose address-sensitive behavior, or otherwise require a stability guarantee;
-- representation-level value validity and invalid-bit-pattern rules are closed with the first byte/representation consumer, such as Buffer mapping/coherence in P0-B or ABI/FFI in P0-D;
-- new undefined-behavior cases and unsafe preconditions are owned with the operation that introduces them rather than by a premature complete UB registry;
+- representation-level value validity and invalid-bit-pattern rules are closed only when a phase first exposes bytes or representations, for example through a P0-B Buffer mapping contract if it becomes representation-observable or through P0-D ABI/FFI;
+- operation-specific unsafe preconditions are added with the operation's canonical semantic owner, while undefined-behavior classification remains owned by Core unsafe semantics and expands only when a concrete new precondition requires it;
 - source `unsafe`, first-class references/lifetimes, and concrete checking of safe public abstraction contracts are P0-D concerns built on the Core soundness law;
 - cross-stratum evidence that later memory, source, and realization rules preserve Core safety belongs to P0-F.
 
@@ -30,7 +30,7 @@ A consuming phase that makes one of these rules necessary must update the approp
 
 **Depends on:** the closed P0-A represented Core safety foundation.
 
-Close Buffer mapping/coherence, cross-realization memory semantics, conflicting-access rules, atomics/order/scope, task lifetime and cancellation, structured parallelism, reductions/collectives, and hierarchical execution. Where these operations first make representation validity, address stability, or additional unsafe/UB rules observable, P0-B closes those concrete rules through their canonical normative owners instead of assuming P0-A predeclared them.
+Close Buffer mapping/coherence, cross-realization memory semantics, conflicting-access rules, atomics/order/scope, task lifetime and cancellation, structured parallelism, reductions/collectives, and hierarchical execution. If these operations first make representation validity, address stability, or additional unsafe/UB rules observable, P0-B closes those concrete rules through their canonical normative owners instead of assuming P0-A predeclared them.
 
 **Gate:** representative scalar CPU, parallel CPU, and GPU realizations can be checked against one semantic contract without violating Core safety.
 
