@@ -160,6 +160,10 @@ impl HierarchyFixture {
         Ok(Self { id, memberships })
     }
 
+    pub(crate) const fn each(&self) -> EachId {
+        self.id.each()
+    }
+
     #[must_use]
     pub fn membership(&self, iteration: IterationId) -> Option<HierarchyMembership> {
         self.memberships
