@@ -798,9 +798,7 @@ fn validate_operand_state(
             // and later RawAssign state propagation, not a second provenance identity.
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
-            Ok(ValidationValue::Scalar(ValidationScalar::RawPointer(
-                place,
-            )))
+            Ok(ValidationValue::Scalar(ValidationScalar::RawPointer(place)))
         }
     }
 }
@@ -810,12 +808,9 @@ fn validation_value_from_constant(value: &Value) -> ValidationValue {
         Value::Bool(_) | Value::I64(_) | Value::TrackedFixture(_) => {
             ValidationValue::Scalar(ValidationScalar::NonPointer)
         }
-        Value::Struct(values) => ValidationValue::Struct(
-            values
-                .iter()
-                .map(validation_value_from_constant)
-                .collect(),
-        ),
+        Value::Struct(values) => {
+            ValidationValue::Struct(values.iter().map(validation_value_from_constant).collect())
+        }
     }
 }
 
@@ -892,9 +887,7 @@ fn write_validation_value(
             *leaf = LeafState::Live(value);
         }
         (
-            TypeKind::Scalar(
-                ScalarType::Bool | ScalarType::I64 | ScalarType::TrackedFixture,
-            ),
+            TypeKind::Scalar(ScalarType::Bool | ScalarType::I64 | ScalarType::TrackedFixture),
             ObjectState::Leaf(leaf),
             ValidationValue::Scalar(ValidationScalar::NonPointer),
         ) => {
