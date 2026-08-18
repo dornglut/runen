@@ -27,16 +27,45 @@ pub const fn task_scope_orders(earlier: TaskScopePhase, later: TaskScopePhase) -
     )
 }
 
-/// Checks that every attached child required for normal scope completion has
-/// completed normally exactly once, independent of completion-list order.
+/// Verification-only completion evidence for the task outcomes represented by the
+/// current structured-scope/cancellation oracle.
 ///
-/// Duplicate required task identities are rejected as invalid fixture input.
+/// This is not a complete Runen task-outcome enumeration. Fault and other abnormal
+/// completion forms remain outside the represented task oracle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskCompletionEvidence {
+    Normal(TaskId),
+    Cancelled(TaskId),
+}
+
+/// Checks that every attached child required for normal scope completion has
+/// completed normally exactly once, independent of completion-evidence order.
+///
+/// Cancelled evidence cannot satisfy normal completion. Duplicate required task
+/// identities are rejected as invalid fixture input.
 #[must_use]
 pub fn has_exact_attached_completion(
     required_attached: &[TaskId],
-    completed_normally: &[TaskId],
+    completion_evidence: &[TaskCompletionEvidence],
 ) -> bool {
-    has_exact_unique_coverage(required_attached, completed_normally)
+    if completion_evidence
+        .iter()
+        .any(|evidence| matches!(evidence, TaskCompletionEvidence::Cancelled(_)))
+    {
+        return false;
+    }
+
+    let completed_normally = completion_evidence
+        .iter()
+        .map(|evidence| match evidence {
+            TaskCompletionEvidence::Normal(task) => *task,
+            TaskCompletionEvidence::Cancelled(_) => {
+                unreachable!("cancelled completion evidence is rejected above")
+            }
+        })
+        .collect::<Vec<_>>();
+
+    has_exact_unique_coverage(required_attached, &completed_normally)
 }
 
 /// Verification-only classification of how one task-state dependency survives
@@ -63,4 +92,92 @@ pub const fn state_is_detach_safe(retention: TaskStateRetention) -> bool {
 #[must_use]
 pub fn all_state_dependencies_are_detach_safe(required_state: &[TaskStateRetention]) -> bool {
     required_state.iter().copied().all(state_is_detach_safe)
+}
+
+/// Verification-only cancellation state for one represented task.
+///
+/// The fixture records an explicitly sequenced semantic request/observation history.
+/// It does not model source-unordered request/observation races, host timing,
+/// scheduling, polling, or cancellation authority.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskCancellationState {
+    Running,
+    CancellationPending,
+    Cancelled,
+}
+
+/// Verification-only result of one explicit cancellation observation transition.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskCancellationObservation {
+    Continue,
+    Cancelled,
+}
+
+/// Invalid transition for the focused cancellation verification fixture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskCancellationError {
+    ForeignTask,
+    TerminalTask,
+}
+
+/// Verification-only cooperative cancellation state for one task.
+///
+/// Transition call order stands only for semantic sequencing already established by
+/// an applicable owner. The fixture is not a scheduler and supplies no interaction
+/// rule for source-unordered request and observation operations.
+pub struct TaskCancellationFixture {
+    task: TaskId,
+    state: TaskCancellationState,
+}
+
+impl TaskCancellationFixture {
+    #[must_use]
+    pub const fn new(task: TaskId) -> Self {
+        Self {
+            task,
+            state: TaskCancellationState::Running,
+        }
+    }
+
+    #[must_use]
+    pub const fn state(&self) -> TaskCancellationState {
+        self.state
+    }
+
+    /// Records one semantically sequenced cancellation request for the represented
+    /// task. Repeated requests while cancellation is already pending are idempotent.
+    pub fn request(&mut self, task: TaskId) -> Result<(), TaskCancellationError> {
+        if task != self.task {
+            return Err(TaskCancellationError::ForeignTask);
+        }
+
+        match self.state {
+            TaskCancellationState::Running => {
+                self.state = TaskCancellationState::CancellationPending;
+                Ok(())
+            }
+            TaskCancellationState::CancellationPending => Ok(()),
+            TaskCancellationState::Cancelled => Err(TaskCancellationError::TerminalTask),
+        }
+    }
+
+    /// Observes the cancellation state at one explicit observation point belonging
+    /// to the represented task.
+    pub fn observe(
+        &mut self,
+        task: TaskId,
+    ) -> Result<TaskCancellationObservation, TaskCancellationError> {
+        if task != self.task {
+            return Err(TaskCancellationError::ForeignTask);
+        }
+
+        match self.state {
+            TaskCancellationState::Running => Ok(TaskCancellationObservation::Continue),
+            TaskCancellationState::CancellationPending => {
+                self.state = TaskCancellationState::Cancelled;
+                Ok(TaskCancellationObservation::Cancelled)
+            }
+            TaskCancellationState::Cancelled => Err(TaskCancellationError::TerminalTask),
+        }
+    }
 }
