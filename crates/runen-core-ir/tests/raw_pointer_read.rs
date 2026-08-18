@@ -94,7 +94,10 @@ fn raw_read_requires_live_pointer_value() {
     );
 
     let error = validate_body(body).expect_err("uninitialized pointer value is invalid MIR");
-    assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(pointer));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(pointer)
+    );
 }
 
 #[test]
@@ -128,7 +131,10 @@ fn raw_read_rejects_moved_pointer_value() {
     );
 
     let error = validate_body(body).expect_err("moved pointer value is invalid MIR");
-    assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(pointer));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(pointer)
+    );
 }
 
 #[test]
