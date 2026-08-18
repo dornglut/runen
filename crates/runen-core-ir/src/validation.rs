@@ -683,12 +683,8 @@ fn validate_state_statement(
         Statement::RawRead { pointer } => {
             // Validation owns access to the pointer value itself. Pointee target
             // liveness and target-loan compatibility are unsafe execution obligations.
-            let place = resolve_authorized_access(
-                active_loans,
-                pointer,
-                AccessRequirement::Shared,
-                point,
-            )?;
+            let place =
+                resolve_authorized_access(active_loans, pointer, AccessRequirement::Shared, point)?;
             require_fully_live(locals, &place, point)?;
         }
         Statement::Assign { dst, src } => {
