@@ -1,7 +1,7 @@
 use runen_exec_oracle::{
     Access, AccessKind, BufferId, BufferRegion, PositionId, TaskCancellationError,
     TaskCancellationFixture, TaskCancellationObservation, TaskCancellationState,
-    TaskCompletionEvidence, TaskId, TaskScopePhase, TaskStateRetention,
+    TaskCompletionEvidence, TaskId, TaskScopeId, TaskScopePhase, TaskStateRetention,
     all_state_dependencies_are_detach_safe, has_exact_attached_completion, state_is_detach_safe,
     task_scope_orders,
 };
@@ -12,6 +12,14 @@ fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
 
 fn normal(task: TaskId) -> TaskCompletionEvidence {
     TaskCompletionEvidence::Normal(task)
+}
+
+fn attached(scope: TaskScopeId, task: TaskId) -> TaskScopePhase {
+    TaskScopePhase::AttachedChild { scope, task }
+}
+
+fn detached(scope: TaskScopeId, task: TaskId) -> TaskScopePhase {
+    TaskScopePhase::DetachedFromScope { scope, task }
 }
 
 #[test]
@@ -34,18 +42,46 @@ fn normal_scope_completion_requires_exact_unordered_attached_child_coverage() {
 }
 
 #[test]
-fn structured_scope_orders_attached_children_only_before_normal_continuation() {
-    let first = TaskScopePhase::AttachedChild(TaskId(1));
-    let second = TaskScopePhase::AttachedChild(TaskId(2));
-    let detached = TaskScopePhase::DetachedFromScope(TaskId(3));
+fn structured_scope_orders_attached_children_only_before_same_scope_continuation() {
+    let scope = TaskScopeId::new(7);
+    let first = attached(scope, TaskId(1));
+    let second = attached(scope, TaskId(2));
+    let detached = detached(scope, TaskId(3));
+    let after = TaskScopePhase::After(scope);
 
-    assert!(task_scope_orders(first, TaskScopePhase::After));
-    assert!(task_scope_orders(second, TaskScopePhase::After));
+    assert!(task_scope_orders(first, after));
+    assert!(task_scope_orders(second, after));
 
     assert!(!task_scope_orders(first, second));
     assert!(!task_scope_orders(second, first));
-    assert!(!task_scope_orders(detached, TaskScopePhase::After));
-    assert!(!task_scope_orders(TaskScopePhase::After, first));
+    assert!(!task_scope_orders(detached, after));
+    assert!(!task_scope_orders(after, first));
+}
+
+#[test]
+fn structured_scope_order_does_not_cross_dynamic_scope_identity() {
+    let first_scope = TaskScopeId::new(7);
+    let second_scope = TaskScopeId::new(8);
+    let same_task_token = TaskId(1);
+    let first_child = attached(first_scope, same_task_token);
+    let second_child = attached(second_scope, same_task_token);
+
+    assert!(!task_scope_orders(
+        first_child,
+        TaskScopePhase::After(second_scope)
+    ));
+    assert!(!task_scope_orders(
+        second_child,
+        TaskScopePhase::After(first_scope)
+    ));
+    assert!(task_scope_orders(
+        first_child,
+        TaskScopePhase::After(first_scope)
+    ));
+    assert!(task_scope_orders(
+        second_child,
+        TaskScopePhase::After(second_scope)
+    ));
 }
 
 #[test]
@@ -69,8 +105,9 @@ fn only_owned_or_independently_retained_state_is_detach_safe() {
 
 #[test]
 fn scope_membership_does_not_legalize_ordinary_sibling_conflict() {
-    let first_task = TaskScopePhase::AttachedChild(TaskId(1));
-    let second_task = TaskScopePhase::AttachedChild(TaskId(2));
+    let scope = TaskScopeId::new(7);
+    let first_task = attached(scope, TaskId(1));
+    let second_task = attached(scope, TaskId(2));
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
     let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
 
@@ -157,11 +194,12 @@ fn cancellation_rejects_foreign_task_transitions() {
 
 #[test]
 fn cancellation_does_not_create_sibling_order_or_legalize_conflict() {
+    let scope = TaskScopeId::new(7);
     let first = TaskId(1);
     let second = TaskId(2);
     let mut cancellation = TaskCancellationFixture::new(first);
-    let first_task = TaskScopePhase::AttachedChild(first);
-    let second_task = TaskScopePhase::AttachedChild(second);
+    let first_task = attached(scope, first);
+    let second_task = attached(scope, second);
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
     let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
 

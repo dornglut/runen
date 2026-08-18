@@ -7,23 +7,41 @@ use crate::coverage::has_exact_unique_coverage;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TaskId(pub u32);
 
+/// Verification-only opaque identity for one dynamic structured task scope.
+///
+/// The private token carries equality only. It is not a source scope handle,
+/// nesting depth, scheduler identity, executor identity, or ordering relation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TaskScopeId(u32);
+
+impl TaskScopeId {
+    #[must_use]
+    pub const fn new(token: u32) -> Self {
+        Self(token)
+    }
+}
+
 /// Verification-only phases relative to one originating structured task scope.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskScopePhase {
-    AttachedChild(TaskId),
-    DetachedFromScope(TaskId),
-    After,
+    AttachedChild { scope: TaskScopeId, task: TaskId },
+    DetachedFromScope { scope: TaskScopeId, task: TaskId },
+    After(TaskScopeId),
 }
 
 /// Tests only the ordering supplied by structured task-scope membership itself.
 ///
-/// An attached child's actions precede normal scope continuation. This relation
-/// deliberately supplies no sibling order and no detachment-derived order.
+/// An attached child's actions precede the normal continuation of the same dynamic
+/// scope. This relation deliberately supplies no sibling order, cross-scope order,
+/// or detachment-derived order.
 #[must_use]
-pub const fn task_scope_orders(earlier: TaskScopePhase, later: TaskScopePhase) -> bool {
+pub fn task_scope_orders(earlier: TaskScopePhase, later: TaskScopePhase) -> bool {
     matches!(
         (earlier, later),
-        (TaskScopePhase::AttachedChild(_), TaskScopePhase::After)
+        (
+            TaskScopePhase::AttachedChild { scope: child_scope, .. },
+            TaskScopePhase::After(after_scope),
+        ) if child_scope == after_scope
     )
 }
 

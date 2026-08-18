@@ -12,15 +12,17 @@ A task denotes computation visible to realization as an independent execution un
 
 A **structured task scope** is a semantic execution boundary with a set of child tasks attached to that scope for normal-completion purposes.
 
+One dynamic structured task scope has opaque semantic identity only as needed to distinguish its attachment, detachment, and normal-continuation relationships from those of another dynamic structured task scope. Scope identity is not a numeric index, source handle, nesting depth, runtime parent object, executor identity, scheduler token, or ordering relation. Equal implementation or debug tokens used for distinct semantic scope instances do not by themselves identify one shared scope.
+
 Attachment is a semantic lifetime and ordering relationship relative to that scope. It does not imply a host thread, executor, worker, queue, physical parent task, scheduling policy, or execution target.
 
-A structured task scope completes normally only after every child task that remains attached to that scope's normal-completion set has completed normally. Actions in the scope's normal continuation occur after the actions of every such normally completed attached child.
+A structured task scope completes normally only after every child task that remains attached to that scope's normal-completion set has completed normally. Actions in that scope's normal continuation occur after the actions of every such normally completed attached child of that same scope.
 
-Attachment to the same structured task scope does not by itself establish a relative order between two child tasks. Any ordering or interaction between child tasks requires another applicable semantic contract.
+Attachment to the same structured task scope does not by itself establish a relative order between two child tasks. A child attached to one dynamic scope receives no order to a distinct dynamic scope's normal continuation merely because task/debug identities match or a realization nests or serializes the scopes. Any ordering or interaction between child tasks or distinct scopes requires another applicable semantic contract.
 
 This revision defines only normal structured task-scope completion. If an attached child faults, is cancelled, diverges, or otherwise fails to complete normally, the scope's resulting fault, cancellation, result, and completion behavior are not defined by this revision.
 
-The source or runtime operations that create a task, attach it to a scope, wait for it, or produce its result are not defined by this revision.
+The source or runtime operations that create a task, create or identify a structured task scope, attach a child to a scope, wait for it, or produce its result are not defined by this revision.
 
 ## Borrowed and permission-bearing state
 
@@ -82,6 +84,6 @@ Structured task-scope membership is not a synchronization mechanism between sibl
 
 Ordinary accesses by child tasks remain governed by [Exec memory model](memory-model.md), and attachment does not legalize an otherwise-conflicting unordered ordinary interaction. Cancellation request, pending state, and cancellation observation likewise do not by themselves legalize, order, or synchronize an otherwise-conflicting sibling interaction.
 
-Buffer logical coherence may consume the semantic order from an attached child's normal completion to the structured scope's normal continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue.
+Buffer logical coherence may consume the semantic order from an attached child's normal completion to that same structured task scope's normal continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue.
 
-The exact spawn, await, task result, task fault-propagation, cancellation-request authority, source-unordered request/observation interaction, and containing-scope abnormal-completion rules remain not defined by this revision.
+The exact spawn, await, task result, task fault-propagation, cancellation-request authority, source-unordered request/observation interaction, containing-scope abnormal-completion rules, source task-scope formation or identity-observation mechanisms, and scope nesting relationships remain not defined by this revision.

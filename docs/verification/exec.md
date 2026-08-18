@@ -4,7 +4,7 @@ Status: **non-normative conformance-obligation documentation**
 
 This document records focused assurance obligations for defined Exec semantic slices. It does not define Runen semantics, conformance profiles, compiler architecture, or repository CI.
 
-The normative ordinary-access and structured-iteration rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Structured task lifetime, detachment, and cooperative cancellation observation are owned by `spec/language/exec/tasks.md`. Buffer-specific identity, region, view-access, and logical-coherence facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, interior-mutability, and function-termination cleanup facts remain owned by their Core specifications.
+The normative ordinary-access and structured-iteration rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Structured task lifetime, detachment, dynamic task-scope identity, and cooperative cancellation observation are owned by `spec/language/exec/tasks.md`. Buffer-specific identity, region, view-access, and logical-coherence facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, interior-mutability, and function-termination cleanup facts remain owned by their Core specifications.
 
 `crates/runen-exec-oracle` is the verification-only executable conformance model for the currently represented Exec relations below. It is not source or compiler Exec IR, a runtime, a scheduler, a backend, or a normative owner. Future compiler/runtime realizations must remain independently accountable to the normative specification rather than treating the oracle representation as language semantics.
 
@@ -231,20 +231,22 @@ These cases exercise structured task-scope lifetime/order and state-retention re
 
 Required cases:
 
+- each represented dynamic structured task scope has an equality-only identity used solely to scope its attachment/detachment/normal-continuation ordering evidence;
 - normal completion of one structured task scope requires every child attached to that scope's normal-completion set to have completed normally;
 - attached-child completion coverage is insensitive to completion-list order but rejects missing, duplicate, invented, or ambiguous duplicate fixture task identities;
 - the empty attached-child set permits normal completion without inventing a child task;
-- actions of an attached child are ordered before the originating scope's normal continuation;
+- actions of an attached child are ordered before the normal continuation of that same dynamic structured task scope;
+- an attached-child phase associated with one dynamic task scope is not ordered before the normal continuation of a distinct dynamic task scope, including when the test phases reuse the same `TaskId` token;
 - two children attached to the same scope receive no relative order from membership alone;
 - a task detached from the originating scope receives no ordering to that scope's normal continuation from detachment alone;
 - attachment or detachment does not extend, renew, copy, or upgrade a scope-bounded borrow/view permission;
 - a scope-bounded state dependency is not safe to keep using after detachment once the originating scope may complete;
 - owned and independently retained state dependencies are detach-safe under this lifetime relation;
 - detached work is detach-safe only when every state dependency it still requires is owned or independently retained;
-- task-scope membership does not legalize an otherwise-conflicting ordinary sibling access;
+- task-scope identity or membership does not legalize an otherwise-conflicting ordinary sibling access;
 - no fault/result behavior is inferred when an attached child does not complete normally.
 
-`TaskId`, task-scope phases, and `TaskStateRetention` are verification-only tokens/classifications. `IndependentlyRetained` does not prescribe reference counting, allocation ownership, a runtime handle, or another retention implementation.
+`TaskScopeId`, `TaskId`, task-scope phases, and `TaskStateRetention` are verification-only tokens/classifications. `TaskScopeId` is not a source scope handle, runtime parent object, nesting level, executor identity, scheduler identity, or observable ordering token. `IndependentlyRetained` does not prescribe reference counting, allocation ownership, a runtime handle, or another retention implementation.
 
 ## Cooperative task cancellation observation boundary
 
@@ -282,9 +284,9 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - validated root/group/subgroup structured-barrier cohorts, explicit root `EachId`, foreign-`each`/foreign-hierarchy rejection, participant-only phase construction, cross-phase ordering, and exact before-phase completion coverage;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
 - complete unordered-reduction contract admission evidence plus validated root/group/subgroup reduction cohorts, explicit root `EachId`, foreign-`each`/foreign-hierarchy rejection, participant-only contribution construction, and exact unordered semantic-contribution coverage;
-- structured task-scope attached-child ordering/completion coverage, detachment state-retention admissibility, and explicitly sequenced cooperative cancellation request/observation transitions.
+- dynamic-task-scope-local attached-child ordering, outcome-aware normal-completion coverage, detachment state-retention admissibility, and explicitly sequenced cooperative cancellation request/observation transitions.
 
-Its atomic-location/exchange/value tokens, exchange-semantics/scope/scope-relation classifications, private predecessor/exact-scope-producer evidence and fixtures, `BufferId`, `PositionId`, `ValueToken`, `EachId`, scoped iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, task tokens, cancellation fixture/state/result/error classifications, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, source iteration or hierarchy handles, atomic storage forms, source memory-order or memory-scope enumerations, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, cancellation handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+Its atomic-location/exchange/value tokens, exchange-semantics/scope/scope-relation classifications, private predecessor/exact-scope-producer evidence and fixtures, `BufferId`, `PositionId`, `ValueToken`, `EachId`, scoped iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, `TaskScopeId`, task tokens, cancellation fixture/state/result/error classifications, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, source iteration or hierarchy handles, atomic storage forms, source memory-order or memory-scope enumerations, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, task-scope handles or nesting, cancellation handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
 
 The private generic exact-coverage helper used by atomic, hierarchy, barrier, reduction, and task fixtures, the crate-private dynamic-`each` identity relation used by structured/hierarchy/barrier/reduction/atomic fixtures, and the crate-private hierarchy cohort collection used by barrier and reduction fixtures are mechanical oracle implementation. They own no Runen semantic concept.
 
