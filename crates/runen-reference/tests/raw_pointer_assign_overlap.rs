@@ -2,9 +2,7 @@ use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId, Operand,
     Place, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_body,
 };
-use runen_reference::{
-    Machine, UndefinedBehaviorKind, VerificationEvent, VerificationWriteKind,
-};
+use runen_reference::{Machine, UndefinedBehaviorKind, VerificationEvent, VerificationWriteKind};
 
 #[test]
 fn self_targeting_raw_assign_executes_from_snapshotted_pointer_value() {
