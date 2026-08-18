@@ -74,6 +74,17 @@ pub enum AtomicExchangeScope {
     Root(EachId),
 }
 
+/// Verification-only result of comparing two represented exchange scope forms.
+///
+/// `Open` records an interaction that the normative specification deliberately has
+/// not defined yet; it is not another kind of incompatibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomicScopeRelation {
+    Compatible,
+    Incompatible,
+    Open,
+}
+
 /// Verification-only description of one semantic atomic exchange occurrence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicExchange {
@@ -249,9 +260,43 @@ impl AtomicExchangeRealization {
             .find_map(|(candidate, prior)| (*candidate == exchange).then_some(*prior))
     }
 
+    /// The currently defined synchronization-scope relationship between two
+    /// represented exchanges on this location.
+    ///
+    /// `None` means one or both identities are not represented on this realization.
+    /// `Open` means the pair is represented but the normative interaction is not
+    /// defined by the current revision.
+    #[must_use]
+    pub fn synchronization_scope_relation(
+        &self,
+        left: AtomicExchangeId,
+        right: AtomicExchangeId,
+    ) -> Option<AtomicScopeRelation> {
+        let left_scope = self.scope_of(left)?;
+        let right_scope = self.scope_of(right)?;
+
+        Some(match (left_scope, right_scope) {
+            (AtomicExchangeScope::Unscoped, AtomicExchangeScope::Unscoped) => {
+                AtomicScopeRelation::Compatible
+            }
+            (AtomicExchangeScope::Root(left_each), AtomicExchangeScope::Root(right_each)) => {
+                if left_each == right_each {
+                    AtomicScopeRelation::Compatible
+                } else {
+                    AtomicScopeRelation::Incompatible
+                }
+            }
+            _ => AtomicScopeRelation::Open,
+        })
+    }
+
     /// Whether the named release-capable exchange directly synchronizes with the
     /// named acquire-capable exchange under the accepted direct-predecessor and
     /// synchronization-scope relations.
+    ///
+    /// A pair whose scope relationship is `Open` does not receive a synchronization
+    /// edge from this represented relation; callers must not reinterpret that as a
+    /// normative proof that the open interaction is incompatible.
     #[must_use]
     pub fn release_acquire_synchronizes(
         &self,
@@ -268,7 +313,8 @@ impl AtomicExchangeRealization {
         ) && matches!(
             self.semantics_of(acquire),
             Some(AtomicExchangeSemantics::Acquire | AtomicExchangeSemantics::AcquireRelease)
-        ) && self.scopes_are_compatible(release, acquire)
+        ) && self.synchronization_scope_relation(release, acquire)
+            == Some(AtomicScopeRelation::Compatible)
             && self.immediate_predecessor(acquire) == Some(release)
     }
 
@@ -295,18 +341,12 @@ impl AtomicExchangeRealization {
     }
 
     fn scope_of(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeScope> {
+        if exchange.location() != self.location {
+            return None;
+        }
+
         self.scopes
             .iter()
             .find_map(|(candidate, scope)| (*candidate == exchange).then_some(*scope))
-    }
-
-    fn scopes_are_compatible(&self, release: AtomicExchangeId, acquire: AtomicExchangeId) -> bool {
-        match (self.scope_of(release), self.scope_of(acquire)) {
-            (Some(AtomicExchangeScope::Unscoped), Some(AtomicExchangeScope::Unscoped)) => true,
-            (Some(AtomicExchangeScope::Root(release_each)), Some(AtomicExchangeScope::Root(acquire_each))) => {
-                release_each == acquire_each
-            }
-            _ => false,
-        }
     }
 }
