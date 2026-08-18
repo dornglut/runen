@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     BasicBlockId, Body, BorrowKind, LoanId, LocalId, Operand, Place, PlaceAccess, Projection,
-    ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable,
+    ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable, Value,
 };
 
 /// Location within Core MIR used by validation diagnostics.
@@ -31,6 +31,7 @@ pub enum MirValidationErrorKind {
     },
     CopyOfNonCopy(TypeId),
     RawReadRequiresPointer(TypeId),
+    RawAssignRequiresPointer(TypeId),
     AssignToImmutable(LocalId),
     InteriorMutationRequiresMarkedRegion(Place),
     InitRequiresNeverInitialized(Place),
@@ -86,11 +87,12 @@ impl ValidatedBody {
 ///
 /// The boundary covers all structural, typing, copyability, assignment-mutability,
 /// interior-mutability, initialization-state, borrow-tree, and place-access rules
-/// expressible by the currently represented Core MIR. Unsafe `RawRead` target
-/// obligations are intentionally not modeled as validator pointer-provenance state;
-/// they are execution preconditions owned by the unsafe pointer-access semantics.
-/// Later language domains extend validation in their owning slices rather than being
-/// anticipated here.
+/// expressible by the currently represented Core MIR. Unsafe raw-target access
+/// obligations remain execution preconditions rather than validation diagnostics.
+/// Validation carries exact symbolic raw-pointer targets only as verification state
+/// needed to propagate defined `RawAssign` storage effects; that state is not an
+/// independent provenance model or observable language state. Later language domains
+/// extend validation in their owning slices rather than being anticipated here.
 pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
     validate_type_table(&body.types)?;
     validate_local_declarations(&body)?;
@@ -249,6 +251,16 @@ fn validate_static_statement(
                     MirValidationErrorKind::RawReadRequiresPointer(actual),
                 ))
             }
+        }
+        Statement::RawAssign { pointer, src } => {
+            let actual = access_type(body, pointer, point)?;
+            let Some(pointee) = body.types.raw_pointer_pointee(actual) else {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::RawAssignRequiresPointer(actual),
+                ));
+            };
+            validate_operand_type(body, src, pointee, point)
         }
         Statement::Assign { dst, src } => {
             let expected = access_type(body, dst, point)?;
@@ -454,10 +466,22 @@ fn access_type(
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum ValidationScalar {
+    NonPointer,
+    RawPointer(Place),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum ValidationValue {
+    Scalar(ValidationScalar),
+    Struct(Vec<ValidationValue>),
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum LeafState {
     NeverInitialized,
-    Live,
+    Live(ValidationScalar),
     Dead,
 }
 
@@ -486,14 +510,14 @@ impl ObjectState {
     fn all_never_initialized(&self) -> bool {
         match self {
             Self::Leaf(LeafState::NeverInitialized) => true,
-            Self::Leaf(LeafState::Live | LeafState::Dead) => false,
+            Self::Leaf(LeafState::Live(_) | LeafState::Dead) => false,
             Self::Aggregate(fields) => fields.iter().all(Self::all_never_initialized),
         }
     }
 
     fn fully_live(&self) -> bool {
         match self {
-            Self::Leaf(LeafState::Live) => true,
+            Self::Leaf(LeafState::Live(_)) => true,
             Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => false,
             Self::Aggregate(fields) => fields.iter().all(Self::fully_live),
         }
@@ -501,30 +525,16 @@ impl ObjectState {
 
     fn any_live(&self) -> bool {
         match self {
-            Self::Leaf(LeafState::Live) => true,
+            Self::Leaf(LeafState::Live(_)) => true,
             Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => false,
             Self::Aggregate(fields) => fields.iter().any(Self::any_live),
-        }
-    }
-
-    fn mark_live(&mut self) {
-        match self {
-            Self::Leaf(state) => *state = LeafState::Live,
-            Self::Aggregate(fields) => fields.iter_mut().for_each(Self::mark_live),
-        }
-    }
-
-    fn mark_dead(&mut self) {
-        match self {
-            Self::Leaf(state) => *state = LeafState::Dead,
-            Self::Aggregate(fields) => fields.iter_mut().for_each(Self::mark_dead),
         }
     }
 
     fn drop_live(&mut self) {
         match self {
             Self::Leaf(state) => {
-                if *state == LeafState::Live {
+                if matches!(state, LeafState::Live(_)) {
                     *state = LeafState::Dead;
                 }
             }
@@ -559,9 +569,9 @@ fn validate_path_state(body: &Body) -> Result<(), MirValidationError> {
     loop {
         if !seen.insert((current, locals.clone(), active_loans.clone())) {
             // The current MIR has one control-flow successor per block. Reaching the
-            // same block with the same abstract storage and active-loan forest state
-            // proves that future validation repeats forever without exposing a new
-            // invalid state.
+            // same block with the same abstract storage, exact raw-pointer targets,
+            // and active-loan forest state proves that future validation repeats
+            // forever without exposing a new invalid state.
             return Ok(());
         }
 
@@ -600,8 +610,9 @@ fn validate_state_statement(
                     MirValidationErrorKind::InitRequiresNeverInitialized(dst.clone()),
                 ));
             }
-            validate_operand_state(locals, active_loans, src, point)?;
-            place_state_mut(locals, dst).mark_live();
+            let dst_ty = place_type(body, dst, point)?;
+            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            write_validation_value(&body.types, dst_ty, place_state_mut(locals, dst), value);
         }
         Statement::Borrow { loan, kind, src } => {
             let loan_index = loan.0 as usize;
@@ -681,11 +692,32 @@ fn validate_state_statement(
             require_fully_live(locals, &place, point)?;
         }
         Statement::RawRead { pointer } => {
-            // Validation owns access to the pointer value itself. Pointee target
-            // liveness and target-loan compatibility are unsafe execution obligations.
+            // Validation owns access to the pointer value itself. Exact target metadata
+            // exists only for value transport and RawAssign state propagation; target
+            // liveness and target-loan compatibility remain unsafe execution obligations.
             let place =
                 resolve_authorized_access(active_loans, pointer, AccessRequirement::Shared, point)?;
             require_fully_live(locals, &place, point)?;
+        }
+        Statement::RawAssign { pointer, src } => {
+            // Snapshot the exact target before source evaluation. Validation intentionally
+            // does not check the raw target alias precondition; that remains UB territory.
+            let pointer_place =
+                resolve_authorized_access(active_loans, pointer, AccessRequirement::Shared, point)?;
+            require_fully_live(locals, &pointer_place, point)?;
+            let target = raw_pointer_target_at(locals, &pointer_place);
+            let pointer_ty = place_type(body, &pointer_place, point)?;
+            let pointee_ty = body
+                .types
+                .raw_pointer_pointee(pointer_ty)
+                .expect("static validation guarantees a raw-pointer RawAssign operand");
+            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            write_validation_value(
+                &body.types,
+                pointee_ty,
+                place_state_mut(locals, &target),
+                value,
+            );
         }
         Statement::Assign { dst, src } => {
             // Authorization and assignment mutability are properties of the destination
@@ -694,8 +726,9 @@ fn validate_state_statement(
             let place =
                 resolve_authorized_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
             require_mutable_local(body, &place, point)?;
-            validate_operand_state(locals, active_loans, src, point)?;
-            place_state_mut(locals, &place).mark_live();
+            let dst_ty = place_type(body, &place, point)?;
+            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            write_validation_value(&body.types, dst_ty, place_state_mut(locals, &place), value);
         }
         Statement::InteriorAssign { dst, src } => {
             // Interior mutability is independent of local assignment mutability. Shared
@@ -704,8 +737,9 @@ fn validate_state_statement(
             let place =
                 resolve_authorized_access(active_loans, dst, AccessRequirement::Shared, point)?;
             require_interior_mutable_place(body, &place, point)?;
-            validate_operand_state(locals, active_loans, src, point)?;
-            place_state_mut(locals, &place).mark_live();
+            let dst_ty = place_type(body, &place, point)?;
+            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            write_validation_value(&body.types, dst_ty, place_state_mut(locals, &place), value);
         }
         Statement::Drop { place } => {
             let place = resolve_authorized_access(
@@ -727,32 +761,155 @@ fn validate_state_statement(
 }
 
 fn validate_operand_state(
+    body: &Body,
     locals: &mut [ObjectState],
     active_loans: &[Option<ActiveLoan>],
     operand: &Operand,
     point: &MirPoint,
-) -> Result<(), MirValidationError> {
+) -> Result<ValidationValue, MirValidationError> {
     match operand {
-        Operand::Constant(_) => Ok(()),
+        Operand::Constant(value) => Ok(validation_value_from_constant(value)),
         Operand::Move(src) => {
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Exclusive, point)?;
             require_fully_live(locals, &place, point)?;
-            place_state_mut(locals, &place).mark_dead();
-            Ok(())
+            let ty = place_type(body, &place, point)?;
+            Ok(take_validation_value(
+                &body.types,
+                ty,
+                place_state_mut(locals, &place),
+            ))
         }
         Operand::Copy(src) => {
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
-            require_fully_live(locals, &place, point)
+            require_fully_live(locals, &place, point)?;
+            let ty = place_type(body, &place, point)?;
+            Ok(clone_validation_value(
+                &body.types,
+                ty,
+                place_state(locals, &place),
+            ))
         }
         Operand::AddressOf(src) => {
             // Address formation authorizes access to existing storage but does not
             // read the pointee value, so NeverInitialized and Dead storage are valid
-            // targets in this slice.
-            resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
-            Ok(())
+            // targets. The resolved Place is exact verification metadata for transport
+            // and later RawAssign state propagation, not a second provenance identity.
+            let place =
+                resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
+            Ok(ValidationValue::Scalar(ValidationScalar::RawPointer(place)))
         }
+    }
+}
+
+fn validation_value_from_constant(value: &Value) -> ValidationValue {
+    match value {
+        Value::Bool(_) | Value::I64(_) | Value::TrackedFixture(_) => {
+            ValidationValue::Scalar(ValidationScalar::NonPointer)
+        }
+        Value::Struct(values) => {
+            ValidationValue::Struct(values.iter().map(validation_value_from_constant).collect())
+        }
+    }
+}
+
+fn clone_validation_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> ValidationValue {
+    let definition = types
+        .get(ty)
+        .expect("validated Core MIR references only known types");
+    match (&definition.kind, state) {
+        (TypeKind::Scalar(_), ObjectState::Leaf(LeafState::Live(value))) => {
+            ValidationValue::Scalar(value.clone())
+        }
+        (TypeKind::Struct(fields), ObjectState::Aggregate(states))
+            if fields.len() == states.len() =>
+        {
+            ValidationValue::Struct(
+                fields
+                    .iter()
+                    .zip(states)
+                    .map(|(field, state)| clone_validation_value(types, field.ty, state))
+                    .collect(),
+            )
+        }
+        _ => unreachable!("validated Core MIR guarantees copied state is fully live"),
+    }
+}
+
+fn take_validation_value(
+    types: &TypeTable,
+    ty: TypeId,
+    state: &mut ObjectState,
+) -> ValidationValue {
+    let definition = types
+        .get(ty)
+        .expect("validated Core MIR references only known types");
+    match (&definition.kind, state) {
+        (TypeKind::Scalar(_), ObjectState::Leaf(leaf)) => {
+            match std::mem::replace(leaf, LeafState::Dead) {
+                LeafState::Live(value) => ValidationValue::Scalar(value),
+                LeafState::NeverInitialized | LeafState::Dead => {
+                    unreachable!("validated Core MIR guarantees moved state is fully live")
+                }
+            }
+        }
+        (TypeKind::Struct(fields), ObjectState::Aggregate(states))
+            if fields.len() == states.len() =>
+        {
+            ValidationValue::Struct(
+                fields
+                    .iter()
+                    .zip(states)
+                    .map(|(field, state)| take_validation_value(types, field.ty, state))
+                    .collect(),
+            )
+        }
+        _ => unreachable!("validated Core MIR guarantees moved state matches its type"),
+    }
+}
+
+fn write_validation_value(
+    types: &TypeTable,
+    ty: TypeId,
+    state: &mut ObjectState,
+    value: ValidationValue,
+) {
+    let definition = types
+        .get(ty)
+        .expect("validated Core MIR references only known types");
+    match (&definition.kind, state, value) {
+        (
+            TypeKind::Scalar(ScalarType::RawPointer(_)),
+            ObjectState::Leaf(leaf),
+            ValidationValue::Scalar(value @ ValidationScalar::RawPointer(_)),
+        ) => {
+            *leaf = LeafState::Live(value);
+        }
+        (
+            TypeKind::Scalar(ScalarType::Bool | ScalarType::I64 | ScalarType::TrackedFixture),
+            ObjectState::Leaf(leaf),
+            ValidationValue::Scalar(ValidationScalar::NonPointer),
+        ) => {
+            *leaf = LeafState::Live(ValidationScalar::NonPointer);
+        }
+        (
+            TypeKind::Struct(fields),
+            ObjectState::Aggregate(states),
+            ValidationValue::Struct(values),
+        ) if fields.len() == states.len() && fields.len() == values.len() => {
+            for ((field, field_state), field_value) in fields.iter().zip(states).zip(values) {
+                write_validation_value(types, field.ty, field_state, field_value);
+            }
+        }
+        _ => unreachable!("static validation guarantees value/type compatibility"),
+    }
+}
+
+fn raw_pointer_target_at(locals: &[ObjectState], place: &Place) -> Place {
+    match place_state(locals, place) {
+        ObjectState::Leaf(LeafState::Live(ValidationScalar::RawPointer(target))) => target.clone(),
+        _ => unreachable!("validated raw-pointer access reaches exact live pointer metadata"),
     }
 }
 

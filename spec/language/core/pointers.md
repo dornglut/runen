@@ -2,9 +2,9 @@
 
 Status: **provisional normative; incomplete**
 
-This document defines the currently represented Core semantics for raw-pointer types and values, symbolic pointer targets, provenance formation from existing storage, preservation under ordinary pointer-value transport, and the first non-consuming raw-pointer target read.
+This document defines the currently represented Core semantics for raw-pointer types and values, symbolic pointer targets, provenance formation from existing storage, preservation under ordinary pointer-value transport, one non-consuming raw-pointer target read, and one source-first raw-pointer target replacement.
 
-Dynamic storage-instance identity, storage extent, structural storage regions, stored-value lifetime, initialization state, replacement, and destruction are defined by [Core value and storage semantics](value-storage.md). Shared/exclusive authority used while selecting storage for pointer formation and active-loan compatibility for raw target reads are defined by [Core borrowing](borrowing.md). Unsafe-operation classification and undefined behavior from violated unsafe preconditions are defined by [Core unsafe semantics](unsafe.md).
+Dynamic storage-instance identity, storage extent, structural storage regions, stored-value lifetime, initialization state, replacement, and destruction are defined by [Core value and storage semantics](value-storage.md). Shared/exclusive authority used while selecting storage for pointer formation, accessing stored pointer values, and checking raw target access compatibility is defined by [Core borrowing](borrowing.md). Unsafe-operation classification and undefined behavior from violated unsafe preconditions are defined by [Core unsafe semantics](unsafe.md).
 
 ## Required distinctions
 
@@ -48,7 +48,7 @@ A non-null raw-pointer value formed by the currently defined operation has a **t
 
 Formation also establishes pointer provenance **rooted in the dynamic storage instance containing that target region**. This is the only provenance fact defined by this revision. It does not define the complete future structure of provenance, access permissions carried by provenance, derivation history, invalidation rules, exposed provenance, or address reconstruction.
 
-The current reference oracle therefore needs only one stored source of truth for this foundation: the symbolic target region. Its `target.instance` is sufficient verification evidence for the currently defined provenance root. A later provenance model may add independent semantic state when future operations require distinctions that cannot be derived from the target region.
+The current reference oracle therefore needs only one stored source of truth for this foundation: the symbolic target region. Its `target.instance` is sufficient verification evidence for the currently defined provenance root. Exact static structural `Place` bookkeeping derived from that target is verification-only when used to model defined path-state effects; it is not a second provenance identity or Runen-observable value.
 
 The target is symbolic structural metadata selected at formation. It does not mean that the pointer dynamically follows relocated storage, nor does it itself define a physical address or unrestricted memory access. Relocation and address stability remain undefined.
 
@@ -64,7 +64,7 @@ The proving MIR forms a non-null raw pointer with:
 AddressOf(src: PlaceAccess)
 ```
 
-`AddressOf` is an operand producing an owned raw-pointer value whose pointee type must exactly equal the type selected by `src`.
+`AddressOf` is an operand producing an owned raw-pointer value whose pointee type MUST exactly equal the type selected by `src`.
 
 Formation proceeds conceptually as follows:
 
@@ -86,11 +86,11 @@ Storage existence and stored-value liveness are independent semantic facts.
 
 The resulting raw pointer does not retain the source loan's authority and does not keep that loan active. Ending the source loan therefore does not alter or erase a raw-pointer value already formed from that storage.
 
-Formation authority alone does not establish the unsafe preconditions for a later raw-pointer target read.
+Formation authority alone does not establish the unsafe preconditions for a later raw-pointer target read or replacement.
 
 ## Non-consuming raw-pointer read
 
-The current proving MIR has one raw-pointer memory-access operation:
+The current proving MIR has one raw-pointer target-read operation:
 
 ```text
 RawRead { pointer: PlaceAccess }
@@ -117,6 +117,38 @@ When its unsafe preconditions hold, `RawRead` reads the current stored value non
 
 The operation is not restricted to copyable pointee types because it does not produce an owned duplicate or move a value out of the target. The current proving MIR simply discards the semantic read result, as it does for ordinary `Read`.
 
+## Source-first raw-pointer replacement
+
+The current proving MIR has one raw-pointer target-replacement operation:
+
+```text
+RawAssign { pointer: PlaceAccess, src: Operand }
+```
+
+`RawAssign` is an unsafe semantic replacement through an already stored raw-pointer value. It does not create a dereferenced `Place`, define byte-wise memory access, or create a second pointer/provenance representation.
+
+The `pointer` operand selects and obtains a stored raw-pointer value using the same language-validation requirements as the pointer-value access of `RawRead`: the selected place MUST have raw-pointer type, the pointer value MUST be fully Live, and the `PlaceAccess` MUST have shared alias authority under [Core borrowing](borrowing.md).
+
+The type of `src` MUST exactly equal the pointee type of that raw-pointer value.
+
+A language-valid `RawAssign` proceeds conceptually as follows:
+
+1. obtain the raw-pointer value through `pointer` and snapshot that value's symbolic target structural storage region;
+2. resolve the snapshotted target to the corresponding concrete structural place in the continuing dynamic storage instance;
+3. evaluate `src` completely according to the ordinary Core operand semantics;
+4. require the target write to satisfy the active-loan **exclusive** compatibility rule defined by [Core borrowing](borrowing.md);
+5. apply the source-first replacement lifecycle defined by [Core value and storage semantics](value-storage.md) to the resolved target using the already evaluated source value.
+
+The target snapshot in step 1 is semantically significant. Later source evaluation or target replacement does not retroactively change which target this `RawAssign` selected. Obtaining the pointer value for the snapshot does not itself consume or mutate that stored pointer value. Ordinary source evaluation and the target replacement can nevertheless affect storage that aliases the pointer operand place when their independently applicable semantics permit it.
+
+Unlike `RawRead`, `RawAssign` has no target-liveness precondition. The operation is defined when the resolved target is Never-initialized, partially initialized, fully Live, or Dead. The replacement lifecycle destroys exactly the then-Live destruction domain after source evaluation and leaves the complete written target Live, as defined by the value/storage owner.
+
+`RawAssign` is not ordinary `Assign` and is not `InteriorAssign`. The containing local's ordinary assignment-mutability flag and the interior-mutability marker are therefore not preconditions of `RawAssign`. They remain capabilities specific to the operations defined by the value/storage semantics. `RawAssign` instead relies on its unsafe classification and its raw target exclusive-access precondition.
+
+Violation of the raw target exclusive-access precondition is undefined behavior under [Core unsafe semantics](unsafe.md). It is not a language-validation error or a defined `Fault`.
+
+A successful `RawAssign` does not change the target storage extent or storage-instance identity and does not create, end, or transfer any loan. Its stored-value lifetime and destruction effects are exactly those of the reused replacement lifecycle.
+
 ## Stored-value replacement and raw-pointer targets
 
 Pointer provenance formed here is rooted in the dynamic storage instance rather than in the particular stored-value lifetime occupying that storage.
@@ -127,11 +159,13 @@ Consequently, while the storage extent continues:
 - destroying the current value does not by itself change that root;
 - ordinary assignment may end an old stored-value lifetime and begin a new one without changing the root storage identity;
 - interior assignment may do the same while shared loans remain active;
+- raw-pointer replacement follows the same stored-value lifetime transition rules without changing the target storage identity;
 - forming a pointer before and after such a transition selects the same structural storage region when the same place is selected;
 - when the target is fully Live and the current borrowing precondition permits the read, `RawRead` through a previously formed pointer reads the later replacement value;
-- the same pointer cannot legally `RawRead` the target while that target is Never-initialized, Dead, or only partially initialized as a whole.
+- the same pointer cannot legally `RawRead` the target while that target is Never-initialized, Dead, or only partially initialized as a whole;
+- when the raw target exclusive-access precondition permits the write, `RawAssign` is defined to replace or initialize the continuing target region regardless of its prior initialization state.
 
-Thus a pointer targets continuing storage rather than one frozen stored-value lifetime, while each actual access is still constrained by the target's state at that semantic step.
+Thus a pointer targets continuing storage rather than one frozen stored-value lifetime, while each actual access is still constrained by the preconditions of that access operation.
 
 ## Raw-pointer value transport
 
@@ -146,17 +180,18 @@ Pointer-value transport does not reactivate, recreate, or extend any loan from w
 
 ## Determinism and verification
 
-For a fixed validated body and execution that has not entered undefined behavior, symbolic target selection, the currently defined provenance root, target resolution, and successful `RawRead` behavior are deterministic from the storage identities, storage state, and active-loan state supplied by the owning Core semantics.
+For a fixed validated body and execution that has not entered undefined behavior, symbolic target selection, the currently defined provenance root, target resolution, successful `RawRead`, and successful `RawAssign` behavior are deterministic from the storage identities, storage/value state, active-loan state, and operand semantics supplied by the owning Core semantics.
 
-Reference-oracle instrumentation may expose storage-instance identities, formed pointer targets, successful raw reads, and detected unsafe-precondition violations to conformance tests. Such instrumentation is verification-only and is not Runen-observable program behavior.
+Reference-oracle instrumentation MAY expose storage-instance identities, formed pointer targets, successful raw reads/replacements, and detected unsafe-precondition violations to conformance tests. Exact static pointer-target bookkeeping retained solely to propagate defined path-state is verification-only and is not Runen-observable program behavior.
 
-No program may branch on, print, compare, serialize, or otherwise observe the oracle's numeric storage-instance representation or UB diagnostic taxonomy under the semantics defined by this revision.
+A Runen program MUST NOT branch on, print, compare, serialize, or otherwise observe the oracle's numeric storage-instance representation, validator pointer-target bookkeeping, or UB diagnostic taxonomy under the semantics defined by this revision.
 
 ## Not yet defined
 
 This revision deliberately does **not** define:
 
-- raw-pointer stores or mutation through raw pointers;
+- raw-pointer mutation beyond the semantic source-first `RawAssign` operation defined above;
+- non-dropping or byte-wise raw writes;
 - a general dereference-place abstraction;
 - ownership-moving raw loads such as `ptr::read`-style semantics;
 - pointer arithmetic, offsets, one-past rules, or byte-wise addressing;
@@ -169,7 +204,7 @@ This revision deliberately does **not** define:
 - relocation or address stability;
 - pinning;
 - alignment or bounds rules beyond the current structural target model;
-- value validity or invalid bit patterns beyond requiring the existing semantic target value to be fully Live for `RawRead`;
+- value validity or invalid bit patterns beyond the existing semantic-value and initialization requirements used by the defined operations;
 - dangling access outside the currently represented local-storage extents or the complete undefined-behavior taxonomy;
 - source `unsafe` syntax or unsafe blocks;
 - first-class references, reference lifetimes, or source borrow inference;

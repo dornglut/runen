@@ -55,9 +55,10 @@ pub enum ScalarType {
     I64,
     /// Capability-neutral raw pointer to a pointee type.
     ///
-    /// The current Core slice defines formation, ordinary value transport, and one
-    /// non-consuming `RawRead`; broader pointer access remains outside this type.
-    /// The pointee edge is semantic indirection rather than structural containment.
+    /// The current Core slice defines formation, ordinary value transport, one
+    /// non-consuming `RawRead`, and one source-first `RawAssign` replacement.
+    /// Broader pointer access remains outside this type. The pointee edge is semantic
+    /// indirection rather than structural containment.
     RawPointer(TypeId),
     /// Verification-only non-copy scalar used to make destruction observable to tests.
     /// This is not a Runen language scalar primitive.
@@ -436,6 +437,14 @@ pub enum Statement {
     /// The current proving MIR discards the read result and does not create a
     /// general dereferenced-place representation.
     RawRead { pointer: PlaceAccess },
+    /// Unsafe source-first replacement through a stored raw-pointer value.
+    ///
+    /// Language validation checks the pointer-value access and source type. The
+    /// concrete pointee target is snapshotted before source evaluation; active-loan
+    /// compatibility for the target write remains an unsafe execution precondition.
+    /// The operation reuses Core replacement semantics without creating a general
+    /// dereferenced-place representation.
+    RawAssign { pointer: PlaceAccess, src: Operand },
     /// Ordinary mutable write/replacement/re-initialization.
     ///
     /// This requires exclusive alias authority and containing-local assignment
