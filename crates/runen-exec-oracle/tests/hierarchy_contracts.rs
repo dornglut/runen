@@ -192,11 +192,8 @@ fn hierarchy_membership_does_not_legalize_ordinary_conflict() {
 #[test]
 fn root_barrier_order_is_independent_of_hierarchy_membership() {
     let required = [IterationId(1), IterationId(2)];
-    let hierarchy = HierarchyFixture::new(
-        &required,
-        vec![membership(1, 10, 1), membership(2, 20, 1)],
-    )
-    .unwrap();
+    let hierarchy =
+        HierarchyFixture::new(&required, vec![membership(1, 10, 1), membership(2, 20, 1)]).unwrap();
     let barrier = BarrierFixture::root(BarrierId::new(5), &required).unwrap();
     let before = barrier.before(IterationId(1)).unwrap();
     let after = barrier.after(IterationId(2)).unwrap();
