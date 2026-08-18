@@ -3,10 +3,16 @@ use runen_core_ir::{
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
     validate_body,
 };
-use runen_reference::{Machine, TerminalStatus, VerificationEvent, VerificationWriteKind};
+use runen_reference::{ExecutionReport, Machine, TerminalStatus, VerificationEvent, VerificationWriteKind};
 
 fn machine(body: Body) -> Machine {
     Machine::new(validate_body(body).expect("borrow test MIR must pass validation"))
+}
+
+fn defined_report(body: Body) -> ExecutionReport {
+    machine(body)
+        .execute()
+        .expect("borrow fixture must have defined execution")
 }
 
 #[test]
@@ -54,7 +60,7 @@ fn exclusive_loan_controls_storage_across_move_and_replacement() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(
         report.verification_events,
@@ -131,7 +137,7 @@ fn loan_relative_projection_resolves_to_concrete_subplace() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert!(
         report
             .verification_events
@@ -176,7 +182,7 @@ fn defined_fault_ends_active_borrow_before_cleanup() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("BORROW_FAULT".into())
