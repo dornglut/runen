@@ -1,5 +1,6 @@
 use crate::{
-    GroupId, HierarchyFixture, IterationId, SubgroupId, coverage::has_exact_unique_coverage,
+    EachId, GroupId, HierarchyFixture, IterationId, SubgroupId,
+    coverage::has_exact_unique_coverage,
 };
 
 /// Verification-only identity token for one dynamic structured barrier fixture.
@@ -44,21 +45,33 @@ pub enum BarrierError {
 /// Validated verification-only structured barrier over one selected cohort.
 ///
 /// The participant collection is private and has no semantic enumeration order.
-/// This fixture is not a source barrier API, runtime rendezvous object, or atomic
-/// memory-scope representation.
+/// The fixture retains the dynamic `each` identity containing that cohort so a
+/// foreign iteration cannot retarget by private-token coincidence. This fixture is
+/// not a source barrier API, runtime rendezvous object, or atomic memory-scope
+/// representation.
 pub struct BarrierFixture {
     id: BarrierId,
+    each: EachId,
     participants: Vec<IterationId>,
 }
 
 impl BarrierFixture {
-    pub fn root(id: BarrierId, required_iterations: &[IterationId]) -> Result<Self, BarrierError> {
-        if !has_exact_unique_coverage(required_iterations, required_iterations) {
+    pub fn root(
+        id: BarrierId,
+        each: EachId,
+        required_iterations: &[IterationId],
+    ) -> Result<Self, BarrierError> {
+        if required_iterations
+            .iter()
+            .any(|iteration| iteration.each() != each)
+            || !has_exact_unique_coverage(required_iterations, required_iterations)
+        {
             return Err(BarrierError::InvalidRootIterations);
         }
 
         Ok(Self {
             id,
+            each,
             participants: required_iterations.to_vec(),
         })
     }
@@ -71,8 +84,17 @@ impl BarrierFixture {
         let participants = hierarchy
             .group_members(group)
             .ok_or(BarrierError::UnknownGroup)?;
+        let each = participants
+            .first()
+            .copied()
+            .expect("validated hierarchy groups are non-empty")
+            .each();
 
-        Ok(Self { id, participants })
+        Ok(Self {
+            id,
+            each,
+            participants,
+        })
     }
 
     pub fn subgroup(
@@ -83,8 +105,17 @@ impl BarrierFixture {
         let participants = hierarchy
             .subgroup_members(subgroup)
             .ok_or(BarrierError::UnknownSubgroup)?;
+        let each = participants
+            .first()
+            .copied()
+            .expect("validated hierarchy subgroups are non-empty")
+            .each();
 
-        Ok(Self { id, participants })
+        Ok(Self {
+            id,
+            each,
+            participants,
+        })
     }
 
     #[must_use]
@@ -125,6 +156,6 @@ impl BarrierFixture {
     }
 
     fn is_participant(&self, iteration: IterationId) -> bool {
-        self.participants.contains(&iteration)
+        iteration.each() == self.each && self.participants.contains(&iteration)
     }
 }
