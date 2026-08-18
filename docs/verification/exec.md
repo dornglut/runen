@@ -24,7 +24,7 @@ Required cases:
 - Core interior mutability under shared aliases does not by itself legalize overlapping state-changing accesses from source-unordered Exec work;
 - for Core-origin structural storage, root/descendant overlap and sibling-field disjointness are consumed as Core-owned facts rather than redefined by Exec.
 
-These obligations do not authorize atomics, reductions, commutative accumulation, collectives, barriers, or other synchronization mechanisms whose normative contracts remain open.
+These obligations do not authorize atomics, commutative accumulation, collectives, barriers, or other synchronization mechanisms whose normative contracts remain open. Identity-bearing unordered reduction is covered separately below.
 
 ## Buffer logical-region boundary
 
@@ -76,7 +76,27 @@ Required cases:
 - the normal join boundary makes no claim about an iteration that faults, is cancelled, diverges, or otherwise fails to complete normally;
 - backend queue order, worker order, host thread timing, lane order, chunk order, and physical serialization are not semantic oracles for sibling iteration order.
 
-These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, barriers, reductions, collectives, or execution hierarchy.
+These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, barriers, collectives, or execution hierarchy.
+
+## Identity-bearing unordered reduction boundary
+
+These cases exercise the reduction interaction owned by `spec/language/exec/parallelism.md`. Reduction contributions are not modeled as ordinary accesses to a shared accumulator, while ordinary accesses performed outside the reduction interaction remain subject to the ordinary conflict rules.
+
+Required cases:
+
+- unordered reduction is admitted only when the represented operator contract establishes two-sided identity, associativity, and commutativity under its applicable result relation;
+- failure to establish any one of those three obligations rejects this unordered reduction form;
+- the empty semantic contribution collection yields the explicit identity value;
+- every semantic contribution occurrence is incorporated exactly once, including distinct contributions that carry semantically equal values;
+- contribution coverage is insensitive to contribution ordering but rejects omitted, duplicated, invented, or ambiguous duplicate fixture identities;
+- lawful test-local exact combination produces the same result across distinct contribution permutations and binary tree shapes;
+- additional identity-valued physical partial initialization is permitted only as neutral realization state and does not count as a semantic contribution;
+- physical worker, lane, chunk, queue, partial-accumulator, and tree order are not semantic input;
+- reduction admission does not legalize an overlapping ordinary sibling read/write or write/write conflict;
+- a normally completed `each` carrying a reduction exposes its result to normal continuation only after all required iterations complete normally and all produced semantic contributions are incorporated;
+- no result or partial-result contract is inferred for iteration fault, cancellation, divergence, or other abnormal completion.
+
+Arithmetic used in an executable fixture is test-local evidence only. It must use values that avoid overflow or representation questions and does not define Runen integer, floating-point, or reduction-operator semantics.
 
 ## Executable oracle coverage
 
@@ -85,9 +105,10 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
 - ordinary read/state-change conflict classification;
 - the cross-phase `each` normal entry/completion ordering relation, with no sibling or intra-iteration order;
-- a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas.
+- a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
+- unordered-reduction law admission and exact unordered semantic-contribution coverage.
 
-Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, and finite collections are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, versioning, physical allocation, scheduling, or backend representation.
+Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, contribution tokens, finite collections, and reduction-law flags are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, contribution order, operator traits, versioning, physical allocation, scheduling, or backend representation.
 
 ## Future executable evidence
 
