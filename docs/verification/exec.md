@@ -2,13 +2,13 @@
 
 Status: **non-normative conformance-obligation documentation**
 
-This document records focused assurance obligations for the currently accepted Exec semantic slices. It does not define Runen semantics, conformance profiles, compiler architecture, or repository CI.
+This document records focused assurance obligations for defined Exec semantic slices. It does not define Runen semantics, conformance profiles, compiler architecture, or repository CI.
 
 The normative ordinary-access rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
 
 ## Ordinary unordered-access boundary
 
-The repository does not yet have an accepted executable Exec representation. The first Exec memory slice is therefore evidenced with focused semantic litmus obligations rather than by inventing an Exec IR, scheduler, runtime, or backend model solely for testing.
+The repository does not yet have an accepted executable Exec representation. The ordinary-access boundary is therefore evidenced with focused semantic litmus obligations rather than by inventing an Exec IR, scheduler, runtime, or backend model solely for testing.
 
 In the cases below, region identity and overlap come from the canonical owner of the accessed storage or resource. `unordered` means that the language semantics provide no relative order between the two pieces of work; incidental backend execution order is ignored.
 
