@@ -89,13 +89,8 @@ pub struct ExecutionReport {
 /// taxonomy for the language.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndefinedBehaviorKind {
-    RawReadTargetNotLive {
-        target: StorageRegion,
-    },
-    RawReadConflictsWithExclusiveLoan {
-        target: StorageRegion,
-        loan: LoanId,
-    },
+    RawReadTargetNotLive { target: StorageRegion },
+    RawReadConflictsWithExclusiveLoan { target: StorageRegion, loan: LoanId },
 }
 
 /// Reference-oracle report for an execution that entered undefined behavior.
@@ -370,10 +365,8 @@ impl Machine {
             });
         }
 
-        self.verification_events.push(VerificationEvent::RawRead {
-            pointer,
-            target,
-        });
+        self.verification_events
+            .push(VerificationEvent::RawRead { pointer, target });
         Ok(())
     }
 
@@ -436,7 +429,9 @@ impl Machine {
 
     fn raw_pointer_at(&self, place: &Place) -> RawPointerValue {
         match place_state(&self.locals, place) {
-            ObjectState::Leaf(LeafState::Live(RuntimeValue::RawPointer(pointer))) => pointer.clone(),
+            ObjectState::Leaf(LeafState::Live(RuntimeValue::RawPointer(pointer))) => {
+                pointer.clone()
+            }
             _ => unreachable!("validated RawRead reaches a fully-live raw-pointer value"),
         }
     }
