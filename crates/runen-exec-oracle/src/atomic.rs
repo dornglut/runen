@@ -50,17 +50,38 @@ impl AtomicValueToken {
     }
 }
 
+/// Verification-only classification of the exchange synchronization semantics
+/// represented by one occurrence.
+///
+/// These variants do not freeze source memory-order spellings or define a complete
+/// future atomic-order enumeration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomicExchangeSemantics {
+    Base,
+    Release,
+    Acquire,
+}
+
 /// Verification-only description of one semantic atomic exchange occurrence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicExchange {
     id: AtomicExchangeId,
     desired: AtomicValueToken,
+    semantics: AtomicExchangeSemantics,
 }
 
 impl AtomicExchange {
     #[must_use]
-    pub const fn new(id: AtomicExchangeId, desired: AtomicValueToken) -> Self {
-        Self { id, desired }
+    pub const fn new(
+        id: AtomicExchangeId,
+        desired: AtomicValueToken,
+        semantics: AtomicExchangeSemantics,
+    ) -> Self {
+        Self {
+            id,
+            desired,
+            semantics,
+        }
     }
 }
 
@@ -158,6 +179,9 @@ impl AtomicExchangeFixture {
 
         let mut current = self.initial;
         let mut prior_values = Vec::with_capacity(candidate_order.len());
+        let mut predecessors = Vec::with_capacity(candidate_order.len());
+        let mut semantics = Vec::with_capacity(candidate_order.len());
+        let mut previous = None;
 
         for exchange_id in candidate_order {
             let exchange = self
@@ -166,12 +190,17 @@ impl AtomicExchangeFixture {
                 .find(|exchange| exchange.id == *exchange_id)
                 .expect("exact coverage guarantees represented exchange presence");
             prior_values.push((exchange.id, current));
+            predecessors.push((exchange.id, previous));
+            semantics.push((exchange.id, exchange.semantics));
             current = exchange.desired;
+            previous = Some(exchange.id);
         }
 
         Ok(AtomicExchangeRealization {
             location: self.location,
             prior_values,
+            predecessors,
+            semantics,
             final_value: current,
         })
     }
@@ -183,6 +212,8 @@ impl AtomicExchangeFixture {
 pub struct AtomicExchangeRealization {
     location: AtomicLocationId,
     prior_values: Vec<(AtomicExchangeId, AtomicValueToken)>,
+    predecessors: Vec<(AtomicExchangeId, Option<AtomicExchangeId>)>,
+    semantics: Vec<(AtomicExchangeId, AtomicExchangeSemantics)>,
     final_value: AtomicValueToken,
 }
 
@@ -198,8 +229,43 @@ impl AtomicExchangeRealization {
             .find_map(|(candidate, prior)| (*candidate == exchange).then_some(*prior))
     }
 
+    /// Whether the named represented Release exchange directly synchronizes with
+    /// the named represented Acquire exchange under the accepted direct-predecessor
+    /// relation.
+    #[must_use]
+    pub fn release_acquire_synchronizes(
+        &self,
+        release: AtomicExchangeId,
+        acquire: AtomicExchangeId,
+    ) -> bool {
+        if release.location() != self.location || acquire.location() != self.location {
+            return false;
+        }
+
+        self.semantics_of(release) == Some(AtomicExchangeSemantics::Release)
+            && self.semantics_of(acquire) == Some(AtomicExchangeSemantics::Acquire)
+            && self.immediate_predecessor(acquire) == Some(release)
+    }
+
     #[must_use]
     pub const fn final_value(&self) -> AtomicValueToken {
         self.final_value
+    }
+
+    fn immediate_predecessor(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeId> {
+        if exchange.location() != self.location {
+            return None;
+        }
+
+        self.predecessors
+            .iter()
+            .find_map(|(candidate, predecessor)| (*candidate == exchange).then_some(*predecessor))
+            .flatten()
+    }
+
+    fn semantics_of(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeSemantics> {
+        self.semantics
+            .iter()
+            .find_map(|(candidate, semantics)| (*candidate == exchange).then_some(*semantics))
     }
 }
