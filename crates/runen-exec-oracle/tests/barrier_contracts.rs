@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
     Access, AccessKind, BarrierError, BarrierFixture, BarrierId, BufferId, BufferRegion, GroupId,
-    HierarchyFixture, HierarchyId, HierarchyMembership, IterationId, LogicalBufferState, PositionId,
-    SubgroupId, ValueToken,
+    HierarchyFixture, HierarchyId, HierarchyMembership, IterationId, LogicalBufferState,
+    PositionId, SubgroupId, ValueToken,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -111,7 +111,11 @@ fn subgroup_barrier_selects_exact_group_scoped_subgroup() {
     assert!(second.before(IterationId(1)).is_none());
 
     assert!(matches!(
-        BarrierFixture::subgroup(BarrierId::new(9), &hierarchy, SubgroupId::new(group(10), 99)),
+        BarrierFixture::subgroup(
+            BarrierId::new(9),
+            &hierarchy,
+            SubgroupId::new(group(10), 99)
+        ),
         Err(BarrierError::UnknownSubgroup)
     ));
 }
@@ -154,12 +158,9 @@ fn barrier_requires_exact_participant_before_completion() {
 #[test]
 fn barrier_orders_every_participant_before_every_participant_after() {
     let hierarchy = hierarchy();
-    let barrier = BarrierFixture::subgroup(
-        BarrierId::new(7),
-        &hierarchy,
-        SubgroupId::new(group(10), 1),
-    )
-    .unwrap();
+    let barrier =
+        BarrierFixture::subgroup(BarrierId::new(7), &hierarchy, SubgroupId::new(group(10), 1))
+            .unwrap();
     let before_first = barrier.before(IterationId(1)).unwrap();
     let before_second = barrier.before(IterationId(2)).unwrap();
     let after_first = barrier.after(IterationId(1)).unwrap();
@@ -192,12 +193,9 @@ fn barrier_supplies_no_same_phase_or_cross_identity_order() {
 #[test]
 fn nonparticipants_cannot_gain_barrier_phase_or_order() {
     let hierarchy = hierarchy();
-    let barrier = BarrierFixture::subgroup(
-        BarrierId::new(7),
-        &hierarchy,
-        SubgroupId::new(group(10), 1),
-    )
-    .unwrap();
+    let barrier =
+        BarrierFixture::subgroup(BarrierId::new(7), &hierarchy, SubgroupId::new(group(10), 1))
+            .unwrap();
 
     assert!(barrier.before(IterationId(3)).is_none());
     assert!(barrier.after(IterationId(3)).is_none());
