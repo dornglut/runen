@@ -444,10 +444,7 @@ pub enum Statement {
     /// compatibility for the target write remains an unsafe execution precondition.
     /// The operation reuses Core replacement semantics without creating a general
     /// dereferenced-place representation.
-    RawAssign {
-        pointer: PlaceAccess,
-        src: Operand,
-    },
+    RawAssign { pointer: PlaceAccess, src: Operand },
     /// Ordinary mutable write/replacement/re-initialization.
     ///
     /// This requires exclusive alias authority and containing-local assignment
