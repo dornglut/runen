@@ -1,6 +1,6 @@
 use runen_exec_oracle::{
     Access, AccessKind, BufferId, BufferRegion, PositionId, TaskId, TaskScopePhase,
-    TaskStateRetention, all_state_is_detach_safe, has_exact_attached_completion,
+    TaskStateRetention, all_state_dependencies_are_detach_safe, has_exact_attached_completion,
     state_is_detach_safe, task_scope_orders,
 };
 
@@ -31,7 +31,7 @@ fn normal_scope_completion_requires_exact_unordered_attached_child_coverage() {
 fn structured_scope_orders_attached_children_only_before_normal_continuation() {
     let first = TaskScopePhase::AttachedChild(TaskId(1));
     let second = TaskScopePhase::AttachedChild(TaskId(2));
-    let detached = TaskScopePhase::DetachedChild(TaskId(3));
+    let detached = TaskScopePhase::DetachedFromScope(TaskId(3));
 
     assert!(task_scope_orders(first, TaskScopePhase::After));
     assert!(task_scope_orders(second, TaskScopePhase::After));
@@ -50,12 +50,12 @@ fn only_owned_or_independently_retained_state_is_detach_safe() {
         TaskStateRetention::IndependentlyRetained
     ));
 
-    assert!(all_state_is_detach_safe(&[]));
-    assert!(all_state_is_detach_safe(&[
+    assert!(all_state_dependencies_are_detach_safe(&[]));
+    assert!(all_state_dependencies_are_detach_safe(&[
         TaskStateRetention::Owned,
         TaskStateRetention::IndependentlyRetained,
     ]));
-    assert!(!all_state_is_detach_safe(&[
+    assert!(!all_state_dependencies_are_detach_safe(&[
         TaskStateRetention::Owned,
         TaskStateRetention::ScopeBound,
     ]));
