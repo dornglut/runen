@@ -1,4 +1,4 @@
-use crate::coverage::has_exact_unique_coverage;
+use crate::{EachId, coverage::has_exact_unique_coverage};
 
 /// Verification-only opaque identity for one semantic atomic location.
 ///
@@ -63,12 +63,24 @@ pub enum AtomicExchangeSemantics {
     AcquireRelease,
 }
 
+/// Verification-only synchronization-scope classification for one atomic exchange.
+///
+/// `Root` consumes the identity of one dynamic `each` root cohort. These variants
+/// are not source memory-scope spellings, a hardware scope lattice, hierarchy
+/// topology, or scheduling metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomicExchangeScope {
+    Unscoped,
+    Root(EachId),
+}
+
 /// Verification-only description of one semantic atomic exchange occurrence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicExchange {
     id: AtomicExchangeId,
     desired: AtomicValueToken,
     semantics: AtomicExchangeSemantics,
+    scope: AtomicExchangeScope,
 }
 
 impl AtomicExchange {
@@ -77,11 +89,13 @@ impl AtomicExchange {
         id: AtomicExchangeId,
         desired: AtomicValueToken,
         semantics: AtomicExchangeSemantics,
+        scope: AtomicExchangeScope,
     ) -> Self {
         Self {
             id,
             desired,
             semantics,
+            scope,
         }
     }
 }
@@ -99,7 +113,8 @@ pub enum AtomicExchangeError {
 /// Validated verification-only exchange set for one semantic atomic location.
 ///
 /// Exchange storage order is not semantic modification order. A candidate
-/// modification order is supplied only when checking one realization.
+/// modification order is supplied only when checking one realization. Exchange
+/// synchronization scope does not partition or duplicate that location-local order.
 pub struct AtomicExchangeFixture {
     location: AtomicLocationId,
     initial: AtomicValueToken,
@@ -182,6 +197,7 @@ impl AtomicExchangeFixture {
         let mut prior_values = Vec::with_capacity(candidate_order.len());
         let mut predecessors = Vec::with_capacity(candidate_order.len());
         let mut semantics = Vec::with_capacity(candidate_order.len());
+        let mut scopes = Vec::with_capacity(candidate_order.len());
         let mut previous = None;
 
         for exchange_id in candidate_order {
@@ -193,6 +209,7 @@ impl AtomicExchangeFixture {
             prior_values.push((exchange.id, current));
             predecessors.push((exchange.id, previous));
             semantics.push((exchange.id, exchange.semantics));
+            scopes.push((exchange.id, exchange.scope));
             current = exchange.desired;
             previous = Some(exchange.id);
         }
@@ -202,6 +219,7 @@ impl AtomicExchangeFixture {
             prior_values,
             predecessors,
             semantics,
+            scopes,
             final_value: current,
         })
     }
@@ -215,6 +233,7 @@ pub struct AtomicExchangeRealization {
     prior_values: Vec<(AtomicExchangeId, AtomicValueToken)>,
     predecessors: Vec<(AtomicExchangeId, Option<AtomicExchangeId>)>,
     semantics: Vec<(AtomicExchangeId, AtomicExchangeSemantics)>,
+    scopes: Vec<(AtomicExchangeId, AtomicExchangeScope)>,
     final_value: AtomicValueToken,
 }
 
@@ -231,7 +250,8 @@ impl AtomicExchangeRealization {
     }
 
     /// Whether the named release-capable exchange directly synchronizes with the
-    /// named acquire-capable exchange under the accepted direct-predecessor relation.
+    /// named acquire-capable exchange under the accepted direct-predecessor and
+    /// synchronization-scope relations.
     #[must_use]
     pub fn release_acquire_synchronizes(
         &self,
@@ -248,7 +268,8 @@ impl AtomicExchangeRealization {
         ) && matches!(
             self.semantics_of(acquire),
             Some(AtomicExchangeSemantics::Acquire | AtomicExchangeSemantics::AcquireRelease)
-        ) && self.immediate_predecessor(acquire) == Some(release)
+        ) && self.scopes_are_compatible(release, acquire)
+            && self.immediate_predecessor(acquire) == Some(release)
     }
 
     #[must_use]
@@ -271,5 +292,21 @@ impl AtomicExchangeRealization {
         self.semantics
             .iter()
             .find_map(|(candidate, semantics)| (*candidate == exchange).then_some(*semantics))
+    }
+
+    fn scope_of(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeScope> {
+        self.scopes
+            .iter()
+            .find_map(|(candidate, scope)| (*candidate == exchange).then_some(*scope))
+    }
+
+    fn scopes_are_compatible(&self, release: AtomicExchangeId, acquire: AtomicExchangeId) -> bool {
+        match (self.scope_of(release), self.scope_of(acquire)) {
+            (Some(AtomicExchangeScope::Unscoped), Some(AtomicExchangeScope::Unscoped)) => true,
+            (Some(AtomicExchangeScope::Root(release_each)), Some(AtomicExchangeScope::Root(acquire_each))) => {
+                release_each == acquire_each
+            }
+            _ => false,
+        }
     }
 }
