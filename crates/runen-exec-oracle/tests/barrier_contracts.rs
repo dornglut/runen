@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
-    Access, AccessKind, BarrierId, BarrierPhase, BufferId, BufferRegion, IterationId,
-    LogicalBufferState, PositionId, ValueToken, barrier_orders, has_exact_before_phase_completion,
+    Access, AccessKind, BarrierError, BarrierFixture, BarrierId, BufferId, BufferRegion, GroupId,
+    HierarchyFixture, HierarchyMembership, IterationId, LogicalBufferState, PositionId, SubgroupId,
+    ValueToken,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -20,137 +21,205 @@ fn state(buffer: u32, entries: &[(u32, u32)]) -> LogicalBufferState {
     )
 }
 
-#[test]
-fn structured_barrier_requires_exact_before_phase_coverage() {
-    let required = [IterationId(1), IterationId(2), IterationId(3)];
-    let permutation = [IterationId(3), IterationId(1), IterationId(2)];
-    let missing = [IterationId(1), IterationId(3)];
-    let duplicated = [IterationId(1), IterationId(1), IterationId(3)];
-    let invented = [IterationId(1), IterationId(2), IterationId(4)];
+fn membership(iteration: u32, group: u32, subgroup: u32) -> HierarchyMembership {
+    let group = GroupId::new(group);
+    HierarchyMembership::new(IterationId(iteration), SubgroupId::new(group, subgroup))
+}
 
-    assert!(has_exact_before_phase_completion(&required, &permutation));
-    assert!(!has_exact_before_phase_completion(&required, &missing));
-    assert!(!has_exact_before_phase_completion(&required, &duplicated));
-    assert!(!has_exact_before_phase_completion(&required, &invented));
-    assert!(!has_exact_before_phase_completion(
-        &[IterationId(1), IterationId(1)],
-        &[IterationId(1), IterationId(1)]
+fn hierarchy() -> HierarchyFixture {
+    HierarchyFixture::new(
+        &[
+            IterationId(1),
+            IterationId(2),
+            IterationId(3),
+            IterationId(4),
+        ],
+        vec![
+            membership(1, 10, 1),
+            membership(2, 10, 1),
+            membership(3, 10, 2),
+            membership(4, 20, 1),
+        ],
+    )
+    .unwrap()
+}
+
+#[test]
+fn root_barrier_preserves_full_each_participation_and_empty_behavior() {
+    let barrier = BarrierFixture::root(
+        BarrierId::new(7),
+        &[IterationId(1), IterationId(2), IterationId(3)],
+    )
+    .unwrap();
+
+    assert!(barrier.before(IterationId(1)).is_some());
+    assert!(barrier.before(IterationId(2)).is_some());
+    assert!(barrier.before(IterationId(3)).is_some());
+    assert!(barrier.before(IterationId(4)).is_none());
+
+    let empty = BarrierFixture::root(BarrierId::new(8), &[]).unwrap();
+    assert!(empty.has_exact_before_completion(&[]));
+    assert!(empty.before(IterationId(1)).is_none());
+
+    assert!(matches!(
+        BarrierFixture::root(BarrierId::new(9), &[IterationId(1), IterationId(1)]),
+        Err(BarrierError::InvalidRootIterations)
     ));
-    assert!(has_exact_before_phase_completion(&[], &[]));
 }
 
 #[test]
-fn barrier_orders_every_before_participant_before_every_after_participant() {
-    let barrier = BarrierId(7);
-    let before_first = BarrierPhase::Before {
-        barrier,
-        iteration: IterationId(1),
-    };
-    let before_second = BarrierPhase::Before {
-        barrier,
-        iteration: IterationId(2),
-    };
-    let after_first = BarrierPhase::After {
-        barrier,
-        iteration: IterationId(1),
-    };
-    let after_second = BarrierPhase::After {
-        barrier,
-        iteration: IterationId(2),
-    };
+fn group_barrier_selects_exact_existing_group() {
+    let hierarchy = hierarchy();
+    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, GroupId::new(10)).unwrap();
 
-    assert!(barrier_orders(before_first, after_first));
-    assert!(barrier_orders(before_first, after_second));
-    assert!(barrier_orders(before_second, after_first));
-    assert!(barrier_orders(before_second, after_second));
+    assert!(barrier.before(IterationId(1)).is_some());
+    assert!(barrier.before(IterationId(2)).is_some());
+    assert!(barrier.before(IterationId(3)).is_some());
+    assert!(barrier.before(IterationId(4)).is_none());
+
+    assert!(matches!(
+        BarrierFixture::group(BarrierId::new(8), &hierarchy, GroupId::new(99)),
+        Err(BarrierError::UnknownGroup)
+    ));
 }
 
 #[test]
-fn barrier_supplies_no_within_phase_or_cross_identity_order() {
-    let first_barrier = BarrierId(7);
-    let second_barrier = BarrierId(8);
-    let before_first = BarrierPhase::Before {
-        barrier: first_barrier,
-        iteration: IterationId(1),
-    };
-    let before_second = BarrierPhase::Before {
-        barrier: first_barrier,
-        iteration: IterationId(2),
-    };
-    let after_first = BarrierPhase::After {
-        barrier: first_barrier,
-        iteration: IterationId(1),
-    };
-    let after_second = BarrierPhase::After {
-        barrier: first_barrier,
-        iteration: IterationId(2),
-    };
-    let other_after = BarrierPhase::After {
-        barrier: second_barrier,
-        iteration: IterationId(2),
-    };
+fn subgroup_barrier_selects_exact_group_scoped_subgroup() {
+    let hierarchy = hierarchy();
+    let first_group = SubgroupId::new(GroupId::new(10), 1);
+    let second_group = SubgroupId::new(GroupId::new(20), 1);
+    let first = BarrierFixture::subgroup(BarrierId::new(7), &hierarchy, first_group).unwrap();
+    let second = BarrierFixture::subgroup(BarrierId::new(8), &hierarchy, second_group).unwrap();
 
-    assert!(!barrier_orders(before_first, before_second));
-    assert!(!barrier_orders(before_second, before_first));
-    assert!(!barrier_orders(after_first, after_second));
-    assert!(!barrier_orders(after_second, after_first));
-    assert!(!barrier_orders(before_first, other_after));
+    assert_ne!(first_group, second_group);
+    assert!(first.before(IterationId(1)).is_some());
+    assert!(first.before(IterationId(2)).is_some());
+    assert!(first.before(IterationId(3)).is_none());
+    assert!(first.before(IterationId(4)).is_none());
+    assert!(second.before(IterationId(4)).is_some());
+    assert!(second.before(IterationId(1)).is_none());
+
+    assert!(matches!(
+        BarrierFixture::subgroup(
+            BarrierId::new(9),
+            &hierarchy,
+            SubgroupId::new(GroupId::new(10), 99)
+        ),
+        Err(BarrierError::UnknownSubgroup)
+    ));
 }
 
 #[test]
-fn barrier_orders_a_conflicting_cross_phase_pair_without_erasing_conflict() {
+fn barrier_requires_exact_participant_before_completion() {
+    let hierarchy = hierarchy();
+    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, GroupId::new(10)).unwrap();
+
+    assert!(barrier.has_exact_before_completion(&[IterationId(3), IterationId(1), IterationId(2)]));
+    assert!(!barrier.has_exact_before_completion(&[IterationId(1), IterationId(2)]));
+    assert!(!barrier.has_exact_before_completion(&[
+        IterationId(1),
+        IterationId(1),
+        IterationId(3)
+    ]));
+    assert!(!barrier.has_exact_before_completion(&[
+        IterationId(1),
+        IterationId(2),
+        IterationId(4)
+    ]));
+}
+
+#[test]
+fn barrier_orders_every_participant_before_every_participant_after() {
+    let hierarchy = hierarchy();
+    let barrier = BarrierFixture::subgroup(
+        BarrierId::new(7),
+        &hierarchy,
+        SubgroupId::new(GroupId::new(10), 1),
+    )
+    .unwrap();
+    let before_first = barrier.before(IterationId(1)).unwrap();
+    let before_second = barrier.before(IterationId(2)).unwrap();
+    let after_first = barrier.after(IterationId(1)).unwrap();
+    let after_second = barrier.after(IterationId(2)).unwrap();
+
+    assert!(barrier.orders(before_first, after_first));
+    assert!(barrier.orders(before_first, after_second));
+    assert!(barrier.orders(before_second, after_first));
+    assert!(barrier.orders(before_second, after_second));
+}
+
+#[test]
+fn barrier_supplies_no_same_phase_or_cross_identity_order() {
+    let required = [IterationId(1), IterationId(2)];
+    let first = BarrierFixture::root(BarrierId::new(7), &required).unwrap();
+    let second = BarrierFixture::root(BarrierId::new(8), &required).unwrap();
+    let before_first = first.before(IterationId(1)).unwrap();
+    let before_second = first.before(IterationId(2)).unwrap();
+    let after_first = first.after(IterationId(1)).unwrap();
+    let after_second = first.after(IterationId(2)).unwrap();
+    let other_after = second.after(IterationId(2)).unwrap();
+
+    assert!(!first.orders(before_first, before_second));
+    assert!(!first.orders(before_second, before_first));
+    assert!(!first.orders(after_first, after_second));
+    assert!(!first.orders(after_second, after_first));
+    assert!(!first.orders(before_first, other_after));
+}
+
+#[test]
+fn nonparticipants_cannot_gain_barrier_phase_or_order() {
+    let hierarchy = hierarchy();
+    let barrier = BarrierFixture::subgroup(
+        BarrierId::new(7),
+        &hierarchy,
+        SubgroupId::new(GroupId::new(10), 1),
+    )
+    .unwrap();
+
+    assert!(barrier.before(IterationId(3)).is_none());
+    assert!(barrier.after(IterationId(3)).is_none());
+    assert!(barrier.before(IterationId(4)).is_none());
+    assert!(barrier.after(IterationId(4)).is_none());
+}
+
+#[test]
+fn barrier_orders_conflicting_cross_phase_pair_without_erasing_conflict() {
     let selected = region(1, &[0]);
     let before_change = Access::new(AccessKind::StateChange, selected.clone());
     let after_read = Access::new(AccessKind::Read, selected);
-    let barrier = BarrierId(7);
+    let barrier =
+        BarrierFixture::root(BarrierId::new(7), &[IterationId(1), IterationId(2)]).unwrap();
+    let before = barrier.before(IterationId(1)).unwrap();
+    let after = barrier.after(IterationId(2)).unwrap();
 
     assert!(before_change.conflicts_with(&after_read));
-    assert!(barrier_orders(
-        BarrierPhase::Before {
-            barrier,
-            iteration: IterationId(1),
-        },
-        BarrierPhase::After {
-            barrier,
-            iteration: IterationId(2),
-        }
-    ));
+    assert!(barrier.orders(before, after));
 }
 
 #[test]
 fn same_phase_sibling_conflict_remains_unordered() {
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
     let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
-    let barrier = BarrierId(7);
-    let first_before = BarrierPhase::Before {
-        barrier,
-        iteration: IterationId(1),
-    };
-    let second_before = BarrierPhase::Before {
-        barrier,
-        iteration: IterationId(2),
-    };
+    let barrier =
+        BarrierFixture::root(BarrierId::new(7), &[IterationId(1), IterationId(2)]).unwrap();
+    let first_before = barrier.before(IterationId(1)).unwrap();
+    let second_before = barrier.before(IterationId(2)).unwrap();
 
     assert!(first_access.conflicts_with(&second_access));
-    assert!(!barrier_orders(first_before, second_before));
-    assert!(!barrier_orders(second_before, first_before));
+    assert!(!barrier.orders(first_before, second_before));
+    assert!(!barrier.orders(second_before, first_before));
 }
 
 #[test]
-fn barrier_order_composes_with_logical_buffer_state() {
+fn participant_barrier_order_composes_with_logical_buffer_state() {
+    let hierarchy = hierarchy();
     let selected = region(1, &[0]);
-    let barrier = BarrierId(7);
-    let before = BarrierPhase::Before {
-        barrier,
-        iteration: IterationId(1),
-    };
-    let after = BarrierPhase::After {
-        barrier,
-        iteration: IterationId(2),
-    };
+    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, GroupId::new(10)).unwrap();
+    let before = barrier.before(IterationId(1)).unwrap();
+    let after = barrier.after(IterationId(2)).unwrap();
     let mut logical = state(1, &[(0, 10)]);
 
-    assert!(barrier_orders(before, after));
+    assert!(barrier.orders(before, after));
     logical.apply_change(&selected, ValueToken(20)).unwrap();
 
     assert_eq!(

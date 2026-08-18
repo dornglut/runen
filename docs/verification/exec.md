@@ -76,7 +76,7 @@ Required cases:
 - the normal join boundary makes no claim about an iteration that faults, is cancelled, diverges, or otherwise fails to complete normally;
 - backend queue order, worker order, host thread timing, lane order, chunk order, and physical serialization are not semantic oracles for sibling iteration order.
 
-These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, or collectives. The hierarchy and full-`each` structured barrier contracts are covered separately below.
+These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, or collectives. The hierarchy and structured-barrier contracts are covered separately below.
 
 ## Group and subgroup hierarchy boundary
 
@@ -94,31 +94,43 @@ Required cases:
 - reordering the private finite membership storage does not change membership, same-group, or same-subgroup results;
 - group and subgroup identities expose equality only and do not become numeric indices, coordinates, lanes, hardware cohorts, or scheduling order;
 - hierarchy membership supplies no sibling iteration order and does not legalize an otherwise-conflicting ordinary sibling access;
-- the existing full-`each` structured barrier remains rooted at the complete required iteration set and is unaffected by hierarchy membership alone.
+- root-barrier participation remains the complete required `each` set independent of hierarchy membership, while narrower barriers require an explicit group or subgroup selection.
 
 `GroupId`, group-scoped `SubgroupId`, `HierarchyMembership`, and the finite hierarchy fixture are verification representation only. They do not define source hierarchy syntax, hierarchy selection/admission, group or subgroup sizes, dimensions, coordinates, enumeration order, launch geometry, runtime worker topology, or hardware subgroup identity.
 
-These obligations do not define group/subgroup barriers, partial-cohort synchronization, atomic or fence scope, collectives, group-local storage, broadcast, shuffle, scans, or any other hierarchy-sensitive operation. Such operations require their own normative contracts before executable evidence is extended to cover them.
+These obligations do not define atomic or fence scope, collectives, group-local storage, broadcast, shuffle, scans, or any other hierarchy-sensitive operation beyond the structured barrier covered separately below. Such operations require their own normative contracts before executable evidence is extended to cover them.
 
-## Full-`each` structured barrier boundary
+## Cohort-scoped structured barrier boundary
 
-These cases exercise the structured phase boundary owned by `spec/language/exec/parallelism.md` and the ordinary-access synchronization relation owned by `spec/language/exec/memory-model.md`. The barrier is modeled as a full-`each` phase cut rather than an imperative lane-level operation.
+These cases exercise the selected-cohort phase boundary owned by `spec/language/exec/parallelism.md` and the participant ordinary-access synchronization relation owned by `spec/language/exec/memory-model.md`. The barrier remains a structured phase cut rather than an imperative lane-level operation.
 
 Required cases:
 
-- the required participants of one barrier fixture are exactly the iterations required by the enclosing `each` fixture;
-- normal barrier completion requires exact before-phase completion by every required iteration, independent of participant completion-list order;
-- missing, duplicate, invented, or ambiguous duplicate fixture iteration identities reject exact before-phase completion coverage;
-- every before-barrier participant is ordered before every after-barrier participant of the same barrier instance;
-- sibling before phases receive no relative order from the barrier;
-- sibling after phases receive no relative order from the barrier;
-- distinct barrier fixture identities create no order by identity alone;
-- an overlapping ordinary read/write or write/write pair remains a conflict even when the same barrier orders the before-phase access before the after-phase access;
-- same-phase overlapping sibling state-changing accesses remain unordered and conflicting absent another interaction contract;
-- a permitted logical Buffer state change in a before phase is present in the logical state read by an ordered after-phase fixture;
+- a root barrier selects exactly the complete required `each` iteration set without requiring a hierarchy, including an empty root cohort;
+- duplicate required root fixture iteration identities are rejected;
+- a group barrier selects exactly one existing group from a validated hierarchy and rejects an unknown group;
+- a subgroup barrier selects exactly one existing group-scoped subgroup and rejects an unknown subgroup;
+- equal private subgroup tokens under distinct groups select distinct subgroup cohorts;
+- a group barrier excludes iterations belonging to other groups;
+- a subgroup barrier excludes same-group iterations belonging to other subgroups and all iterations in other groups;
+- the exact participant set is private verification state and supplies no public enumeration order;
+- barrier before/after phase points can be obtained only for actual participants; nonparticipants cannot fabricate phase participation through the public oracle API;
+- normal barrier completion requires exact before-phase completion by every participant, independent of completion-list order;
+- missing, duplicate, or invented completion identities reject exact before-phase completion coverage;
+- every participant before-barrier phase is ordered before every participant after-barrier phase of the same barrier instance;
+- sibling participant before phases receive no relative order from the barrier;
+- sibling participant after phases receive no relative order from the barrier;
+- a nonparticipant receives no phase, completion obligation, ordinary-access order, or Buffer visibility consequence from the barrier;
+- distinct barrier fixture identities create no order by identity or cohort relationship alone;
+- an overlapping ordinary participant read/write or write/write pair remains a conflict even when the same barrier orders the before-phase access before the after-phase access;
+- same-phase overlapping participant state-changing accesses remain unordered and conflicting absent another interaction contract;
+- a permitted logical Buffer state change by a participant in a before phase is present in the logical state read by an ordered participant after-phase fixture;
+- hierarchy membership without an explicit barrier creates no synchronization;
 - physical arrival, release, worker, lane, chunk, queue, cache-fence, and rendezvous order are not semantic oracles.
 
-These obligations do not define source barrier syntax, dynamic divergent-barrier validation, hierarchy-sensitive or partial-cohort barriers, atomics, fences, collectives, or physical barrier implementation.
+`BarrierFixture`, `BarrierId`, `BarrierPhase`, and finite participant collections are verification representation only. The fixture is not a source barrier API, runtime rendezvous object, hardware scope, or atomic memory-scope model. The root case replaces the prior root-only free barrier helpers; no compatibility barrier oracle is retained.
+
+These obligations do not define source barrier syntax, dynamic divergent-barrier validation, atomics, fences, collectives, group-local storage, or physical barrier implementation.
 
 ## Identity-bearing unordered reduction boundary
 
@@ -170,14 +182,14 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - ordinary read/state-change conflict classification;
 - the cross-phase `each` normal entry/completion ordering relation, with no sibling or intra-iteration order;
 - nested group/subgroup hierarchy membership, group-scoped subgroup identity, and order-neutral same-group/same-subgroup relations;
-- full-`each` structured barrier phase ordering and exact before-phase participant completion coverage;
+- validated root/group/subgroup structured-barrier cohorts, participant-only phase construction, cross-phase ordering, and exact before-phase completion coverage;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
 - complete unordered-reduction contract admission evidence and exact unordered semantic-contribution coverage;
 - structured task-scope attached-child ordering/completion coverage and detachment state-retention admissibility.
 
-Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, hierarchy tokens and memberships, barrier tokens, contribution tokens, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, hierarchy enumeration order, barrier order/topology, contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, contribution tokens, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, hierarchy enumeration order, barrier participant order/topology, contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
 
-The private generic exact-coverage helper used by hierarchy, barrier, reduction, and task fixtures is mechanical oracle implementation. It owns no Runen semantic concept.
+The private generic exact-coverage helper used by hierarchy, barrier, reduction, and task fixtures and the crate-private hierarchy cohort collection used by barrier fixtures are mechanical oracle implementation. They own no Runen semantic concept.
 
 ## Future executable evidence
 
