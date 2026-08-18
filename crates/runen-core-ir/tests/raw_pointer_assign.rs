@@ -104,6 +104,83 @@ fn raw_assign_requires_live_pointer_value() {
 }
 
 #[test]
+fn raw_assign_rejects_moved_pointer_value() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let pointer = Place::local(LocalId(1));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+            LocalDecl::new("moved", pointer_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: pointer.clone(),
+                src: Operand::AddressOf(Place::local(LocalId(0)).into()),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(2)),
+                src: Operand::Move(pointer.clone().into()),
+            },
+            Statement::RawAssign {
+                pointer: pointer.clone().into(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+        ],
+    );
+
+    let error = validate_body(body).expect_err("moved pointer value is invalid MIR");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(pointer)
+    );
+}
+
+#[test]
+fn exclusive_loan_over_pointer_storage_blocks_raw_assign_at_validation() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let pointer = Place::local(LocalId(1));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+        ],
+        vec![LoanDecl::new("pointer_exclusive", pointer_ty)],
+        vec![
+            Statement::Init {
+                dst: pointer.clone(),
+                src: Operand::AddressOf(Place::local(LocalId(0)).into()),
+            },
+            Statement::Borrow {
+                loan: LoanId(0),
+                kind: BorrowKind::Exclusive,
+                src: pointer.clone().into(),
+            },
+            Statement::RawAssign {
+                pointer: pointer.clone().into(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+        ],
+    );
+
+    let error = validate_body(body).expect_err("exclusive pointer-storage loan blocks RawAssign");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::DirectAccessConflict {
+            place: pointer,
+            loan: LoanId(0),
+        }
+    );
+}
+
+#[test]
 fn raw_assign_makes_never_initialized_target_live_for_later_safe_read() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
@@ -353,6 +430,46 @@ fn aggregate_copy_transports_nested_pointer_target_for_raw_assign() {
 }
 
 #[test]
+fn aggregate_move_transports_nested_pointer_target_for_raw_assign() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let holder_ty = types.push(TypeDef::structure(
+        "Holder",
+        vec![Field::new("pointer", pointer_ty)],
+    ));
+    let target = Place::local(LocalId(0));
+    let holder = Place::local(LocalId(1));
+    let moved = Place::local(LocalId(2));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("holder", holder_ty, false),
+            LocalDecl::new("moved", holder_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: holder.field(0),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Init {
+                dst: moved.clone(),
+                src: Operand::Move(Place::local(LocalId(1)).into()),
+            },
+            Statement::RawAssign {
+                pointer: moved.field(0).into(),
+                src: Operand::Constant(Value::I64(12)),
+            },
+            Statement::Read { src: target.into() },
+        ],
+    );
+
+    validate_body(body).expect("aggregate Move must transfer nested raw-pointer targets");
+}
+
+#[test]
 fn pointer_replacement_installs_new_exact_target() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
@@ -386,4 +503,118 @@ fn pointer_replacement_installs_new_exact_target() {
     );
 
     validate_body(body).expect("pointer replacement must replace exact target metadata too");
+}
+
+#[test]
+fn pointer_destruction_and_reinitialization_replace_exact_target_metadata() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let first = Place::local(LocalId(0));
+    let second = Place::local(LocalId(1));
+    let pointer = Place::local(LocalId(2));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("first", value_ty, false),
+            LocalDecl::new("second", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, true),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: pointer.clone(),
+                src: Operand::AddressOf(first.into()),
+            },
+            Statement::Drop {
+                place: pointer.clone().into(),
+            },
+            Statement::Assign {
+                dst: pointer.clone().into(),
+                src: Operand::AddressOf(second.clone().into()),
+            },
+            Statement::RawAssign {
+                pointer: pointer.into(),
+                src: Operand::Constant(Value::I64(13)),
+            },
+            Statement::Read { src: second.into() },
+        ],
+    );
+
+    validate_body(body)
+        .expect("reinitializing pointer storage must install only the new exact target");
+}
+
+#[test]
+fn pointer_target_metadata_participates_in_loop_state_repetition() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let first = Place::local(LocalId(0));
+    let second = Place::local(LocalId(1));
+    let pointer = Place::local(LocalId(2));
+    let body = Body {
+        types,
+        locals: vec![
+            LocalDecl::new("first", value_ty, false),
+            LocalDecl::new("second", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, true),
+        ],
+        loans: Vec::new(),
+        entry: BasicBlockId(0),
+        blocks: vec![
+            BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: first.clone(),
+                        src: Operand::Constant(Value::I64(0)),
+                    },
+                    Statement::Drop {
+                        place: first.clone().into(),
+                    },
+                    Statement::Init {
+                        dst: second.clone(),
+                        src: Operand::Constant(Value::I64(0)),
+                    },
+                    Statement::Drop {
+                        place: second.clone().into(),
+                    },
+                    Statement::Init {
+                        dst: pointer.clone(),
+                        src: Operand::AddressOf(first.clone().into()),
+                    },
+                ],
+                Terminator::Goto(BasicBlockId(1)),
+            ),
+            BasicBlock::new(
+                vec![
+                    Statement::RawAssign {
+                        pointer: pointer.clone().into(),
+                        src: Operand::Constant(Value::I64(1)),
+                    },
+                    Statement::Read {
+                        src: first.clone().into(),
+                    },
+                    Statement::Drop {
+                        place: first.clone().into(),
+                    },
+                    Statement::Assign {
+                        dst: pointer.into(),
+                        src: Operand::AddressOf(second.into()),
+                    },
+                ],
+                Terminator::Goto(BasicBlockId(1)),
+            ),
+        ],
+    };
+
+    let error = validate_body(body).expect_err(
+        "second loop iteration must be validated because the pointer target changed",
+    );
+    assert_eq!(error.point.as_ref().map(|point| point.block), Some(BasicBlockId(1)));
+    assert_eq!(error.point.as_ref().and_then(|point| point.statement), Some(1));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(first)
+    );
 }
