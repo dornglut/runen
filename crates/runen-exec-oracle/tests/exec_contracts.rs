@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
-    Access, AccessKind, BufferId, BufferRegion, EachPhase, IterationId, LogicalBufferState,
-    LogicalStateError, PositionId, ValueToken, each_orders,
+    Access, AccessKind, BufferId, BufferRegion, ContributionId, EachPhase, IterationId,
+    LogicalBufferState, LogicalStateError, PositionId, ReductionLaws, ValueToken, each_orders,
+    has_exact_contribution_coverage,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -144,4 +145,62 @@ fn overlapping_sibling_changes_conflict_independently_of_physical_order() {
     assert!(first_access.conflicts_with(&second_access));
     assert!(!each_orders(first_iteration, second_iteration));
     assert!(!each_orders(second_iteration, first_iteration));
+}
+
+#[test]
+fn unordered_reduction_requires_every_accepted_operator_law() {
+    let lawful = ReductionLaws::new(true, true, true);
+    assert!(lawful.permits_unordered_reduction());
+
+    for insufficient in [
+        ReductionLaws::new(false, true, true),
+        ReductionLaws::new(true, false, true),
+        ReductionLaws::new(true, true, false),
+    ] {
+        assert!(!insufficient.permits_unordered_reduction());
+    }
+}
+
+#[test]
+fn reduction_contribution_coverage_ignores_order_but_rejects_count_changes() {
+    let required = [ContributionId(1), ContributionId(2), ContributionId(3)];
+    let permutation = [ContributionId(3), ContributionId(1), ContributionId(2)];
+    let omitted = [ContributionId(1), ContributionId(3)];
+    let duplicated = [ContributionId(1), ContributionId(1), ContributionId(3)];
+    let invented = [ContributionId(1), ContributionId(2), ContributionId(4)];
+
+    assert!(has_exact_contribution_coverage(&required, &permutation));
+    assert!(!has_exact_contribution_coverage(&required, &omitted));
+    assert!(!has_exact_contribution_coverage(&required, &duplicated));
+    assert!(!has_exact_contribution_coverage(&required, &invented));
+    assert!(!has_exact_contribution_coverage(
+        &[ContributionId(1), ContributionId(1)],
+        &[ContributionId(1), ContributionId(1)]
+    ));
+}
+
+#[test]
+fn lawful_reduction_fixture_is_invariant_to_permutation_and_tree_shape() {
+    let laws = ReductionLaws::new(true, true, true);
+    assert!(laws.permits_unordered_reduction());
+
+    let identity = 0_i64;
+    let left_tree = (((identity + 1) + 2) + 3) + 4;
+    let permuted_tree = (4 + 2) + (1 + (3 + identity));
+    let right_tree = 1 + (2 + (3 + (4 + identity)));
+
+    assert_eq!(left_tree, 10);
+    assert_eq!(permuted_tree, left_tree);
+    assert_eq!(right_tree, left_tree);
+    assert_eq!(identity, 0);
+}
+
+#[test]
+fn reduction_admission_does_not_legalize_ordinary_sibling_conflict() {
+    let laws = ReductionLaws::new(true, true, true);
+    let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+    let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+
+    assert!(laws.permits_unordered_reduction());
+    assert!(first_access.conflicts_with(&second_access));
 }
