@@ -179,10 +179,7 @@ fn contribution_coverage_is_exact_and_order_neutral() {
     );
     assert!(!reduction.has_exact_contribution_coverage(&[first, second, third], &[first, third]));
     assert!(
-        !reduction.has_exact_contribution_coverage(
-            &[first, second, third],
-            &[first, first, third]
-        )
+        !reduction.has_exact_contribution_coverage(&[first, second, third], &[first, first, third])
     );
     assert!(
         !reduction
