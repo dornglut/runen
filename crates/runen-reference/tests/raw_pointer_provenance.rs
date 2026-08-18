@@ -291,11 +291,11 @@ fn pointer_copy_and_move_preserve_exact_target_and_provenance() {
             },
             Statement::Init {
                 dst: second.clone(),
-                src: Operand::Copy(first),
+                src: Operand::Copy(first.into()),
             },
             Statement::Init {
                 dst: Place::local(LocalId(3)),
-                src: Operand::Move(second),
+                src: Operand::Move(second.into()),
             },
         ],
     );
@@ -346,7 +346,7 @@ fn ending_source_loan_does_not_mutate_previously_formed_pointer() {
             Statement::EndBorrow { loan: LoanId(0) },
             Statement::Init {
                 dst: Place::local(LocalId(2)),
-                src: Operand::Copy(stored),
+                src: Operand::Copy(stored.into()),
             },
         ],
     );
