@@ -28,6 +28,40 @@ Buffer logical coherence consumes the semantic ordering relationships establishe
 
 Unordered physical scheduling does not by itself imply semantic nondeterminism.
 
+## Group and subgroup hierarchy
+
+A **hierarchy instance** belongs to one dynamic `each` execution and supplies nested semantic participant cohorts for hierarchy-sensitive Exec operations.
+
+The complete required iteration set of the `each` is the root cohort.
+
+- If that required iteration set is empty, the hierarchy has no groups or subgroups.
+- Otherwise, the required iterations are partitioned into one or more non-empty **groups**.
+- Within every non-empty group, that group's iterations are partitioned into one or more non-empty **subgroups**.
+
+Therefore every required iteration belongs to exactly one group and exactly one subgroup within that group. Distinct groups are disjoint and exhaust the root cohort. Distinct subgroups within one group are disjoint and exhaust that group. A subgroup cannot contain iterations from two groups.
+
+No empty group or subgroup is introduced merely as hierarchy metadata. This hierarchy contract does not otherwise constrain the cardinality of an `each` execution.
+
+### Semantic identity and stability
+
+Group and subgroup membership is semantic structure once a hierarchy instance has been established for an execution. Membership is stable for the duration of that hierarchy instance and MUST NOT silently change merely because a realization changes physical scheduling or placement.
+
+Group and subgroup identities are opaque cohort identities. They are not numeric indices, coordinates, addresses, queue identities, worker identities, lane identities, hardware wave identities, or scheduling order.
+
+Subgroup identity is scoped by its containing group. An implementation or verification representation that uses equal subgroup tokens under distinct groups does not thereby identify one subgroup spanning those groups.
+
+Hierarchy membership by itself establishes no execution order, synchronization, memory visibility, progress guarantee, physical concurrency, temporal contiguity, or scheduling relationship. Sibling iterations remain source-unordered regardless of whether they share a group or subgroup.
+
+### Establishment boundary
+
+This revision does not define how source code requests, constrains, observes, or obtains a hierarchy instance.
+
+A future hierarchy-sensitive operation MUST define how its relevant hierarchy is established or admitted and what hierarchy variation, if any, its contract permits. A hierarchy choice that can affect program semantics MUST NOT be treated as an arbitrary hidden scheduling choice merely because several physical realizations are available.
+
+This revision defines no fixed group or subgroup sizes, dimensions, coordinates, local or global indices, ordering, contiguity, uniform-size requirement, launch geometry, or hardware topology.
+
+The existing full-`each` normal-completion and structured-barrier contracts continue to use the complete root cohort and are not reinterpreted as group- or subgroup-scoped operations by the existence of a hierarchy instance.
+
 ## Full-`each` structured barrier
 
 A **structured barrier** in this revision is a phase boundary belonging to one dynamic `each` execution. It partitions every iteration required by that execution into one before-barrier phase and one after-barrier phase for that barrier instance.
@@ -97,4 +131,4 @@ An unordered reduction is not an implicit structured barrier. It establishes no 
 
 The reduction result and partial-result behavior when an iteration faults, is cancelled, diverges, or otherwise fails to complete normally are not defined by this revision.
 
-Hierarchical execution concepts such as groups, subgroups, group-local storage, broadcast, and shuffle belong to Exec. Their precise portable semantics are not defined by this revision. Barrier forms beyond the full-`each` structured barrier defined above are likewise not defined by this revision.
+Group-local storage, group/subgroup barriers, group/subgroup reductions or collectives, broadcast, shuffle, scans, atomics, and atomic/fence scopes remain not defined by this revision. The hierarchy above defines only their shared participant-domain foundation.

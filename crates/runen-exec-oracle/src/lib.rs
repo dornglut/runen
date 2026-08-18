@@ -9,6 +9,7 @@ mod access;
 mod barrier;
 mod buffer;
 mod coverage;
+mod hierarchy;
 mod reduction;
 mod structured;
 mod task;
@@ -18,6 +19,7 @@ pub use barrier::{BarrierId, BarrierPhase, barrier_orders, has_exact_before_phas
 pub use buffer::{
     BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
+pub use hierarchy::{GroupId, HierarchyError, HierarchyFixture, HierarchyMembership, SubgroupId};
 pub use reduction::{ContributionId, UnorderedReductionEvidence, has_exact_contribution_coverage};
 pub use structured::{EachPhase, IterationId, each_orders};
 pub use task::{
