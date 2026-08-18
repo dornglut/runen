@@ -7,10 +7,12 @@
 
 mod access;
 mod buffer;
+mod reduction;
 mod structured;
 
 pub use access::{Access, AccessKind};
 pub use buffer::{
     BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
+pub use reduction::{ContributionId, ReductionLaws, has_exact_contribution_coverage};
 pub use structured::{EachPhase, IterationId, each_orders};
