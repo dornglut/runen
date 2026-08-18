@@ -313,6 +313,65 @@ fn direct_release_predecessor_synchronizes_with_acquire() {
 }
 
 #[test]
+fn acquire_release_is_both_acquire_capable_and_release_capable() {
+    let local = location(1);
+    let release = exchange_id(local, 1);
+    let acquire_release = exchange_id(local, 2);
+    let acquire = exchange_id(local, 3);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            exchange(local, 1, 20, AtomicExchangeSemantics::Release),
+            exchange(
+                local,
+                2,
+                30,
+                AtomicExchangeSemantics::AcquireRelease,
+            ),
+            exchange(local, 3, 40, AtomicExchangeSemantics::Acquire),
+        ],
+    )
+    .unwrap();
+    let realization = fixture
+        .realize(&[release, acquire_release, acquire], &[])
+        .unwrap();
+
+    assert!(realization.release_acquire_synchronizes(release, acquire_release));
+    assert!(realization.release_acquire_synchronizes(acquire_release, acquire));
+    assert!(!realization.release_acquire_synchronizes(release, acquire));
+}
+
+#[test]
+fn acquire_release_directly_synchronizes_with_acquire_release() {
+    let local = location(1);
+    let first = exchange_id(local, 1);
+    let second = exchange_id(local, 2);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            exchange(
+                local,
+                1,
+                20,
+                AtomicExchangeSemantics::AcquireRelease,
+            ),
+            exchange(
+                local,
+                2,
+                30,
+                AtomicExchangeSemantics::AcquireRelease,
+            ),
+        ],
+    )
+    .unwrap();
+    let realization = fixture.realize(&[first, second], &[]).unwrap();
+
+    assert!(realization.release_acquire_synchronizes(first, second));
+}
+
+#[test]
 fn synchronization_requires_release_and_acquire_classes() {
     let local = location(1);
     let first = exchange_id(local, 1);
@@ -371,6 +430,34 @@ fn intervening_exchange_blocks_direct_release_acquire_synchronization() {
 }
 
 #[test]
+fn intervening_base_blocks_acquire_release_synchronization() {
+    let local = location(1);
+    let acquire_release = exchange_id(local, 1);
+    let middle = exchange_id(local, 2);
+    let acquire = exchange_id(local, 3);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(20),
+        vec![
+            exchange(
+                local,
+                1,
+                20,
+                AtomicExchangeSemantics::AcquireRelease,
+            ),
+            exchange(local, 2, 20, AtomicExchangeSemantics::Base),
+            exchange(local, 3, 20, AtomicExchangeSemantics::Acquire),
+        ],
+    )
+    .unwrap();
+    let realization = fixture
+        .realize(&[acquire_release, middle, acquire], &[])
+        .unwrap();
+
+    assert!(!realization.release_acquire_synchronizes(acquire_release, acquire));
+}
+
+#[test]
 fn release_acquire_synchronization_is_location_scoped() {
     let first_location = location(1);
     let second_location = location(2);
@@ -390,6 +477,38 @@ fn release_acquire_synchronization_is_location_scoped() {
 
     assert!(realization.release_acquire_synchronizes(release, acquire));
     assert!(!realization.release_acquire_synchronizes(release, foreign_acquire));
+}
+
+#[test]
+fn acquire_release_synchronization_is_location_scoped() {
+    let first_location = location(1);
+    let second_location = location(2);
+    let first = exchange_id(first_location, 1);
+    let second = exchange_id(first_location, 2);
+    let foreign_second = exchange_id(second_location, 2);
+    let fixture = AtomicExchangeFixture::new(
+        first_location,
+        AtomicValueToken::new(10),
+        vec![
+            exchange(
+                first_location,
+                1,
+                20,
+                AtomicExchangeSemantics::AcquireRelease,
+            ),
+            exchange(
+                first_location,
+                2,
+                30,
+                AtomicExchangeSemantics::AcquireRelease,
+            ),
+        ],
+    )
+    .unwrap();
+    let realization = fixture.realize(&[first, second], &[]).unwrap();
+
+    assert!(realization.release_acquire_synchronizes(first, second));
+    assert!(!realization.release_acquire_synchronizes(first, foreign_second));
 }
 
 #[test]
