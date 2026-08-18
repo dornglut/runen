@@ -285,9 +285,7 @@ impl Machine {
             }
             Statement::RawRead { pointer } => self.raw_read(pointer),
             Statement::RawAssign { pointer, src } => self.raw_assign(pointer, src),
-            Statement::Assign { dst, src } => {
-                self.replace(dst, src, VerificationWriteKind::Assign)
-            }
+            Statement::Assign { dst, src } => self.replace(dst, src, VerificationWriteKind::Assign),
             Statement::InteriorAssign { dst, src } => {
                 self.replace(dst, src, VerificationWriteKind::InteriorAssign)
             }
@@ -469,11 +467,13 @@ impl Machine {
                     });
                 }
 
-                if let Some((index, _)) = self.active_loans.iter().enumerate().find(|(_, active)| {
-                    active
-                        .as_ref()
-                        .is_some_and(|active| active.place.overlaps(&target))
-                }) {
+                if let Some((index, _)) =
+                    self.active_loans.iter().enumerate().find(|(_, active)| {
+                        active
+                            .as_ref()
+                            .is_some_and(|active| active.place.overlaps(&target))
+                    })
+                {
                     return Err(UndefinedBehaviorKind::RawMoveConflictsWithLoan {
                         target: pointer.target,
                         loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
