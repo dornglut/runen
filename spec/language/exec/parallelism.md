@@ -47,7 +47,7 @@ Physical arrival order, release order, worker assignment, lane identity, queue o
 
 Different dynamic barrier instances are distinct semantic boundaries. Barrier identity alone does not order actions around two different barriers; any such order must follow from their placement and other applicable semantics in the enclosing execution.
 
-This revision defines the structured phase form rather than an imperative barrier call. Source syntax, lowering, or validation for a future imperative spelling is not defined here and MUST NOT rely on a hidden divergent-control-flow precondition that safe source cannot establish.
+This revision defines the structured phase form rather than an imperative barrier call. Source syntax, lowering, and validation for any future imperative spelling are not defined here; such a future form requires its own rules establishing the structured participation represented by this barrier boundary.
 
 If a required iteration faults, is cancelled, diverges, or otherwise fails to complete its before-barrier phase normally, the barrier and enclosing `each` abnormal-completion behavior are not defined by this revision.
 
