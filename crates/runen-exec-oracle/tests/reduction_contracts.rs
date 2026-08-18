@@ -112,16 +112,14 @@ fn root_reduction_preserves_full_each_participation_and_empty_behavior() {
     let empty = ReductionFixture::root(ReductionId::new(8), each, &[]).unwrap();
     assert!(empty.has_exact_contribution_coverage(&[], &[]));
     assert!(empty.contribution(iteration(1), 11).is_none());
-    assert!(empty
-        .contribution(IterationId::new(EachId::new(2), 1), 11)
-        .is_none());
+    assert!(
+        empty
+            .contribution(IterationId::new(EachId::new(2), 1), 11)
+            .is_none()
+    );
 
     assert!(matches!(
-        ReductionFixture::root(
-            ReductionId::new(9),
-            each,
-            &[iteration(1), iteration(1)]
-        ),
+        ReductionFixture::root(ReductionId::new(9), each, &[iteration(1), iteration(1)]),
         Err(ReductionError::InvalidRootIterations)
     ));
 }
@@ -148,17 +146,15 @@ fn group_reduction_selects_exact_existing_group() {
     let hierarchy = hierarchy();
     let reduction = ReductionFixture::group(ReductionId::new(7), &hierarchy, group(10)).unwrap();
 
-    for (participant, token) in [
-        (iteration(1), 17),
-        (iteration(2), 31),
-        (iteration(3), 43),
-    ] {
+    for (participant, token) in [(iteration(1), 17), (iteration(2), 31), (iteration(3), 43)] {
         assert!(reduction.contribution(participant, token).is_some());
     }
     assert!(reduction.contribution(iteration(4), 59).is_none());
-    assert!(reduction
-        .contribution(IterationId::new(EachId::new(2), 1), 61)
-        .is_none());
+    assert!(
+        reduction
+            .contribution(IterationId::new(EachId::new(2), 1), 61)
+            .is_none()
+    );
 
     assert!(matches!(
         ReductionFixture::group(ReductionId::new(8), &hierarchy, group(99)),
@@ -181,9 +177,11 @@ fn subgroup_reduction_selects_group_scoped_subgroup() {
     assert!(first.contribution(iteration(2), 23).is_some());
     assert!(first.contribution(iteration(3), 37).is_none());
     assert!(first.contribution(iteration(4), 41).is_none());
-    assert!(first
-        .contribution(IterationId::new(EachId::new(2), 1), 47)
-        .is_none());
+    assert!(
+        first
+            .contribution(IterationId::new(EachId::new(2), 1), 47)
+            .is_none()
+    );
     assert!(second.contribution(iteration(4), 53).is_some());
     assert!(second.contribution(iteration(1), 61).is_none());
 
