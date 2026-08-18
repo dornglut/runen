@@ -86,4 +86,4 @@ Ordinary accesses by child tasks remain governed by [Exec memory model](memory-m
 
 Buffer logical coherence may consume the semantic order from an attached child's normal completion to that same structured task scope's normal continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue.
 
-The exact spawn, await, task result, task fault-propagation, cancellation-request authority, source-unordered request/observation interaction, containing-scope abnormal-completion rules, source task-scope formation/identity, and scope nesting relationships remain not defined by this revision.
+The exact spawn, await, task result, task fault-propagation, cancellation-request authority, source-unordered request/observation interaction, containing-scope abnormal-completion rules, source task-scope formation or identity-observation mechanisms, and scope nesting relationships remain not defined by this revision.
