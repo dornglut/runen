@@ -77,19 +77,21 @@ A release exchange does not gain acquire behavior merely because the exchange al
 For the direct synchronization relation defined by this revision, an atomic exchange may use either of these currently represented scope forms:
 
 - an **unscoped exchange** participates in the previously defined unscoped direct synchronization relation when paired with another unscoped exchange; or
-- a **root-cohort-scoped exchange** selects the complete root cohort of one dynamic `each` execution defined by [Exec parallelism](parallelism.md).
+- a **root-cohort-scoped exchange** is performed by one iteration of a dynamic `each` execution and selects the complete root cohort of that iteration's containing dynamic `each`, as defined by [Exec parallelism](parallelism.md).
 
-A root-cohort scope does not require a hierarchy instance. The selected dynamic `each` identity is semantic scope metadata for this operation; it is not a source handle, numeric index, launch identifier, worker or lane identity, queue identity, scheduler token, or hardware memory-scope enumeration. The source or lowering mechanism that associates an exchange with this semantic scope is not defined by this revision.
+A root-cohort scope does not require a hierarchy instance. The scoped exchange's executing iteration identity determines the selected dynamic `each` identity; there is no independent root-cohort identity supplied to the operation that can disagree with that producer. The iteration and dynamic-`each` identities remain the opaque semantic identities owned by Exec parallelism, not source handles, numeric indices, launch identifiers, worker or lane identities, queue identities, scheduler tokens, or hardware memory-scope enumerations.
+
+The source or lowering mechanism that identifies the current iteration and requests this scoped exchange form is not defined by this revision. That open source/lowering boundary does not make the semantic root scope a free-floating label: a root-cohort-scoped exchange belongs to the executing iteration recorded by the operation and selects that iteration's containing root cohort.
 
 Scope does not partition an atomic location or its modification order. Unscoped and root-cohort-scoped exchanges on one semantic location remain atomic exchanges on that same location and participate in the one location-local modification order above. Scope changes only the synchronization relationship that may be established between exchange occurrences.
 
 The **synchronization-scope relationship** for two exchanges is defined by this revision in these cases:
 
 - two unscoped exchanges are **scope-compatible**, preserving the accepted unscoped relation;
-- two root-cohort-scoped exchanges selecting the same dynamic `each` identity are **scope-compatible**;
-- two root-cohort-scoped exchanges selecting distinct dynamic `each` identities are **scope-incompatible**.
+- two root-cohort-scoped exchanges whose executing iterations belong to the same dynamic `each` are **scope-compatible**;
+- two root-cohort-scoped exchanges whose executing iterations belong to distinct dynamic `each` identities are **scope-incompatible**.
 
-The synchronization-scope relationship of a mixed unscoped/root-cohort pair is **not defined by this revision**. In particular, absence of a synchronization edge from the relations defined here is not a normative statement that such a future mixed-scope interaction must be incompatible. Defining that interoperability requires an additional execution-context or participant-inclusion contract that this root-only slice does not establish.
+The synchronization-scope relationship of a mixed unscoped/root-cohort pair is **not defined by this revision**. In particular, absence of a synchronization edge from the relations defined here is not a normative statement that such a future mixed-scope interaction must be incompatible. Defining that interoperability requires a broader execution-context or participant-inclusion contract that this root-only slice does not establish.
 
 Root-cohort scope identity by itself establishes no sibling-iteration order, barrier, ordinary-access visibility, hierarchy membership, progress guarantee, physical concurrency, or other synchronization relationship. The scope condition matters only when every other requirement of the explicit direct release/acquire relation below is also satisfied.
 
