@@ -1,21 +1,26 @@
 use runen_exec_oracle::{
     Access, AccessKind, BufferId, BufferRegion, PositionId, TaskCancellationError,
-    TaskCancellationFixture, TaskCancellationObservation, TaskCancellationState, TaskId,
-    TaskScopePhase, TaskStateRetention, all_state_dependencies_are_detach_safe,
-    has_exact_attached_completion, state_is_detach_safe, task_scope_orders,
+    TaskCancellationFixture, TaskCancellationObservation, TaskCancellationState,
+    TaskCompletionEvidence, TaskId, TaskScopePhase, TaskStateRetention,
+    all_state_dependencies_are_detach_safe, has_exact_attached_completion, state_is_detach_safe,
+    task_scope_orders,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
     BufferRegion::new(BufferId(buffer), positions.iter().copied().map(PositionId))
 }
 
+fn normal(task: TaskId) -> TaskCompletionEvidence {
+    TaskCompletionEvidence::Normal(task)
+}
+
 #[test]
 fn normal_scope_completion_requires_exact_unordered_attached_child_coverage() {
     let required = [TaskId(1), TaskId(2), TaskId(3)];
-    let permutation = [TaskId(3), TaskId(1), TaskId(2)];
-    let missing = [TaskId(1), TaskId(3)];
-    let duplicated = [TaskId(1), TaskId(1), TaskId(3)];
-    let invented = [TaskId(1), TaskId(2), TaskId(4)];
+    let permutation = [normal(TaskId(3)), normal(TaskId(1)), normal(TaskId(2))];
+    let missing = [normal(TaskId(1)), normal(TaskId(3))];
+    let duplicated = [normal(TaskId(1)), normal(TaskId(1)), normal(TaskId(3))];
+    let invented = [normal(TaskId(1)), normal(TaskId(2)), normal(TaskId(4))];
 
     assert!(has_exact_attached_completion(&required, &permutation));
     assert!(!has_exact_attached_completion(&required, &missing));
@@ -23,7 +28,7 @@ fn normal_scope_completion_requires_exact_unordered_attached_child_coverage() {
     assert!(!has_exact_attached_completion(&required, &invented));
     assert!(!has_exact_attached_completion(
         &[TaskId(1), TaskId(1)],
-        &[TaskId(1), TaskId(1)]
+        &[normal(TaskId(1)), normal(TaskId(1))]
     ));
     assert!(has_exact_attached_completion(&[], &[]));
 }
@@ -184,6 +189,6 @@ fn cancelled_attached_child_does_not_satisfy_normal_completion_coverage() {
 
     assert!(!has_exact_attached_completion(
         &[first, second],
-        &[first]
+        &[normal(first), TaskCompletionEvidence::Cancelled(second)]
     ));
 }
