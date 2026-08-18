@@ -179,7 +179,7 @@ Raw target-access compatibility after obtaining a raw pointer value is a separat
 
 A direct child whose concrete root is disjoint from `p` does not constrain access through `P` to `p`.
 
-An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. On such a disjoint sibling, the parent retains the authority needed for `InteriorAssign`, `AddressOf`, or shared pointer-value access for `RawRead`/`RawAssign`, subject to each operation's independent preconditions.
+Delegating one field of an aggregate to an exclusive child leaves an exclusive parent with exclusive authority over a disjoint sibling field. On such a disjoint sibling, the parent retains the authority needed for `InteriorAssign`, `AddressOf`, or shared pointer-value access for `RawRead`/`RawAssign`, subject to each operation's independent preconditions.
 
 ## Direct access while loans are active
 
@@ -296,7 +296,7 @@ After the pointer value selects one concrete structural target place `p`, target
 
 Ending the loan that authorized `AddressOf` therefore neither grants nor revokes later raw access by itself; only the active loan state at the raw target-access step matters.
 
-Violation of either raw target compatibility requirement is classified by [Core unsafe semantics](unsafe.md), not as a new borrow-validation diagnostic. A validator may know an exact raw-pointer target for path-state propagation without turning these unsafe proof obligations into language-validation rules.
+Violation of either raw target compatibility requirement is classified by [Core unsafe semantics](unsafe.md), not as a new borrow-validation diagnostic. Exact raw-pointer target bookkeeping used for path-state propagation does not turn these unsafe proof obligations into language-validation rules.
 
 ## Borrow end and termination
 
@@ -316,7 +316,7 @@ Borrow end itself is not defined as Runen-observable program behavior by this re
 
 For the current deterministic Core MIR, the complete active-loan forest state participates in semantic path-state repetition.
 
-The repeated-state key therefore includes each active loan's kind, concrete root, and current parent relation in addition to storage state and control-flow position. Verification-only exact raw-pointer target state may also participate where required to propagate the defined effects of `RawAssign`; it does not change borrowing authority.
+The repeated-state key therefore includes each active loan's kind, concrete root, and current parent relation in addition to storage state and control-flow position.
 
 Interior mutability adds no hidden loan or borrow-guard state. A legal `InteriorAssign` changes only the ordinary storage state already represented by the value/storage model.
 
