@@ -6,6 +6,7 @@
 //! make accepted Exec contracts executable in conformance tests.
 
 mod access;
+mod barrier;
 mod buffer;
 mod coverage;
 mod reduction;
@@ -13,6 +14,7 @@ mod structured;
 mod task;
 
 pub use access::{Access, AccessKind};
+pub use barrier::{BarrierId, BarrierPhase, barrier_orders, has_exact_before_phase_completion};
 pub use buffer::{
     BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
