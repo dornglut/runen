@@ -508,6 +508,59 @@ fn assign_with_raw_move_from_same_target_is_source_first_without_double_drop() {
 }
 
 #[test]
+fn raw_move_ub_prevents_enclosing_interior_assign_destruction_and_write() {
+    let mut types = TypeTable::new();
+    let tracked_ty = types.push(
+        TypeDef::scalar("InteriorTracked", ScalarType::TrackedFixture).with_interior_mutability(),
+    );
+    let pointer_ty = types.push(TypeDef::raw_pointer("tracked_ptr", tracked_ty));
+    let source = Place::local(LocalId(0));
+    let pointer = Place::local(LocalId(1));
+    let destination = Place::local(LocalId(2));
+    let error = execute(
+        types,
+        vec![
+            LocalDecl::new("source", tracked_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+            LocalDecl::new("destination", tracked_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: pointer.clone(),
+                src: Operand::AddressOf(source.into()),
+            },
+            Statement::Init {
+                dst: destination.clone(),
+                src: Operand::Constant(Value::TrackedFixture(50)),
+            },
+            Statement::InteriorAssign {
+                dst: destination.clone().into(),
+                src: Operand::RawMove(pointer.into()),
+            },
+        ],
+        Terminator::Return,
+    )
+    .expect_err("RawMove source UB must stop InteriorAssign before destination replacement");
+
+    assert!(matches!(
+        error.kind,
+        UndefinedBehaviorKind::RawMoveTargetNotLive { .. }
+    ));
+    assert!(!error.verification_events.iter().any(|event| matches!(
+        event,
+        VerificationEvent::DropTrackedFixture { place, id: 50 } if place == &destination
+    )));
+    assert!(!error.verification_events.iter().any(|event| matches!(
+        event,
+        VerificationEvent::Write {
+            place,
+            kind: VerificationWriteKind::InteriorAssign,
+        } if place == &destination
+    )));
+}
+
+#[test]
 fn raw_move_transports_raw_pointer_metadata_at_runtime() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
@@ -795,7 +848,12 @@ fn raw_move_transfers_complete_aggregate_without_source_destruction() {
         report
             .verification_events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 101 | 102, .. }))
+            .filter(|event| {
+                matches!(
+                    event,
+                    VerificationEvent::DropTrackedFixture { id: 101 | 102, .. }
+                )
+            })
             .count(),
         2,
         "both moved aggregate leaves are destroyed only from their destination"
