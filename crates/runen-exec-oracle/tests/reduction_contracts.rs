@@ -139,7 +139,8 @@ fn subgroup_reduction_selects_group_scoped_subgroup() {
     let hierarchy = hierarchy();
     let first_subgroup = SubgroupId::new(group(10), 1);
     let second_subgroup = SubgroupId::new(group(20), 1);
-    let first = ReductionFixture::subgroup(ReductionId::new(7), &hierarchy, first_subgroup).unwrap();
+    let first =
+        ReductionFixture::subgroup(ReductionId::new(7), &hierarchy, first_subgroup).unwrap();
     let second =
         ReductionFixture::subgroup(ReductionId::new(8), &hierarchy, second_subgroup).unwrap();
 
