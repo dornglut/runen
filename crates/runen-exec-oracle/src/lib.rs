@@ -7,8 +7,10 @@
 
 mod access;
 mod buffer;
+mod coverage;
 mod reduction;
 mod structured;
+mod task;
 
 pub use access::{Access, AccessKind};
 pub use buffer::{
@@ -16,3 +18,7 @@ pub use buffer::{
 };
 pub use reduction::{ContributionId, UnorderedReductionEvidence, has_exact_contribution_coverage};
 pub use structured::{EachPhase, IterationId, each_orders};
+pub use task::{
+    TaskId, TaskScopePhase, TaskStateRetention, all_state_is_detach_safe,
+    has_exact_attached_completion, state_is_detach_safe, task_scope_orders,
+};
