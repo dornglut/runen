@@ -1,5 +1,5 @@
 use runen_exec_oracle::{
-    Access, AccessKind, BufferId, BufferRegion, EachPhase, GroupId, HierarchyFixture,
+    Access, AccessKind, BufferId, BufferRegion, EachPhase, GroupId, HierarchyFixture, HierarchyId,
     HierarchyMembership, IterationId, PositionId, ReductionError, ReductionFixture, ReductionId,
     SubgroupId, UnorderedReductionEvidence, each_orders,
 };
@@ -13,13 +13,24 @@ fn complete_reduction_evidence() -> UnorderedReductionEvidence {
         .with_commutativity()
 }
 
-fn membership(iteration: u32, group: u32, subgroup: u32) -> HierarchyMembership {
-    let group = GroupId::new(group);
-    HierarchyMembership::new(IterationId(iteration), SubgroupId::new(group, subgroup))
+fn hierarchy_id() -> HierarchyId {
+    HierarchyId::new(1)
+}
+
+fn group(token: u32) -> GroupId {
+    GroupId::new(hierarchy_id(), token)
+}
+
+fn membership(iteration: u32, group_token: u32, subgroup: u32) -> HierarchyMembership {
+    HierarchyMembership::new(
+        IterationId(iteration),
+        SubgroupId::new(group(group_token), subgroup),
+    )
 }
 
 fn hierarchy() -> HierarchyFixture {
     HierarchyFixture::new(
+        hierarchy_id(),
         &[
             IterationId(1),
             IterationId(2),
@@ -106,8 +117,7 @@ fn root_reduction_preserves_full_each_participation_and_empty_behavior() {
 #[test]
 fn group_reduction_selects_exact_existing_group() {
     let hierarchy = hierarchy();
-    let reduction =
-        ReductionFixture::group(ReductionId::new(7), &hierarchy, GroupId::new(10)).unwrap();
+    let reduction = ReductionFixture::group(ReductionId::new(7), &hierarchy, group(10)).unwrap();
 
     for (participant, token) in [
         (IterationId(1), 17),
@@ -119,7 +129,7 @@ fn group_reduction_selects_exact_existing_group() {
     assert!(reduction.contribution(IterationId(4), 59).is_none());
 
     assert!(matches!(
-        ReductionFixture::group(ReductionId::new(8), &hierarchy, GroupId::new(99)),
+        ReductionFixture::group(ReductionId::new(8), &hierarchy, group(99)),
         Err(ReductionError::UnknownGroup)
     ));
 }
@@ -127,10 +137,9 @@ fn group_reduction_selects_exact_existing_group() {
 #[test]
 fn subgroup_reduction_selects_group_scoped_subgroup() {
     let hierarchy = hierarchy();
-    let first_subgroup = SubgroupId::new(GroupId::new(10), 1);
-    let second_subgroup = SubgroupId::new(GroupId::new(20), 1);
-    let first =
-        ReductionFixture::subgroup(ReductionId::new(7), &hierarchy, first_subgroup).unwrap();
+    let first_subgroup = SubgroupId::new(group(10), 1);
+    let second_subgroup = SubgroupId::new(group(20), 1);
+    let first = ReductionFixture::subgroup(ReductionId::new(7), &hierarchy, first_subgroup).unwrap();
     let second =
         ReductionFixture::subgroup(ReductionId::new(8), &hierarchy, second_subgroup).unwrap();
 
@@ -146,8 +155,24 @@ fn subgroup_reduction_selects_group_scoped_subgroup() {
         ReductionFixture::subgroup(
             ReductionId::new(9),
             &hierarchy,
-            SubgroupId::new(GroupId::new(10), 99)
+            SubgroupId::new(group(10), 99)
         ),
+        Err(ReductionError::UnknownSubgroup)
+    ));
+}
+
+#[test]
+fn reduction_rejects_foreign_hierarchy_group_and_subgroup_selectors() {
+    let hierarchy = hierarchy();
+    let foreign_group = GroupId::new(HierarchyId::new(2), 10);
+    let foreign_subgroup = SubgroupId::new(foreign_group, 1);
+
+    assert!(matches!(
+        ReductionFixture::group(ReductionId::new(7), &hierarchy, foreign_group),
+        Err(ReductionError::UnknownGroup)
+    ));
+    assert!(matches!(
+        ReductionFixture::subgroup(ReductionId::new(8), &hierarchy, foreign_subgroup),
         Err(ReductionError::UnknownSubgroup)
     ));
 }
@@ -267,8 +292,7 @@ fn lawful_reduction_fixture_is_invariant_to_permutation_tree_and_neutral_identit
 #[test]
 fn reduction_cohort_membership_does_not_order_or_legalize_sibling_conflict() {
     let hierarchy = hierarchy();
-    let reduction =
-        ReductionFixture::group(ReductionId::new(7), &hierarchy, GroupId::new(10)).unwrap();
+    let reduction = ReductionFixture::group(ReductionId::new(7), &hierarchy, group(10)).unwrap();
     let first = reduction.contribution(IterationId(1), 17).unwrap();
     let second = reduction.contribution(IterationId(2), 31).unwrap();
     let first_iteration = EachPhase::Iteration(IterationId(1));
