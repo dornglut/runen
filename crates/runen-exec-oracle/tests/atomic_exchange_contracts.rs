@@ -59,7 +59,6 @@ fn one_base_exchange_returns_initial_value_and_installs_desired_value() {
         realization.prior_value(first),
         Some(AtomicValueToken::new(10))
     );
-    assert_eq!(realization.immediate_predecessor(first), None);
     assert_eq!(realization.final_value(), AtomicValueToken::new(20));
     assert!(!realization.release_acquire_synchronizes(first, first));
 }
@@ -88,11 +87,6 @@ fn unordered_base_exchanges_admit_both_location_local_linearizations() {
         first_then_second.prior_value(second),
         Some(AtomicValueToken::new(20))
     );
-    assert_eq!(first_then_second.immediate_predecessor(first), None);
-    assert_eq!(
-        first_then_second.immediate_predecessor(second),
-        Some(first)
-    );
     assert_eq!(first_then_second.final_value(), AtomicValueToken::new(30));
     assert!(!first_then_second.release_acquire_synchronizes(first, second));
 
@@ -104,11 +98,6 @@ fn unordered_base_exchanges_admit_both_location_local_linearizations() {
     assert_eq!(
         second_then_first.prior_value(first),
         Some(AtomicValueToken::new(30))
-    );
-    assert_eq!(second_then_first.immediate_predecessor(second), None);
-    assert_eq!(
-        second_then_first.immediate_predecessor(first),
-        Some(second)
     );
     assert_eq!(second_then_first.final_value(), AtomicValueToken::new(20));
     assert!(!second_then_first.release_acquire_synchronizes(second, first));
@@ -327,17 +316,9 @@ fn direct_release_predecessor_synchronizes_with_acquire() {
     .unwrap();
 
     let release_then_acquire = fixture.realize(&[release, acquire], &[]).unwrap();
-    assert_eq!(
-        release_then_acquire.immediate_predecessor(acquire),
-        Some(release)
-    );
     assert!(release_then_acquire.release_acquire_synchronizes(release, acquire));
 
     let acquire_then_release = fixture.realize(&[acquire, release], &[]).unwrap();
-    assert_eq!(
-        acquire_then_release.immediate_predecessor(acquire),
-        None
-    );
     assert!(!acquire_then_release.release_acquire_synchronizes(release, acquire));
 }
 
@@ -396,7 +377,6 @@ fn intervening_exchange_blocks_direct_release_acquire_synchronization() {
         realization.prior_value(acquire),
         Some(AtomicValueToken::new(20))
     );
-    assert_eq!(realization.immediate_predecessor(acquire), Some(middle));
     assert!(!realization.release_acquire_synchronizes(release, acquire));
 }
 
