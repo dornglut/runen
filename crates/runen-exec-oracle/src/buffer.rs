@@ -4,14 +4,15 @@ use std::collections::{BTreeMap, BTreeSet};
 ///
 /// The numeric representation is not a Runen value, physical address,
 /// allocation identity, version, or compiler IR identity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BufferId(pub u32);
 
 /// Verification-only identity token for one logical Buffer element position.
 ///
 /// The numeric representation does not imply byte offset, layout, shape, stride,
-/// physical location, or source-level indexing syntax.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// physical location, or source-level indexing syntax. Ordering exists only to
+/// support deterministic verification collections and is not Buffer semantics.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct PositionId(pub u32);
 
 /// Verification-only semantic value token used by [`LogicalBufferState`].
