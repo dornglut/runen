@@ -128,4 +128,26 @@ impl HierarchyFixture {
 
         left.subgroup == right.subgroup
     }
+
+    pub(crate) fn group_members(&self, group: GroupId) -> Option<Vec<IterationId>> {
+        let members = self
+            .memberships
+            .iter()
+            .filter(|membership| membership.group() == group)
+            .map(|membership| membership.iteration())
+            .collect::<Vec<_>>();
+
+        (!members.is_empty()).then_some(members)
+    }
+
+    pub(crate) fn subgroup_members(&self, subgroup: SubgroupId) -> Option<Vec<IterationId>> {
+        let members = self
+            .memberships
+            .iter()
+            .filter(|membership| membership.subgroup() == subgroup)
+            .map(|membership| membership.iteration())
+            .collect::<Vec<_>>();
+
+        (!members.is_empty()).then_some(members)
+    }
 }
