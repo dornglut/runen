@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
-    Access, AccessKind, BufferId, BufferRegion, EachPhase, IterationId, LogicalBufferState,
-    LogicalStateError, PositionId, ValueToken, each_orders,
+    Access, AccessKind, BufferId, BufferRegion, ContributionId, EachPhase, IterationId,
+    LogicalBufferState, LogicalStateError, PositionId, UnorderedReductionEvidence, ValueToken,
+    each_orders, has_exact_contribution_coverage,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -19,6 +20,15 @@ fn values(entries: &[(u32, u32)]) -> BTreeMap<PositionId, ValueToken> {
 
 fn state(buffer: u32, entries: &[(u32, u32)]) -> LogicalBufferState {
     LogicalBufferState::new(BufferId(buffer), values(entries))
+}
+
+fn complete_reduction_evidence() -> UnorderedReductionEvidence {
+    UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_associativity()
+        .with_commutativity()
 }
 
 #[test]
@@ -144,4 +154,112 @@ fn overlapping_sibling_changes_conflict_independently_of_physical_order() {
     assert!(first_access.conflicts_with(&second_access));
     assert!(!each_orders(first_iteration, second_iteration));
     assert!(!each_orders(second_iteration, first_iteration));
+}
+
+#[test]
+fn unordered_reduction_requires_the_complete_combination_contract() {
+    assert!(complete_reduction_evidence().permits_unordered_reduction());
+
+    let missing_normality = UnorderedReductionEvidence::none()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_associativity()
+        .with_commutativity();
+    let missing_result_only = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_two_sided_identity()
+        .with_associativity()
+        .with_commutativity();
+    let missing_identity = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_associativity()
+        .with_commutativity();
+    let missing_associativity = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_commutativity();
+    let missing_commutativity = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_associativity();
+
+    for insufficient in [
+        missing_normality,
+        missing_result_only,
+        missing_identity,
+        missing_associativity,
+        missing_commutativity,
+    ] {
+        assert!(!insufficient.permits_unordered_reduction());
+    }
+}
+
+#[test]
+fn reduction_contribution_coverage_ignores_order_but_rejects_count_changes() {
+    let required = [ContributionId(1), ContributionId(2), ContributionId(3)];
+    let permutation = [ContributionId(3), ContributionId(1), ContributionId(2)];
+    let omitted = [ContributionId(1), ContributionId(3)];
+    let duplicated = [ContributionId(1), ContributionId(1), ContributionId(3)];
+    let invented = [ContributionId(1), ContributionId(2), ContributionId(4)];
+
+    assert!(has_exact_contribution_coverage(&required, &permutation));
+    assert!(!has_exact_contribution_coverage(&required, &omitted));
+    assert!(!has_exact_contribution_coverage(&required, &duplicated));
+    assert!(!has_exact_contribution_coverage(&required, &invented));
+    assert!(!has_exact_contribution_coverage(
+        &[ContributionId(1), ContributionId(1)],
+        &[ContributionId(1), ContributionId(1)]
+    ));
+}
+
+#[test]
+fn equal_valued_reduction_contributions_remain_distinct_occurrences() {
+    let required = [ContributionId(7), ContributionId(8)];
+    let same_value_contributions = [(ContributionId(7), 5_i64), (ContributionId(8), 5_i64)];
+    let incorporated = [same_value_contributions[1].0, same_value_contributions[0].0];
+
+    assert!(has_exact_contribution_coverage(&required, &incorporated));
+    assert_eq!(
+        same_value_contributions
+            .iter()
+            .map(|(_, value)| *value)
+            .sum::<i64>(),
+        10
+    );
+}
+
+#[test]
+fn lawful_reduction_fixture_is_invariant_to_permutation_tree_and_neutral_identity() {
+    fn combine(left: i64, right: i64) -> i64 {
+        left + right
+    }
+
+    assert!(complete_reduction_evidence().permits_unordered_reduction());
+
+    let identity = 0_i64;
+    let left_tree = combine(combine(combine(combine(identity, 1), 2), 3), 4);
+    let permuted_tree = combine(combine(4, 2), combine(1, combine(3, identity)));
+    let right_tree = combine(1, combine(2, combine(3, combine(4, identity))));
+    let extra_neutral_initializers = combine(
+        combine(identity, combine(identity, 1)),
+        combine(combine(identity, 2), combine(3, combine(identity, 4))),
+    );
+
+    assert_eq!(left_tree, 10);
+    assert_eq!(permuted_tree, left_tree);
+    assert_eq!(right_tree, left_tree);
+    assert_eq!(extra_neutral_initializers, left_tree);
+    assert_eq!(identity, 0);
+}
+
+#[test]
+fn reduction_admission_does_not_legalize_ordinary_sibling_conflict() {
+    let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+    let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+
+    assert!(complete_reduction_evidence().permits_unordered_reduction());
+    assert!(first_access.conflicts_with(&second_access));
 }

@@ -20,7 +20,7 @@ This revision defines only normal structured completion. The behavior of an `eac
 
 ## Inter-iteration interaction
 
-Safe inter-iteration interaction requires an explicit legal interaction model. Ordinary non-atomic inter-iteration access is governed by the conflict and unordered-access rules in [Exec memory model](memory-model.md). Atomics, reductions, commutative accumulation, and collectives require their own defined contracts; listing them as interaction categories does not itself authorize behavior that those contracts have not yet defined.
+Safe inter-iteration interaction requires an explicit legal interaction model. Ordinary non-atomic inter-iteration access is governed by the conflict and unordered-access rules in [Exec memory model](memory-model.md). The identity-bearing unordered reduction defined below is a separate structured interaction model. Atomics, commutative accumulation, and collectives require their own defined contracts; listing them as interaction categories does not itself authorize behavior that those contracts have not yet defined.
 
 The structured entry/completion boundary does not legalize a conflicting ordinary pair of sibling-iteration accesses. Conversely, disjoint or otherwise legally interacting sibling work need not be physically serialized merely because normal continuation waits for the structured operation to complete.
 
@@ -28,6 +28,50 @@ Buffer logical coherence consumes the semantic ordering relationships establishe
 
 Unordered physical scheduling does not by itself imply semantic nondeterminism.
 
-A reduction realization MAY exploit only algebraic laws guaranteed by its operator contract.
+## Identity-bearing unordered reduction
+
+An **unordered reduction** is a structured interaction that combines semantic contributions produced by source-unordered participating iterations into one reduction result.
+
+A participating iteration may produce zero or more semantic reduction contributions when the enclosing reduction operation permits that cardinality. Contributions are distinct occurrences even when two or more contributions carry semantically equal values.
+
+A reduction contribution belongs to the reduction interaction itself. Producing or combining a contribution is not an ordinary non-atomic read or state-changing access to a shared accumulator region. Ordinary accesses performed by an iteration outside the reduction interaction remain governed by [Exec memory model](memory-model.md). Other semantic actions used while producing a contribution remain governed by their own applicable contracts. Participating in a reduction does not legalize, reorder, or otherwise weaken those independent obligations.
+
+The reduction defined by this revision has an explicit semantic identity value `e`. The identity defines the result of an empty contribution collection and the neutral element used by the operator contract below.
+
+### Combination contract
+
+The identity and every semantic contribution are values admitted by the reduction's combination contract.
+
+For every pair of values that can arise by recursively combining the identity and admitted contributions, `combine` MUST complete normally and yield another value admitted by the same reduction. Combination MUST have no Runen-observable behavior other than producing that result value.
+
+These requirements make permitted regrouping and permutation a result-combination question rather than a choice that can change defined outcome or observable trace through the combination operation itself.
+
+The combination operator MUST additionally guarantee all of the following under the semantic equivalence relation applicable to the reduction result:
+
+- **two-sided identity:** `combine(e, x)` and `combine(x, e)` are equivalent to `x`;
+- **associativity:** `combine(combine(a, b), c)` is equivalent to `combine(a, combine(b, c))`;
+- **commutativity:** `combine(a, b)` is equivalent to `combine(b, a)`.
+
+These are semantic operator-contract obligations. An implementation MUST NOT infer them merely from operator spelling, host-language traits, backend instructions, or observed test values.
+
+Where an applicable numeric contract defines the result equivalence or transformation freedom, that numeric contract remains authoritative. This Exec rule does not define integer overflow, floating-point reassociation, NaN behavior, contraction, approximation, or another numeric policy.
+
+This revision defines only unordered reductions whose combination contract guarantees normal closed result-only combination plus all three algebraic obligations above. Ordered reductions, intentionally nondeterministic reductions, reductions without an explicit identity, effectful or partial combination, and weaker-law reduction forms are not defined by this revision.
+
+### Contributions and result
+
+A normally completed reduction incorporates every semantic contribution produced by its participating iterations exactly once. It MUST NOT omit, duplicate, or invent a semantic contribution.
+
+The identity value defines the empty result and may participate as a neutral operand in the semantic combination. A realization MAY additionally initialize or combine physical partial results with the identity value any finite number of times when the two-sided identity law guarantees that doing so is semantically neutral. Such identity-valued physical initialization is realization state, is not a semantic contribution, and does not count as contribution duplication or invention.
+
+Because sibling contributions have no source-defined relative order, a legal realization MAY choose any permutation of the contributions and any binary combination tree only where the complete combination and applicable result contracts guarantee that the resulting behavior and value are semantically equivalent.
+
+Physical worker, lane, chunk, queue, partial-accumulator, or tree order is not additional semantic input. A realization MAY use such physical structure only as an implementation technique preserving the reduction contract.
+
+For a normally completed `each` carrying the reduction, normal continuation is reached only after every required iteration has completed normally and every contribution produced by those iterations has been incorporated. The reduction result is then available to the normal continuation.
+
+This reduction interaction establishes no general ordering relation among sibling iterations and no atomic, fence, barrier, or other synchronization semantics for ordinary accesses.
+
+The reduction result and partial-result behavior when an iteration faults, is cancelled, diverges, or otherwise fails to complete normally are not defined by this revision.
 
 Hierarchical execution concepts such as groups, subgroups, group-local storage, barriers, broadcast, and shuffle belong to Exec. Their precise portable semantics are not defined by this revision.
