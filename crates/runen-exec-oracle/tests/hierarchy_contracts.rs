@@ -5,11 +5,8 @@ use runen_exec_oracle::{
 };
 
 fn membership(iteration: u32, group: u32, subgroup: u32) -> HierarchyMembership {
-    HierarchyMembership::new(
-        IterationId(iteration),
-        GroupId::new(group),
-        SubgroupId::new(subgroup),
-    )
+    let group = GroupId::new(group);
+    HierarchyMembership::new(IterationId(iteration), SubgroupId::new(group, subgroup))
 }
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -18,47 +15,56 @@ fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
 
 #[test]
 fn hierarchy_requires_exact_iteration_coverage_and_accepts_empty_each() {
-    assert_eq!(HierarchyFixture::new(&[], vec![]), Ok(HierarchyFixture::new(&[], vec![]).unwrap()));
+    assert!(HierarchyFixture::new(&[], vec![]).is_ok());
 
     let required = [IterationId(1), IterationId(2), IterationId(3)];
-    let valid = vec![membership(3, 2, 1), membership(1, 1, 1), membership(2, 1, 2)];
+    let valid = vec![
+        membership(3, 2, 1),
+        membership(1, 1, 1),
+        membership(2, 1, 2),
+    ];
     assert!(HierarchyFixture::new(&required, valid).is_ok());
 
-    assert_eq!(
+    assert!(matches!(
         HierarchyFixture::new(&required, vec![membership(1, 1, 1), membership(2, 1, 2)]),
         Err(HierarchyError::InvalidIterationCoverage)
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         HierarchyFixture::new(
             &required,
             vec![membership(1, 1, 1), membership(2, 1, 2), membership(4, 2, 1)]
         ),
         Err(HierarchyError::InvalidIterationCoverage)
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         HierarchyFixture::new(
             &required,
             vec![membership(1, 1, 1), membership(1, 2, 1), membership(3, 2, 1)]
         ),
         Err(HierarchyError::InvalidIterationCoverage)
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         HierarchyFixture::new(
             &[IterationId(1), IterationId(1)],
             vec![membership(1, 1, 1), membership(1, 1, 1)]
         ),
         Err(HierarchyError::InvalidIterationCoverage)
-    );
-    assert_eq!(
+    ));
+    assert!(matches!(
         HierarchyFixture::new(&[], vec![membership(1, 1, 1)]),
         Err(HierarchyError::InvalidIterationCoverage)
-    );
+    ));
 }
 
 #[test]
 fn groups_and_subgroups_form_nested_partitions_of_required_iterations() {
     let hierarchy = HierarchyFixture::new(
-        &[IterationId(1), IterationId(2), IterationId(3), IterationId(4)],
+        &[
+            IterationId(1),
+            IterationId(2),
+            IterationId(3),
+            IterationId(4),
+        ],
         vec![
             membership(1, 10, 1),
             membership(2, 10, 1),
@@ -76,15 +82,54 @@ fn groups_and_subgroups_form_nested_partitions_of_required_iterations() {
     assert!(!hierarchy.same_subgroup(IterationId(1), IterationId(3)));
     assert!(!hierarchy.same_subgroup(IterationId(1), IterationId(4)));
 
-    assert_eq!(
-        hierarchy.membership(IterationId(3)),
-        Some(membership(3, 10, 2))
-    );
-    assert_eq!(hierarchy.membership(IterationId(9)), None);
+    let third = hierarchy.membership(IterationId(3)).unwrap();
+    assert_eq!(third.iteration(), IterationId(3));
+    assert_eq!(third.group(), GroupId::new(10));
+    assert_eq!(third.subgroup(), SubgroupId::new(GroupId::new(10), 2));
+    assert!(hierarchy.membership(IterationId(9)).is_none());
 }
 
 #[test]
-fn subgroup_token_is_scoped_by_containing_group() {
+fn hierarchy_storage_order_does_not_change_semantic_relations() {
+    let required = [IterationId(1), IterationId(2), IterationId(3)];
+    let first = HierarchyFixture::new(
+        &required,
+        vec![
+            membership(1, 10, 1),
+            membership(2, 10, 1),
+            membership(3, 20, 1),
+        ],
+    )
+    .unwrap();
+    let second = HierarchyFixture::new(
+        &required,
+        vec![
+            membership(3, 20, 1),
+            membership(1, 10, 1),
+            membership(2, 10, 1),
+        ],
+    )
+    .unwrap();
+
+    for iteration in required {
+        assert_eq!(first.membership(iteration), second.membership(iteration));
+    }
+    assert_eq!(
+        first.same_group(IterationId(1), IterationId(2)),
+        second.same_group(IterationId(1), IterationId(2))
+    );
+    assert_eq!(
+        first.same_subgroup(IterationId(1), IterationId(2)),
+        second.same_subgroup(IterationId(1), IterationId(2))
+    );
+}
+
+#[test]
+fn subgroup_identity_is_scoped_by_containing_group() {
+    let first = SubgroupId::new(GroupId::new(10), 7);
+    let second = SubgroupId::new(GroupId::new(20), 7);
+    assert_ne!(first, second);
+
     let hierarchy = HierarchyFixture::new(
         &[IterationId(1), IterationId(2)],
         vec![membership(1, 10, 7), membership(2, 20, 7)],
@@ -93,6 +138,18 @@ fn subgroup_token_is_scoped_by_containing_group() {
 
     assert!(!hierarchy.same_group(IterationId(1), IterationId(2)));
     assert!(!hierarchy.same_subgroup(IterationId(1), IterationId(2)));
+}
+
+#[test]
+fn same_subgroup_implies_same_group() {
+    let hierarchy = HierarchyFixture::new(
+        &[IterationId(1), IterationId(2)],
+        vec![membership(1, 10, 7), membership(2, 10, 7)],
+    )
+    .unwrap();
+
+    assert!(hierarchy.same_subgroup(IterationId(1), IterationId(2)));
+    assert!(hierarchy.same_group(IterationId(1), IterationId(2)));
 }
 
 #[test]
