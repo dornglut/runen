@@ -64,3 +64,82 @@ pub const fn state_is_detach_safe(retention: TaskStateRetention) -> bool {
 pub fn all_state_dependencies_are_detach_safe(required_state: &[TaskStateRetention]) -> bool {
     required_state.iter().copied().all(state_is_detach_safe)
 }
+
+/// Verification-only result of one explicit cancellation observation point.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskCancellationObservation {
+    Continue,
+    Cancelled,
+}
+
+/// Invalid use of the focused one-task cancellation fixture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskCancellationError {
+    ForeignTask,
+    AlreadyCancelled,
+}
+
+/// Verification-only cooperative cancellation state for one represented task.
+///
+/// This fixture models only explicit semantic request/observation sequencing. It is
+/// not a source task handle, cancellation capability, scheduler, timer, polling
+/// loop, executor, or fault-propagation model.
+pub struct TaskCancellationFixture {
+    task: TaskId,
+    request_pending: bool,
+    cancelled: bool,
+}
+
+impl TaskCancellationFixture {
+    #[must_use]
+    pub const fn new(task: TaskId) -> Self {
+        Self {
+            task,
+            request_pending: false,
+            cancelled: false,
+        }
+    }
+
+    /// Records a cancellation request for the represented task.
+    ///
+    /// Repeated requests while the task remains non-terminal are idempotent. A
+    /// request alone does not make the task cancelled.
+    pub fn request(&mut self, task: TaskId) -> Result<(), TaskCancellationError> {
+        self.require_live_task(task)?;
+        self.request_pending = true;
+        Ok(())
+    }
+
+    /// Exercises one explicit cancellation observation point of the represented task.
+    ///
+    /// Without a pending request the task continues. A pending request is consumed
+    /// by terminal cancellation; no later observation transition is represented.
+    pub fn observe(
+        &mut self,
+        task: TaskId,
+    ) -> Result<TaskCancellationObservation, TaskCancellationError> {
+        self.require_live_task(task)?;
+
+        if self.request_pending {
+            self.cancelled = true;
+            return Ok(TaskCancellationObservation::Cancelled);
+        }
+
+        Ok(TaskCancellationObservation::Continue)
+    }
+
+    #[must_use]
+    pub const fn is_cancelled(&self) -> bool {
+        self.cancelled
+    }
+
+    fn require_live_task(&self, task: TaskId) -> Result<(), TaskCancellationError> {
+        if task != self.task {
+            return Err(TaskCancellationError::ForeignTask);
+        }
+        if self.cancelled {
+            return Err(TaskCancellationError::AlreadyCancelled);
+        }
+        Ok(())
+    }
+}
