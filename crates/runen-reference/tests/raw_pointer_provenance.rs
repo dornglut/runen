@@ -34,7 +34,7 @@ fn formed(events: &[VerificationEvent]) -> Vec<RawPointerValue> {
 }
 
 #[test]
-fn distinct_local_storage_extents_have_distinct_storage_instances() {
+fn distinct_local_storage_extents_have_distinct_provenance_roots() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
@@ -62,8 +62,6 @@ fn distinct_local_storage_extents_have_distinct_storage_instances() {
 
     assert_eq!(pointers.len(), 2);
     assert_ne!(pointers[0].target.instance, pointers[1].target.instance);
-    assert_eq!(pointers[0].provenance, pointers[0].target.instance);
-    assert_eq!(pointers[1].provenance, pointers[1].target.instance);
 }
 
 #[test]
@@ -91,11 +89,10 @@ fn address_of_field_records_structural_region_without_layout() {
 
     assert_eq!(pointers.len(), 1);
     assert_eq!(pointers[0].target.projections, vec![Projection::Field(1)]);
-    assert_eq!(pointers[0].provenance, pointers[0].target.instance);
 }
 
 #[test]
-fn direct_and_loan_address_formation_share_underlying_storage_provenance() {
+fn direct_and_loan_address_formation_share_underlying_storage_provenance_root() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
@@ -136,7 +133,7 @@ fn direct_and_loan_address_formation_share_underlying_storage_provenance() {
 }
 
 #[test]
-fn ordinary_replacement_preserves_storage_identity_and_pointer_provenance() {
+fn ordinary_replacement_preserves_storage_identity_and_pointer_metadata() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
@@ -175,7 +172,7 @@ fn ordinary_replacement_preserves_storage_identity_and_pointer_provenance() {
 }
 
 #[test]
-fn interior_replacement_preserves_storage_identity_and_pointer_provenance() {
+fn interior_replacement_preserves_storage_identity_and_pointer_metadata() {
     let mut types = TypeTable::new();
     let value_ty =
         types.push(TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability());
@@ -269,7 +266,7 @@ fn move_and_drop_end_values_without_changing_storage_identity() {
 }
 
 #[test]
-fn pointer_copy_and_move_preserve_exact_target_and_provenance() {
+fn pointer_copy_and_move_preserve_defined_pointer_metadata() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));

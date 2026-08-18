@@ -2,9 +2,9 @@
 
 Status: **provisional normative; root borrowing, reborrowing, interior-mutability interaction, and raw-pointer formation authorization defined**
 
-This document owns the currently defined Core semantics for structural place overlap, shared/exclusive borrowing, reborrow delegation, borrow intervals, and alias authority through active loans.
+This document defines structural place overlap, shared/exclusive borrowing, reborrow delegation, borrow intervals, and alias authority through active loans.
 
-The storage existence, dynamic storage-instance identity, stored-value lifetime, initialization-state, ownership-transfer, assignment-mutability, interior-mutability capability, destruction-domain, and cleanup rules that borrowing constrains are owned by [Core value and storage semantics](value-storage.md). Raw-pointer values and provenance formed after borrowing authorizes a storage selection are owned by [Core pointers and provenance](pointers.md).
+Storage extent, storage-instance identity, stored-value lifetime, initialization state, assignment mutability, interior mutability, destruction, and cleanup are defined by [Core value and storage semantics](value-storage.md). Raw-pointer values and provenance are defined by [Core pointers and provenance](pointers.md).
 
 ## Terms
 
@@ -20,7 +20,7 @@ For the field-only places defined by this revision:
 - two places with the same local root overlap exactly when either field-projection sequence is a prefix of the other;
 - sibling field places that diverge at a field projection are disjoint.
 
-Place overlap is symmetric. It depends only on semantic place structure and does not depend on physical addresses, field offsets, ABI layout, dynamic storage-instance token representation, relocation, or pointer provenance.
+Place overlap is symmetric. It depends only on semantic place structure and does not depend on physical addresses, field offsets, ABI layout, relocation, or pointer provenance.
 
 ### Loan
 
@@ -32,11 +32,11 @@ Shared versus exclusive describes competing-access authority. It does not itself
 
 The three concerns are independent:
 
-- **assignment mutability** controls ordinary `Assign` and is owned by the value/storage model;
-- **alias authority** is shared or exclusive and is owned by this borrowing model;
-- **interior mutability** is explicit type/storage capability and is owned by the value/storage model.
+- **assignment mutability** controls ordinary `Assign`;
+- **alias authority** is shared or exclusive;
+- **interior mutability** is explicit type/storage capability.
 
-A loan is not defined by this revision as a numeric address, pointer bit pattern, source-language reference value, allocation identity, dynamic storage-instance identity, or provenance token.
+A loan is not a numeric address, pointer bit pattern, source-language reference value, allocation identity, dynamic storage-instance identity, or provenance token.
 
 ### Alias authority
 
@@ -46,9 +46,7 @@ A loan is not defined by this revision as a numeric address, pointer bit pattern
 
 `Init` is also an exclusive-authority direct-storage operation.
 
-Interior mutation is deliberately not modeled as a third alias kind. A shared write to explicitly interior-mutable storage still uses shared alias authority plus a separate interior-mutability capability check.
-
-Raw-pointer formation is likewise not a third alias kind. `AddressOf` uses shared authority to select existing storage but does not read the current stored value and does not transfer that authority into the resulting raw pointer.
+Interior mutation is not a third alias kind. A shared write to explicitly interior-mutable storage uses shared alias authority plus a separate interior-mutability capability check.
 
 ### Borrow interval
 
@@ -58,11 +56,9 @@ Borrow interval, storage extent, dynamic storage-instance identity, and stored-v
 
 Ending a borrow interval does not by itself end the target storage extent, its storage-instance identity, or the currently active stored-value lifetime.
 
-Conversely, an exclusive loan may remain active while an exclusive operation through that loan ends one stored-value lifetime and later begins another in the same storage extent when the ordinary assignment rule permits that replacement.
+Conversely, an exclusive loan may remain active while an exclusive operation through that loan ends one stored-value lifetime and later begins another in the same storage extent when ordinary assignment permits replacement.
 
-For interior-mutable storage, a shared loan may likewise remain active while legal `InteriorAssign` ends old stored-value lifetimes and begins replacement lifetimes in the same storage extent. Therefore a shared loan is not a promise that one stored-value lifetime remains unchanged for the entire interval.
-
-A raw pointer formed while a loan is active is an owned pointer value rather than a continuation of the loan interval. Ending that loan does not mutate or erase the already formed pointer. This statement defines no right to dereference that pointer after loan end; raw-pointer access is a later semantic owner.
+For interior-mutable storage, a shared loan may likewise remain active while legal `InteriorAssign` ends old stored-value lifetimes and begins replacement lifetimes in the same storage extent. A shared loan is therefore not a promise that one stored-value lifetime remains unchanged for the whole borrow interval.
 
 The current proving MIR gives a loan declaration a stable body-local `LoanId`. That declaration may be activated again after an earlier interval ends. Each activation is a distinct borrow interval and receives fresh dynamic root, kind, and parent state.
 
@@ -72,7 +68,7 @@ A Core operation may reach storage either directly through a place or through an
 
 Loan-relative projection does not create a new loan. It selects a sub-place governed by the existing loan.
 
-`PlaceAccess` is semantic access authority in the proving MIR. It is not a stored reference value, raw-pointer value, address, dynamic storage-instance identity, or provenance identity.
+`PlaceAccess` is proving-MIR access authority. It is not a stored reference value, raw-pointer value, address, dynamic storage-instance identity, or provenance identity.
 
 ### Loan forest
 
@@ -89,9 +85,7 @@ Parentage belongs to the current activation, not permanently to the reusable loa
 
 ## Borrow creation
 
-The proving MIR has one borrow operation whose source is a `PlaceAccess`.
-
-Conceptually:
+The proving MIR has one borrow operation whose source is a `PlaceAccess`:
 
 ```text
 Borrow { loan, kind, src: PlaceAccess }
@@ -118,8 +112,6 @@ For `PlaceAccess::Direct(p)`:
 Exclusive borrowing does not by itself require the containing local to be mutable. Assignment mutability remains a separate rule applied when ordinary `Assign` is attempted.
 
 Interior-mutability capability is also irrelevant to whether a root shared or exclusive loan may begin. It affects only the dedicated interior-replacement operation after alias authority has been established.
-
-Raw-pointer provenance is likewise irrelevant to whether a loan may begin. Loans regulate current alias access to structural places; provenance is pointer metadata owned separately.
 
 ### Reborrow creation
 
@@ -162,22 +154,20 @@ If one or more active shared direct children of `P` overlap `p`, `P` retains sha
 
 - `Read` is permitted;
 - `Copy` is permitted when the selected type is copyable;
-- `AddressOf` raw-pointer formation is permitted;
+- `AddressOf` is permitted;
 - shared reborrow is permitted when its ordinary preconditions hold;
 - `InteriorAssign` is permitted when the selected concrete target independently lies within an interior-mutable region;
 - `Move`, ordinary `Assign`, `Drop`, and exclusive reborrow are invalid.
 
 For an exclusive parent this is a temporary local downgrade from exclusive to shared authority. For a shared parent, an overlapping shared child does not further reduce the parent's already-shared authority.
 
-The availability of `InteriorAssign` here does not mean the shared child grants mutation permission. The child only leaves shared alias authority intact; the distinct interior-mutability capability is checked by the value/storage rules.
-
-Likewise, availability of `AddressOf` means only that shared authority remains sufficient to select storage for pointer formation. The resulting pointer does not inherit parent or child loan authority.
+The availability of `InteriorAssign` does not mean the shared child grants mutation permission. The child only leaves shared alias authority intact; the distinct interior-mutability capability is checked by the value/storage rules.
 
 ### Disjoint child
 
 A direct child whose concrete root is disjoint from `p` does not constrain access through `P` to `p`.
 
-An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. It may also perform `InteriorAssign` or `AddressOf` on a disjoint sibling when their independent preconditions hold.
+An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. It may perform `InteriorAssign` or `AddressOf` on a disjoint sibling when their independent preconditions hold.
 
 ## Direct access while loans are active
 
@@ -187,11 +177,9 @@ For a direct access target `p`:
 
 - `Read(p)` is permitted when no active exclusive loan overlaps `p`;
 - `Copy(p)` is permitted when no active exclusive loan overlaps `p` and the existing copyability rule permits the copy;
-- `AddressOf(p)` is permitted when no active exclusive loan overlaps `p`; it does not additionally require `p` to be Live because pointer formation does not read the stored value;
+- `AddressOf(p)` is permitted when no active exclusive loan overlaps `p`; it does not additionally require `p` to be Live;
 - `InteriorAssign(p, ...)` is permitted when no active exclusive loan overlaps `p` and `p` independently lies within an interior-mutable region;
 - `Init(p, ...)`, `Move(p)`, ordinary `Assign(p, ...)`, and `Drop(p)` are permitted only when no active loan of either kind overlaps `p`, in addition to their existing value/storage preconditions.
-
-Thus overlapping shared loans do not block direct raw-pointer formation or direct interior replacement, while an overlapping exclusive loan blocks both shared-requirement operations.
 
 The direct-access rules apply structurally. Loan delegation never weakens these constraints.
 
@@ -203,15 +191,13 @@ It permits:
 
 - `Read`;
 - `Copy`, when the selected type is copyable;
-- `AddressOf` raw-pointer formation;
+- `AddressOf`;
 - shared reborrow creation;
 - `InteriorAssign`, only when the resolved concrete target lies within an interior-mutable region under the value/storage rules.
 
 A shared loan does not permit `Move`, ordinary `Assign`, `Drop`, or exclusive reborrow in this revision.
 
 Interior assignment therefore does not upgrade a shared loan to exclusive authority. It is one operation whose alias requirement is shared and whose independent storage capability is explicit interior mutability.
-
-Raw-pointer formation similarly consumes no loan authority and performs no pointee-value read. The formed pointer is a separate owned value whose target/provenance semantics are defined by the pointer specification.
 
 ## Access through an exclusive loan
 
@@ -221,7 +207,7 @@ It permits access using:
 
 - `Read`;
 - `Copy`, when the selected type is copyable;
-- `AddressOf` raw-pointer formation because exclusive authority includes shared authority;
+- `AddressOf` because exclusive authority includes shared authority;
 - shared or exclusive reborrow according to the ordinary child rules;
 - `Move`;
 - ordinary `Assign`, when the existing containing-local assignment-mutability rule permits assignment;
@@ -237,10 +223,7 @@ An exclusive loan controls access to storage rather than to one immutable stored
 1. `Move` or `Drop` through an exclusive root or child loan may end the selected stored-value lifetime and leave that storage Dead;
 2. the exclusive borrow interval may remain active because the underlying storage extent and storage-instance identity still exist;
 3. when the containing local is mutable, a later legal ordinary `Assign` through the same active exclusive loan may begin a new stored-value lifetime in that storage;
-4. independently, when the target lies within an interior-mutable region, legal `InteriorAssign` may begin a replacement stored-value lifetime without relying on the containing local's assignment-mutability flag;
-5. `AddressOf` may form a raw pointer to the selected storage using shared authority without making that pointer a continuation of the exclusive loan.
-
-This distinction follows the separation between storage extent, dynamic storage-instance identity, stored-value lifetime, borrow interval, alias authority, assignment mutability, interior-mutability capability, and pointer provenance.
+4. independently, when the target lies within an interior-mutable region, legal `InteriorAssign` may begin a replacement stored-value lifetime without relying on the containing local's assignment-mutability flag.
 
 ## Interior mutation under shared aliases
 
@@ -254,30 +237,17 @@ For `InteriorAssign(dst, src)`:
 
 Multiple overlapping shared root loans may therefore remain active over the same marked storage while sequential `InteriorAssign` operations occur in the current single-threaded deterministic Core machine. Those loans continue to govern the same structural storage region; they do not identify one immutable stored-value lifetime.
 
-This rule does not define concurrency safety. Data races, synchronization, atomics, memory ordering, and multi-agent execution belong to the owning Exec concurrency semantics and are not inferred from the single-threaded Core rule.
+This rule does not define concurrency safety. Data races, synchronization, atomics, memory ordering, and multi-agent execution belong to Exec concurrency semantics and are not inferred from the single-threaded Core rule.
 
 This rule also does not define a source-language reference representation. A future source reference system may lower to or refine these semantic loans, but it cannot infer physical address identity, pointer provenance, or a value-stability guarantee from this proving-MIR model.
 
-## Raw-pointer formation under loans
+## Raw-pointer formation authorization
 
-`AddressOf(src)` is the only raw-pointer-related operation whose borrowing requirement is defined by this revision.
+`AddressOf(src)` requires shared authority for `src` and resolves it to one concrete structural place. Unlike `Read` and `Copy`, formation does not require the selected stored value to be Live because it selects existing storage without reading the pointee value.
 
-The borrowing model performs only formation-time authorization:
+The resulting raw pointer does not contain the `LoanId`, borrow interval, shared/exclusive loan kind, or delegation state used to authorize formation. Forming a pointer does not end, shorten, or extend the source loan, and ending or later reactivating that loan does not alter the already formed pointer.
 
-1. require shared authority for `src`;
-2. resolve `src` to one concrete structural place;
-3. return that place to the pointer semantics for storage-instance/provenance formation.
-
-Borrowing does not place a `LoanId`, borrow interval, shared/exclusive kind, or delegation state into the resulting raw-pointer value.
-
-Therefore:
-
-- forming a pointer does not end, shorten, or extend the source loan;
-- ending the source loan does not mutate the formed pointer;
-- a later reactivation of the same loan declaration does not retroactively alter pointers formed during a previous activation;
-- forming through a shared versus exclusive loan to the same concrete region derives pointer provenance from the same underlying dynamic storage instance, not from the loan kind or loan identity.
-
-No rule in this section authorizes dereference, load, store, arithmetic, or any other memory access through the raw pointer. Later pointer-access semantics must define their own preconditions and their relationship to aliasing without pretending that formation-time loan authority was stored in the pointer.
+These rules authorize pointer formation only. They do not authorize dereference, load, store, arithmetic, or any other memory access through the resulting raw pointer.
 
 ## Borrow end and termination
 
@@ -286,8 +256,6 @@ No rule in this section authorizes dereference, load, store, arithmetic, or any 
 Ending a child interval restores the direct parent's original authority over the delegated region, subject to any other still-active direct children of that parent.
 
 After an explicit borrow end, using that loan for place access is invalid until a new interval for that loan declaration begins.
-
-Raw pointers previously formed while that loan was active are values independent of the ended loan. Their mere continued existence does not count as use of an inactive `LoanId`.
 
 Defined `Return` and defined `Fault` end the complete active loan forest before function termination cleanup begins. This semantic termination is not required to fabricate explicit `BorrowEnd` verification instrumentation for each automatically ended interval.
 
@@ -303,27 +271,14 @@ The repeated-state key therefore includes each active loan's kind, concrete root
 
 Interior mutability adds no hidden loan or borrow-guard state. A legal `InteriorAssign` changes only the ordinary storage state already represented by the value/storage model.
 
-Raw-pointer formation likewise adds no hidden borrow state. Its pointer value is ordinary runtime value state after formation; provenance does not become part of the active-loan forest.
+Raw-pointer formation likewise adds no hidden borrow state. The formed pointer is ordinary runtime value state after formation.
 
 Borrow creation, reborrow delegation, access permission, address-formation alias authorization, interior-assignment alias authorization, and explicit borrow end are determined solely from typed places, active loans, structural parentage, and structural overlap. They do not depend on host references, backend alias analysis, physical scheduling, physical addresses, pointer provenance, or container iteration order.
 
 ## Separate semantic owners
 
-This revision does not define:
+This revision does not define lifetime parameters or source borrow inference, first-class reference values, borrowing transient operand values, source syntax or library APIs for interior mutability, runtime borrow guards, raw-pointer memory access or arithmetic, numeric-address conversion, complete provenance semantics, relocation or pinning, heap allocation/deallocation, value validity, undefined behavior, source `unsafe`, custom destructor bodies, or concurrency/memory-ordering semantics.
 
-- lifetime parameters, source-level lifetime syntax, lifetime elision, or source borrow inference;
-- first-class reference values, stored references, or their representation/equality;
-- borrowing transient operand values that do not already inhabit a place;
-- source syntax or library APIs for declaring/exposing interior-mutable types;
-- runtime borrow guards such as `RefCell`-style dynamic borrowing;
-- raw-pointer dereference, loads/stores, pointer arithmetic, numeric-address conversion, exposed provenance, pointer equality, or pointer access validity;
-- relocation or pinning/address stability;
-- heap allocation/deallocation;
-- value validity, invalid bit patterns, or undefined-behavior closure;
-- source `unsafe` constructs or safe-abstraction proof rules;
-- custom destructor bodies;
-- atomics, data races, synchronization, or Exec memory/concurrency semantics.
-
-Raw-pointer type/value formation and storage-rooted provenance are defined by [Core pointers and provenance](pointers.md); this document defines only the shared alias authority needed to select storage during that formation.
+Raw-pointer formation and provenance are defined by [Core pointers and provenance](pointers.md); this document defines only the alias authority required to select storage for that formation.
 
 Illustrative source spellings such as `&T`, `&mut T`, or an interior-cell type do not freeze grammar. Future source references and library abstractions may lower to or refine the semantic loan and interior-mutability models, but source representation is not defined here.
