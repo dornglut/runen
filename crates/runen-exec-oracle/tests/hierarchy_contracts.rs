@@ -1,7 +1,7 @@
 use runen_exec_oracle::{
-    Access, AccessKind, BarrierId, BarrierPhase, BufferId, BufferRegion, EachPhase, GroupId,
+    Access, AccessKind, BarrierFixture, BarrierId, BufferId, BufferRegion, EachPhase, GroupId,
     HierarchyError, HierarchyFixture, HierarchyMembership, IterationId, PositionId, SubgroupId,
-    barrier_orders, each_orders,
+    each_orders,
 };
 
 fn membership(iteration: u32, group: u32, subgroup: u32) -> HierarchyMembership {
@@ -190,23 +190,17 @@ fn hierarchy_membership_does_not_legalize_ordinary_conflict() {
 }
 
 #[test]
-fn full_each_barrier_order_is_independent_of_hierarchy_membership() {
+fn root_barrier_order_is_independent_of_hierarchy_membership() {
+    let required = [IterationId(1), IterationId(2)];
     let hierarchy = HierarchyFixture::new(
-        &[IterationId(1), IterationId(2)],
+        &required,
         vec![membership(1, 10, 1), membership(2, 20, 1)],
     )
     .unwrap();
-    let barrier = BarrierId(5);
+    let barrier = BarrierFixture::root(BarrierId::new(5), &required).unwrap();
+    let before = barrier.before(IterationId(1)).unwrap();
+    let after = barrier.after(IterationId(2)).unwrap();
 
     assert!(!hierarchy.same_group(IterationId(1), IterationId(2)));
-    assert!(barrier_orders(
-        BarrierPhase::Before {
-            barrier,
-            iteration: IterationId(1),
-        },
-        BarrierPhase::After {
-            barrier,
-            iteration: IterationId(2),
-        }
-    ));
+    assert!(barrier.orders(before, after));
 }
