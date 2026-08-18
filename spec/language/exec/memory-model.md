@@ -35,8 +35,24 @@ Therefore a realization that happens to serialize source-unordered conflicting a
 
 This is a language/profile semantic legality rule. It is not environment admission and is not an optimization preference. The source-language or compiler mechanism by which a program establishes the required interaction contract is not defined by this revision.
 
+## Structured barrier synchronization
+
+The full-`each` structured barrier defined by [Exec parallelism](parallelism.md) is an explicit synchronization mechanism for ordinary accesses.
+
+The phase relation owned by that construct induces this memory-model ordering for one normally completed barrier instance: every ordinary non-atomic access in every required iteration's before-barrier phase is ordered before every ordinary non-atomic access in every required iteration's after-barrier phase.
+
+This relationship is semantic. It does not derive from physical arrival order, release order, worker scheduling, cache operations, or backend queue behavior.
+
+The barrier does not change the ordinary conflict relation. Two overlapping ordinary accesses with at least one state-changing access still conflict. When one such access is in a before-barrier phase and the other is in an after-barrier phase of the same normally completed barrier instance, the barrier supplies semantic order between them, so they are not a source-unordered conflicting pair under the rule above. Every other applicable authority, validity, effect, resource, and operation-specific contract still has to permit both accesses.
+
+Conflicting ordinary accesses performed by sibling iterations within the same before-barrier phase or within the same after-barrier phase remain source-unordered unless another semantic contract orders them.
+
+A different barrier identity supplies no memory order by identity alone. Ordering between ordinary accesses around distinct barriers must arise from their placement or another applicable semantic relationship in the enclosing execution.
+
+Buffer logical coherence consumes this barrier-established access order through its own canonical contract; this document does not redefine Buffer state or visibility.
+
 No host, hardware, or backend memory model is normative by default.
 
 ## Open memory-model rules
 
-The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations, atomic order vocabulary, atomic scope lattice, and synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.
+The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations beyond the structured barrier relation above, atomic order vocabulary, atomic scope lattice, and additional synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.

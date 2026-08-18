@@ -20,13 +20,36 @@ This revision defines only normal structured completion. The behavior of an `eac
 
 ## Inter-iteration interaction
 
-Safe inter-iteration interaction requires an explicit legal interaction model. Ordinary non-atomic inter-iteration access is governed by the conflict and unordered-access rules in [Exec memory model](memory-model.md). The identity-bearing unordered reduction defined below is a separate structured interaction model. Atomics, commutative accumulation, and collectives require their own defined contracts; listing them as interaction categories does not itself authorize behavior that those contracts have not yet defined.
+Safe inter-iteration interaction requires an explicit legal interaction model. Ordinary non-atomic inter-iteration access is governed by the conflict and unordered-access rules in [Exec memory model](memory-model.md). The structured barrier and identity-bearing unordered reduction defined below are separate structured interaction models. Atomics, commutative accumulation, and collectives require their own defined contracts; listing them as interaction categories does not itself authorize behavior that those contracts have not yet defined.
 
 The structured entry/completion boundary does not legalize a conflicting ordinary pair of sibling-iteration accesses. Conversely, disjoint or otherwise legally interacting sibling work need not be physically serialized merely because normal continuation waits for the structured operation to complete.
 
 Buffer logical coherence consumes the semantic ordering relationships established here according to [Exec Buffers](resources/buffers.md); this document does not redefine Buffer visibility or coherence.
 
 Unordered physical scheduling does not by itself imply semantic nondeterminism.
+
+## Full-`each` structured barrier
+
+A **structured barrier** in this revision is a phase boundary belonging to one dynamic `each` execution. It partitions every iteration required by that execution into one before-barrier phase and one after-barrier phase for that barrier instance.
+
+The required participants of the barrier are exactly the iterations required by the enclosing `each` execution. This first barrier form does not define a subgroup, partial cohort, workgroup, lane set, or independently selected participant set.
+
+For one structured barrier instance:
+
+1. every required iteration has one before-barrier phase and one after-barrier phase;
+2. the barrier boundary completes normally only after every required iteration has completed its before-barrier phase normally;
+3. no required iteration begins its after-barrier phase before the barrier boundary has completed normally;
+4. the boundary introduces no relative order among sibling before-barrier phases and no relative order among sibling after-barrier phases.
+
+The memory-ordering consequence of this completed phase boundary is owned by [Exec memory model](memory-model.md).
+
+Physical arrival order, release order, worker assignment, lane identity, queue order, chunking, and rendezvous implementation are not semantic input. A realization MAY implement the boundary using any mechanism that preserves the defined phase structure and applicable memory semantics.
+
+Different dynamic barrier instances are distinct semantic boundaries. Barrier identity alone does not order actions around two different barriers; any such order must follow from their placement and other applicable semantics in the enclosing execution.
+
+This revision defines the structured phase form rather than an imperative barrier call. Source syntax, lowering, and validation for any future imperative spelling are not defined here; such a future form requires its own rules establishing the structured participation represented by this barrier boundary.
+
+If a required iteration faults, is cancelled, diverges, or otherwise fails to complete its before-barrier phase normally, the barrier and enclosing `each` abnormal-completion behavior are not defined by this revision.
 
 ## Identity-bearing unordered reduction
 
@@ -70,8 +93,8 @@ Physical worker, lane, chunk, queue, partial-accumulator, or tree order is not a
 
 For a normally completed `each` carrying the reduction, normal continuation is reached only after every required iteration has completed normally and every contribution produced by those iterations has been incorporated. The reduction result is then available to the normal continuation.
 
-This reduction interaction establishes no general ordering relation among sibling iterations and no atomic, fence, barrier, or other synchronization semantics for ordinary accesses.
+An unordered reduction is not an implicit structured barrier. It establishes no general ordering relation among sibling iterations and no atomic, fence, barrier, or other synchronization semantics for ordinary accesses unless a separate contract explicitly supplies such a relationship.
 
 The reduction result and partial-result behavior when an iteration faults, is cancelled, diverges, or otherwise fails to complete normally are not defined by this revision.
 
-Hierarchical execution concepts such as groups, subgroups, group-local storage, barriers, broadcast, and shuffle belong to Exec. Their precise portable semantics are not defined by this revision.
+Hierarchical execution concepts such as groups, subgroups, group-local storage, broadcast, and shuffle belong to Exec. Their precise portable semantics are not defined by this revision. Barrier forms beyond the full-`each` structured barrier defined above are likewise not defined by this revision.
