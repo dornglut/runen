@@ -21,9 +21,7 @@ fn one_block(
 
 fn marked_i64() -> (TypeTable, TypeId) {
     let mut types = TypeTable::new();
-    let ty = types.push(
-        TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability(),
-    );
+    let ty = types.push(TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability());
     (types, ty)
 }
 
@@ -296,9 +294,8 @@ fn marked_ancestor_grants_interior_mutability_to_structural_descendants() {
 #[test]
 fn marked_descendant_does_not_make_unmarked_aggregate_interior_mutable() {
     let mut types = TypeTable::new();
-    let marked = types.push(
-        TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability(),
-    );
+    let marked =
+        types.push(TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability());
     let plain = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pair = types.push(TypeDef::structure(
         "Pair",
@@ -324,9 +321,8 @@ fn marked_descendant_does_not_make_unmarked_aggregate_interior_mutable() {
 #[test]
 fn marked_descendant_itself_is_interior_mutable_inside_unmarked_aggregate() {
     let mut types = TypeTable::new();
-    let marked = types.push(
-        TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability(),
-    );
+    let marked =
+        types.push(TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability());
     let plain = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pair = types.push(TypeDef::structure(
         "Pair",
@@ -360,10 +356,7 @@ fn shared_child_preserves_parent_shared_authority_for_interior_assignment() {
     let body = one_block(
         types,
         vec![LocalDecl::new("value", ty, false)],
-        vec![
-            LoanDecl::new("parent", ty),
-            LoanDecl::new("child", ty),
-        ],
+        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
         vec![
             Statement::Init {
                 dst: place.clone(),
@@ -398,10 +391,7 @@ fn exclusive_child_suspends_parent_interior_assignment() {
     let body = one_block(
         types,
         vec![LocalDecl::new("value", ty, false)],
-        vec![
-            LoanDecl::new("parent", ty),
-            LoanDecl::new("child", ty),
-        ],
+        vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
         vec![
             Statement::Init {
                 dst: place.clone(),
@@ -449,10 +439,7 @@ fn disjoint_exclusive_child_does_not_block_parent_interior_assignment_on_sibling
     let body = one_block(
         types,
         vec![LocalDecl::new("pair", pair, false)],
-        vec![
-            LoanDecl::new("parent", pair),
-            LoanDecl::new("left", scalar),
-        ],
+        vec![LoanDecl::new("parent", pair), LoanDecl::new("left", scalar)],
         vec![
             Statement::Init {
                 dst: root.clone(),
