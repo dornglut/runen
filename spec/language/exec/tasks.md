@@ -18,9 +18,34 @@ A structured task scope completes normally only after every child task that rema
 
 Attachment to the same structured task scope does not by itself establish a relative order between two child tasks. Any ordering or interaction between child tasks requires another applicable semantic contract.
 
-This revision defines only normal structured task-scope completion. If an attached child faults, is cancelled, diverges, or otherwise fails to complete normally, the scope's resulting fault, cancellation, result, and completion behavior are not defined by this revision.
+A child task that terminates with the cancelled outcome defined below has not completed normally and therefore does not satisfy the attached-child normal-completion requirement. This revision does not define whether a structured scope containing such a child becomes cancelled, faults, cancels siblings, aggregates abnormal outcomes, retries work, or exposes a result.
+
+If an attached child faults, diverges, or otherwise fails to complete normally, the scope's resulting fault, result, and completion behavior remain not defined by this revision.
 
 The source or runtime operations that create a task, attach it to a scope, wait for it, or produce its result are not defined by this revision.
+
+## Cooperative cancellation
+
+A **cancellation request** targets one task and requests that the task terminate with the cancelled outcome at a later explicit cancellation observation point.
+
+A cancellation request that has been semantically established before an observation point remains **pending** for that task until cancellation is observed or another future contract explicitly defines a different transition. Repeating the same cancellation request effect while the task remains non-terminal leaves cancellation pending and introduces no additional cancellation effect.
+
+A request by itself does not terminate the task, interrupt its current semantic action, establish order between sibling tasks, create memory visibility, or guarantee that the target task will make progress or reach a cancellation observation point.
+
+A **cancellation observation point** is an explicit semantic point in the target task at which pending cancellation is observed:
+
+- if no cancellation request is pending at that point, cancellation observation completes normally and the task may continue;
+- if cancellation is pending at that point, the task begins defined cancellation termination at that point.
+
+A request affects a particular observation point only when the applicable language semantics establish the request before that observation. Cancellation itself does not derive such order from host timing, worker scheduling, queue order, or physical arrival. The interaction of a request and observation that are otherwise source-unordered is not defined by this revision.
+
+Defined cancellation termination performs the applicable Core function-termination cleanup owned by [Core value and storage](../core/value-storage.md). After that required termination cleanup completes, the task has the terminal **cancelled** outcome. Cancellation is distinct from normal completion, defined Core `Fault`, and divergence.
+
+Once cancellation termination begins, the task performs no later ordinary task-body action. Actions required by the applicable termination-cleanup contract are part of cancellation termination rather than continued ordinary task-body execution. After the terminal cancelled outcome, no later task-body action or additional cancellation observation belongs to that task execution.
+
+This revision defines no implicit cancellation point, asynchronous interruption, polling interval, cancellation latency, fairness, deadline, eventual-cancellation guarantee, cancellation masking, or preemptive termination. A task that never reaches an applicable observation point is not made terminal merely because a cancellation request remains pending.
+
+The source spelling or runtime operation that requests cancellation, the authority required to issue a request, and the source/lowering mechanism that creates cancellation observation points are not defined by this revision.
 
 ## Borrowed and permission-bearing state
 
@@ -38,7 +63,7 @@ This revision does not define a new Exec borrowing system, first-class source re
 
 A child task is **detached from an originating structured task scope** when it no longer participates in that scope's normal-completion set.
 
-Detachment therefore removes only the originating scope's structured completion obligation. It does not guarantee asynchrony, parallel execution, progress, survival, a physical execution target, or immunity from future cancellation semantics. It likewise does not itself establish an ordering relationship between the detached task and the originating scope's normal continuation.
+Detachment therefore removes only the originating scope's structured completion obligation. It does not guarantee asynchrony, parallel execution, progress, survival, a physical execution target, or immunity from the cooperative cancellation semantics above. It likewise does not itself establish an ordering relationship between the detached task and the originating scope's normal continuation.
 
 A detached task MUST NOT depend, after detachment, on state whose validity is bounded only by the originating scope once that scope may complete. Every state dependency the detached work still requires MUST instead be either:
 
@@ -53,8 +78,10 @@ The operation that performs detachment, whether every task form is detachable, a
 
 Structured task-scope membership is not a synchronization mechanism between sibling child tasks.
 
+A cancellation request, pending-cancellation state, or cancellation outcome does not by itself establish sibling-task order or legalize an otherwise-conflicting ordinary interaction.
+
 Ordinary accesses by child tasks remain governed by [Exec memory model](memory-model.md), and attachment does not legalize an otherwise-conflicting unordered ordinary interaction.
 
-Buffer logical coherence may consume the semantic order from an attached child's normal completion to the structured scope's normal continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue.
+Buffer logical coherence may consume the semantic order from an attached child's normal completion to the structured scope's normal continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue. This revision does not define a Buffer visibility consequence from a cancelled child to a containing scope because the containing scope's abnormal-completion behavior remains open.
 
-The exact spawn, await, cancellation, task result, and task fault-propagation rules remain not defined by this revision.
+The exact spawn, await, task result, task fault-propagation, parent/sibling cancellation-propagation, and abnormal structured-scope completion rules remain not defined by this revision.
