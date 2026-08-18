@@ -67,13 +67,15 @@ fn raw_assign_replaces_live_target_with_existing_replacement_lifecycle() {
     let write = report
         .verification_events
         .iter()
-        .position(|event| matches!(
-            event,
-            VerificationEvent::Write {
-                place,
-                kind: VerificationWriteKind::RawAssign,
-            } if place == &target
-        ))
+        .position(|event| {
+            matches!(
+                event,
+                VerificationEvent::Write {
+                    place,
+                    kind: VerificationWriteKind::RawAssign,
+                } if place == &target
+            )
+        })
         .expect("RawAssign write is instrumented");
     let new_drop = report
         .verification_events
@@ -186,7 +188,10 @@ fn raw_assign_replaces_partial_aggregate_and_drops_only_live_old_fields() {
     ));
     let pair_ty = types.push(TypeDef::structure(
         "Pair",
-        vec![Field::new("left", tracked_ty), Field::new("right", tracked_ty)],
+        vec![
+            Field::new("left", tracked_ty),
+            Field::new("right", tracked_ty),
+        ],
     ));
     let pointer_ty = types.push(TypeDef::raw_pointer("pair_ptr", pair_ty));
     let pair = Place::local(LocalId(0));
@@ -284,13 +289,15 @@ fn raw_assign_snapshots_target_before_source_move_and_evaluates_source_first() {
     let write_index = report
         .verification_events
         .iter()
-        .position(|event| matches!(
-            event,
-            VerificationEvent::Write {
-                place,
-                kind: VerificationWriteKind::RawAssign,
-            } if place == &target
-        ))
+        .position(|event| {
+            matches!(
+                event,
+                VerificationEvent::Write {
+                    place,
+                    kind: VerificationWriteKind::RawAssign,
+                } if place == &target
+            )
+        })
         .expect("RawAssign writes the snapshotted target");
     assert!(move_index < write_index);
     assert_eq!(
@@ -621,10 +628,12 @@ fn successful_raw_assign_can_be_followed_by_defined_fault_cleanup() {
         report.terminal,
         TerminalStatus::Faulted("expected".to_owned())
     );
-    assert!(report.verification_events.iter().any(|event| matches!(
-        event,
-        VerificationEvent::DropTrackedFixture { id: 80, .. }
-    )));
+    assert!(
+        report
+            .verification_events
+            .iter()
+            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 80, .. }))
+    );
 }
 
 #[test]
