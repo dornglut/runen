@@ -8,9 +8,15 @@ Ordered sequential iteration preserves source-defined relative iteration order.
 
 `each`-style structured parallel iteration removes source-defined relative order among sibling iterations of one execution.
 
+One dynamic `each` execution has opaque semantic identity only as needed to scope the required iteration identities and other semantic structures that belong to that execution. Each required iteration has opaque semantic identity scoped by its containing dynamic `each` execution. Equal implementation or debug iteration tokens used in distinct dynamic `each` executions do not thereby identify one iteration shared by those executions.
+
+Dynamic `each` identity and iteration identity are not numeric indices, source handles, launch identifiers, worker or lane identities, queue identities, scheduler tokens, hardware topology identities, or ordering relations.
+
 Semantic actions sequenced before entry to an `each` in its containing execution context occur before actions performed by its iterations when those preceding actions belong to the same defined continuation.
 
 An `each` execution completes normally only after every iteration required by that execution has completed normally. Actions sequenced in the normal continuation after that completed `each` occur after the actions performed by every completed iteration of the `each`.
+
+These entry and normal-completion relationships belong to that dynamic `each` execution. Equal implementation or debug identities in a distinct dynamic `each` execution do not create an entry, sibling, or continuation ordering relationship between the executions.
 
 These entry and normal-completion relationships do not impose a relative order among sibling iterations. In particular, a backend that happens to execute sibling iterations serially does not thereby create source-defined inter-iteration order.
 
@@ -46,13 +52,15 @@ No empty group or subgroup is introduced merely as hierarchy metadata. This hier
 
 Group and subgroup membership is semantic structure once a hierarchy instance has been established for an execution. Membership is stable for the duration of that hierarchy instance and MUST NOT silently change merely because a realization changes physical scheduling or placement.
 
-A hierarchy instance has opaque semantic identity only as needed to scope the cohort identities it contains. Hierarchy identity is not a numeric index, source handle, launch coordinate, queue identity, worker identity, hardware topology identity, or scheduling order.
+A hierarchy instance has opaque semantic identity only as needed to scope the cohort identities it contains, and that hierarchy identity is itself scoped by the dynamic `each` execution to which the hierarchy belongs. Equal implementation or debug hierarchy tokens used in distinct dynamic `each` executions do not thereby identify one hierarchy shared by those executions. Hierarchy identity is not a numeric index, source handle, launch coordinate, queue identity, worker identity, hardware topology identity, or scheduling order.
 
 Group and subgroup identities are opaque cohort identities. They are not numeric indices, coordinates, addresses, queue identities, worker identities, lane identities, hardware wave identities, or scheduling order.
 
-Group identity is scoped by its containing hierarchy instance. Equal implementation or debug group tokens used in distinct hierarchy instances do not thereby identify one group shared by those hierarchies.
+Group identity is scoped by its containing hierarchy instance and therefore transitively by the containing dynamic `each` execution. Equal implementation or debug group tokens used in distinct hierarchy instances do not thereby identify one group shared by those hierarchies.
 
-Subgroup identity is scoped by its containing group and therefore transitively by the containing hierarchy instance. Equal implementation or debug subgroup tokens used under distinct groups or distinct hierarchy instances do not thereby identify one subgroup spanning those cohorts.
+Subgroup identity is scoped by its containing group and therefore transitively by the containing hierarchy instance and dynamic `each` execution. Equal implementation or debug subgroup tokens used under distinct groups or distinct hierarchy instances do not thereby identify one subgroup spanning those cohorts.
+
+Hierarchy membership and cohort participation consume these scoped identities. An iteration identity belonging to another dynamic `each` execution cannot retarget to an iteration in this hierarchy, barrier cohort, or reduction cohort merely because an implementation or debug iteration token is equal.
 
 Hierarchy membership by itself establishes no execution order, synchronization, memory visibility, progress guarantee, physical concurrency, temporal contiguity, or scheduling relationship. Sibling iterations remain source-unordered regardless of whether they share a group or subgroup.
 
