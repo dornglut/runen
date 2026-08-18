@@ -62,10 +62,7 @@ fn root_barrier_preserves_full_each_participation_and_empty_behavior() {
     assert!(empty.before(IterationId(1)).is_none());
 
     assert!(matches!(
-        BarrierFixture::root(
-            BarrierId::new(9),
-            &[IterationId(1), IterationId(1)]
-        ),
+        BarrierFixture::root(BarrierId::new(9), &[IterationId(1), IterationId(1)]),
         Err(BarrierError::InvalidRootIterations)
     ));
 }
@@ -117,11 +114,7 @@ fn barrier_requires_exact_participant_before_completion() {
     let hierarchy = hierarchy();
     let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, GroupId::new(10)).unwrap();
 
-    assert!(barrier.has_exact_before_completion(&[
-        IterationId(3),
-        IterationId(1),
-        IterationId(2)
-    ]));
+    assert!(barrier.has_exact_before_completion(&[IterationId(3), IterationId(1), IterationId(2)]));
     assert!(!barrier.has_exact_before_completion(&[IterationId(1), IterationId(2)]));
     assert!(!barrier.has_exact_before_completion(&[
         IterationId(1),
@@ -194,11 +187,8 @@ fn barrier_orders_conflicting_cross_phase_pair_without_erasing_conflict() {
     let selected = region(1, &[0]);
     let before_change = Access::new(AccessKind::StateChange, selected.clone());
     let after_read = Access::new(AccessKind::Read, selected);
-    let barrier = BarrierFixture::root(
-        BarrierId::new(7),
-        &[IterationId(1), IterationId(2)],
-    )
-    .unwrap();
+    let barrier =
+        BarrierFixture::root(BarrierId::new(7), &[IterationId(1), IterationId(2)]).unwrap();
     let before = barrier.before(IterationId(1)).unwrap();
     let after = barrier.after(IterationId(2)).unwrap();
 
@@ -210,11 +200,8 @@ fn barrier_orders_conflicting_cross_phase_pair_without_erasing_conflict() {
 fn same_phase_sibling_conflict_remains_unordered() {
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
     let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
-    let barrier = BarrierFixture::root(
-        BarrierId::new(7),
-        &[IterationId(1), IterationId(2)],
-    )
-    .unwrap();
+    let barrier =
+        BarrierFixture::root(BarrierId::new(7), &[IterationId(1), IterationId(2)]).unwrap();
     let first_before = barrier.before(IterationId(1)).unwrap();
     let second_before = barrier.before(IterationId(2)).unwrap();
 
