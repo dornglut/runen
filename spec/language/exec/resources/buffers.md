@@ -41,9 +41,9 @@ A view selects logical Buffer state rather than one physical backing instance. P
 
 Semantic Buffer accesses operate on one logical Buffer state. Physical backing copies, caches, placements, migration images, or replicas are realization state rather than independently selectable semantic Buffer states.
 
-When the applicable Runen semantics establish that a state-changing Buffer access `A` occurs before a later Buffer access `B`, every logical element position selected by both accesses is observed by `B` after the state transition of `A` and after every other state-changing access to that position semantically ordered between `A` and `B`.
+When the applicable Runen semantics establish that a state-changing Buffer access `A` occurs before a later Buffer access `B`, the logical pre-state presented to `B` for every logical element position selected by both accesses includes the state transition of `A` and every other state-changing access to that position semantically ordered between `A` and `B`. Any read component of `B` reads from that logical pre-state, and any state transition performed by `B` is applied to that pre-state according to `B`'s operation-specific semantics.
 
-A realization MUST NOT service such a later access from stale physical backing in a way that makes an earlier semantically ordered state change disappear or resurrects an older logical state for an overlapping position.
+A realization MUST NOT service such a later access from stale physical backing in a way that omits an earlier semantically ordered state change from `B`'s logical pre-state or resurrects an older logical state for a read performed by `B`.
 
 Buffer coherence consumes semantic order established by the applicable program or execution contract; it does not create order between source-unordered accesses. Conflicting source-unordered ordinary accesses remain governed by [Exec memory model](../memory-model.md) and are not legalized merely because a coherence mechanism could serialize or transfer their physical backing.
 
