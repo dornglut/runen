@@ -14,7 +14,7 @@ A **structured task scope** is a semantic execution boundary with a set of child
 
 Attachment is a semantic lifetime and ordering relationship relative to that scope. It does not imply a host thread, executor, worker, queue, physical parent task, scheduling policy, or execution target.
 
-A structured task scope completes normally only after every child task attached to that scope has completed normally. Actions in the scope's normal continuation occur after the actions of every such normally completed attached child.
+A structured task scope completes normally only after every child task that remains attached to that scope's normal-completion set has completed normally. Actions in the scope's normal continuation occur after the actions of every such normally completed attached child.
 
 Attachment to the same structured task scope does not by itself establish a relative order between two child tasks. Any ordering or interaction between child tasks requires another applicable semantic contract.
 
@@ -28,9 +28,9 @@ Exec work receives Core values, owned resources, or permission-bearing borrows o
 
 A child task may use a scope-bounded borrow or view only while that permission remains semantically valid. When a child is required to complete before a structured scope can complete normally, that task relationship does not by itself extend, renew, copy, or upgrade the validity of any borrow or view used by the child.
 
-If a permission would cease to be valid before the child finishes every use that depends on it, the child work is not made valid merely by being attached. The surrounding ownership and scope relationships must instead ensure that the permission remains valid through those uses and the child's required completion point.
+If a permission would cease to be valid before the child finishes every use that depends on it, the child work is not made valid merely by being attached. The surrounding ownership and scope relationships must instead ensure that the permission remains valid through every dependent use. This rule does not require a permission to remain live after the child's last use merely because the child itself continues executing.
 
-Consequently, when a structured task scope is itself the boundary used to keep scope-bounded child state valid, that scope cannot complete normally while an attached child may still use that state.
+When a structured task scope is the semantic boundary whose continued activity keeps scope-bounded child state valid, that scope cannot complete normally while an attached child may still perform a use that depends on that state.
 
 This revision does not define a new Exec borrowing system, first-class source references, source lifetime inference, or a runtime borrow guard.
 
@@ -45,7 +45,7 @@ A detached task MUST NOT depend, after detachment, on state whose validity is bo
 - owned by the detached work; or
 - independently retained by a semantic contract whose validity does not depend on the originating scope remaining active.
 
-Detachment does not convert a borrow or view into ownership or independent retention and does not extend the validity of borrowed state.
+Detachment does not convert a borrow or view into ownership or independent retention and does not extend the validity of borrowed state. State no longer required by the detached work imposes no retention obligation merely because it was used before detachment.
 
 The operation that performs detachment, whether every task form is detachable, and any later operation that explicitly waits for or reorders detached work are not defined by this revision.
 
