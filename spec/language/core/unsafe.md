@@ -18,6 +18,6 @@ A `RawRead` whose pointer operand is structurally and language-valid but whose c
 
 Such undefined behavior is not malformed MIR, a language-validation error, a defined `Fault`, or an ordinary recoverable result. This revision makes no defined termination-cleanup guarantee after that `RawRead` has violated its unsafe preconditions.
 
-The proving MIR does not define source `unsafe` syntax or unsafe-block admission in this revision. Those source-language mechanisms must preserve the unsafe obligations defined here rather than redefine them.
+Source `unsafe` syntax and unsafe-block admission are not defined by this revision.
 
 The complete value-validity model, unsafe-operation set, additional unsafe preconditions, and undefined-behavior taxonomy are not defined by this revision.
