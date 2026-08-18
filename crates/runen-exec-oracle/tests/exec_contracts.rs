@@ -180,18 +180,46 @@ fn reduction_contribution_coverage_ignores_order_but_rejects_count_changes() {
 }
 
 #[test]
-fn lawful_reduction_fixture_is_invariant_to_permutation_and_tree_shape() {
+fn equal_valued_reduction_contributions_remain_distinct_occurrences() {
+    let required = [ContributionId(7), ContributionId(8)];
+    let same_value_contributions = [(ContributionId(7), 5_i64), (ContributionId(8), 5_i64)];
+    let incorporated = [same_value_contributions[1].0, same_value_contributions[0].0];
+
+    assert!(has_exact_contribution_coverage(&required, &incorporated));
+    assert_eq!(
+        same_value_contributions
+            .iter()
+            .map(|(_, value)| *value)
+            .sum::<i64>(),
+        10
+    );
+}
+
+#[test]
+fn lawful_reduction_fixture_is_invariant_to_permutation_tree_and_neutral_identity() {
+    fn combine(left: i64, right: i64) -> i64 {
+        left + right
+    }
+
     let laws = ReductionLaws::new(true, true, true);
     assert!(laws.permits_unordered_reduction());
 
     let identity = 0_i64;
-    let left_tree = (((identity + 1) + 2) + 3) + 4;
-    let permuted_tree = (4 + 2) + (1 + (3 + identity));
-    let right_tree = 1 + (2 + (3 + (4 + identity)));
+    let left_tree = combine(
+        combine(combine(combine(identity, 1), 2), 3),
+        4,
+    );
+    let permuted_tree = combine(combine(4, 2), combine(1, combine(3, identity)));
+    let right_tree = combine(1, combine(2, combine(3, combine(4, identity))));
+    let extra_neutral_initializers = combine(
+        combine(identity, combine(identity, 1)),
+        combine(combine(identity, 2), combine(3, combine(identity, 4))),
+    );
 
     assert_eq!(left_tree, 10);
     assert_eq!(permuted_tree, left_tree);
     assert_eq!(right_tree, left_tree);
+    assert_eq!(extra_neutral_initializers, left_tree);
     assert_eq!(identity, 0);
 }
 
