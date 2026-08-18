@@ -239,7 +239,7 @@ For `InteriorAssign(dst, src)`:
 
 Multiple overlapping shared root loans may therefore remain active over the same marked storage while sequential `InteriorAssign` operations occur in the current single-threaded deterministic Core machine. Those loans continue to govern the same structural storage region; they do not identify one immutable stored-value lifetime.
 
-This rule does not define concurrency safety. Data races, synchronization, atomics, memory ordering, and multi-agent execution belong to P0-B and are not inferred from the single-threaded Core rule.
+This rule does not define concurrency safety. Data races, synchronization, atomics, memory ordering, and multi-agent execution belong to the owning Exec concurrency semantics and are not inferred from the single-threaded Core rule.
 
 This rule also does not define a source-language reference representation. A future source reference system may lower to or refine these semantic loans, but it cannot infer pointer identity, provenance, or a value-stability guarantee from this proving-MIR model.
 
