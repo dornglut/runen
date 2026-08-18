@@ -6,10 +6,7 @@ use runen_exec_oracle::{
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
-    BufferRegion::new(
-        BufferId(buffer),
-        positions.iter().copied().map(PositionId),
-    )
+    BufferRegion::new(BufferId(buffer), positions.iter().copied().map(PositionId))
 }
 
 fn state(buffer: u32, values: &[(u32, u32)]) -> LogicalBufferState {
@@ -48,10 +45,7 @@ fn ordinary_conflict_requires_overlap_and_a_state_change() {
     assert!(!read.conflicts_with(&second_read));
     assert!(read.conflicts_with(&change));
     assert!(change.conflicts_with(&read));
-    assert!(change.conflicts_with(&Access::new(
-        AccessKind::StateChange,
-        region(1, &[0])
-    )));
+    assert!(change.conflicts_with(&Access::new(AccessKind::StateChange, region(1, &[0]))));
     assert!(!change.conflicts_with(&disjoint_change));
 }
 
@@ -80,7 +74,10 @@ fn ordered_changes_update_one_logical_state_not_a_stale_snapshot() {
     current.apply_change(&selected, ValueToken(20)).unwrap();
     current.apply_change(&selected, ValueToken(30)).unwrap();
 
-    assert_eq!(current.read(&selected).unwrap(), vec![(PositionId(0), ValueToken(30))]);
+    assert_eq!(
+        current.read(&selected).unwrap(),
+        vec![(PositionId(0), ValueToken(30))]
+    );
     assert_eq!(
         stale_snapshot.read(&selected).unwrap(),
         vec![(PositionId(0), ValueToken(10))]
