@@ -83,28 +83,31 @@ impl ReductionId {
     }
 }
 
-/// Verification-only identity token for one semantic contribution occurrence.
+/// Verification-only identity for one semantic contribution occurrence.
 ///
-/// The token is interpreted within one reduction fixture. It carries no
-/// contribution order, worker identity, lane identity, or physical accumulator identity.
+/// Occurrence identity is structurally scoped by its reduction. The private token
+/// carries no contribution order, worker identity, lane identity, or physical
+/// accumulator identity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ContributionId(u32);
+pub struct ContributionId {
+    reduction: ReductionId,
+    token: u32,
+}
 
 impl ContributionId {
-    #[must_use]
-    pub const fn new(token: u32) -> Self {
-        Self(token)
+    const fn new(reduction: ReductionId, token: u32) -> Self {
+        Self { reduction, token }
     }
 }
 
 /// Verification-only semantic contribution occurrence created by a validated
 /// reduction fixture for one actual participant.
 ///
-/// Fields are private so callers cannot fabricate a contribution from a
-/// nonparticipant or silently retarget one contribution to another reduction.
+/// The containing reduction is derived from the occurrence identity, so an
+/// inconsistent reduction/contribution pair cannot be represented. Fields are
+/// private so callers cannot fabricate a contribution from a nonparticipant.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ReductionContribution {
-    reduction: ReductionId,
     occurrence: ContributionId,
     producer: IterationId,
 }
@@ -128,7 +131,10 @@ pub struct ReductionFixture {
 }
 
 impl ReductionFixture {
-    pub fn root(id: ReductionId, required_iterations: &[IterationId]) -> Result<Self, ReductionError> {
+    pub fn root(
+        id: ReductionId,
+        required_iterations: &[IterationId],
+    ) -> Result<Self, ReductionError> {
         if !has_exact_unique_coverage(required_iterations, required_iterations) {
             return Err(ReductionError::InvalidRootIterations);
         }
@@ -165,17 +171,17 @@ impl ReductionFixture {
 
     /// Creates one semantic contribution occurrence for an actual participant.
     ///
-    /// A participant may create multiple distinct occurrences by using distinct
-    /// `ContributionId`s. Nonparticipants cannot obtain a contribution token.
+    /// `token` is verification-only occurrence identity within this reduction and
+    /// carries no order. A participant may create multiple distinct occurrences by
+    /// using distinct tokens. Nonparticipants cannot obtain a contribution token.
     #[must_use]
     pub fn contribution(
         &self,
         producer: IterationId,
-        occurrence: ContributionId,
+        token: u32,
     ) -> Option<ReductionContribution> {
         self.is_participant(producer).then_some(ReductionContribution {
-            reduction: self.id,
-            occurrence,
+            occurrence: ContributionId::new(self.id, token),
             producer,
         })
     }
@@ -225,6 +231,6 @@ impl ReductionFixture {
     }
 
     fn owns(&self, contribution: ReductionContribution) -> bool {
-        contribution.reduction == self.id && self.is_participant(contribution.producer)
+        contribution.occurrence.reduction == self.id && self.is_participant(contribution.producer)
     }
 }
