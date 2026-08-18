@@ -281,7 +281,10 @@ impl AtomicExchangeRealization {
             (AtomicExchangeScope::Unscoped, AtomicExchangeScope::Unscoped) => {
                 AtomicScopeRelation::Compatible
             }
-            (AtomicExchangeScope::Root(left_iteration), AtomicExchangeScope::Root(right_iteration)) => {
+            (
+                AtomicExchangeScope::Root(left_iteration),
+                AtomicExchangeScope::Root(right_iteration),
+            ) => {
                 if left_iteration.each() == right_iteration.each() {
                     AtomicScopeRelation::Compatible
                 } else {
