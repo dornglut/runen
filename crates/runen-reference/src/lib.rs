@@ -13,6 +13,7 @@ pub enum VerificationWriteKind {
     Init,
     Assign,
     InteriorAssign,
+    RawAssign,
 }
 
 /// Verification representation of one symbolic raw-pointer value.
@@ -91,6 +92,7 @@ pub struct ExecutionReport {
 pub enum UndefinedBehaviorKind {
     RawReadTargetNotLive { target: StorageRegion },
     RawReadConflictsWithExclusiveLoan { target: StorageRegion, loan: LoanId },
+    RawAssignConflictsWithLoan { target: StorageRegion, loan: LoanId },
 }
 
 /// Reference-oracle report for an execution that entered undefined behavior.
@@ -267,6 +269,7 @@ impl Machine {
             Statement::EndBorrow { loan } => self.end_borrow(*loan),
             Statement::Read { src } => self.read(src),
             Statement::RawRead { pointer } => return self.raw_read(pointer),
+            Statement::RawAssign { pointer, src } => return self.raw_assign(pointer, src),
             Statement::Assign { dst, src } => {
                 self.replace(dst, src, VerificationWriteKind::Assign);
             }
@@ -321,12 +324,15 @@ impl Machine {
     }
 
     fn replace(&mut self, dst: &PlaceAccess, src: &Operand, kind: VerificationWriteKind) {
-        // Both assignment forms share one accepted source-first replacement lifecycle.
-        // Their legality differs only at the validator boundary.
-        let value = self.evaluate_operand(src);
+        // All assignment forms share one accepted source-first replacement lifecycle.
+        // Ordinary/interior legality is already established by validation.
         let dst = self.resolve_access(dst);
-        let dst_ty = self.place_type(&dst);
+        let value = self.evaluate_operand(src);
+        self.replace_resolved(dst, value, kind);
+    }
 
+    fn replace_resolved(&mut self, dst: Place, value: RuntimeValue, kind: VerificationWriteKind) {
+        let dst_ty = self.place_type(&dst);
         self.drop_place_contents(&dst);
         let dst_state = place_state_mut(&mut self.locals, &dst);
         write_value(&self.body.as_body().types, dst_ty, dst_state, value);
@@ -367,6 +373,35 @@ impl Machine {
 
         self.verification_events
             .push(VerificationEvent::RawRead { pointer, target });
+        Ok(())
+    }
+
+    fn raw_assign(
+        &mut self,
+        pointer_access: &PlaceAccess,
+        src: &Operand,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        // The pointer value and target are snapshotted before source evaluation.
+        // Validation owns the pointer-value access and source typing, while the raw
+        // target's exclusive compatibility remains an unsafe execution precondition.
+        let pointer_place = self.resolve_access(pointer_access);
+        let pointer = self.raw_pointer_at(&pointer_place);
+        let target = self.place_for_storage_region(&pointer.target);
+        let value = self.evaluate_operand(src);
+
+        if let Some((index, _)) = self
+            .active_loans
+            .iter()
+            .enumerate()
+            .find(|(_, active)| active.as_ref().is_some_and(|active| active.place.overlaps(&target)))
+        {
+            return Err(UndefinedBehaviorKind::RawAssignConflictsWithLoan {
+                target: pointer.target,
+                loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
+            });
+        }
+
+        self.replace_resolved(target, value, VerificationWriteKind::RawAssign);
         Ok(())
     }
 
@@ -432,7 +467,7 @@ impl Machine {
             ObjectState::Leaf(LeafState::Live(RuntimeValue::RawPointer(pointer))) => {
                 pointer.clone()
             }
-            _ => unreachable!("validated RawRead reaches a fully-live raw-pointer value"),
+            _ => unreachable!("validated raw-pointer access reaches a fully-live pointer value"),
         }
     }
 
