@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document defines structural place overlap, shared/exclusive borrowing, reborrow delegation, borrow intervals, and alias authority through active loans.
 
-Storage extent, storage-instance identity, stored-value lifetime, initialization state, assignment mutability, interior mutability, destruction, and cleanup are defined by [Core value and storage semantics](value-storage.md). Raw-pointer values, provenance, target selection, target reads, and target replacement are defined by [Core pointers and provenance](pointers.md).
+Storage extent, storage-instance identity, stored-value lifetime, initialization state, assignment mutability, interior mutability, destruction, and cleanup are defined by [Core value and storage semantics](value-storage.md). Raw-pointer values, provenance, target selection, target reads, target ownership moves, and target replacement are defined by [Core pointers and provenance](pointers.md).
 
 ## Terms
 
@@ -40,7 +40,7 @@ A loan is not a numeric address, pointer bit pattern, source-language reference 
 
 ### Alias authority
 
-**Shared authority** permits operations whose borrowing requirement is shared. In this revision those include `Read`, copyable `Copy`, shared reborrow creation, raw-pointer `AddressOf` formation, access to the stored raw-pointer value used as the `pointer` operand of `RawRead` or `RawAssign`, and `InteriorAssign` when the target independently lies within an interior-mutable region.
+**Shared authority** permits operations whose borrowing requirement is shared. In this revision those include `Read`, copyable `Copy`, shared reborrow creation, raw-pointer `AddressOf` formation, access to the stored raw-pointer value used by `RawRead`, `RawMove`, or `RawAssign`, and `InteriorAssign` when the target independently lies within an interior-mutable region.
 
 **Exclusive authority** includes shared authority and additionally permits operations whose borrowing requirement is exclusive. In this revision those include `Move`, ordinary `Assign`, `Drop`, and exclusive reborrow creation, subject to each operation's independent value/storage preconditions.
 
@@ -51,6 +51,7 @@ Interior mutation is not a third alias kind. A shared write to explicitly interi
 A raw pointer does not itself carry either alias authority kind. After a raw operation's pointer value has been obtained using ordinary shared authority, the raw target access defined by [Core pointers and provenance](pointers.md) has a separate compatibility requirement against the currently active loan forest:
 
 - `RawRead` has **shared target-access compatibility**;
+- `RawMove` has **exclusive target-access compatibility**;
 - `RawAssign` has **exclusive target-access compatibility**.
 
 These target requirements do not arise from a `LoanId` stored in the raw pointer; raw pointers contain no such authority.
@@ -77,7 +78,7 @@ Loan-relative projection does not create a new loan. It selects a sub-place gove
 
 `PlaceAccess` is proving-MIR access authority. It is not a stored reference value, raw-pointer value, address, dynamic storage-instance identity, or provenance identity.
 
-The `pointer` operand of `RawRead` and `RawAssign` is ordinary shared-authority `PlaceAccess` to the stored raw-pointer value. Neither operation turns the raw pointer's target into `PlaceAccess`; target selection is defined by the pointer value and checked separately against the active loan forest.
+The pointer-value access used by `RawRead`, `RawMove`, and `RawAssign` is ordinary shared-authority `PlaceAccess` to the stored raw-pointer value. None of these operations turns the raw pointer's target into `PlaceAccess`; target selection is defined by the pointer value and checked separately against the active loan forest.
 
 ### Loan forest
 
@@ -155,7 +156,7 @@ This is sufficient because a direct child continues to own its delegated root un
 
 If an active exclusive direct child of `P` overlaps `p`, access through `P` to `p` is suspended completely.
 
-`Read`, `Copy`, `AddressOf`, the pointer-value access of `RawRead` or `RawAssign`, `Move`, ordinary `Assign`, `InteriorAssign`, `Drop`, and overlapping reborrow through `P` are invalid until that child interval ends.
+`Read`, `Copy`, `AddressOf`, pointer-value access for `RawRead`, `RawMove`, or `RawAssign`, `Move`, ordinary `Assign`, `InteriorAssign`, `Drop`, and overlapping reborrow through `P` are invalid until that child interval ends.
 
 ### Overlapping shared child
 
@@ -164,7 +165,7 @@ If one or more active shared direct children of `P` overlap `p`, `P` retains sha
 - `Read` is permitted;
 - `Copy` is permitted when the selected type is copyable;
 - `AddressOf` is permitted;
-- the pointer-value access of `RawRead` and `RawAssign` is permitted subject to each operation's independently owned non-authority preconditions;
+- pointer-value access for `RawRead`, `RawMove`, and `RawAssign` is permitted subject to each operation's independently owned non-authority preconditions;
 - shared reborrow is permitted when its ordinary preconditions hold;
 - `InteriorAssign` is permitted when the selected concrete target independently lies within an interior-mutable region;
 - `Move`, ordinary `Assign`, `Drop`, and exclusive reborrow are invalid.
@@ -179,7 +180,7 @@ Raw target-access compatibility after obtaining a raw pointer value is a separat
 
 A direct child whose concrete root is disjoint from `p` does not constrain access through `P` to `p`.
 
-Delegating one field of an aggregate to an exclusive child leaves an exclusive parent with exclusive authority over a disjoint sibling field. On such a disjoint sibling, the parent retains the authority needed for `InteriorAssign`, `AddressOf`, or shared pointer-value access for `RawRead`/`RawAssign`, subject to each operation's independent preconditions.
+Delegating one field of an aggregate to an exclusive child leaves an exclusive parent with exclusive authority over a disjoint sibling field. On such a disjoint sibling, the parent retains the authority needed for `InteriorAssign`, `AddressOf`, or shared pointer-value access for `RawRead`/`RawMove`/`RawAssign`, subject to each operation's independent preconditions.
 
 ## Direct access while loans are active
 
@@ -190,7 +191,7 @@ For a direct access target `p`:
 - `Read(p)` is permitted when no active exclusive loan overlaps `p`;
 - `Copy(p)` is permitted when no active exclusive loan overlaps `p` and the existing copyability rule permits the copy;
 - `AddressOf(p)` is permitted when no active exclusive loan overlaps `p`; it does not additionally require `p` to be Live;
-- using `p` as the pointer-value operand of `RawRead` or `RawAssign` has shared authority when no active exclusive loan overlaps `p`, subject to each operation's independently owned non-authority preconditions and separate raw-target unsafe preconditions;
+- using `p` for the stored pointer-value access of `RawRead`, `RawMove`, or `RawAssign` has shared authority when no active exclusive loan overlaps `p`, subject to each operation's independently owned non-authority preconditions and separate raw-target unsafe preconditions;
 - `InteriorAssign(p, ...)` is permitted when no active exclusive loan overlaps `p` and `p` independently lies within an interior-mutable region;
 - `Init(p, ...)`, `Move(p)`, ordinary `Assign(p, ...)`, and `Drop(p)` are permitted only when no active loan of either kind overlaps `p`, in addition to their existing value/storage preconditions.
 
@@ -205,7 +206,7 @@ It permits:
 - `Read`;
 - `Copy`, when the selected type is copyable;
 - `AddressOf`;
-- pointer-value access for `RawRead` and `RawAssign`, subject to each operation's independently owned non-authority preconditions;
+- pointer-value access for `RawRead`, `RawMove`, and `RawAssign`, subject to each operation's independently owned non-authority preconditions;
 - shared reborrow creation;
 - `InteriorAssign`, only when the resolved concrete target lies within an interior-mutable region under the value/storage rules.
 
@@ -224,7 +225,7 @@ It permits access using:
 - `Read`;
 - `Copy`, when the selected type is copyable;
 - `AddressOf` because exclusive authority includes shared authority;
-- pointer-value access for `RawRead` and `RawAssign` because exclusive authority includes shared authority;
+- pointer-value access for `RawRead`, `RawMove`, and `RawAssign` because exclusive authority includes shared authority;
 - shared or exclusive reborrow according to the ordinary child rules;
 - `Move`;
 - ordinary `Assign`, when the existing containing-local assignment-mutability rule permits assignment;
@@ -233,7 +234,7 @@ It permits access using:
 
 The ordinary initialization-state, type, assignment-mutability, interior-mutability, and destruction-domain rules still apply to the selected concrete place. Exclusive access does not weaken those independent rules.
 
-In particular, an exclusive loan over an immutable local has the authority needed for reading, copying, raw-pointer formation, shared pointer-value access for `RawRead`/`RawAssign`, moving, dropping, and exclusive reborrowing according to their ordinary rules; it does not make ordinary assignment to that local legal. Likewise, exclusive authority alone does not make an unmarked target eligible for `InteriorAssign`.
+In particular, an exclusive loan over an immutable local has the authority needed for reading, copying, raw-pointer formation, shared pointer-value access for `RawRead`/`RawMove`/`RawAssign`, moving, dropping, and exclusive reborrowing according to their ordinary rules; it does not make ordinary assignment to that local legal. Likewise, exclusive authority alone does not make an unmarked target eligible for `InteriorAssign`.
 
 An exclusive loan controls access to storage rather than to one immutable stored-value identity. Therefore:
 
@@ -244,7 +245,7 @@ An exclusive loan controls access to storage rather than to one immutable stored
 
 ## Interior mutation under shared aliases
 
-Interior mutability is the only defined **safe place-access** shared-write exception in the current Core proving model, and it is explicit rather than implicit. Unsafe raw-pointer target replacement has its own separate exclusive target-access compatibility requirement and does not weaken this rule.
+Interior mutability is the only defined **safe place-access** shared-write exception in the current Core proving model, and it is explicit rather than implicit. Unsafe raw-pointer target ownership transfer and replacement each have a separate exclusive target-access compatibility requirement and do not weaken this rule.
 
 For `InteriorAssign(dst, src)`:
 
@@ -268,9 +269,9 @@ Formation authority does not grant later target access through the resulting poi
 
 ## Raw-pointer target-access compatibility
 
-The `RawRead` and `RawAssign` operations are defined by [Core pointers and provenance](pointers.md). This document owns their alias-authority relationships.
+`RawRead`, `RawMove`, and `RawAssign` are defined by [Core pointers and provenance](pointers.md). This document owns their alias-authority relationships.
 
-First, each operation obtains its stored raw-pointer `pointer` operand using the ordinary shared-authority `PlaceAccess` rules above. That pointer-value access is direct or loan-relative and is subject to the non-authority operation/value preconditions owned by the pointer and value/storage semantics. It does not grant or preserve authority over the pointee.
+First, each operation obtains its stored raw-pointer value using the ordinary shared-authority `PlaceAccess` rules above. That pointer-value access is direct or loan-relative and is subject to the non-authority operation/value preconditions owned by the pointer and value/storage semantics. It does not grant or preserve authority over the pointee.
 
 After the pointer value selects one concrete structural target place `p`, target compatibility is checked against **every** currently active concrete loan rather than against one source loan from pointer formation or the loan used to reach the stored pointer value.
 
@@ -282,6 +283,17 @@ After the pointer value selects one concrete structural target place `p`, target
 - overlapping shared loans do not by themselves block the read;
 - any overlapping exclusive loan, whether root or child, makes the raw target-read precondition fail;
 - disjoint active loans do not constrain the read.
+
+### Raw target ownership move
+
+`RawMove` has an exclusive target-access compatibility requirement because a defined ownership transfer changes the target's stored-value lifetime state:
+
+- the move is compatible only when no active loan of either kind overlaps `p`;
+- any overlapping shared loan makes the raw target-move precondition fail;
+- any overlapping exclusive loan, whether root or child, makes the raw target-move precondition fail;
+- disjoint active loans do not constrain the move.
+
+`RawMove` does not acquire target authority from ordinary local assignment mutability or from an interior-mutability marker. Those capabilities do not weaken ownership-transfer alias requirements.
 
 ### Raw target replacement
 
@@ -296,7 +308,7 @@ After the pointer value selects one concrete structural target place `p`, target
 
 Ending the loan that authorized `AddressOf` therefore neither grants nor revokes later raw access by itself; only the active loan state at the raw target-access step matters.
 
-Violation of either raw target compatibility requirement is classified by [Core unsafe semantics](unsafe.md), not as a new borrow-validation diagnostic. Exact raw-pointer target bookkeeping used for path-state propagation does not turn these unsafe proof obligations into language-validation rules.
+Violation of any represented raw target compatibility requirement is classified by [Core unsafe semantics](unsafe.md), not as a new borrow-validation diagnostic. Exact raw-pointer target bookkeeping used for path-state propagation does not turn these unsafe proof obligations into language-validation rules.
 
 ## Borrow end and termination
 
@@ -322,12 +334,12 @@ Interior mutability adds no hidden loan or borrow-guard state. A legal `Interior
 
 Raw-pointer formation likewise adds no hidden borrow state. The formed pointer is ordinary runtime value state after formation.
 
-Borrow creation, reborrow delegation, ordinary place-access permission, address-formation alias authorization, raw-operation pointer-value access authorization, interior-assignment alias authorization, raw target-read compatibility, raw target-write compatibility, and explicit borrow end are determined from typed places, active loans, structural parentage, and structural overlap. They do not depend on host references, backend alias analysis, physical scheduling, physical addresses, pointer provenance permissions, or container iteration order. Raw target selection itself remains owned by the pointer semantics.
+Borrow creation, reborrow delegation, ordinary place-access permission, address-formation alias authorization, raw-operation pointer-value access authorization, interior-assignment alias authorization, raw target-read compatibility, raw target-move compatibility, raw target-write compatibility, and explicit borrow end are determined from typed places, active loans, structural parentage, and structural overlap. They do not depend on host references, backend alias analysis, physical scheduling, physical addresses, pointer provenance permissions, or container iteration order. Raw target selection itself remains owned by the pointer semantics.
 
 ## Separate semantic owners
 
 This revision does not define lifetime parameters or source borrow inference, first-class reference values, borrowing transient operand values, source syntax or library APIs for interior mutability, runtime borrow guards, raw-pointer target selection or target lifecycle, raw-pointer operations beyond the currently defined compatibility relationships, pointer arithmetic, numeric-address conversion, complete provenance semantics, relocation or pinning, heap allocation/deallocation, value-validity rules, the complete undefined-behavior taxonomy, source `unsafe`, custom destructor bodies, or concurrency/memory-ordering semantics.
 
-Raw-pointer formation, target selection, provenance, `RawRead`, and `RawAssign` non-authority semantics are defined by [Core pointers and provenance](pointers.md); this document defines alias authority for formation and pointer-value `PlaceAccess`, plus active-loan compatibility for the raw target read and replacement. Replacement lifecycle remains owned by [Core value and storage semantics](value-storage.md). Unsafe classification and UB are owned by [Core unsafe semantics](unsafe.md).
+Raw-pointer formation, target selection, provenance, `RawRead`, `RawMove`, and `RawAssign` non-authority semantics are defined by [Core pointers and provenance](pointers.md); this document defines alias authority for formation and stored pointer-value `PlaceAccess`, plus active-loan compatibility for the raw target read, ownership move, and replacement. Ordinary ownership-transfer and replacement lifecycles remain owned by [Core value and storage semantics](value-storage.md). Unsafe classification and UB are owned by [Core unsafe semantics](unsafe.md).
 
 Illustrative source spellings such as `&T`, `&mut T`, or an interior-cell type do not freeze grammar. Future source references and library abstractions may lower to or refine the semantic loan and interior-mutability models, but source representation is not defined here.
