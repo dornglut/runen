@@ -1,3 +1,5 @@
+use crate::coverage::has_exact_unique_coverage;
+
 /// Verification-only evidence for the complete contract required by the accepted
 /// identity-bearing unordered reduction form.
 ///
@@ -82,21 +84,5 @@ pub fn has_exact_contribution_coverage(
     required: &[ContributionId],
     incorporated: &[ContributionId],
 ) -> bool {
-    if required.len() != incorporated.len() || contains_duplicate(required) {
-        return false;
-    }
-
-    required.iter().all(|required_id| {
-        incorporated
-            .iter()
-            .filter(|incorporated_id| *incorporated_id == required_id)
-            .count()
-            == 1
-    })
-}
-
-fn contains_duplicate(ids: &[ContributionId]) -> bool {
-    ids.iter()
-        .enumerate()
-        .any(|(index, id)| ids[index + 1..].contains(id))
+    has_exact_unique_coverage(required, incorporated)
 }

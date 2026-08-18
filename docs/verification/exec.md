@@ -4,7 +4,7 @@ Status: **non-normative conformance-obligation documentation**
 
 This document records focused assurance obligations for defined Exec semantic slices. It does not define Runen semantics, conformance profiles, compiler architecture, or repository CI.
 
-The normative ordinary-access and structured-iteration rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Buffer-specific identity, region, view-access, and logical-coherence facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
+The normative ordinary-access and structured-iteration rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Structured task lifetime and detachment are owned by `spec/language/exec/tasks.md`. Buffer-specific identity, region, view-access, and logical-coherence facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
 
 `crates/runen-exec-oracle` is the verification-only executable conformance model for the currently represented Exec relations below. It is not source or compiler Exec IR, a runtime, a scheduler, a backend, or a normative owner. Future compiler/runtime realizations must remain independently accountable to the normative specification rather than treating the oracle representation as language semantics.
 
@@ -99,6 +99,27 @@ Required cases:
 
 Arithmetic used in an executable fixture is test-local evidence only. It must use values that avoid overflow or representation questions and does not define Runen integer, floating-point, or reduction-operator semantics.
 
+## Structured task lifetime and detachment boundary
+
+These cases exercise only structured task-scope lifetime/order and state-retention relations owned by `spec/language/exec/tasks.md`. They do not model task creation, execution, waiting, cancellation, fault propagation, or scheduling.
+
+Required cases:
+
+- normal completion of one structured task scope requires every child attached to that scope's normal-completion set to have completed normally;
+- attached-child completion coverage is insensitive to completion-list order but rejects missing, duplicate, invented, or ambiguous duplicate fixture task identities;
+- the empty attached-child set permits normal completion without inventing a child task;
+- actions of an attached child are ordered before the originating scope's normal continuation;
+- two children attached to the same scope receive no relative order from membership alone;
+- a task detached from the originating scope receives no ordering to that scope's normal continuation from detachment alone;
+- attachment or detachment does not extend, renew, copy, or upgrade a scope-bounded borrow/view permission;
+- a scope-bounded state dependency is not safe to keep using after detachment once the originating scope may complete;
+- owned and independently retained state dependencies are detach-safe under this lifetime relation;
+- detached work is detach-safe only when every state dependency it still requires is owned or independently retained;
+- task-scope membership does not legalize an otherwise-conflicting ordinary sibling access;
+- no fault/cancellation/result behavior is inferred when an attached child does not complete normally.
+
+`TaskId`, task-scope phases, and `TaskStateRetention` are verification-only tokens/classifications. `IndependentlyRetained` does not prescribe reference counting, allocation ownership, a runtime handle, or another retention implementation.
+
 ## Executable oracle coverage
 
 The current `runen-exec-oracle` executable subset covers only relations already defined above:
@@ -107,9 +128,12 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - ordinary read/state-change conflict classification;
 - the cross-phase `each` normal entry/completion ordering relation, with no sibling or intra-iteration order;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
-- complete unordered-reduction contract admission evidence and exact unordered semantic-contribution coverage.
+- complete unordered-reduction contract admission evidence and exact unordered semantic-contribution coverage;
+- structured task-scope attached-child ordering/completion coverage and detachment state-retention admissibility.
 
-Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, contribution tokens, finite collections, and reduction-contract evidence flags are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, contribution order, operator traits, versioning, physical allocation, scheduling, or backend representation.
+Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, contribution tokens, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+
+The private generic exact-coverage helper used by reduction and task fixtures is mechanical oracle implementation. It owns no Runen semantic concept.
 
 ## Future executable evidence
 
