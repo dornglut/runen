@@ -371,13 +371,7 @@ fn same_root_acquire_release_combinations_use_existing_capability_rules() {
         AtomicValueToken::new(10),
         vec![
             root_scoped_exchange(local, 1, 20, AtomicExchangeSemantics::Release, each),
-            root_scoped_exchange(
-                local,
-                2,
-                30,
-                AtomicExchangeSemantics::AcquireRelease,
-                each,
-            ),
+            root_scoped_exchange(local, 2, 30, AtomicExchangeSemantics::AcquireRelease, each),
             root_scoped_exchange(local, 3, 40, AtomicExchangeSemantics::Acquire, each),
         ],
     )
@@ -402,20 +396,8 @@ fn distinct_root_scopes_are_incompatible_but_share_modification_order() {
         local,
         AtomicValueToken::new(10),
         vec![
-            root_scoped_exchange(
-                local,
-                1,
-                20,
-                AtomicExchangeSemantics::Release,
-                first_each,
-            ),
-            root_scoped_exchange(
-                local,
-                2,
-                30,
-                AtomicExchangeSemantics::Acquire,
-                second_each,
-            ),
+            root_scoped_exchange(local, 1, 20, AtomicExchangeSemantics::Release, first_each),
+            root_scoped_exchange(local, 2, 30, AtomicExchangeSemantics::Acquire, second_each),
         ],
     )
     .unwrap();
