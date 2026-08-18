@@ -3,7 +3,7 @@
 
 use runen_core_ir::{
     BorrowKind, LoanId, LocalId, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
-    Terminator, TypeId, TypeKind, TypeTable, ValidatedBody, Value,
+    StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable, ValidatedBody, Value,
 };
 
 /// Why a write occurred in verification instrumentation.
@@ -12,6 +12,18 @@ pub enum VerificationWriteKind {
     Init,
     Assign,
     InteriorAssign,
+}
+
+/// Verification representation of one symbolic raw-pointer value.
+///
+/// `target` identifies the structural storage region selected when the pointer was
+/// formed. `provenance` identifies the dynamic root storage instance from which the
+/// pointer derives. Their numeric representation is verification-only and is not
+/// Runen-observable program behavior.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RawPointerValue {
+    pub target: StorageRegion,
+    pub provenance: StorageInstanceId,
 }
 
 /// Verification-only event emitted by the executable reference oracle.
@@ -32,6 +44,18 @@ pub enum VerificationEvent {
     Write {
         place: Place,
         kind: VerificationWriteKind,
+    },
+    AddressOf {
+        place: Place,
+        pointer: RawPointerValue,
+    },
+    RawPointerMove {
+        place: Place,
+        pointer: RawPointerValue,
+    },
+    RawPointerCopy {
+        place: Place,
+        pointer: RawPointerValue,
     },
     /// Verification event for destruction of the synthetic `TrackedFixture` fixture.
     DropTrackedFixture {
@@ -56,9 +80,31 @@ pub struct ExecutionReport {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+enum RuntimeValue {
+    Bool(bool),
+    I64(i64),
+    RawPointer(RawPointerValue),
+    TrackedFixture(u64),
+    Struct(Vec<RuntimeValue>),
+}
+
+impl RuntimeValue {
+    fn from_constant(value: &Value) -> Self {
+        match value {
+            Value::Bool(value) => Self::Bool(*value),
+            Value::I64(value) => Self::I64(*value),
+            Value::TrackedFixture(value) => Self::TrackedFixture(*value),
+            Value::Struct(values) => {
+                Self::Struct(values.iter().map(Self::from_constant).collect())
+            }
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum LeafState {
     NeverInitialized,
-    Live(Value),
+    Live(RuntimeValue),
     Dead,
 }
 
@@ -86,6 +132,12 @@ impl ObjectState {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+struct LocalStorage {
+    instance: StorageInstanceId,
+    state: ObjectState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ActiveLoan {
     place: Place,
 }
@@ -93,7 +145,7 @@ struct ActiveLoan {
 /// Small executable abstract machine for validated Core MIR.
 pub struct Machine {
     body: ValidatedBody,
-    locals: Vec<ObjectState>,
+    locals: Vec<LocalStorage>,
     active_loans: Vec<Option<ActiveLoan>>,
     verification_events: Vec<VerificationEvent>,
 }
@@ -102,11 +154,24 @@ impl Machine {
     /// Constructs the reference machine from Core MIR that passed language validation.
     #[must_use]
     pub fn new(body: ValidatedBody) -> Self {
+        // The counter is an oracle representation of fresh execution-scoped storage
+        // identity. Semantics depend only on uniqueness and stability, not on the
+        // numeric values or their relation to MIR `LocalId`s.
+        let mut next_storage_instance = 1_u64;
         let locals = body
             .as_body()
             .locals
             .iter()
-            .map(|local| ObjectState::uninitialized(&body.as_body().types, local.ty))
+            .map(|local| {
+                let instance = StorageInstanceId(next_storage_instance);
+                next_storage_instance = next_storage_instance
+                    .checked_add(1)
+                    .expect("reference storage-instance identity exhausted");
+                LocalStorage {
+                    instance,
+                    state: ObjectState::uninitialized(&body.as_body().types, local.ty),
+                }
+            })
             .collect();
         let active_loans = vec![None; body.as_body().loans.len()];
 
@@ -240,15 +305,23 @@ impl Machine {
         self.drop_place_contents(&place);
     }
 
-    fn evaluate_operand(&mut self, operand: &Operand) -> Value {
+    fn evaluate_operand(&mut self, operand: &Operand) -> RuntimeValue {
         match operand {
-            Operand::Constant(value) => value.clone(),
+            Operand::Constant(value) => RuntimeValue::from_constant(value),
             Operand::Move(src) => {
                 let src = self.resolve_access(src);
                 let src_ty = self.place_type(&src);
                 let src_state = place_state_mut(&mut self.locals, &src);
                 let value = take_value(&self.body.as_body().types, src_ty, src_state);
-                self.verification_events.push(VerificationEvent::Move(src));
+                self.verification_events
+                    .push(VerificationEvent::Move(src.clone()));
+                if let RuntimeValue::RawPointer(pointer) = &value {
+                    self.verification_events
+                        .push(VerificationEvent::RawPointerMove {
+                            place: src,
+                            pointer: pointer.clone(),
+                        });
+                }
                 value
             }
             Operand::Copy(src) => {
@@ -259,8 +332,29 @@ impl Machine {
                     src_ty,
                     place_state(&self.locals, &src),
                 );
-                self.verification_events.push(VerificationEvent::Copy(src));
+                self.verification_events
+                    .push(VerificationEvent::Copy(src.clone()));
+                if let RuntimeValue::RawPointer(pointer) = &value {
+                    self.verification_events
+                        .push(VerificationEvent::RawPointerCopy {
+                            place: src,
+                            pointer: pointer.clone(),
+                        });
+                }
                 value
+            }
+            Operand::AddressOf(src) => {
+                let place = self.resolve_access(src);
+                let target = self.storage_region(&place);
+                let pointer = RawPointerValue {
+                    provenance: target.instance,
+                    target,
+                };
+                self.verification_events.push(VerificationEvent::AddressOf {
+                    place,
+                    pointer: pointer.clone(),
+                });
+                RuntimeValue::RawPointer(pointer)
             }
         }
     }
@@ -278,6 +372,17 @@ impl Machine {
                 place.projections.extend(projections.iter().copied());
                 place
             }
+        }
+    }
+
+    fn storage_region(&self, place: &Place) -> StorageRegion {
+        let local = self
+            .locals
+            .get(place.local.0 as usize)
+            .expect("validated Core MIR references only known local storage");
+        StorageRegion {
+            instance: local.instance,
+            projections: place.projections.clone(),
         }
     }
 
@@ -319,8 +424,8 @@ impl Machine {
     }
 }
 
-fn place_state<'a>(locals: &'a [ObjectState], place: &Place) -> &'a ObjectState {
-    let mut state = &locals[place.local.0 as usize];
+fn place_state<'a>(locals: &'a [LocalStorage], place: &Place) -> &'a ObjectState {
+    let mut state = &locals[place.local.0 as usize].state;
     for projection in &place.projections {
         match (state, projection) {
             (ObjectState::Aggregate(fields), Projection::Field(index)) => {
@@ -334,8 +439,8 @@ fn place_state<'a>(locals: &'a [ObjectState], place: &Place) -> &'a ObjectState 
     state
 }
 
-fn place_state_mut<'a>(locals: &'a mut [ObjectState], place: &Place) -> &'a mut ObjectState {
-    let mut state = &mut locals[place.local.0 as usize];
+fn place_state_mut<'a>(locals: &'a mut [LocalStorage], place: &Place) -> &'a mut ObjectState {
+    let mut state = &mut locals[place.local.0 as usize].state;
     for projection in &place.projections {
         match (state, projection) {
             (ObjectState::Aggregate(fields), Projection::Field(index)) => {
@@ -349,28 +454,45 @@ fn place_state_mut<'a>(locals: &'a mut [ObjectState], place: &Place) -> &'a mut 
     state
 }
 
-fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Value) {
+fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: RuntimeValue) {
     let definition = types
         .get(ty)
         .expect("validated Core MIR references only known types");
 
     match (&definition.kind, state, value) {
-        (TypeKind::Scalar(ScalarType::Bool), ObjectState::Leaf(leaf), Value::Bool(value)) => {
-            *leaf = LeafState::Live(Value::Bool(value));
+        (
+            TypeKind::Scalar(ScalarType::Bool),
+            ObjectState::Leaf(leaf),
+            RuntimeValue::Bool(value),
+        ) => {
+            *leaf = LeafState::Live(RuntimeValue::Bool(value));
         }
-        (TypeKind::Scalar(ScalarType::I64), ObjectState::Leaf(leaf), Value::I64(value)) => {
-            *leaf = LeafState::Live(Value::I64(value));
+        (
+            TypeKind::Scalar(ScalarType::I64),
+            ObjectState::Leaf(leaf),
+            RuntimeValue::I64(value),
+        ) => {
+            *leaf = LeafState::Live(RuntimeValue::I64(value));
+        }
+        (
+            TypeKind::Scalar(ScalarType::RawPointer(_)),
+            ObjectState::Leaf(leaf),
+            RuntimeValue::RawPointer(value),
+        ) => {
+            *leaf = LeafState::Live(RuntimeValue::RawPointer(value));
         }
         (
             TypeKind::Scalar(ScalarType::TrackedFixture),
             ObjectState::Leaf(leaf),
-            Value::TrackedFixture(value),
+            RuntimeValue::TrackedFixture(value),
         ) => {
-            *leaf = LeafState::Live(Value::TrackedFixture(value));
+            *leaf = LeafState::Live(RuntimeValue::TrackedFixture(value));
         }
-        (TypeKind::Struct(fields), ObjectState::Aggregate(states), Value::Struct(values))
-            if fields.len() == states.len() && fields.len() == values.len() =>
-        {
+        (
+            TypeKind::Struct(fields),
+            ObjectState::Aggregate(states),
+            RuntimeValue::Struct(values),
+        ) if fields.len() == states.len() && fields.len() == values.len() => {
             for ((field, field_state), field_value) in fields.iter().zip(states).zip(values) {
                 write_value(types, field.ty, field_state, field_value);
             }
@@ -379,7 +501,7 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Va
     }
 }
 
-fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> Value {
+fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> RuntimeValue {
     let definition = types
         .get(ty)
         .expect("validated Core MIR references only known types");
@@ -389,7 +511,7 @@ fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> Value {
         (TypeKind::Struct(fields), ObjectState::Aggregate(states))
             if fields.len() == states.len() =>
         {
-            Value::Struct(
+            RuntimeValue::Struct(
                 fields
                     .iter()
                     .zip(states)
@@ -401,7 +523,7 @@ fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> Value {
     }
 }
 
-fn take_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState) -> Value {
+fn take_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState) -> RuntimeValue {
     let definition = types
         .get(ty)
         .expect("validated Core MIR references only known types");
@@ -418,7 +540,7 @@ fn take_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState) -> Value {
         (TypeKind::Struct(fields), ObjectState::Aggregate(states))
             if fields.len() == states.len() =>
         {
-            Value::Struct(
+            RuntimeValue::Struct(
                 fields
                     .iter()
                     .zip(states)
@@ -445,7 +567,7 @@ fn drop_live_values(
         (TypeKind::Scalar(_), ObjectState::Leaf(leaf)) => {
             let previous = std::mem::replace(leaf, LeafState::Dead);
             match previous {
-                LeafState::Live(Value::TrackedFixture(id)) => {
+                LeafState::Live(RuntimeValue::TrackedFixture(id)) => {
                     trace.push(VerificationEvent::DropTrackedFixture {
                         place: place.clone(),
                         id,
