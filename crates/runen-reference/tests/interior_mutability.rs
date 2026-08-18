@@ -13,8 +13,7 @@ fn machine(body: Body) -> Machine {
 fn shared_loan_survives_interior_replacement_and_observes_replacement_storage() {
     let mut types = TypeTable::new();
     let tracked = types.push(
-        TypeDef::scalar("InteriorTracked", ScalarType::TrackedFixture)
-            .with_interior_mutability(),
+        TypeDef::scalar("InteriorTracked", ScalarType::TrackedFixture).with_interior_mutability(),
     );
     let value = Place::local(LocalId(0));
     let body = Body {
@@ -82,8 +81,7 @@ fn shared_loan_survives_interior_replacement_and_observes_replacement_storage() 
 fn interior_assignment_preserves_source_first_replacement_order() {
     let mut types = TypeTable::new();
     let tracked = types.push(
-        TypeDef::scalar("InteriorTracked", ScalarType::TrackedFixture)
-            .with_interior_mutability(),
+        TypeDef::scalar("InteriorTracked", ScalarType::TrackedFixture).with_interior_mutability(),
     );
     let dst = Place::local(LocalId(0));
     let src = Place::local(LocalId(1));
@@ -241,8 +239,7 @@ fn marked_aggregate_interior_assignment_drops_only_then_live_contents() {
 fn interior_replacement_under_shared_borrow_is_cleaned_once_on_fault() {
     let mut types = TypeTable::new();
     let tracked = types.push(
-        TypeDef::scalar("InteriorTracked", ScalarType::TrackedFixture)
-            .with_interior_mutability(),
+        TypeDef::scalar("InteriorTracked", ScalarType::TrackedFixture).with_interior_mutability(),
     );
     let value = Place::local(LocalId(0));
     let body = Body {
