@@ -147,6 +147,45 @@ fn raw_read_of_dead_target_is_undefined_behavior() {
 }
 
 #[test]
+fn raw_read_of_explicitly_dropped_target_is_undefined_behavior() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let target = Place::local(LocalId(0));
+    let error = execute(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Drop {
+                place: target.into(),
+            },
+            Statement::RawRead {
+                pointer: Place::local(LocalId(1)).into(),
+            },
+        ],
+        Terminator::Return,
+    )
+    .expect_err("explicit destruction leaves a Dead raw target");
+
+    assert!(matches!(
+        error.kind,
+        UndefinedBehaviorKind::RawReadTargetNotLive { .. }
+    ));
+}
+
+#[test]
 fn reinitialization_makes_existing_pointer_readable_again() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
