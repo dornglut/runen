@@ -47,16 +47,19 @@ Required cases:
 - a base exchange does not create release/acquire synchronization;
 - a release exchange that is the immediate modification-order predecessor of an acquire exchange on the same location synchronizes with that acquire;
 - reversing those two exchanges in modification order removes that release-to-acquire synchronization;
-- a base exchange between a release and an acquire prevents the earlier release from synchronizing with the acquire under this direct-predecessor relation;
+- an acquire-release exchange is acquire-capable, so a directly preceding release or acquire-release exchange may synchronize with it;
+- an acquire-release exchange is release-capable, so it may synchronize with a directly following acquire or acquire-release exchange;
+- two directly adjacent acquire-release exchanges synchronize through the same direct-predecessor relation;
+- a base exchange between a release-capable and an acquire-capable exchange prevents the earlier exchange from synchronizing with the later one under this direct-predecessor relation;
 - base immediately before acquire does not synchronize, and release immediately before base does not synchronize;
 - equal desired or prior values do not infer synchronization; predecessor exchange identity and exchange semantics control the relation;
 - exchange identities from different atomic locations do not synchronize through this relation;
 - release/acquire synchronization does not change the ordinary-access conflict predicate, even when that synchronization supplies semantic order around a conflicting ordinary pair;
 - validating atomic exchange or release/acquire evidence does not infer sibling `each` order from physical scheduling.
 
-`AtomicLocationId`, location-scoped `AtomicExchangeId`, `AtomicValueToken`, `AtomicExchangeSemantics`, `AtomicExchange`, `AtomicExchangeFixture`, and `AtomicExchangeRealization` are verification representation only. `Base`, `Release`, and `Acquire` are verification classifications of the normative semantic classes rather than a frozen source memory-order enumeration. Candidate modification-order slices are supplied as realization evidence and are not exposed by an accepted realization as semantic scheduler order. Verification-only `(before, after)` constraint pairs stand for order facts already owned elsewhere; they do not define a generic Runen execution graph. Immediate-predecessor evidence is retained privately only to exercise the focused direct synchronization relation.
+`AtomicLocationId`, location-scoped `AtomicExchangeId`, `AtomicValueToken`, `AtomicExchangeSemantics`, `AtomicExchange`, `AtomicExchangeFixture`, and `AtomicExchangeRealization` are verification representation only. `Base`, `Release`, `Acquire`, and `AcquireRelease` are verification classifications of the normative semantic classes rather than a frozen source memory-order enumeration. Candidate modification-order slices are supplied as realization evidence and are not exposed by an accepted realization as semantic scheduler order. Verification-only `(before, after)` constraint pairs stand for order facts already owned elsewhere; they do not define a generic Runen execution graph. Immediate-predecessor evidence is retained privately only to exercise the focused direct synchronization relation.
 
-These obligations do not define atomic load/store, compare-exchange, fetch operations, release sequences, acquire-release or sequentially-consistent semantics, fences, atomic scope, mixed atomic/non-atomic race legality for the atomic location itself, source atomic syntax/types, storage layout, addresses, progress guarantees, or backend atomic instructions.
+These obligations do not define atomic load/store, compare-exchange, fetch operations, release sequences, sequentially-consistent semantics, fences, atomic scope, mixed atomic/non-atomic race legality for the atomic location itself, source atomic syntax/types, storage layout, addresses, progress guarantees, or backend atomic instructions.
 
 ## Buffer logical-region boundary
 
