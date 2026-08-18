@@ -97,13 +97,25 @@ This revision defines the structured phase form rather than an imperative barrie
 
 If a participant faults, is cancelled, diverges, or otherwise fails to complete its before-barrier phase normally, the barrier and enclosing `each` abnormal-completion behavior are not defined by this revision.
 
-## Identity-bearing unordered reduction
+## Cohort-scoped identity-bearing unordered reduction
 
-An **unordered reduction** is a structured interaction that combines semantic contributions produced by source-unordered participating iterations into one reduction result.
+An **unordered reduction** is a structured interaction belonging to one dynamic `each` execution that combines semantic contributions from one selected participant cohort into one reduction result.
 
-A participating iteration may produce zero or more semantic reduction contributions when the enclosing reduction operation permits that cardinality. Contributions are distinct occurrences even when two or more contributions carry semantically equal values.
+The selected **reduction cohort** is exactly one of:
 
-A reduction contribution belongs to the reduction interaction itself. Producing or combining a contribution is not an ordinary non-atomic read or state-changing access to a shared accumulator region. Ordinary accesses performed by an iteration outside the reduction interaction remain governed by [Exec memory model](memory-model.md). Other semantic actions used while producing a contribution remain governed by their own applicable contracts. Participating in a reduction does not legalize, reorder, or otherwise weaken those independent obligations.
+- the complete root cohort of the enclosing `each` execution;
+- one group from an already-established hierarchy instance for that `each` execution; or
+- one subgroup from that already-established hierarchy instance.
+
+A root-cohort reduction does not require a hierarchy instance. A group- or subgroup-cohort reduction requires the selected group or subgroup to exist in the established hierarchy instance. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
+
+The participant set is exactly the selected reduction cohort and is fixed for the reduction instance. The root cohort is empty exactly when the enclosing `each` has no required iterations. Group and subgroup cohorts are non-empty by the hierarchy contract above.
+
+An iteration outside the selected reduction cohort is a nonparticipant and MUST NOT produce a semantic contribution belonging to that reduction instance.
+
+A participant may produce zero or more semantic reduction contributions when the enclosing reduction operation permits that cardinality. Contributions are distinct occurrences even when two or more contributions carry semantically equal values. Therefore a non-empty reduction cohort may still produce no semantic contributions.
+
+A reduction contribution belongs to the reduction interaction itself. Producing or combining a contribution is not an ordinary non-atomic read or state-changing access to a shared accumulator region. Ordinary accesses performed by an iteration outside the reduction interaction remain governed by [Exec memory model](memory-model.md). Other semantic actions used while producing a contribution remain governed by their own applicable contracts. Participating in a reduction does not legalize, reorder, synchronize, or otherwise weaken those independent obligations.
 
 The reduction defined by this revision has an explicit semantic identity value `e`. The identity defines the result of an empty contribution collection and the neutral element used by the operator contract below.
 
@@ -129,18 +141,20 @@ This revision defines only unordered reductions whose combination contract guara
 
 ### Contributions and result
 
-A normally completed reduction incorporates every semantic contribution produced by its participating iterations exactly once. It MUST NOT omit, duplicate, or invent a semantic contribution.
+A normally completed reduction incorporates every semantic contribution produced by its participants exactly once. It MUST NOT omit, duplicate, or invent a semantic contribution.
 
-The identity value defines the empty result and may participate as a neutral operand in the semantic combination. A realization MAY additionally initialize or combine physical partial results with the identity value any finite number of times when the two-sided identity law guarantees that doing so is semantically neutral. Such identity-valued physical initialization is realization state, is not a semantic contribution, and does not count as contribution duplication or invention.
+The identity value defines the result when the participant cohort produces no semantic contributions and may participate as a neutral operand in the semantic combination. A realization MAY additionally initialize or combine physical partial results with the identity value any finite number of times when the two-sided identity law guarantees that doing so is semantically neutral. Such identity-valued physical initialization is realization state, is not a semantic contribution, and does not count as contribution duplication or invention.
 
 Because sibling contributions have no source-defined relative order, a legal realization MAY choose any permutation of the contributions and any binary combination tree only where the complete combination and applicable result contracts guarantee that the resulting behavior and value are semantically equivalent.
 
 Physical worker, lane, chunk, queue, partial-accumulator, or tree order is not additional semantic input. A realization MAY use such physical structure only as an implementation technique preserving the reduction contract.
 
-For a normally completed `each` carrying the reduction, normal continuation is reached only after every required iteration has completed normally and every contribution produced by those iterations has been incorporated. The reduction result is then available to the normal continuation.
+For a normally completed `each` carrying the reduction, normal continuation is reached only after every required iteration of the complete `each` execution has completed normally and every semantic contribution produced by the reduction's participants has been incorporated. The one reduction result is then available to that normal continuation.
 
-An unordered reduction is not an implicit structured barrier. It establishes no general ordering relation among sibling iterations and no atomic, fence, barrier, or other synchronization semantics for ordinary accesses unless a separate contract explicitly supplies such a relationship.
+This revision does not define a cohort-local continuation, a result visible to participants before the enclosing `each` normal continuation, a leader or lane result, or automatic distribution of the result to the selected cohort.
+
+An unordered reduction is not an implicit structured barrier. Selecting a root, group, or subgroup cohort for a reduction establishes no general ordering relation among sibling iterations and no atomic, fence, barrier, ordinary-access visibility, or other synchronization semantics unless a separate contract explicitly supplies such a relationship.
 
 The reduction result and partial-result behavior when an iteration faults, is cancelled, diverges, or otherwise fails to complete normally are not defined by this revision.
 
-Group-local storage, group/subgroup reductions or collectives, broadcast, shuffle, scans, atomics, and atomic/fence scopes remain not defined by this revision. The hierarchy above defines their shared participant-domain foundation where applicable; the structured barrier defines only its own cohort-scoped phase relation.
+Group-local storage, cohort-local reduction result distribution, group/subgroup collectives beyond the unordered reduction defined above, broadcast, shuffle, scans, atomics, and atomic/fence scopes remain not defined by this revision. The hierarchy above defines their shared participant-domain foundation where applicable; the structured barrier and unordered reduction define only their own cohort-scoped contracts.

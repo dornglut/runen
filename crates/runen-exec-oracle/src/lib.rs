@@ -20,7 +20,10 @@ pub use buffer::{
     BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
 pub use hierarchy::{GroupId, HierarchyError, HierarchyFixture, HierarchyMembership, SubgroupId};
-pub use reduction::{ContributionId, UnorderedReductionEvidence, has_exact_contribution_coverage};
+pub use reduction::{
+    ContributionId, ReductionContribution, ReductionError, ReductionFixture, ReductionId,
+    UnorderedReductionEvidence,
+};
 pub use structured::{EachPhase, IterationId, each_orders};
 pub use task::{
     TaskId, TaskScopePhase, TaskStateRetention, all_state_dependencies_are_detach_safe,
