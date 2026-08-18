@@ -128,7 +128,7 @@ Consequently, while the storage extent continues:
 - ordinary assignment may end an old stored-value lifetime and begin a new one without changing the root storage identity;
 - interior assignment may do the same while shared loans remain active;
 - forming a pointer before and after such a transition selects the same structural storage region when the same place is selected;
-- a previously formed pointer may `RawRead` a later replacement value when the target is fully Live and the current borrowing precondition permits the read;
+- when the target is fully Live and the current borrowing precondition permits the read, `RawRead` through a previously formed pointer reads the later replacement value;
 - the same pointer cannot legally `RawRead` the target while that target is Never-initialized, Dead, or only partially initialized as a whole.
 
 Thus a pointer targets continuing storage rather than one frozen stored-value lifetime, while each actual access is still constrained by the target's state at that semantic step.
