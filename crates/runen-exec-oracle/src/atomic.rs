@@ -60,6 +60,7 @@ pub enum AtomicExchangeSemantics {
     Base,
     Release,
     Acquire,
+    AcquireRelease,
 }
 
 /// Verification-only description of one semantic atomic exchange occurrence.
@@ -229,9 +230,8 @@ impl AtomicExchangeRealization {
             .find_map(|(candidate, prior)| (*candidate == exchange).then_some(*prior))
     }
 
-    /// Whether the named represented Release exchange directly synchronizes with
-    /// the named represented Acquire exchange under the accepted direct-predecessor
-    /// relation.
+    /// Whether the named release-capable exchange directly synchronizes with the
+    /// named acquire-capable exchange under the accepted direct-predecessor relation.
     #[must_use]
     pub fn release_acquire_synchronizes(
         &self,
@@ -242,9 +242,13 @@ impl AtomicExchangeRealization {
             return false;
         }
 
-        self.semantics_of(release) == Some(AtomicExchangeSemantics::Release)
-            && self.semantics_of(acquire) == Some(AtomicExchangeSemantics::Acquire)
-            && self.immediate_predecessor(acquire) == Some(release)
+        matches!(
+            self.semantics_of(release),
+            Some(AtomicExchangeSemantics::Release | AtomicExchangeSemantics::AcquireRelease)
+        ) && matches!(
+            self.semantics_of(acquire),
+            Some(AtomicExchangeSemantics::Acquire | AtomicExchangeSemantics::AcquireRelease)
+        ) && self.immediate_predecessor(acquire) == Some(release)
     }
 
     #[must_use]
