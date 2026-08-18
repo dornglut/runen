@@ -14,7 +14,5 @@ pub use access::{Access, AccessKind};
 pub use buffer::{
     BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
-pub use reduction::{
-    ContributionId, UnorderedReductionEvidence, has_exact_contribution_coverage,
-};
+pub use reduction::{ContributionId, UnorderedReductionEvidence, has_exact_contribution_coverage};
 pub use structured::{EachPhase, IterationId, each_orders};
