@@ -229,20 +229,6 @@ impl AtomicExchangeRealization {
             .find_map(|(candidate, prior)| (*candidate == exchange).then_some(*prior))
     }
 
-    /// Returns the immediate modification-order predecessor of one represented
-    /// exchange without exposing or enumerating the full modification order.
-    #[must_use]
-    pub fn immediate_predecessor(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeId> {
-        if exchange.location() != self.location {
-            return None;
-        }
-
-        self.predecessors
-            .iter()
-            .find_map(|(candidate, predecessor)| (*candidate == exchange).then_some(*predecessor))
-            .flatten()
-    }
-
     /// Whether the named represented Release exchange directly synchronizes with
     /// the named represented Acquire exchange under the accepted direct-predecessor
     /// relation.
@@ -264,6 +250,17 @@ impl AtomicExchangeRealization {
     #[must_use]
     pub const fn final_value(&self) -> AtomicValueToken {
         self.final_value
+    }
+
+    fn immediate_predecessor(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeId> {
+        if exchange.location() != self.location {
+            return None;
+        }
+
+        self.predecessors
+            .iter()
+            .find_map(|(candidate, predecessor)| (*candidate == exchange).then_some(*predecessor))
+            .flatten()
     }
 
     fn semantics_of(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeSemantics> {
