@@ -22,7 +22,7 @@ For `RawAssign`, the pointer specification defines target selection, source-firs
 
 Undefined behavior from any currently defined raw operation is not malformed MIR, a language-validation error, a defined `Fault`, or an ordinary recoverable result. A validator's exact symbolic pointer-target bookkeeping for defined path-state propagation does not reclassify these unsafe target proof obligations as validation rules.
 
-Once execution violates one of these unsafe preconditions, this specification defines no continuing execution state or operand result for subsequent Core operations. A verifier MAY therefore stop propagating defined path-state when its exact verification state establishes such a violation, but that verification choice is not a Runen-observable safety result and does not remove the execution-time unsafe precondition.
+Once execution violates one of these unsafe preconditions, this specification defines no continuing execution state or operand result for subsequent Core operations.
 
 This revision makes no defined termination-cleanup guarantee after execution has violated one of these unsafe preconditions.
 
