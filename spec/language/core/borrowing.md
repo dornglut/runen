@@ -159,7 +159,7 @@ If one or more active shared direct children of `P` overlap `p`, `P` retains sha
 - `Read` is permitted;
 - `Copy` is permitted when the selected type is copyable;
 - `AddressOf` is permitted;
-- access to a stored raw-pointer value as the `pointer` operand of `RawRead` is permitted when the selected type is a raw-pointer type and the pointer operation's independent preconditions hold;
+- the pointer-value access of `RawRead` is permitted subject to that operation's independently owned non-authority preconditions;
 - shared reborrow is permitted when its ordinary preconditions hold;
 - `InteriorAssign` is permitted when the selected concrete target independently lies within an interior-mutable region;
 - `Move`, ordinary `Assign`, `Drop`, and exclusive reborrow are invalid.
@@ -174,7 +174,7 @@ Raw target-access compatibility after obtaining a `RawRead` pointer value is a s
 
 A direct child whose concrete root is disjoint from `p` does not constrain access through `P` to `p`.
 
-An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. It may perform `InteriorAssign`, `AddressOf`, or shared access to a `RawRead` pointer-value operand on a disjoint sibling when their independent preconditions hold.
+An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. It may perform `InteriorAssign`, `AddressOf`, or shared pointer-value access for `RawRead` on a disjoint sibling when their independent preconditions hold.
 
 ## Direct access while loans are active
 
@@ -185,7 +185,7 @@ For a direct access target `p`:
 - `Read(p)` is permitted when no active exclusive loan overlaps `p`;
 - `Copy(p)` is permitted when no active exclusive loan overlaps `p` and the existing copyability rule permits the copy;
 - `AddressOf(p)` is permitted when no active exclusive loan overlaps `p`; it does not additionally require `p` to be Live;
-- using `p` as the stored pointer-value operand of `RawRead` is permitted when no active exclusive loan overlaps `p`, the selected type is a raw-pointer type, and the pointer value is fully Live; the pointee target's unsafe access preconditions are checked separately;
+- using `p` as the pointer-value operand of `RawRead` has shared authority when no active exclusive loan overlaps `p`, subject to the operation's independently owned non-authority preconditions and its separate raw-target unsafe preconditions;
 - `InteriorAssign(p, ...)` is permitted when no active exclusive loan overlaps `p` and `p` independently lies within an interior-mutable region;
 - `Init(p, ...)`, `Move(p)`, ordinary `Assign(p, ...)`, and `Drop(p)` are permitted only when no active loan of either kind overlaps `p`, in addition to their existing value/storage preconditions.
 
@@ -200,7 +200,7 @@ It permits:
 - `Read`;
 - `Copy`, when the selected type is copyable;
 - `AddressOf`;
-- access to a stored raw-pointer value as the `pointer` operand of `RawRead`, when the selected type is a raw-pointer type and the pointer value is fully Live;
+- pointer-value access for `RawRead`, subject to the operation's independently owned non-authority preconditions;
 - shared reborrow creation;
 - `InteriorAssign`, only when the resolved concrete target lies within an interior-mutable region under the value/storage rules.
 
@@ -219,7 +219,7 @@ It permits access using:
 - `Read`;
 - `Copy`, when the selected type is copyable;
 - `AddressOf` because exclusive authority includes shared authority;
-- access to a stored raw-pointer value as the `pointer` operand of `RawRead` because exclusive authority includes shared authority;
+- pointer-value access for `RawRead` because exclusive authority includes shared authority;
 - shared or exclusive reborrow according to the ordinary child rules;
 - `Move`;
 - ordinary `Assign`, when the existing containing-local assignment-mutability rule permits assignment;
@@ -228,7 +228,7 @@ It permits access using:
 
 The ordinary initialization-state, type, assignment-mutability, interior-mutability, and destruction-domain rules still apply to the selected concrete place. Exclusive access does not weaken those independent rules.
 
-In particular, an exclusive loan over an immutable local may authorize reading, copying, raw-pointer formation, shared access to a `RawRead` pointer-value operand, moving, dropping, and exclusive reborrowing according to their ordinary rules, but it does not make ordinary assignment to that local legal. Likewise, exclusive authority alone does not make an unmarked target eligible for `InteriorAssign`.
+In particular, an exclusive loan over an immutable local may authorize reading, copying, raw-pointer formation, shared pointer-value access for `RawRead`, moving, dropping, and exclusive reborrowing according to their ordinary rules, but it does not make ordinary assignment to that local legal. Likewise, exclusive authority alone does not make an unmarked target eligible for `InteriorAssign`.
 
 An exclusive loan controls access to storage rather than to one immutable stored-value identity. Therefore:
 
@@ -265,7 +265,7 @@ Formation authority does not grant later target access through the resulting poi
 
 The `RawRead` operation is defined by [Core pointers and provenance](pointers.md). This document owns its alias-authority relationships.
 
-First, `RawRead` obtains its stored raw-pointer `pointer` operand using the ordinary shared-authority `PlaceAccess` rules above. That pointer-value access may be direct or loan-relative and is validated like other shared accesses. It does not grant or preserve authority over the pointee.
+First, `RawRead` obtains its stored raw-pointer `pointer` operand using the ordinary shared-authority `PlaceAccess` rules above. That pointer-value access may be direct or loan-relative and is subject to the non-authority operation/value preconditions owned by the pointer and value/storage semantics. It does not grant or preserve authority over the pointee.
 
 After the pointer value resolves its symbolic target to one concrete structural place `p`, the raw target access has a separate shared compatibility requirement against the active loan forest:
 
