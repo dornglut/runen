@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, ScalarType, Statement, Terminator, TypeDef, TypeTable,
-    Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef,
+    TypeTable, Value, validate_body,
 };
 
 fn one_block(
@@ -49,6 +49,43 @@ fn live_raw_pointer_value_is_valid_for_raw_read() {
     );
 
     validate_body(body).expect("live raw-pointer value is valid MIR for RawRead");
+}
+
+#[test]
+fn shared_loan_can_supply_raw_read_pointer_value() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let pointer = Place::local(LocalId(1));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+        ],
+        vec![LoanDecl::new("pointer_shared", pointer_ty)],
+        vec![
+            Statement::Init {
+                dst: Place::local(LocalId(0)),
+                src: Operand::Constant(Value::I64(1)),
+            },
+            Statement::Init {
+                dst: pointer.clone(),
+                src: Operand::AddressOf(Place::local(LocalId(0)).into()),
+            },
+            Statement::Borrow {
+                loan: LoanId(0),
+                kind: BorrowKind::Shared,
+                src: pointer.into(),
+            },
+            Statement::RawRead {
+                pointer: PlaceAccess::loan(LoanId(0)),
+            },
+            Statement::EndBorrow { loan: LoanId(0) },
+        ],
+    );
+
+    validate_body(body).expect("shared loan retains authority to read the stored pointer value");
 }
 
 #[test]
