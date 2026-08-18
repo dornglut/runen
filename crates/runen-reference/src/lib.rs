@@ -18,13 +18,11 @@ pub enum VerificationWriteKind {
 /// Verification representation of one symbolic raw-pointer value.
 ///
 /// `target` identifies the structural storage region selected when the pointer was
-/// formed. `provenance` identifies the dynamic root storage instance from which the
-/// pointer derives. Their numeric representation is verification-only and is not
-/// Runen-observable program behavior.
+/// formed. The currently defined provenance root is represented once by
+/// `target.instance`; the oracle does not materialize a duplicate provenance field.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RawPointerValue {
     pub target: StorageRegion,
-    pub provenance: StorageInstanceId,
 }
 
 /// Verification-only event emitted by the executable reference oracle.
@@ -344,10 +342,8 @@ impl Machine {
             }
             Operand::AddressOf(src) => {
                 let place = self.resolve_access(src);
-                let target = self.storage_region(&place);
                 let pointer = RawPointerValue {
-                    provenance: target.instance,
-                    target,
+                    target: self.storage_region(&place),
                 };
                 self.verification_events.push(VerificationEvent::AddressOf {
                     place,
