@@ -132,7 +132,7 @@ This revision intentionally makes no claim that dereferencing such a pointer whi
 
 A formed raw pointer is an ordinary owned value for the value operations currently represented by Core.
 
-- `Copy` of a raw pointer produces an equal raw-pointer value and preserves target and provenance.
+- `Copy` of a raw pointer produces another owned raw-pointer value with exactly the same target and provenance; this does not define a language-level pointer equality operation.
 - `Move` transfers the raw-pointer value and preserves target and provenance while ending the source pointer's stored-value lifetime in the ordinary way.
 - storing or replacing a raw-pointer value preserves its target and provenance as part of that value.
 - destruction of a raw-pointer value has no pointer-specific semantic effect in this revision.
