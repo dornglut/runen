@@ -2,7 +2,7 @@ use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Field, LocalDecl, LocalId, MirValidationErrorKind,
     Operand, Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
 };
-use runen_reference::{Machine, TerminalStatus, VerificationEvent};
+use runen_reference::{ExecutionReport, Machine, TerminalStatus, VerificationEvent};
 
 fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
     Body {
@@ -16,6 +16,12 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
 
 fn machine(body: Body) -> Machine {
     Machine::new(validate_body(body).expect("A0 test MIR must pass validation"))
+}
+
+fn defined_report(body: Body) -> ExecutionReport {
+    machine(body)
+        .execute()
+        .expect("A0 value/place fixture must have defined execution")
 }
 
 #[test]
@@ -83,7 +89,7 @@ fn copy_preserves_source() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert!(
         report
@@ -136,7 +142,7 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     let drops: Vec<_> = report
         .verification_events
         .iter()
@@ -173,7 +179,7 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     let drops = report
         .verification_events
         .iter()
@@ -213,7 +219,7 @@ fn fault_unwinds_live_locals_once_in_reverse_declaration_order() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("TEST_FAULT".into())
@@ -275,7 +281,7 @@ fn fault_cleanup_uses_the_current_partial_destruction_domain() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("PARTIAL_FAULT".into())
@@ -321,7 +327,7 @@ fn fields_can_be_first_initialized_independently_before_whole_value_is_read() {
         ],
     );
 
-    let _ = machine(body).execute();
+    defined_report(body);
 }
 
 #[test]
@@ -348,7 +354,7 @@ fn struct_fields_drop_in_reverse_declaration_order() {
         }],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     let ids: Vec<_> = report
         .verification_events
         .iter()
