@@ -323,12 +323,7 @@ fn acquire_release_is_both_acquire_capable_and_release_capable() {
         AtomicValueToken::new(10),
         vec![
             exchange(local, 1, 20, AtomicExchangeSemantics::Release),
-            exchange(
-                local,
-                2,
-                30,
-                AtomicExchangeSemantics::AcquireRelease,
-            ),
+            exchange(local, 2, 30, AtomicExchangeSemantics::AcquireRelease),
             exchange(local, 3, 40, AtomicExchangeSemantics::Acquire),
         ],
     )
@@ -351,18 +346,8 @@ fn acquire_release_directly_synchronizes_with_acquire_release() {
         local,
         AtomicValueToken::new(10),
         vec![
-            exchange(
-                local,
-                1,
-                20,
-                AtomicExchangeSemantics::AcquireRelease,
-            ),
-            exchange(
-                local,
-                2,
-                30,
-                AtomicExchangeSemantics::AcquireRelease,
-            ),
+            exchange(local, 1, 20, AtomicExchangeSemantics::AcquireRelease),
+            exchange(local, 2, 30, AtomicExchangeSemantics::AcquireRelease),
         ],
     )
     .unwrap();
@@ -439,12 +424,7 @@ fn intervening_base_blocks_acquire_release_synchronization() {
         local,
         AtomicValueToken::new(20),
         vec![
-            exchange(
-                local,
-                1,
-                20,
-                AtomicExchangeSemantics::AcquireRelease,
-            ),
+            exchange(local, 1, 20, AtomicExchangeSemantics::AcquireRelease),
             exchange(local, 2, 20, AtomicExchangeSemantics::Base),
             exchange(local, 3, 20, AtomicExchangeSemantics::Acquire),
         ],
