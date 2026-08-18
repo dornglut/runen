@@ -49,7 +49,7 @@ The barrier does not change the ordinary conflict relation. Two overlapping ordi
 
 Conflicting ordinary accesses performed by sibling participants within the same before-barrier phase or within the same after-barrier phase remain source-unordered unless another semantic contract orders them.
 
-A different barrier identity, a broader or narrower selected cohort, or hierarchy membership alone supplies no memory order. Ordering between ordinary accesses around distinct barriers must arise from their placement or another applicable semantic relationship in the enclosing execution.
+Barrier identity alone does not order distinct barrier instances. Neither overlap/nesting between two selected barrier cohorts nor hierarchy membership alone supplies memory order. Ordering between ordinary accesses around distinct barriers must arise from their placement or another applicable semantic relationship in the enclosing execution.
 
 Buffer logical coherence consumes this barrier-established participant access order through its own canonical contract; this document does not redefine Buffer state or visibility.
 
