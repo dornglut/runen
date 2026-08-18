@@ -27,16 +27,45 @@ pub const fn task_scope_orders(earlier: TaskScopePhase, later: TaskScopePhase) -
     )
 }
 
-/// Checks that every attached child required for normal scope completion has
-/// completed normally exactly once, independent of completion-list order.
+/// Verification-only completion evidence for the task outcomes represented by the
+/// current structured-scope/cancellation oracle.
 ///
-/// Duplicate required task identities are rejected as invalid fixture input.
+/// This is not a complete Runen task-outcome enumeration. Fault and other abnormal
+/// completion forms remain outside the represented task oracle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskCompletionEvidence {
+    Normal(TaskId),
+    Cancelled(TaskId),
+}
+
+/// Checks that every attached child required for normal scope completion has
+/// completed normally exactly once, independent of completion-evidence order.
+///
+/// Cancelled evidence cannot satisfy normal completion. Duplicate required task
+/// identities are rejected as invalid fixture input.
 #[must_use]
 pub fn has_exact_attached_completion(
     required_attached: &[TaskId],
-    completed_normally: &[TaskId],
+    completion_evidence: &[TaskCompletionEvidence],
 ) -> bool {
-    has_exact_unique_coverage(required_attached, completed_normally)
+    if completion_evidence
+        .iter()
+        .any(|evidence| matches!(evidence, TaskCompletionEvidence::Cancelled(_)))
+    {
+        return false;
+    }
+
+    let completed_normally = completion_evidence
+        .iter()
+        .map(|evidence| match evidence {
+            TaskCompletionEvidence::Normal(task) => *task,
+            TaskCompletionEvidence::Cancelled(_) => {
+                unreachable!("cancelled completion evidence is rejected above")
+            }
+        })
+        .collect::<Vec<_>>();
+
+    has_exact_unique_coverage(required_attached, &completed_normally)
 }
 
 /// Verification-only classification of how one task-state dependency survives
