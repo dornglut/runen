@@ -427,7 +427,8 @@ fn static_validation_still_checks_statements_after_statically_evident_raw_ub() {
         ],
     );
 
-    let error = validate_body(body).expect_err("whole-body static type validation remains mandatory");
+    let error =
+        validate_body(body).expect_err("whole-body static type validation remains mandatory");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::TypeMismatch { expected: bool_ty }
