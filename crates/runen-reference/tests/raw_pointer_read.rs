@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl,
-    LocalId, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable,
-    Value, validate_body,
+    BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
+    Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
+    validate_body,
 };
 use runen_reference::{
     ExecutionReport, Machine, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
@@ -67,10 +67,7 @@ fn raw_read_of_live_target_is_defined_and_non_consuming() {
         report
             .verification_events
             .iter()
-            .filter(|event| matches!(
-                event,
-                VerificationEvent::DropTrackedFixture { id: 7, .. }
-            ))
+            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 7, .. }))
             .count(),
         1,
         "RawRead must not consume or duplicate the non-copy pointee",
@@ -188,16 +185,23 @@ fn reinitialization_makes_existing_pointer_readable_again() {
     )
     .expect("replacement in continuing storage restores a live target");
 
-    let formed = report.verification_events.iter().find_map(|event| match event {
-        VerificationEvent::AddressOf { pointer, .. } => Some(pointer.clone()),
-        _ => None,
-    });
-    let read = report.verification_events.iter().find_map(|event| match event {
-        VerificationEvent::RawRead { pointer, target: read } if read == &target => {
-            Some(pointer.clone())
-        }
-        _ => None,
-    });
+    let formed = report
+        .verification_events
+        .iter()
+        .find_map(|event| match event {
+            VerificationEvent::AddressOf { pointer, .. } => Some(pointer.clone()),
+            _ => None,
+        });
+    let read = report
+        .verification_events
+        .iter()
+        .find_map(|event| match event {
+            VerificationEvent::RawRead {
+                pointer,
+                target: read,
+            } if read == &target => Some(pointer.clone()),
+            _ => None,
+        });
     assert_eq!(read, formed);
 }
 
@@ -472,8 +476,10 @@ fn detected_undefined_behavior_does_not_run_defined_cleanup() {
     )
     .expect_err("dead target enters UB before defined Fault");
 
-    assert!(!error.verification_events.iter().any(|event| matches!(
-        event,
-        VerificationEvent::DropTrackedFixture { .. }
-    )));
+    assert!(
+        !error
+            .verification_events
+            .iter()
+            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
+    );
 }
