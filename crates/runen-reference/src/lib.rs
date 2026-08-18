@@ -43,6 +43,10 @@ pub enum VerificationEvent {
         pointer: RawPointerValue,
         target: Place,
     },
+    RawMove {
+        pointer: RawPointerValue,
+        target: Place,
+    },
     Move(Place),
     Copy(Place),
     Write {
@@ -92,6 +96,8 @@ pub struct ExecutionReport {
 pub enum UndefinedBehaviorKind {
     RawReadTargetNotLive { target: StorageRegion },
     RawReadConflictsWithExclusiveLoan { target: StorageRegion, loan: LoanId },
+    RawMoveTargetNotLive { target: StorageRegion },
+    RawMoveConflictsWithLoan { target: StorageRegion, loan: LoanId },
     RawAssignConflictsWithLoan { target: StorageRegion, loan: LoanId },
 }
 
@@ -265,31 +271,43 @@ impl Machine {
     fn execute_statement(&mut self, statement: &Statement) -> Result<(), UndefinedBehaviorKind> {
         match statement {
             Statement::Init { dst, src } => self.initialize(dst, src),
-            Statement::Borrow { loan, kind, src } => self.begin_borrow(*loan, *kind, src),
-            Statement::EndBorrow { loan } => self.end_borrow(*loan),
-            Statement::Read { src } => self.read(src),
-            Statement::RawRead { pointer } => return self.raw_read(pointer),
-            Statement::RawAssign { pointer, src } => return self.raw_assign(pointer, src),
+            Statement::Borrow { loan, kind, src } => {
+                self.begin_borrow(*loan, *kind, src);
+                Ok(())
+            }
+            Statement::EndBorrow { loan } => {
+                self.end_borrow(*loan);
+                Ok(())
+            }
+            Statement::Read { src } => {
+                self.read(src);
+                Ok(())
+            }
+            Statement::RawRead { pointer } => self.raw_read(pointer),
+            Statement::RawAssign { pointer, src } => self.raw_assign(pointer, src),
             Statement::Assign { dst, src } => {
-                self.replace(dst, src, VerificationWriteKind::Assign);
+                self.replace(dst, src, VerificationWriteKind::Assign)
             }
             Statement::InteriorAssign { dst, src } => {
-                self.replace(dst, src, VerificationWriteKind::InteriorAssign);
+                self.replace(dst, src, VerificationWriteKind::InteriorAssign)
             }
-            Statement::Drop { place } => self.drop_explicit(place),
+            Statement::Drop { place } => {
+                self.drop_explicit(place);
+                Ok(())
+            }
         }
-        Ok(())
     }
 
-    fn initialize(&mut self, dst: &Place, src: &Operand) {
+    fn initialize(&mut self, dst: &Place, src: &Operand) -> Result<(), UndefinedBehaviorKind> {
         let dst_ty = self.place_type(dst);
-        let value = self.evaluate_operand(src);
+        let value = self.evaluate_operand(src)?;
         let dst_state = place_state_mut(&mut self.locals, dst);
         write_value(&self.body.as_body().types, dst_ty, dst_state, value);
         self.verification_events.push(VerificationEvent::Write {
             place: dst.clone(),
             kind: VerificationWriteKind::Init,
         });
+        Ok(())
     }
 
     fn begin_borrow(&mut self, loan: LoanId, kind: BorrowKind, src: &PlaceAccess) {
@@ -323,12 +341,19 @@ impl Machine {
             .push(VerificationEvent::BorrowEnd(loan));
     }
 
-    fn replace(&mut self, dst: &PlaceAccess, src: &Operand, kind: VerificationWriteKind) {
+    fn replace(
+        &mut self,
+        dst: &PlaceAccess,
+        src: &Operand,
+        kind: VerificationWriteKind,
+    ) -> Result<(), UndefinedBehaviorKind> {
         // All assignment forms share one accepted source-first replacement lifecycle.
-        // Ordinary/interior legality is already established by validation.
+        // Ordinary/interior legality is already established by validation. A failing
+        // unsafe operand stops before destination destruction or write.
         let dst = self.resolve_access(dst);
-        let value = self.evaluate_operand(src);
+        let value = self.evaluate_operand(src)?;
         self.replace_resolved(dst, value, kind);
+        Ok(())
     }
 
     fn replace_resolved(&mut self, dst: Place, value: RuntimeValue, kind: VerificationWriteKind) {
@@ -387,7 +412,7 @@ impl Machine {
         let pointer_place = self.resolve_access(pointer_access);
         let pointer = self.raw_pointer_at(&pointer_place);
         let target = self.place_for_storage_region(&pointer.target);
-        let value = self.evaluate_operand(src);
+        let value = self.evaluate_operand(src)?;
 
         if let Some((index, _)) = self.active_loans.iter().enumerate().find(|(_, active)| {
             active
@@ -409,9 +434,12 @@ impl Machine {
         self.drop_place_contents(&place);
     }
 
-    fn evaluate_operand(&mut self, operand: &Operand) -> RuntimeValue {
+    fn evaluate_operand(
+        &mut self,
+        operand: &Operand,
+    ) -> Result<RuntimeValue, UndefinedBehaviorKind> {
         match operand {
-            Operand::Constant(value) => RuntimeValue::from_constant(value),
+            Operand::Constant(value) => Ok(RuntimeValue::from_constant(value)),
             Operand::Move(src) => {
                 let src = self.resolve_access(src);
                 let src_ty = self.place_type(&src);
@@ -426,7 +454,47 @@ impl Machine {
                             pointer: pointer.clone(),
                         });
                 }
-                value
+                Ok(value)
+            }
+            Operand::RawMove(pointer_access) => {
+                // Snapshot the stored raw-pointer value before consuming any target
+                // storage, including the self-targeting case.
+                let pointer_place = self.resolve_access(pointer_access);
+                let pointer = self.raw_pointer_at(&pointer_place);
+                let target = self.place_for_storage_region(&pointer.target);
+
+                if !place_state(&self.locals, &target).fully_live() {
+                    return Err(UndefinedBehaviorKind::RawMoveTargetNotLive {
+                        target: pointer.target,
+                    });
+                }
+
+                if let Some((index, _)) = self.active_loans.iter().enumerate().find(|(_, active)| {
+                    active
+                        .as_ref()
+                        .is_some_and(|active| active.place.overlaps(&target))
+                }) {
+                    return Err(UndefinedBehaviorKind::RawMoveConflictsWithLoan {
+                        target: pointer.target,
+                        loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
+                    });
+                }
+
+                let target_ty = self.place_type(&target);
+                let target_state = place_state_mut(&mut self.locals, &target);
+                let value = take_value(&self.body.as_body().types, target_ty, target_state);
+                self.verification_events.push(VerificationEvent::RawMove {
+                    pointer,
+                    target: target.clone(),
+                });
+                if let RuntimeValue::RawPointer(pointer) = &value {
+                    self.verification_events
+                        .push(VerificationEvent::RawPointerMove {
+                            place: target,
+                            pointer: pointer.clone(),
+                        });
+                }
+                Ok(value)
             }
             Operand::Copy(src) => {
                 let src = self.resolve_access(src);
@@ -445,7 +513,7 @@ impl Machine {
                             pointer: pointer.clone(),
                         });
                 }
-                value
+                Ok(value)
             }
             Operand::AddressOf(src) => {
                 let place = self.resolve_access(src);
@@ -456,7 +524,7 @@ impl Machine {
                     place,
                     pointer: pointer.clone(),
                 });
-                RuntimeValue::RawPointer(pointer)
+                Ok(RuntimeValue::RawPointer(pointer))
             }
         }
     }
