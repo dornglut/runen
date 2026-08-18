@@ -3,7 +3,7 @@
 ///
 /// These flags do not prove arbitrary operator implementations satisfy the
 /// represented obligations and are not a source-language trait system.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct UnorderedReductionEvidence {
     normal_and_closed: bool,
     result_only: bool,
