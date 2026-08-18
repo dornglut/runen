@@ -55,7 +55,7 @@ Physical migration, replication, caching, or placement may occur before, during,
 
 A legal realization may maintain, migrate, or replicate physical backing only according to the logical coherence contract above and the applicable Exec memory rules.
 
-This revision does not yet define a Buffer version representation, transfer-completion protocol, physical ownership or dirty-state protocol, replica directory, mapping state machine, relocation mechanism, or the visibility/synchronization rules for accesses whose ordering will be established by future atomics or synchronization operations. It likewise does not define which physical copy services an access.
+This revision does not yet define a Buffer version representation, transfer-completion protocol, physical ownership or dirty-state protocol, replica directory, mapping state machine, relocation mechanism, atomic access to Buffer storage, or mixed atomic/non-atomic Buffer access or visibility rules. It likewise does not define which physical copy services an access.
 
 ## Address exposure
 
