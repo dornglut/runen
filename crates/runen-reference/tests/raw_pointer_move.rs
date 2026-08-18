@@ -740,3 +740,123 @@ fn raw_move_undefined_behavior_does_not_run_defined_cleanup() {
             .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
     );
 }
+
+#[test]
+fn raw_move_transfers_complete_aggregate_without_source_destruction() {
+    let mut types = TypeTable::new();
+    let tracked_ty = types.push(TypeDef::scalar(
+        "TrackedFixture",
+        ScalarType::TrackedFixture,
+    ));
+    let pair_ty = types.push(TypeDef::structure(
+        "Pair",
+        vec![
+            Field::new("left", tracked_ty),
+            Field::new("right", tracked_ty),
+        ],
+    ));
+    let pointer_ty = types.push(TypeDef::raw_pointer("pair_ptr", pair_ty));
+    let target = Place::local(LocalId(0));
+    let destination = Place::local(LocalId(2));
+    let report = execute(
+        types,
+        vec![
+            LocalDecl::new("target", pair_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+            LocalDecl::new("destination", pair_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::Struct(vec![
+                    Value::TrackedFixture(101),
+                    Value::TrackedFixture(102),
+                ])),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Init {
+                dst: destination.clone(),
+                src: Operand::RawMove(Place::local(LocalId(1)).into()),
+            },
+        ],
+        Terminator::Return,
+    )
+    .expect("whole aggregate RawMove is defined when every target leaf is Live");
+
+    assert!(!report.verification_events.iter().any(|event| matches!(
+        event,
+        VerificationEvent::DropTrackedFixture { place, .. } if place.local == target.local
+    )));
+    assert_eq!(
+        report
+            .verification_events
+            .iter()
+            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 101 | 102, .. }))
+            .count(),
+        2,
+        "both moved aggregate leaves are destroyed only from their destination"
+    );
+}
+
+#[test]
+fn raw_assign_snapshots_target_before_raw_move_source_consumes_pointer_operand_at_runtime() {
+    let mut types = TypeTable::new();
+    let pointer_ty = types.push(TypeDef::raw_pointer("recursive_ptr", TypeId(0)));
+    assert_eq!(pointer_ty, TypeId(0));
+
+    let outer = Place::local(LocalId(0));
+    let source = Place::local(LocalId(1));
+    let target = Place::local(LocalId(2));
+    let report = execute(
+        types,
+        vec![
+            LocalDecl::new("outer", pointer_ty, false),
+            LocalDecl::new("source", pointer_ty, false),
+            LocalDecl::new("target", pointer_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: outer.clone(),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Init {
+                dst: source.clone(),
+                src: Operand::AddressOf(outer.clone().into()),
+            },
+            Statement::RawAssign {
+                pointer: outer.clone().into(),
+                src: Operand::RawMove(source.into()),
+            },
+            Statement::RawRead {
+                pointer: target.clone().into(),
+            },
+        ],
+        Terminator::Return,
+    )
+    .expect("outer RawAssign uses its pre-source target snapshot");
+
+    let raw_move_index = report
+        .verification_events
+        .iter()
+        .position(|event| matches!(event, VerificationEvent::RawMove { target: place, .. } if place == &outer))
+        .expect("source RawMove consumes the outer pointer storage");
+    let raw_assign_index = report
+        .verification_events
+        .iter()
+        .position(|event| {
+            matches!(
+                event,
+                VerificationEvent::Write {
+                    place,
+                    kind: VerificationWriteKind::RawAssign,
+                } if place == &target
+            )
+        })
+        .expect("outer RawAssign still writes its snapshotted target");
+    assert!(raw_move_index < raw_assign_index);
+}
