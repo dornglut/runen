@@ -6,9 +6,9 @@ This document records focused assurance obligations for defined Exec semantic sl
 
 The normative ordinary-access and structured-iteration rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Buffer-specific identity, region, view-access, and logical-coherence facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
 
-## Ordinary unordered-access boundary
+`crates/runen-exec-oracle` is the verification-only executable conformance model for the currently represented Exec relations below. It is not source or compiler Exec IR, a runtime, a scheduler, a backend, or a normative owner. Future compiler/runtime realizations must remain independently accountable to the normative specification rather than treating the oracle representation as language semantics.
 
-The repository does not yet have an accepted executable Exec representation. The ordinary-access boundary is therefore evidenced with focused semantic litmus obligations rather than by inventing an Exec IR, scheduler, runtime, or backend model solely for testing.
+## Ordinary unordered-access boundary
 
 In the cases below, region identity and overlap come from the canonical owner of the accessed storage or resource. `unordered` means that the language semantics provide no relative order between the two pieces of work; incidental backend execution order is ignored. A case described as non-conflicting passes only the ordinary Exec conflict relation; every other applicable semantic contract still has to permit the accesses.
 
@@ -78,8 +78,17 @@ Required cases:
 
 These obligations do not define iteration construction, task semantics, fault aggregation, cancellation, early exit, atomics, barriers, reductions, collectives, or execution hierarchy.
 
+## Executable oracle coverage
+
+The current `runen-exec-oracle` executable subset covers only relations already defined above:
+
+- Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
+- ordinary read/state-change conflict classification;
+- the cross-phase `each` normal entry/completion ordering relation, with no sibling or intra-iteration order;
+- a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas.
+
+Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, and finite collections are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, versioning, physical allocation, scheduling, or backend representation.
+
 ## Future executable evidence
 
-When an accepted Exec operation or resource representation creates a concrete executable consumer, its reference/conformance tests should realize the applicable obligations above without using host thread scheduling, host memory ordering, physical addresses, or backend behavior as the semantic oracle.
-
-A future executable representation may refine the evidence mechanism. It must not silently strengthen, weaken, or replace the normative owners listed above.
+As additional Exec semantics acquire concrete executable consumers, extend reference/conformance evidence only after their normative owners are closed enough to state the expected behavior. Compiler IR, runtime, CPU/GPU realizations, and other production mechanisms should be checked against the strongest applicable semantic oracle without making the oracle representation authoritative over the specification.
