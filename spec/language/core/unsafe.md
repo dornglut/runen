@@ -16,7 +16,7 @@ For `RawRead`, the concrete target-liveness precondition is defined by the point
 
 For `RawAssign`, the pointer specification defines target selection, source-first ordering, and reuse of the ordinary replacement lifecycle, while [Core borrowing](borrowing.md) defines its raw target exclusive-access compatibility requirement. A `RawAssign` whose explicit operands are structurally and language-valid but whose concrete target violates that compatibility requirement has **undefined behavior**.
 
-`RawAssign` does not have a target-liveness unsafe precondition: its defined replacement may initialize Never-initialized storage, replace partial or fully Live storage, or reinitialize Dead storage according to the value/storage replacement semantics.
+`RawAssign` does not have a target-liveness unsafe precondition. Its defined replacement domain includes Never-initialized, partially initialized, fully Live, and Dead target storage according to the value/storage replacement semantics.
 
 Undefined behavior from either currently defined raw operation is not malformed MIR, a language-validation error, a defined `Fault`, or an ordinary recoverable result. A validator's exact symbolic pointer-target bookkeeping for path-state propagation does not reclassify these unsafe target proof obligations as validation rules.
 
