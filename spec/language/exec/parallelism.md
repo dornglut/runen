@@ -34,7 +34,7 @@ An **unordered reduction** is a structured interaction that combines semantic co
 
 A participating iteration may produce zero or more semantic reduction contributions when the enclosing reduction operation permits that cardinality. Contributions are distinct occurrences even when two or more contributions carry semantically equal values.
 
-A reduction contribution belongs to the reduction interaction itself. Producing or combining a contribution is not an ordinary non-atomic read or state-changing access to a shared accumulator region. Ordinary accesses performed by an iteration outside the reduction interaction remain governed by [Exec memory model](memory-model.md), and participating in a reduction does not legalize an otherwise-conflicting ordinary access.
+A reduction contribution belongs to the reduction interaction itself. Producing or combining a contribution is not an ordinary non-atomic read or state-changing access to a shared accumulator region. Ordinary accesses performed by an iteration outside the reduction interaction remain governed by [Exec memory model](memory-model.md). Other semantic actions used while producing a contribution remain governed by their own applicable contracts. Participating in a reduction does not legalize, reorder, or otherwise weaken those independent obligations.
 
 The reduction defined by this revision has an explicit semantic identity value `e`. The identity defines the result of an empty contribution collection and the neutral element used by the operator contract below.
 
@@ -44,7 +44,7 @@ The identity and every semantic contribution are values admitted by the reductio
 
 For every pair of values that can arise by recursively combining the identity and admitted contributions, `combine` MUST complete normally and yield another value admitted by the same reduction. Combination MUST have no Runen-observable behavior other than producing that result value.
 
-These requirements make permitted regrouping and permutation a result-combination question rather than a choice that can reorder faults, divergence, I/O, external mutation, event emission, or another independently observable action.
+These requirements make permitted regrouping and permutation a result-combination question rather than a choice that can change defined outcome or observable trace through the combination operation itself.
 
 The combination operator MUST additionally guarantee all of the following under the semantic equivalence relation applicable to the reduction result:
 
