@@ -140,9 +140,9 @@ A language-valid `RawMove` proceeds conceptually as follows:
 
 Step 5 reuses the value/storage transition of `Move`; it does **not** import ordinary `Move`'s `PlaceAccess` authorization requirement. Raw target alias legality is the distinct compatibility precondition in step 4 because the raw pointer carries no loan authority.
 
-The target snapshot in step 1 is semantically significant. Obtaining the pointer value does not itself consume or mutate that stored pointer value. If the pointer targets the storage containing that pointer value, target selection therefore occurs before the target's ordinary Move lifecycle consumes that stored value.
+The target snapshot in step 1 is semantically significant. Obtaining the pointer value does not itself consume or mutate that stored pointer value. If the pointer targets the storage containing that pointer value, target selection therefore occurs before the value/storage owner's `Move` transition is applied to that target.
 
-A defined `RawMove` moves every leaf of the complete target from Live to Dead, ends those source stored-value lifetimes, performs no source destruction, and leaves the target storage extent and storage-instance identity continuing exactly as ordinary `Move` does. The produced value is then consumed by the enclosing operation according to that operation's existing semantics.
+The ownership-transfer state transition in step 5 is governed entirely by [Core value and storage semantics](value-storage.md). This document adds no independent rules for leaf initialization-state transitions, stored-value lifetime ending, destruction, storage extent, or storage-instance identity. The owned value produced by that transition is consumed by the enclosing operation according to that operation's existing semantics.
 
 If the moved pointee value itself contains raw pointers, their already defined target/provenance metadata is part of the moved value and is preserved by the ordinary ownership-transfer lifecycle. `RawMove` does not derive new provenance merely because transport occurred through a raw pointer.
 
@@ -198,7 +198,7 @@ Consequently, while the storage extent continues:
 - forming a pointer before and after such a transition selects the same structural storage region when the same place is selected;
 - when the target is fully Live and the current borrowing precondition permits the read, `RawRead` through a previously formed pointer reads the later replacement value;
 - the same pointer cannot legally `RawRead` or `RawMove` the target while that complete target is Never-initialized, Dead, or only partially initialized;
-- when the raw target exclusive-access precondition permits ownership transfer, `RawMove` moves the current complete value out and leaves the continuing target Dead;
+- when the raw target exclusive-access precondition permits ownership transfer, `RawMove` applies the value/storage owner's `Move` transition to the current complete target value;
 - when the raw target exclusive-access precondition permits the write, `RawAssign` is defined to replace or initialize the continuing target region regardless of its prior initialization state.
 
 Thus a pointer targets continuing storage rather than one frozen stored-value lifetime, while each actual access is still constrained by the preconditions of that access operation.
@@ -209,7 +209,7 @@ A formed raw pointer is an ordinary owned value for the value operations current
 
 - `Copy` produces another owned raw-pointer value preserving the defined pointer metadata, including target and provenance root; this does not define a language-level pointer equality operation.
 - ordinary `Move` transfers the raw-pointer value preserving that metadata while ending the source pointer's stored-value lifetime in the ordinary way.
-- defined `RawMove` of pointer-valued target storage transfers the same raw-pointer value metadata through the ordinary Move lifecycle while leaving the raw target storage Dead.
+- defined `RawMove` of pointer-valued target storage preserves that raw-pointer metadata in the value produced by the value/storage owner's `Move` transition.
 - storing or replacing a raw-pointer value preserves its defined pointer metadata as part of that value.
 - destruction of a raw-pointer value has no pointer-specific semantic effect in this revision.
 
