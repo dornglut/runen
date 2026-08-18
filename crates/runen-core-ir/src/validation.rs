@@ -818,7 +818,9 @@ fn validate_operand_state(
     point: &MirPoint,
 ) -> Result<DefinedStep<ValidationValue>, MirValidationError> {
     match operand {
-        Operand::Constant(value) => Ok(DefinedStep::Continue(validation_value_from_constant(value))),
+        Operand::Constant(value) => {
+            Ok(DefinedStep::Continue(validation_value_from_constant(value)))
+        }
         Operand::Move(src) => {
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Exclusive, point)?;
