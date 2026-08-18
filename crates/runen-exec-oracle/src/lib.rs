@@ -31,7 +31,7 @@ pub use reduction::{
     ContributionId, ReductionContribution, ReductionError, ReductionFixture, ReductionId,
     UnorderedReductionEvidence,
 };
-pub use structured::{EachPhase, IterationId, each_orders};
+pub use structured::{EachId, EachPhase, IterationId, each_orders};
 pub use task::{
     TaskId, TaskScopePhase, TaskStateRetention, all_state_dependencies_are_detach_safe,
     has_exact_attached_completion, state_is_detach_safe, task_scope_orders,
