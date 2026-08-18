@@ -14,34 +14,44 @@ impl GroupId {
     }
 }
 
-/// Verification-only opaque subgroup token interpreted within one containing group.
+/// Verification-only opaque identity for one logical subgroup fixture.
 ///
-/// Equal subgroup tokens under distinct groups do not denote one cross-group subgroup.
+/// Subgroup identity is structurally scoped by its containing group. The private
+/// token is not a numeric subgroup index, coordinate, lane identity, hardware
+/// cohort, or scheduling order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SubgroupId(u32);
+pub struct SubgroupId {
+    group: GroupId,
+    token: u32,
+}
 
 impl SubgroupId {
     #[must_use]
-    pub const fn new(token: u32) -> Self {
-        Self(token)
+    pub const fn new(group: GroupId, token: u32) -> Self {
+        Self { group, token }
+    }
+
+    #[must_use]
+    pub const fn group(self) -> GroupId {
+        self.group
     }
 }
 
-/// Verification-only membership of one required `each` iteration in one group and
-/// one subgroup within that group.
+/// Verification-only membership of one required `each` iteration in one subgroup.
+///
+/// The containing group is derived from the subgroup identity, so an inconsistent
+/// group/subgroup pair cannot be represented.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HierarchyMembership {
     iteration: IterationId,
-    group: GroupId,
     subgroup: SubgroupId,
 }
 
 impl HierarchyMembership {
     #[must_use]
-    pub const fn new(iteration: IterationId, group: GroupId, subgroup: SubgroupId) -> Self {
+    pub const fn new(iteration: IterationId, subgroup: SubgroupId) -> Self {
         Self {
             iteration,
-            group,
             subgroup,
         }
     }
@@ -53,7 +63,7 @@ impl HierarchyMembership {
 
     #[must_use]
     pub const fn group(self) -> GroupId {
-        self.group
+        self.subgroup.group()
     }
 
     #[must_use]
@@ -71,7 +81,8 @@ pub enum HierarchyError {
 /// Validated verification-only hierarchy for one required `each` iteration set.
 ///
 /// The fixture stores no semantic ordering of groups, subgroups, or iterations.
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// It intentionally does not implement equality over its private storage order.
+#[derive(Clone, Debug)]
 pub struct HierarchyFixture {
     memberships: Vec<HierarchyMembership>,
 }
@@ -107,7 +118,7 @@ impl HierarchyFixture {
             return false;
         };
 
-        left.group == right.group
+        left.group() == right.group()
     }
 
     #[must_use]
@@ -116,6 +127,6 @@ impl HierarchyFixture {
             return false;
         };
 
-        left.group == right.group && left.subgroup == right.subgroup
+        left.subgroup == right.subgroup
     }
 }
