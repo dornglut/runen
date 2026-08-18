@@ -174,7 +174,7 @@ Raw target-access compatibility after obtaining a `RawRead` pointer value is a s
 
 A direct child whose concrete root is disjoint from `p` does not constrain access through `P` to `p`.
 
-An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. It may perform `InteriorAssign`, `AddressOf`, or shared pointer-value access for `RawRead` on a disjoint sibling when their independent preconditions hold.
+An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. On such a disjoint sibling, the parent retains the authority needed for `InteriorAssign`, `AddressOf`, or shared pointer-value access for `RawRead`, subject to each operation's independent preconditions.
 
 ## Direct access while loans are active
 
@@ -228,7 +228,7 @@ It permits access using:
 
 The ordinary initialization-state, type, assignment-mutability, interior-mutability, and destruction-domain rules still apply to the selected concrete place. Exclusive access does not weaken those independent rules.
 
-In particular, an exclusive loan over an immutable local may authorize reading, copying, raw-pointer formation, shared pointer-value access for `RawRead`, moving, dropping, and exclusive reborrowing according to their ordinary rules, but it does not make ordinary assignment to that local legal. Likewise, exclusive authority alone does not make an unmarked target eligible for `InteriorAssign`.
+In particular, an exclusive loan over an immutable local has the authority needed for reading, copying, raw-pointer formation, shared pointer-value access for `RawRead`, moving, dropping, and exclusive reborrowing according to their ordinary rules; it does not make ordinary assignment to that local legal. Likewise, exclusive authority alone does not make an unmarked target eligible for `InteriorAssign`.
 
 An exclusive loan controls access to storage rather than to one immutable stored-value identity. Therefore:
 
@@ -265,7 +265,7 @@ Formation authority does not grant later target access through the resulting poi
 
 The `RawRead` operation is defined by [Core pointers and provenance](pointers.md). This document owns its alias-authority relationships.
 
-First, `RawRead` obtains its stored raw-pointer `pointer` operand using the ordinary shared-authority `PlaceAccess` rules above. That pointer-value access may be direct or loan-relative and is subject to the non-authority operation/value preconditions owned by the pointer and value/storage semantics. It does not grant or preserve authority over the pointee.
+First, `RawRead` obtains its stored raw-pointer `pointer` operand using the ordinary shared-authority `PlaceAccess` rules above. That pointer-value access is direct or loan-relative and is subject to the non-authority operation/value preconditions owned by the pointer and value/storage semantics. It does not grant or preserve authority over the pointee.
 
 After the pointer value resolves its symbolic target to one concrete structural place `p`, the raw target access has a separate shared compatibility requirement against the active loan forest:
 
