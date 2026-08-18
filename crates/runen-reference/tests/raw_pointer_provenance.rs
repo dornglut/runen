@@ -177,9 +177,8 @@ fn ordinary_replacement_preserves_storage_identity_and_pointer_provenance() {
 #[test]
 fn interior_replacement_preserves_storage_identity_and_pointer_provenance() {
     let mut types = TypeTable::new();
-    let value_ty = types.push(
-        TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability(),
-    );
+    let value_ty =
+        types.push(TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability());
     let pointer_ty = types.push(TypeDef::raw_pointer("interior_i64_ptr", value_ty));
     let target = Place::local(LocalId(0));
     let events = execute(
@@ -360,7 +359,9 @@ fn ending_source_loan_does_not_mutate_previously_formed_pointer() {
 
     assert_eq!(formed.len(), 1);
     assert_eq!(copied.as_ref(), Some(&formed[0]));
-    assert!(events.iter().any(|event| {
-        matches!(event, VerificationEvent::BorrowEnd(LoanId(0)))
-    }));
+    assert!(
+        events
+            .iter()
+            .any(|event| { matches!(event, VerificationEvent::BorrowEnd(LoanId(0))) })
+    );
 }
