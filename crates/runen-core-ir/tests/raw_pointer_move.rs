@@ -326,10 +326,7 @@ fn raw_move_of_field_leaves_disjoint_sibling_live() {
 
     let error = validate_body(body)
         .expect_err("RawMove of one field must leave only the complete aggregate partial");
-    assert_eq!(
-        error.kind,
-        MirValidationErrorKind::UseOfUninitialized(pair)
-    );
+    assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(pair));
 }
 
 #[test]
