@@ -2,7 +2,7 @@
 
 Status: **provisional normative; raw-pointer formation and provenance root defined**
 
-This document owns the currently defined Core semantics for raw-pointer types and values, symbolic pointer targets, provenance formation from existing storage, and preservation under ordinary pointer-value transport.
+This document defines the currently represented Core semantics for raw-pointer types and values, symbolic pointer targets, provenance formation from existing storage, and preservation under ordinary pointer-value transport.
 
 Dynamic storage-instance identity, storage extent, structural storage regions, stored-value lifetime, initialization state, replacement, and destruction are defined by [Core value and storage semantics](value-storage.md). Shared/exclusive authority used while selecting storage for pointer formation is defined by [Core borrowing](borrowing.md).
 
