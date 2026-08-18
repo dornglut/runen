@@ -389,12 +389,11 @@ impl Machine {
         let target = self.place_for_storage_region(&pointer.target);
         let value = self.evaluate_operand(src);
 
-        if let Some((index, _)) = self
-            .active_loans
-            .iter()
-            .enumerate()
-            .find(|(_, active)| active.as_ref().is_some_and(|active| active.place.overlaps(&target)))
-        {
+        if let Some((index, _)) = self.active_loans.iter().enumerate().find(|(_, active)| {
+            active
+                .as_ref()
+                .is_some_and(|active| active.place.overlaps(&target))
+        }) {
             return Err(UndefinedBehaviorKind::RawAssignConflictsWithLoan {
                 target: pointer.target,
                 loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
