@@ -80,9 +80,8 @@ pub enum HierarchyError {
 
 /// Validated verification-only hierarchy for one required `each` iteration set.
 ///
-/// The fixture stores no semantic ordering of groups, subgroups, or iterations.
-/// It intentionally does not implement equality over its private storage order.
-#[derive(Clone, Debug)]
+/// The fixture stores no semantic ordering of groups, subgroups, or iterations and
+/// exposes no equality, cloning, or debug surface for its private storage order.
 pub struct HierarchyFixture {
     memberships: Vec<HierarchyMembership>,
 }
