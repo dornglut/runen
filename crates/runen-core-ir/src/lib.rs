@@ -56,9 +56,9 @@ pub enum ScalarType {
     /// Capability-neutral raw pointer to a pointee type.
     ///
     /// The current Core slice defines formation, ordinary value transport, one
-    /// non-consuming `RawRead`, and one source-first `RawAssign` replacement.
-    /// Broader pointer access remains outside this type. The pointee edge is semantic
-    /// indirection rather than structural containment.
+    /// non-consuming `RawRead`, one ownership-moving `RawMove`, and one source-first
+    /// `RawAssign` replacement. Broader pointer access remains outside this type. The
+    /// pointee edge is semantic indirection rather than structural containment.
     RawPointer(TypeId),
     /// Verification-only non-copy scalar used to make destruction observable to tests.
     /// This is not a Runen language scalar primitive.
@@ -208,8 +208,8 @@ impl TypeTable {
     /// Checks whether a MIR constant has the declared structural type.
     ///
     /// Non-null raw pointers are intentionally absent from [`Value`] and therefore
-    /// cannot be fabricated as constants. They are runtime semantic values produced
-    /// only by [`Operand::AddressOf`] in the current slice.
+    /// cannot be fabricated as constants. They are initially formed at runtime by
+    /// [`Operand::AddressOf`] and may then be transported by ordinary or raw moves.
     #[must_use]
     pub fn value_matches(&self, ty: TypeId, value: &Value) -> bool {
         let Some(def) = self.get(ty) else {
@@ -403,6 +403,13 @@ pub enum Operand {
     Constant(Value),
     /// Ownership transfer. The source stored-value lifetime ends.
     Move(PlaceAccess),
+    /// Unsafe ownership transfer through a stored raw-pointer value.
+    ///
+    /// Language validation checks access to the pointer value itself. Concrete pointee
+    /// liveness and exclusive active-loan compatibility are unsafe execution
+    /// preconditions. A defined operation yields the complete pointee value and leaves
+    /// the pointee storage Dead without destruction.
+    RawMove(PlaceAccess),
     /// Non-consuming owned duplication. Requires a copyable type.
     Copy(PlaceAccess),
     /// Forms a non-null symbolic raw pointer to existing storage.
