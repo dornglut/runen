@@ -1,29 +1,72 @@
-/// Verification-only identity token for one sibling `each` iteration fixture.
+/// Verification-only identity token for one dynamic `each` execution fixture.
 ///
-/// The numeric representation is not a worker, lane, queue, scheduler, or source
-/// iteration identity, and it carries no semantic sibling ordering.
+/// The private numeric representation carries equality only. It is not a source
+/// handle, launch identifier, worker identity, scheduler token, or execution order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct IterationId(pub u32);
+pub struct EachId(u32);
 
-/// Verification-only phases needed to exercise the accepted normal `each` boundary.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum EachPhase {
-    Before,
-    Iteration(IterationId),
-    After,
+impl EachId {
+    #[must_use]
+    pub const fn new(token: u32) -> Self {
+        Self(token)
+    }
 }
 
-/// Tests only the cross-phase ordering supplied by the accepted `each` contract.
+/// Verification-only identity token for one sibling iteration of a dynamic `each`.
+///
+/// Iteration identity is structurally scoped by the containing `each` execution.
+/// The private token is not a worker, lane, queue, scheduler, or source iteration
+/// identity, and it carries no semantic sibling ordering.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IterationId {
+    each: EachId,
+    token: u32,
+}
+
+impl IterationId {
+    #[must_use]
+    pub const fn new(each: EachId, token: u32) -> Self {
+        Self { each, token }
+    }
+
+    pub(crate) const fn each(self) -> EachId {
+        self.each
+    }
+}
+
+/// Verification-only phases needed to exercise one accepted normal `each` boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EachPhase {
+    Before(EachId),
+    Iteration(IterationId),
+    After(EachId),
+}
+
+impl EachPhase {
+    const fn each(self) -> EachId {
+        match self {
+            Self::Before(each) | Self::After(each) => each,
+            Self::Iteration(iteration) => iteration.each(),
+        }
+    }
+}
+
+/// Tests only the cross-phase ordering supplied by one accepted `each` contract.
 ///
 /// This relation deliberately supplies no order between sibling iterations and no
-/// intra-iteration ordering, even when both phases name the same iteration. It
-/// also does not represent abnormal completion.
+/// intra-iteration ordering, even when both phases name the same iteration. Phases
+/// belonging to distinct dynamic `each` executions receive no order from this
+/// relation. It also does not represent abnormal completion.
 #[must_use]
-pub const fn each_orders(earlier: EachPhase, later: EachPhase) -> bool {
+pub fn each_orders(earlier: EachPhase, later: EachPhase) -> bool {
+    if earlier.each() != later.each() {
+        return false;
+    }
+
     matches!(
         (earlier, later),
-        (EachPhase::Before, EachPhase::Iteration(_))
-            | (EachPhase::Before, EachPhase::After)
-            | (EachPhase::Iteration(_), EachPhase::After)
+        (EachPhase::Before(_), EachPhase::Iteration(_))
+            | (EachPhase::Before(_), EachPhase::After(_))
+            | (EachPhase::Iteration(_), EachPhase::After(_))
     )
 }

@@ -1,24 +1,34 @@
-use crate::{IterationId, coverage::has_exact_unique_coverage};
+use crate::{EachId, IterationId, coverage::has_exact_unique_coverage};
 
 /// Verification-only opaque identity for one logical hierarchy fixture.
 ///
-/// The token carries equality only. It is not a source hierarchy handle, launch
-/// identity, hardware topology identifier, or scheduling order.
+/// Hierarchy identity is structurally scoped by the dynamic `each` execution it
+/// belongs to. The private token carries equality only. It is not a source
+/// hierarchy handle, launch identity, hardware topology identifier, or scheduling
+/// order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct HierarchyId(u32);
+pub struct HierarchyId {
+    each: EachId,
+    token: u32,
+}
 
 impl HierarchyId {
     #[must_use]
-    pub const fn new(token: u32) -> Self {
-        Self(token)
+    pub const fn new(each: EachId, token: u32) -> Self {
+        Self { each, token }
+    }
+
+    pub(crate) const fn each(self) -> EachId {
+        self.each
     }
 }
 
 /// Verification-only opaque identity for one logical group fixture.
 ///
-/// Group identity is structurally scoped by its containing hierarchy. The private
-/// token carries no numeric group index, coordinate, worker identity, launch
-/// parameter, hardware cohort, or scheduling order.
+/// Group identity is structurally scoped by its containing hierarchy and therefore
+/// transitively by the containing dynamic `each`. The private token carries no
+/// numeric group index, coordinate, worker identity, launch parameter, hardware
+/// cohort, or scheduling order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GroupId {
     hierarchy: HierarchyId,
@@ -39,8 +49,9 @@ impl GroupId {
 /// Verification-only opaque identity for one logical subgroup fixture.
 ///
 /// Subgroup identity is structurally scoped by its containing group and therefore
-/// transitively by the containing hierarchy. The private token is not a numeric
-/// subgroup index, coordinate, lane identity, hardware cohort, or scheduling order.
+/// transitively by the containing hierarchy and dynamic `each`. The private token
+/// is not a numeric subgroup index, coordinate, lane identity, hardware cohort, or
+/// scheduling order.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct SubgroupId {
     group: GroupId,
@@ -63,7 +74,8 @@ impl SubgroupId {
 ///
 /// The containing group and hierarchy are derived from the subgroup identity, so
 /// inconsistent hierarchy/group/subgroup identity cannot be represented inside one
-/// membership value.
+/// membership value. Fixture validation additionally requires the iteration and
+/// hierarchy to belong to the same dynamic `each`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HierarchyMembership {
     iteration: IterationId,
@@ -100,6 +112,7 @@ impl HierarchyMembership {
 pub enum HierarchyError {
     InvalidIterationCoverage,
     ForeignHierarchyMembership,
+    ForeignEachIteration,
 }
 
 /// Validated verification-only hierarchy for one required `each` iteration set.
@@ -125,6 +138,16 @@ impl HierarchyFixture {
             return Err(HierarchyError::ForeignHierarchyMembership);
         }
 
+        if required_iterations
+            .iter()
+            .any(|iteration| iteration.each() != id.each())
+            || memberships
+                .iter()
+                .any(|membership| membership.iteration().each() != id.each())
+        {
+            return Err(HierarchyError::ForeignEachIteration);
+        }
+
         let observed_iterations = memberships
             .iter()
             .map(|membership| membership.iteration)
@@ -135,6 +158,10 @@ impl HierarchyFixture {
         }
 
         Ok(Self { id, memberships })
+    }
+
+    pub(crate) const fn each(&self) -> EachId {
+        self.id.each()
     }
 
     #[must_use]

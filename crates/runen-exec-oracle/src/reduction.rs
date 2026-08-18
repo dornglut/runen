@@ -1,5 +1,5 @@
 use crate::{
-    GroupId, HierarchyFixture, IterationId, SubgroupId, coverage::has_exact_unique_coverage,
+    EachId, GroupId, HierarchyFixture, IterationId, SubgroupId, coverage::has_exact_unique_coverage,
 };
 
 /// Verification-only evidence for the complete contract required by the accepted
@@ -123,24 +123,33 @@ pub enum ReductionError {
 /// Validated verification-only unordered reduction over one selected cohort.
 ///
 /// The participant collection is private and has no semantic enumeration order.
-/// This fixture does not define source reduction syntax, local collective result
-/// distribution, a runtime reduction object, or a physical reduction tree.
+/// The fixture retains the containing dynamic `each` identity so a foreign
+/// iteration cannot retarget by private-token coincidence. This fixture does not
+/// define source reduction syntax, local collective result distribution, a runtime
+/// reduction object, or a physical reduction tree.
 pub struct ReductionFixture {
     id: ReductionId,
+    each: EachId,
     participants: Vec<IterationId>,
 }
 
 impl ReductionFixture {
     pub fn root(
         id: ReductionId,
+        each: EachId,
         required_iterations: &[IterationId],
     ) -> Result<Self, ReductionError> {
-        if !has_exact_unique_coverage(required_iterations, required_iterations) {
+        if required_iterations
+            .iter()
+            .any(|iteration| iteration.each() != each)
+            || !has_exact_unique_coverage(required_iterations, required_iterations)
+        {
             return Err(ReductionError::InvalidRootIterations);
         }
 
         Ok(Self {
             id,
+            each,
             participants: required_iterations.to_vec(),
         })
     }
@@ -154,7 +163,11 @@ impl ReductionFixture {
             .group_members(group)
             .ok_or(ReductionError::UnknownGroup)?;
 
-        Ok(Self { id, participants })
+        Ok(Self {
+            id,
+            each: hierarchy.each(),
+            participants,
+        })
     }
 
     pub fn subgroup(
@@ -166,7 +179,11 @@ impl ReductionFixture {
             .subgroup_members(subgroup)
             .ok_or(ReductionError::UnknownSubgroup)?;
 
-        Ok(Self { id, participants })
+        Ok(Self {
+            id,
+            each: hierarchy.each(),
+            participants,
+        })
     }
 
     /// Creates one semantic contribution occurrence for an actual participant.
@@ -224,7 +241,7 @@ impl ReductionFixture {
     }
 
     fn is_participant(&self, iteration: IterationId) -> bool {
-        self.participants.contains(&iteration)
+        iteration.each() == self.each && self.participants.contains(&iteration)
     }
 
     fn owns(&self, contribution: ReductionContribution) -> bool {

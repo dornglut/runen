@@ -1,7 +1,7 @@
 use runen_exec_oracle::{
     Access, AccessKind, AtomicExchange, AtomicExchangeError, AtomicExchangeFixture,
     AtomicExchangeId, AtomicExchangeSemantics, AtomicLocationId, AtomicValueToken, BufferId,
-    BufferRegion, EachPhase, IterationId, PositionId, each_orders,
+    BufferRegion, EachId, EachPhase, IterationId, PositionId, each_orders,
 };
 
 fn location(token: u32) -> AtomicLocationId {
@@ -525,8 +525,9 @@ fn base_atomic_exchange_relation_does_not_supply_ordinary_access_order() {
     .unwrap();
     assert!(fixture.realize(&[first_exchange], &[]).is_ok());
 
-    let first_iteration = EachPhase::Iteration(IterationId(1));
-    let second_iteration = EachPhase::Iteration(IterationId(2));
+    let each = EachId::new(1);
+    let first_iteration = EachPhase::Iteration(IterationId::new(each, 1));
+    let second_iteration = EachPhase::Iteration(IterationId::new(each, 2));
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
     let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
 
