@@ -46,9 +46,13 @@ No empty group or subgroup is introduced merely as hierarchy metadata. This hier
 
 Group and subgroup membership is semantic structure once a hierarchy instance has been established for an execution. Membership is stable for the duration of that hierarchy instance and MUST NOT silently change merely because a realization changes physical scheduling or placement.
 
+A hierarchy instance has opaque semantic identity only as needed to scope the cohort identities it contains. Hierarchy identity is not a numeric index, source handle, launch coordinate, queue identity, worker identity, hardware topology identity, or scheduling order.
+
 Group and subgroup identities are opaque cohort identities. They are not numeric indices, coordinates, addresses, queue identities, worker identities, lane identities, hardware wave identities, or scheduling order.
 
-Subgroup identity is scoped by its containing group. An implementation or verification representation that uses equal subgroup tokens under distinct groups does not thereby identify one subgroup spanning those groups.
+Group identity is scoped by its containing hierarchy instance. Equal implementation or debug group tokens used in distinct hierarchy instances do not thereby identify one group shared by those hierarchies.
+
+Subgroup identity is scoped by its containing group and therefore transitively by the containing hierarchy instance. Equal implementation or debug subgroup tokens used under distinct groups or distinct hierarchy instances do not thereby identify one subgroup spanning those cohorts.
 
 Hierarchy membership by itself establishes no execution order, synchronization, memory visibility, progress guarantee, physical concurrency, temporal contiguity, or scheduling relationship. Sibling iterations remain source-unordered regardless of whether they share a group or subgroup.
 
@@ -72,7 +76,7 @@ The selected **barrier cohort** is exactly one of:
 - one group from an already-established hierarchy instance for that `each` execution; or
 - one subgroup from that already-established hierarchy instance.
 
-A root-cohort barrier does not require a hierarchy instance. A group- or subgroup-cohort barrier requires the selected group or subgroup to exist in the established hierarchy instance. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
+A root-cohort barrier does not require a hierarchy instance. A group- or subgroup-cohort barrier requires the selected group or subgroup to exist in the established hierarchy instance. A group or subgroup identity from another hierarchy instance does not retarget to a cohort in this hierarchy merely because an implementation or debug token is equal. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
 
 The participant set is exactly the selected barrier cohort and is fixed for the barrier instance. The root cohort is empty exactly when the enclosing `each` has no required iterations; such a root barrier has no participants. Group and subgroup cohorts are non-empty by the hierarchy contract above.
 
@@ -107,7 +111,7 @@ The selected **reduction cohort** is exactly one of:
 - one group from an already-established hierarchy instance for that `each` execution; or
 - one subgroup from that already-established hierarchy instance.
 
-A root-cohort reduction does not require a hierarchy instance. A group- or subgroup-cohort reduction requires the selected group or subgroup to exist in the established hierarchy instance. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
+A root-cohort reduction does not require a hierarchy instance. A group- or subgroup-cohort reduction requires the selected group or subgroup to exist in the established hierarchy instance. A group or subgroup identity from another hierarchy instance does not retarget to a cohort in this hierarchy merely because an implementation or debug token is equal. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
 
 The participant set is exactly the selected reduction cohort and is fixed for the reduction instance. The root cohort is empty exactly when the enclosing `each` has no required iterations. Group and subgroup cohorts are non-empty by the hierarchy contract above.
 
