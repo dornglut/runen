@@ -163,15 +163,10 @@ impl ReductionFixture {
         let participants = hierarchy
             .group_members(group)
             .ok_or(ReductionError::UnknownGroup)?;
-        let each = participants
-            .first()
-            .copied()
-            .expect("validated hierarchy groups are non-empty")
-            .each();
 
         Ok(Self {
             id,
-            each,
+            each: hierarchy.each(),
             participants,
         })
     }
@@ -184,15 +179,10 @@ impl ReductionFixture {
         let participants = hierarchy
             .subgroup_members(subgroup)
             .ok_or(ReductionError::UnknownSubgroup)?;
-        let each = participants
-            .first()
-            .copied()
-            .expect("validated hierarchy subgroups are non-empty")
-            .each();
 
         Ok(Self {
             id,
-            each,
+            each: hierarchy.each(),
             participants,
         })
     }
