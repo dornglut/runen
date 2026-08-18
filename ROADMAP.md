@@ -4,21 +4,33 @@ This document owns project sequencing and specification-closure planning. It is 
 
 ## Current baseline
 
-The repository has an executable A0 Core value/place machine and a provisional decomposed language specification.
+The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety foundation is closed; P0-B is the next sequencing frontier.
 
 ## P0-A — Value, memory, and safety
 
 **Depends on:** accepted A0.
 
-Close the remaining Core memory/safety model: object lifetime, borrows/reborrows, interior mutability, raw pointers, provenance, pinning/address stability, validity, undefined behavior, unsafe-operation preconditions, and safe-abstraction soundness.
+The represented Core foundation closes object/storage lifetime, borrows/reborrows, interior mutability, raw-pointer formation and symbolic provenance root, defined raw target read/move/replacement behavior, unsafe-operation preconditions, undefined-behavior separation from defined outcomes, and the safe-abstraction soundness law needed by downstream phases.
 
-**Gate:** focused executable semantics and adversarial tests form one coherent safe/unsafe memory model.
+This closure applies to semantics that the accepted A0 Core can represent and observe. It does not predefine rules for operations or representations that do not yet exist.
+
+Consumer-dependent memory rules are introduced only with the first phase that can use them:
+
+- relocation, address stability, and pinning are closed when a later operation or realization can relocate storage, expose address-sensitive behavior, or otherwise require a stability guarantee;
+- representation-level value validity and invalid-bit-pattern rules are closed with the first byte/representation consumer, such as Buffer mapping/coherence in P0-B or ABI/FFI in P0-D;
+- new undefined-behavior cases and unsafe preconditions are owned with the operation that introduces them rather than by a premature complete UB registry;
+- source `unsafe`, first-class references/lifetimes, and concrete checking of safe public abstraction contracts are P0-D concerns built on the Core soundness law;
+- cross-stratum evidence that later memory, source, and realization rules preserve Core safety belongs to P0-F.
+
+A consuming phase that makes one of these rules necessary must update the appropriate normative owner in the same semantic slice. P0-A closure is not authority for behavior that the normative specification still marks open.
+
+**Gate:** focused executable semantics and adversarial tests form one coherent safe/unsafe memory model for the represented Core operations.
 
 ## P0-B — Exec resources and concurrency
 
-**Depends on:** P0-A.
+**Depends on:** the closed P0-A represented Core safety foundation.
 
-Close Buffer mapping/coherence, cross-realization memory semantics, conflicting-access rules, atomics/order/scope, task lifetime and cancellation, structured parallelism, reductions/collectives, and hierarchical execution.
+Close Buffer mapping/coherence, cross-realization memory semantics, conflicting-access rules, atomics/order/scope, task lifetime and cancellation, structured parallelism, reductions/collectives, and hierarchical execution. Where these operations first make representation validity, address stability, or additional unsafe/UB rules observable, P0-B closes those concrete rules through their canonical normative owners instead of assuming P0-A predeclared them.
 
 **Gate:** representative scalar CPU, parallel CPU, and GPU realizations can be checked against one semantic contract without violating Core safety.
 
@@ -34,7 +46,7 @@ Close integer overflow and the `standard`, `reproducible`, and `fast` numeric co
 
 **Depends on:** the Core semantic foundations that affect source validation.
 
-Close lexical/concrete grammar, names/scopes/modules/imports, generics and trait coherence, closures/captures, patterns, const/static semantics, fault/panic completion, ABI/layout mechanisms, FFI, linkage, and source-level unsafe forms.
+Close lexical/concrete grammar, names/scopes/modules/imports, generics and trait coherence, closures/captures, patterns, const/static semantics, fault/panic completion, ABI/layout mechanisms, FFI, linkage, source-level unsafe forms, references/lifetime inference where required, and concrete safe-public-contract validation. Representation validity, address stability, or pinning rules required by those source/ABI/FFI mechanisms are closed here only when their first concrete consumer requires them.
 
 **Gate:** an independent frontend can validate and lower source without inventing language rules.
 
@@ -50,7 +62,7 @@ Close logical typing and absence semantics, joins, grouping/aggregation, cardina
 
 **Depends on:** the relevant preceding closures.
 
-Exercise Core, Exec, Model, and their bridges together using memory litmus cases, Buffer mapping/coherence, CPU/GPU equivalence, structured parallel reductions, Model reference evaluation, incremental differential tests, bridge tests, commit/event cases, and lowering/refinement cases.
+Exercise Core, Exec, Model, and their bridges together using memory litmus cases, Buffer mapping/coherence, CPU/GPU equivalence, structured parallel reductions, Model reference evaluation, incremental differential tests, bridge tests, commit/event cases, and lowering/refinement cases. Include the cross-stratum safety evidence required for consumer-driven memory, unsafe, validity, and address-stability rules introduced by earlier phases.
 
 **Gate:** integrated proving does not require ordinary source to expose implementation machinery merely to preserve the intended semantics.
 
