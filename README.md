@@ -1,9 +1,13 @@
 # Runen
 
-Runen language design and proving implementation.
+Runen is a programming language under semantic-kernel development.
 
-- [Specification](spec/README.md)
-- [Roadmap](ROADMAP.md)
+## Documentation
+
+- [Language specification](spec/README.md)
+- [Project roadmap](ROADMAP.md)
 - [Repository architecture](ARCHITECTURE.md)
-- [Testing](TESTING.md)
+- [Repository validation](TESTING.md)
 - [Contributing](CONTRIBUTING.md)
+- [Agent instructions](AGENTS.md)
+- [Engineering and design documentation](docs/README.md)
