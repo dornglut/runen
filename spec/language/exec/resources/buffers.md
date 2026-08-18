@@ -37,13 +37,25 @@ The source or library mechanism for constructing, deriving, slicing, storing, tr
 
 A view selects logical Buffer state rather than one physical backing instance. Physical migration, replication, or backing replacement therefore does not by itself retarget an existing logical view to a different Buffer identity or Buffer region.
 
-## Realization and coherence boundary
+## Logical coherence and ordered visibility
 
-A legal realization may maintain, migrate, or replicate physical backing only according to the Buffer coherence contract and the applicable Exec memory rules.
+Semantic Buffer accesses operate on one logical Buffer state. Physical backing copies, caches, placements, migration images, or replicas are realization state rather than independently selectable semantic Buffer states.
 
-Because one `Buffer<T>` denotes one logical coherent resource, multiple physical backing copies or placements are realization state rather than independently selectable logical Buffer states. A realization MUST preserve the behavior of accesses to the same logical Buffer and regions rather than expose replica identity as an additional source-level choice.
+When the applicable Runen semantics establish that a state-changing Buffer access `A` occurs before a later Buffer access `B`, every logical element position selected by both accesses is observed by `B` after the state transition of `A` and after every other state-changing access to that position semantically ordered between `A` and `B`.
 
-This revision does not yet define the precise Buffer version, visibility, transfer-completion, coherence, mapping, relocation, or multi-realization state machine. In particular, it does not define version counters, dirty states, ownership states, replica protocols, or rules selecting which physical copy services an access.
+A realization MUST NOT service such a later access from stale physical backing in a way that makes an earlier semantically ordered state change disappear or resurrects an older logical state for an overlapping position.
+
+Buffer coherence consumes semantic order established by the applicable program or execution contract; it does not create order between source-unordered accesses. Conflicting source-unordered ordinary accesses remain governed by [Exec memory model](../memory-model.md) and are not legalized merely because a coherence mechanism could serialize or transfer their physical backing.
+
+Coherence is region-local. State changes and visibility obligations for one Buffer region do not by themselves impose semantic order, transfer, or whole-Buffer serialization on a disjoint region. A realization MAY track, place, migrate, replicate, or synchronize disjoint regions independently when every applicable semantic contract is preserved.
+
+Physical migration, replication, caching, or placement may occur before, during, or between accesses only when the resulting behavior is equivalent to access to the one logical Buffer state under the applicable ordering and memory rules. Replica identity, physical-copy selection, migration history, and implementation version metadata are not made program-observable by this contract.
+
+## Realization and open coherence mechanisms
+
+A legal realization may maintain, migrate, or replicate physical backing only according to the logical coherence contract above and the applicable Exec memory rules.
+
+This revision does not yet define a Buffer version representation, transfer-completion protocol, physical ownership or dirty-state protocol, replica directory, mapping state machine, relocation mechanism, or the visibility/synchronization rules for accesses whose ordering will be established by future atomics or synchronization operations. It likewise does not define which physical copy services an access.
 
 ## Address exposure
 
