@@ -38,19 +38,25 @@ A reduction contribution belongs to the reduction interaction itself. Producing 
 
 The reduction defined by this revision has an explicit semantic identity value `e`. The identity defines the result of an empty contribution collection and the neutral element used by the operator contract below.
 
-### Operator contract
+### Combination contract
 
-The reduction combination operator MUST guarantee all of the following under the semantic equivalence relation applicable to the reduction result:
+The identity and every semantic contribution are values admitted by the reduction's combination contract.
+
+For every pair of values that can arise by recursively combining the identity and admitted contributions, `combine` MUST complete normally and yield another value admitted by the same reduction. Combination MUST have no Runen-observable behavior other than producing that result value.
+
+These requirements make permitted regrouping and permutation a result-combination question rather than a choice that can reorder faults, divergence, I/O, external mutation, event emission, or another independently observable action.
+
+The combination operator MUST additionally guarantee all of the following under the semantic equivalence relation applicable to the reduction result:
 
 - **two-sided identity:** `combine(e, x)` and `combine(x, e)` are equivalent to `x`;
 - **associativity:** `combine(combine(a, b), c)` is equivalent to `combine(a, combine(b, c))`;
 - **commutativity:** `combine(a, b)` is equivalent to `combine(b, a)`.
 
-These laws are semantic operator-contract obligations. An implementation MUST NOT infer them merely from operator spelling, host-language traits, backend instructions, or observed test values.
+These are semantic operator-contract obligations. An implementation MUST NOT infer them merely from operator spelling, host-language traits, backend instructions, or observed test values.
 
 Where an applicable numeric contract defines the result equivalence or transformation freedom, that numeric contract remains authoritative. This Exec rule does not define integer overflow, floating-point reassociation, NaN behavior, contraction, approximation, or another numeric policy.
 
-This revision defines only unordered reductions whose operator contract guarantees all three obligations above. Ordered reductions, intentionally nondeterministic reductions, reductions without an explicit identity, and weaker-law reduction forms are not defined by this revision.
+This revision defines only unordered reductions whose combination contract guarantees normal closed result-only combination plus all three algebraic obligations above. Ordered reductions, intentionally nondeterministic reductions, reductions without an explicit identity, effectful or partial combination, and weaker-law reduction forms are not defined by this revision.
 
 ### Contributions and result
 
@@ -58,7 +64,7 @@ A normally completed reduction incorporates every semantic contribution produced
 
 The identity value defines the empty result and may participate as a neutral operand in the semantic combination. A realization MAY additionally initialize or combine physical partial results with the identity value any finite number of times when the two-sided identity law guarantees that doing so is semantically neutral. Such identity-valued physical initialization is realization state, is not a semantic contribution, and does not count as contribution duplication or invention.
 
-Because sibling contributions have no source-defined relative order, a legal realization MAY choose any permutation of the contributions and any binary combination tree only where the operator and applicable result contract guarantee that the resulting value is semantically equivalent.
+Because sibling contributions have no source-defined relative order, a legal realization MAY choose any permutation of the contributions and any binary combination tree only where the complete combination and applicable result contracts guarantee that the resulting behavior and value are semantically equivalent.
 
 Physical worker, lane, chunk, queue, partial-accumulator, or tree order is not additional semantic input. A realization MAY use such physical structure only as an implementation technique preserving the reduction contract.
 
