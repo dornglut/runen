@@ -192,7 +192,7 @@ pub enum Value {
     Bool(bool),
     I64(i64),
     /// Verification-only fixture identity whose destruction is visible in the oracle trace.
-    /// This is not a Runen language scalar primitive.
+    /// This is not a Runen language value primitive.
     TrackedFixture(u64),
     Struct(Vec<Value>),
 }
