@@ -352,7 +352,7 @@ fn self_targeting_raw_move_snapshots_pointer_before_moving_same_storage() {
                 src: Operand::RawMove(pointer.clone().into()),
             },
             Statement::RawAssign {
-                pointer: moved,
+                pointer: moved.into(),
                 src: Operand::AddressOf(pointer.clone().into()),
             },
             Statement::RawRead {
