@@ -285,6 +285,54 @@ fn defined_raw_move_leaves_exact_target_dead() {
 }
 
 #[test]
+fn raw_move_of_field_leaves_disjoint_sibling_live() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pair_ty = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", value_ty), Field::new("right", value_ty)],
+    ));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let pair = Place::local(LocalId(0));
+    let left = pair.clone().field(0);
+    let right = pair.clone().field(1);
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("pair", pair_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+            LocalDecl::new("destination", value_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: pair.clone(),
+                src: Operand::Constant(Value::Struct(vec![Value::I64(1), Value::I64(2)])),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(left.into()),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(2)),
+                src: Operand::RawMove(Place::local(LocalId(1)).into()),
+            },
+            Statement::Read { src: right.into() },
+            Statement::Read {
+                src: pair.clone().into(),
+            },
+        ],
+    );
+
+    let error = validate_body(body)
+        .expect_err("RawMove of one field must leave only the complete aggregate partial");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(pair)
+    );
+}
+
+#[test]
 fn raw_move_transports_raw_pointer_target_metadata() {
     let mut types = TypeTable::new();
     let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
@@ -541,7 +589,8 @@ fn statically_evident_raw_assign_ub_has_no_path_state_continuation() {
         ],
     );
 
-    validate_body(body).expect("statically evident RawAssign UB has no defined path-state successor");
+    validate_body(body)
+        .expect("statically evident RawAssign UB has no defined path-state successor");
 }
 
 #[test]
