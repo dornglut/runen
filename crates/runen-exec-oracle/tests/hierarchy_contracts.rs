@@ -32,14 +32,22 @@ fn hierarchy_requires_exact_iteration_coverage_and_accepts_empty_each() {
     assert!(matches!(
         HierarchyFixture::new(
             &required,
-            vec![membership(1, 1, 1), membership(2, 1, 2), membership(4, 2, 1)]
+            vec![
+                membership(1, 1, 1),
+                membership(2, 1, 2),
+                membership(4, 2, 1)
+            ]
         ),
         Err(HierarchyError::InvalidIterationCoverage)
     ));
     assert!(matches!(
         HierarchyFixture::new(
             &required,
-            vec![membership(1, 1, 1), membership(1, 2, 1), membership(3, 2, 1)]
+            vec![
+                membership(1, 1, 1),
+                membership(1, 2, 1),
+                membership(3, 2, 1)
+            ]
         ),
         Err(HierarchyError::InvalidIterationCoverage)
     ));
