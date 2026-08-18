@@ -38,7 +38,7 @@ fn root_scoped_exchange(
         exchange_id(location, token),
         AtomicValueToken::new(desired),
         semantics,
-        AtomicExchangeScope::Root(each),
+        AtomicExchangeScope::Root(IterationId::new(each, token)),
     )
 }
 
@@ -163,7 +163,7 @@ fn fixture_rejects_duplicate_and_foreign_exchange_identities() {
                     duplicate,
                     AtomicValueToken::new(30),
                     AtomicExchangeSemantics::Release,
-                    AtomicExchangeScope::Root(EachId::new(1)),
+                    AtomicExchangeScope::Root(IterationId::new(EachId::new(1), 1)),
                 ),
             ]
         ),
