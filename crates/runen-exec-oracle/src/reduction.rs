@@ -175,15 +175,12 @@ impl ReductionFixture {
     /// carries no order. A participant may create multiple distinct occurrences by
     /// using distinct tokens. Nonparticipants cannot obtain a contribution token.
     #[must_use]
-    pub fn contribution(
-        &self,
-        producer: IterationId,
-        token: u32,
-    ) -> Option<ReductionContribution> {
-        self.is_participant(producer).then_some(ReductionContribution {
-            occurrence: ContributionId::new(self.id, token),
-            producer,
-        })
+    pub fn contribution(&self, producer: IterationId, token: u32) -> Option<ReductionContribution> {
+        self.is_participant(producer)
+            .then_some(ReductionContribution {
+                occurrence: ContributionId::new(self.id, token),
+                producer,
+            })
     }
 
     /// Checks that one realization incorporates exactly the produced semantic
