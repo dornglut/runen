@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef,
-    TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
+    TypeDef, TypeTable, Value, validate_body,
 };
 
 fn one_block(
