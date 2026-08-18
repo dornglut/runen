@@ -665,7 +665,7 @@ fn raw_assign_snapshots_target_before_raw_move_source_consumes_pointer_operand()
                 src: Operand::AddressOf(outer.clone().into()),
             },
             Statement::RawAssign {
-                pointer: outer,
+                pointer: outer.into(),
                 src: Operand::RawMove(source.into()),
             },
             Statement::RawRead {
