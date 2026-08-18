@@ -3,10 +3,16 @@ use runen_core_ir::{
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
     validate_body,
 };
-use runen_reference::{Machine, TerminalStatus, VerificationEvent, VerificationWriteKind};
+use runen_reference::{ExecutionReport, Machine, TerminalStatus, VerificationEvent, VerificationWriteKind};
 
 fn machine(body: Body) -> Machine {
     Machine::new(validate_body(body).expect("interior-mutability test MIR must validate"))
+}
+
+fn defined_report(body: Body) -> ExecutionReport {
+    machine(body)
+        .execute()
+        .expect("interior-mutability fixture must have defined execution")
 }
 
 #[test]
@@ -45,7 +51,7 @@ fn shared_loan_survives_interior_replacement_and_observes_replacement_storage() 
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(
         report.verification_events,
@@ -112,7 +118,7 @@ fn interior_assignment_preserves_source_first_replacement_order() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.verification_events,
         vec![
@@ -189,7 +195,7 @@ fn marked_aggregate_interior_assignment_drops_only_then_live_contents() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report
             .verification_events
@@ -267,7 +273,7 @@ fn interior_replacement_under_shared_borrow_is_cleaned_once_on_fault() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("INTERIOR_FAULT".into())
