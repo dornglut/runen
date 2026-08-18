@@ -41,10 +41,6 @@ impl BufferRegion {
         self.buffer
     }
 
-    pub fn positions(&self) -> impl Iterator<Item = PositionId> + '_ {
-        self.positions.iter().copied()
-    }
-
     /// Implements the accepted Buffer logical-region overlap relation.
     #[must_use]
     pub fn overlaps(&self, other: &Self) -> bool {
@@ -95,31 +91,35 @@ impl LogicalBufferState {
     ) -> Result<(), LogicalStateError> {
         self.validate_region(region)?;
 
-        for position in region.positions() {
+        for position in &region.positions {
             *self
                 .values
-                .get_mut(&position)
+                .get_mut(position)
                 .expect("validated region positions exist in logical state") = value;
         }
 
         Ok(())
     }
 
-    /// Reads the current logical fixture state for a region in position-token order.
+    /// Reads the current logical position/value relation for a Buffer region.
+    ///
+    /// The returned map is a deterministic verification representation. Its
+    /// iteration order is not part of the accepted Buffer-region semantics.
     pub fn read(
         &self,
         region: &BufferRegion,
-    ) -> Result<Vec<(PositionId, ValueToken)>, LogicalStateError> {
+    ) -> Result<BTreeMap<PositionId, ValueToken>, LogicalStateError> {
         self.validate_region(region)?;
 
         Ok(region
-            .positions()
+            .positions
+            .iter()
             .map(|position| {
                 let value = *self
                     .values
-                    .get(&position)
+                    .get(position)
                     .expect("validated region positions exist in logical state");
-                (position, value)
+                (*position, value)
             })
             .collect())
     }
@@ -133,7 +133,9 @@ impl LogicalBufferState {
         }
 
         if let Some(position) = region
-            .positions()
+            .positions
+            .iter()
+            .copied()
             .find(|position| !self.values.contains_key(position))
         {
             return Err(LogicalStateError::UnknownPosition(position));
