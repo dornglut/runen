@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/runen-core-ir",
+    "crates/runen-exec-oracle",
     "crates/runen-reference",
     "tools/xtask",
 ]
