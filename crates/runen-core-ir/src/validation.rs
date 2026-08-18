@@ -31,6 +31,7 @@ pub enum MirValidationErrorKind {
     },
     CopyOfNonCopy(TypeId),
     RawReadRequiresPointer(TypeId),
+    RawMoveRequiresPointer(TypeId),
     RawAssignRequiresPointer(TypeId),
     AssignToImmutable(LocalId),
     InteriorMutationRequiresMarkedRegion(Place),
@@ -90,9 +91,12 @@ impl ValidatedBody {
 /// expressible by the currently represented Core MIR. Unsafe raw-target access
 /// obligations remain execution preconditions rather than validation diagnostics.
 /// Validation carries exact symbolic raw-pointer targets only as verification state
-/// needed to propagate defined `RawAssign` storage effects; that state is not an
-/// independent provenance model or observable language state. Later language domains
-/// extend validation in their owning slices rather than being anticipated here.
+/// needed to propagate defined raw target state effects; that state is not an
+/// independent provenance model or observable language state. When exact verification
+/// state proves that a raw unsafe precondition already fails, path-state propagation
+/// stops rather than fabricating post-UB state; static MIR validation still covers the
+/// complete body. Later language domains extend validation in their owning slices
+/// rather than being anticipated here.
 pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
     validate_type_table(&body.types)?;
     validate_local_declarations(&body)?;
@@ -304,6 +308,16 @@ fn validate_operand_type(
             let actual = access_type(body, src, point)?;
             require_type_match(actual, expected, point)
         }
+        Operand::RawMove(pointer) => {
+            let pointer_ty = access_type(body, pointer, point)?;
+            let Some(actual) = body.types.raw_pointer_pointee(pointer_ty) else {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::RawMoveRequiresPointer(pointer_ty),
+                ));
+            };
+            require_type_match(actual, expected, point)
+        }
         Operand::Copy(src) => {
             let actual = access_type(body, src, point)?;
             require_type_match(actual, expected, point)?;
@@ -478,6 +492,12 @@ enum ValidationValue {
     Struct(Vec<ValidationValue>),
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum DefinedStep<T> {
+    Continue(T),
+    NoDefinedContinuation,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum LeafState {
     NeverInitialized,
@@ -584,7 +604,15 @@ fn validate_path_state(body: &Body) -> Result<(), MirValidationError> {
                 block: current,
                 statement: Some(statement_index),
             };
-            validate_state_statement(body, &mut locals, &mut active_loans, statement, &point)?;
+            if matches!(
+                validate_state_statement(body, &mut locals, &mut active_loans, statement, &point)?,
+                DefinedStep::NoDefinedContinuation
+            ) {
+                // Static validation already covered the complete MIR. Path-state
+                // propagation is only about defined executions, so a statically evident
+                // unsafe violation has no post-state to validate.
+                return Ok(());
+            }
         }
 
         match &block.terminator {
@@ -600,7 +628,7 @@ fn validate_state_statement(
     active_loans: &mut [Option<ActiveLoan>],
     statement: &Statement,
     point: &MirPoint,
-) -> Result<(), MirValidationError> {
+) -> Result<DefinedStep<()>, MirValidationError> {
     match statement {
         Statement::Init { dst, src } => {
             authorize_direct_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
@@ -611,7 +639,11 @@ fn validate_state_statement(
                 ));
             }
             let dst_ty = place_type(body, dst, point)?;
-            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            let DefinedStep::Continue(value) =
+                validate_operand_state(body, locals, active_loans, src, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
             write_validation_value(&body.types, dst_ty, place_state_mut(locals, dst), value);
         }
         Statement::Borrow { loan, kind, src } => {
@@ -692,16 +724,19 @@ fn validate_state_statement(
             require_fully_live(locals, &place, point)?;
         }
         Statement::RawRead { pointer } => {
-            // Validation owns access to the pointer value itself. Exact target metadata
-            // exists only for value transport and RawAssign state propagation; target
-            // liveness and target-loan compatibility remain unsafe execution obligations.
-            let place =
+            let pointer_place =
                 resolve_authorized_access(active_loans, pointer, AccessRequirement::Shared, point)?;
-            require_fully_live(locals, &place, point)?;
+            require_fully_live(locals, &pointer_place, point)?;
+            let target = raw_pointer_target_at(locals, &pointer_place);
+            if !place_state(locals, &target).fully_live()
+                || raw_target_conflicts(active_loans, &target, AccessRequirement::Shared)
+            {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            }
         }
         Statement::RawAssign { pointer, src } => {
-            // Snapshot the exact target before source evaluation. Validation intentionally
-            // does not check the raw target alias precondition; that remains UB territory.
+            // Snapshot the exact target before source evaluation, matching the
+            // normative RawAssign ordering.
             let pointer_place =
                 resolve_authorized_access(active_loans, pointer, AccessRequirement::Shared, point)?;
             require_fully_live(locals, &pointer_place, point)?;
@@ -711,7 +746,14 @@ fn validate_state_statement(
                 .types
                 .raw_pointer_pointee(pointer_ty)
                 .expect("static validation guarantees a raw-pointer RawAssign operand");
-            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            let DefinedStep::Continue(value) =
+                validate_operand_state(body, locals, active_loans, src, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
+            if raw_target_conflicts(active_loans, &target, AccessRequirement::Exclusive) {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            }
             write_validation_value(
                 &body.types,
                 pointee_ty,
@@ -727,7 +769,11 @@ fn validate_state_statement(
                 resolve_authorized_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
             require_mutable_local(body, &place, point)?;
             let dst_ty = place_type(body, &place, point)?;
-            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            let DefinedStep::Continue(value) =
+                validate_operand_state(body, locals, active_loans, src, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
             write_validation_value(&body.types, dst_ty, place_state_mut(locals, &place), value);
         }
         Statement::InteriorAssign { dst, src } => {
@@ -738,7 +784,11 @@ fn validate_state_statement(
                 resolve_authorized_access(active_loans, dst, AccessRequirement::Shared, point)?;
             require_interior_mutable_place(body, &place, point)?;
             let dst_ty = place_type(body, &place, point)?;
-            let value = validate_operand_state(body, locals, active_loans, src, point)?;
+            let DefinedStep::Continue(value) =
+                validate_operand_state(body, locals, active_loans, src, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
             write_validation_value(&body.types, dst_ty, place_state_mut(locals, &place), value);
         }
         Statement::Drop { place } => {
@@ -757,7 +807,7 @@ fn validate_state_statement(
             place_state_mut(locals, &place).drop_live();
         }
     }
-    Ok(())
+    Ok(DefinedStep::Continue(()))
 }
 
 fn validate_operand_state(
@@ -766,39 +816,66 @@ fn validate_operand_state(
     active_loans: &[Option<ActiveLoan>],
     operand: &Operand,
     point: &MirPoint,
-) -> Result<ValidationValue, MirValidationError> {
+) -> Result<DefinedStep<ValidationValue>, MirValidationError> {
     match operand {
-        Operand::Constant(value) => Ok(validation_value_from_constant(value)),
+        Operand::Constant(value) => Ok(DefinedStep::Continue(validation_value_from_constant(value))),
         Operand::Move(src) => {
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Exclusive, point)?;
             require_fully_live(locals, &place, point)?;
             let ty = place_type(body, &place, point)?;
-            Ok(take_validation_value(
+            Ok(DefinedStep::Continue(take_validation_value(
                 &body.types,
                 ty,
                 place_state_mut(locals, &place),
-            ))
+            )))
+        }
+        Operand::RawMove(pointer) => {
+            // The pointer value itself is language-validated like other raw operations.
+            // Target liveness and alias compatibility remain unsafe preconditions. If
+            // exact verification state proves either fails, there is no defined value
+            // to fabricate for the enclosing statement.
+            let pointer_place =
+                resolve_authorized_access(active_loans, pointer, AccessRequirement::Shared, point)?;
+            require_fully_live(locals, &pointer_place, point)?;
+            let target = raw_pointer_target_at(locals, &pointer_place);
+            if !place_state(locals, &target).fully_live()
+                || raw_target_conflicts(active_loans, &target, AccessRequirement::Exclusive)
+            {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            }
+            let pointer_ty = place_type(body, &pointer_place, point)?;
+            let pointee_ty = body
+                .types
+                .raw_pointer_pointee(pointer_ty)
+                .expect("static validation guarantees a raw-pointer RawMove operand");
+            Ok(DefinedStep::Continue(take_validation_value(
+                &body.types,
+                pointee_ty,
+                place_state_mut(locals, &target),
+            )))
         }
         Operand::Copy(src) => {
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
             require_fully_live(locals, &place, point)?;
             let ty = place_type(body, &place, point)?;
-            Ok(clone_validation_value(
+            Ok(DefinedStep::Continue(clone_validation_value(
                 &body.types,
                 ty,
                 place_state(locals, &place),
-            ))
+            )))
         }
         Operand::AddressOf(src) => {
             // Address formation authorizes access to existing storage but does not
             // read the pointee value, so NeverInitialized and Dead storage are valid
             // targets. The resolved Place is exact verification metadata for transport
-            // and later RawAssign state propagation, not a second provenance identity.
+            // and later raw state propagation, not a second provenance identity.
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
-            Ok(ValidationValue::Scalar(ValidationScalar::RawPointer(place)))
+            Ok(DefinedStep::Continue(ValidationValue::Scalar(
+                ValidationScalar::RawPointer(place),
+            )))
         }
     }
 }
@@ -911,6 +988,20 @@ fn raw_pointer_target_at(locals: &[ObjectState], place: &Place) -> Place {
         ObjectState::Leaf(LeafState::Live(ValidationScalar::RawPointer(target))) => target.clone(),
         _ => unreachable!("validated raw-pointer access reaches exact live pointer metadata"),
     }
+}
+
+fn raw_target_conflicts(
+    active_loans: &[Option<ActiveLoan>],
+    place: &Place,
+    requirement: AccessRequirement,
+) -> bool {
+    active_loans.iter().any(|active| {
+        active.as_ref().is_some_and(|active| {
+            active.place.overlaps(place)
+                && (requirement == AccessRequirement::Exclusive
+                    || active.kind == BorrowKind::Exclusive)
+        })
+    })
 }
 
 fn borrow_conflict(
