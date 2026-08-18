@@ -58,7 +58,7 @@ impl EachPhase {
 /// belonging to distinct dynamic `each` executions receive no order from this
 /// relation. It also does not represent abnormal completion.
 #[must_use]
-pub const fn each_orders(earlier: EachPhase, later: EachPhase) -> bool {
+pub fn each_orders(earlier: EachPhase, later: EachPhase) -> bool {
     if earlier.each() != later.each() {
         return false;
     }
