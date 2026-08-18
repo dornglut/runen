@@ -1,8 +1,8 @@
 /// Verification-only identity token for one sibling `each` iteration fixture.
 ///
 /// The numeric representation is not a worker, lane, queue, scheduler, or source
-/// iteration identity.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+/// iteration identity, and it carries no semantic sibling ordering.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct IterationId(pub u32);
 
 /// Verification-only phases needed to exercise the accepted normal `each` boundary.
