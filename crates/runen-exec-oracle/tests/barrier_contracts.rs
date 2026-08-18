@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
     Access, AccessKind, BarrierError, BarrierFixture, BarrierId, BufferId, BufferRegion, GroupId,
-    HierarchyFixture, HierarchyMembership, IterationId, LogicalBufferState, PositionId, SubgroupId,
-    ValueToken,
+    HierarchyFixture, HierarchyId, HierarchyMembership, IterationId, LogicalBufferState, PositionId,
+    SubgroupId, ValueToken,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -21,13 +21,24 @@ fn state(buffer: u32, entries: &[(u32, u32)]) -> LogicalBufferState {
     )
 }
 
-fn membership(iteration: u32, group: u32, subgroup: u32) -> HierarchyMembership {
-    let group = GroupId::new(group);
-    HierarchyMembership::new(IterationId(iteration), SubgroupId::new(group, subgroup))
+fn hierarchy_id() -> HierarchyId {
+    HierarchyId::new(1)
+}
+
+fn group(token: u32) -> GroupId {
+    GroupId::new(hierarchy_id(), token)
+}
+
+fn membership(iteration: u32, group_token: u32, subgroup: u32) -> HierarchyMembership {
+    HierarchyMembership::new(
+        IterationId(iteration),
+        SubgroupId::new(group(group_token), subgroup),
+    )
 }
 
 fn hierarchy() -> HierarchyFixture {
     HierarchyFixture::new(
+        hierarchy_id(),
         &[
             IterationId(1),
             IterationId(2),
@@ -70,7 +81,7 @@ fn root_barrier_preserves_full_each_participation_and_empty_behavior() {
 #[test]
 fn group_barrier_selects_exact_existing_group() {
     let hierarchy = hierarchy();
-    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, GroupId::new(10)).unwrap();
+    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, group(10)).unwrap();
 
     assert!(barrier.before(IterationId(1)).is_some());
     assert!(barrier.before(IterationId(2)).is_some());
@@ -78,7 +89,7 @@ fn group_barrier_selects_exact_existing_group() {
     assert!(barrier.before(IterationId(4)).is_none());
 
     assert!(matches!(
-        BarrierFixture::group(BarrierId::new(8), &hierarchy, GroupId::new(99)),
+        BarrierFixture::group(BarrierId::new(8), &hierarchy, group(99)),
         Err(BarrierError::UnknownGroup)
     ));
 }
@@ -86,8 +97,8 @@ fn group_barrier_selects_exact_existing_group() {
 #[test]
 fn subgroup_barrier_selects_exact_group_scoped_subgroup() {
     let hierarchy = hierarchy();
-    let first_group = SubgroupId::new(GroupId::new(10), 1);
-    let second_group = SubgroupId::new(GroupId::new(20), 1);
+    let first_group = SubgroupId::new(group(10), 1);
+    let second_group = SubgroupId::new(group(20), 1);
     let first = BarrierFixture::subgroup(BarrierId::new(7), &hierarchy, first_group).unwrap();
     let second = BarrierFixture::subgroup(BarrierId::new(8), &hierarchy, second_group).unwrap();
 
@@ -100,11 +111,23 @@ fn subgroup_barrier_selects_exact_group_scoped_subgroup() {
     assert!(second.before(IterationId(1)).is_none());
 
     assert!(matches!(
-        BarrierFixture::subgroup(
-            BarrierId::new(9),
-            &hierarchy,
-            SubgroupId::new(GroupId::new(10), 99)
-        ),
+        BarrierFixture::subgroup(BarrierId::new(9), &hierarchy, SubgroupId::new(group(10), 99)),
+        Err(BarrierError::UnknownSubgroup)
+    ));
+}
+
+#[test]
+fn barrier_rejects_foreign_hierarchy_group_and_subgroup_selectors() {
+    let hierarchy = hierarchy();
+    let foreign_group = GroupId::new(HierarchyId::new(2), 10);
+    let foreign_subgroup = SubgroupId::new(foreign_group, 1);
+
+    assert!(matches!(
+        BarrierFixture::group(BarrierId::new(7), &hierarchy, foreign_group),
+        Err(BarrierError::UnknownGroup)
+    ));
+    assert!(matches!(
+        BarrierFixture::subgroup(BarrierId::new(8), &hierarchy, foreign_subgroup),
         Err(BarrierError::UnknownSubgroup)
     ));
 }
@@ -112,7 +135,7 @@ fn subgroup_barrier_selects_exact_group_scoped_subgroup() {
 #[test]
 fn barrier_requires_exact_participant_before_completion() {
     let hierarchy = hierarchy();
-    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, GroupId::new(10)).unwrap();
+    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, group(10)).unwrap();
 
     assert!(barrier.has_exact_before_completion(&[IterationId(3), IterationId(1), IterationId(2)]));
     assert!(!barrier.has_exact_before_completion(&[IterationId(1), IterationId(2)]));
@@ -134,7 +157,7 @@ fn barrier_orders_every_participant_before_every_participant_after() {
     let barrier = BarrierFixture::subgroup(
         BarrierId::new(7),
         &hierarchy,
-        SubgroupId::new(GroupId::new(10), 1),
+        SubgroupId::new(group(10), 1),
     )
     .unwrap();
     let before_first = barrier.before(IterationId(1)).unwrap();
@@ -172,7 +195,7 @@ fn nonparticipants_cannot_gain_barrier_phase_or_order() {
     let barrier = BarrierFixture::subgroup(
         BarrierId::new(7),
         &hierarchy,
-        SubgroupId::new(GroupId::new(10), 1),
+        SubgroupId::new(group(10), 1),
     )
     .unwrap();
 
@@ -214,7 +237,7 @@ fn same_phase_sibling_conflict_remains_unordered() {
 fn participant_barrier_order_composes_with_logical_buffer_state() {
     let hierarchy = hierarchy();
     let selected = region(1, &[0]);
-    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, GroupId::new(10)).unwrap();
+    let barrier = BarrierFixture::group(BarrierId::new(7), &hierarchy, group(10)).unwrap();
     let before = barrier.before(IterationId(1)).unwrap();
     let after = barrier.after(IterationId(2)).unwrap();
     let mut logical = state(1, &[(0, 10)]);
