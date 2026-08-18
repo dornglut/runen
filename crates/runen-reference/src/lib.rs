@@ -3,7 +3,8 @@
 
 use runen_core_ir::{
     BorrowKind, LoanId, LocalId, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
-    StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable, ValidatedBody, Value,
+    StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable, ValidatedBody,
+    Value,
 };
 
 /// Why a write occurred in verification instrumentation.
@@ -94,9 +95,7 @@ impl RuntimeValue {
             Value::Bool(value) => Self::Bool(*value),
             Value::I64(value) => Self::I64(*value),
             Value::TrackedFixture(value) => Self::TrackedFixture(*value),
-            Value::Struct(values) => {
-                Self::Struct(values.iter().map(Self::from_constant).collect())
-            }
+            Value::Struct(values) => Self::Struct(values.iter().map(Self::from_constant).collect()),
         }
     }
 }
@@ -467,11 +466,7 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Ru
         ) => {
             *leaf = LeafState::Live(RuntimeValue::Bool(value));
         }
-        (
-            TypeKind::Scalar(ScalarType::I64),
-            ObjectState::Leaf(leaf),
-            RuntimeValue::I64(value),
-        ) => {
+        (TypeKind::Scalar(ScalarType::I64), ObjectState::Leaf(leaf), RuntimeValue::I64(value)) => {
             *leaf = LeafState::Live(RuntimeValue::I64(value));
         }
         (
