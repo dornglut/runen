@@ -47,11 +47,11 @@ For one admitted exchange targeting location `L` with desired value `d`, the ope
 
 All normally completing atomic exchanges governed by this contract that modify one semantic location occur in one total **modification order** for that location.
 
-For a represented set of such exchanges, the first exchange returns the location value immediately before that set begins. Every later exchange returns the desired value installed by the immediately preceding exchange in modification order. After the final exchange, the location value is the desired value installed by that final exchange.
+Each exchange returns the desired value installed by its immediately preceding exchange in that location's modification order, if such a predecessor exists. The first exchange instead returns the location value immediately before the first exchange. After any finite non-empty prefix of the modification order, the location value is the desired value installed by the last exchange in that prefix.
 
 Any applicable Runen semantic ordering already established between two exchanges constrains their modification order. If exchange `A` is semantically ordered before exchange `B`, then `A` MUST precede `B` in the modification order of their common location.
 
-Two source-unordered exchanges on the same location for which no applicable semantic rule establishes a relative order may appear in either relative position in that location's modification order, subject to all other established constraints. The prior values and final location value resulting from every such permitted order are explicitly permitted behaviors of this operation under [Correctness Relations](../correctness.md).
+For source-unordered exchanges on one location, any total modification order that extends all applicable established semantic-order constraints is permitted. The prior values and location values resulting from every such order are explicitly permitted behaviors of this operation under [Correctness Relations](../correctness.md).
 
 Incidental physical worker order, scheduler order, queue order, cache behavior, or instruction choice is not additional semantic input. A realization MUST NOT produce an exchange result that cannot arise from a permitted location-local modification order.
 
