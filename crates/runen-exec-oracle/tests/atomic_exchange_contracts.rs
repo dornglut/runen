@@ -45,12 +45,7 @@ fn one_base_exchange_returns_initial_value_and_installs_desired_value() {
     let fixture = AtomicExchangeFixture::new(
         location,
         AtomicValueToken::new(10),
-        vec![exchange(
-            location,
-            1,
-            20,
-            AtomicExchangeSemantics::Base,
-        )],
+        vec![exchange(location, 1, 20, AtomicExchangeSemantics::Base)],
     )
     .unwrap();
     let realization = fixture.realize(&[first], &[]).unwrap();
@@ -161,12 +156,7 @@ fn fixture_rejects_duplicate_and_foreign_exchange_identities() {
         AtomicExchangeFixture::new(
             local,
             AtomicValueToken::new(10),
-            vec![exchange(
-                foreign,
-                1,
-                20,
-                AtomicExchangeSemantics::Acquire
-            )]
+            vec![exchange(foreign, 1, 20, AtomicExchangeSemantics::Acquire)]
         ),
         Err(AtomicExchangeError::ForeignExchangeIdentity)
     ));
@@ -391,18 +381,8 @@ fn release_acquire_synchronization_is_location_scoped() {
         first_location,
         AtomicValueToken::new(10),
         vec![
-            exchange(
-                first_location,
-                1,
-                20,
-                AtomicExchangeSemantics::Release,
-            ),
-            exchange(
-                first_location,
-                2,
-                30,
-                AtomicExchangeSemantics::Acquire,
-            ),
+            exchange(first_location, 1, 20, AtomicExchangeSemantics::Release),
+            exchange(first_location, 2, 30, AtomicExchangeSemantics::Acquire),
         ],
     )
     .unwrap();
@@ -441,12 +421,7 @@ fn base_atomic_exchange_relation_does_not_supply_ordinary_access_order() {
     let fixture = AtomicExchangeFixture::new(
         local,
         AtomicValueToken::new(10),
-        vec![exchange(
-            local,
-            1,
-            20,
-            AtomicExchangeSemantics::Base,
-        )],
+        vec![exchange(local, 1, 20, AtomicExchangeSemantics::Base)],
     )
     .unwrap();
     assert!(fixture.realize(&[first_exchange], &[]).is_ok());
