@@ -1,5 +1,5 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId,
+    BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
     MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
     TypeDef, TypeId, TypeTable, Value, validate_body,
 };
@@ -542,4 +542,93 @@ fn statically_evident_raw_assign_ub_has_no_path_state_continuation() {
     );
 
     validate_body(body).expect("statically evident RawAssign UB has no defined path-state successor");
+}
+
+#[test]
+fn whole_aggregate_raw_move_marks_every_target_leaf_dead() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pair_ty = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", value_ty), Field::new("right", value_ty)],
+    ));
+    let pointer_ty = types.push(TypeDef::raw_pointer("pair_ptr", pair_ty));
+    let target = Place::local(LocalId(0));
+    let destination = Place::local(LocalId(2));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", pair_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+            LocalDecl::new("destination", pair_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::Struct(vec![Value::I64(1), Value::I64(2)])),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Init {
+                dst: destination.clone(),
+                src: Operand::RawMove(Place::local(LocalId(1)).into()),
+            },
+            Statement::Read {
+                src: destination.into(),
+            },
+            Statement::Read {
+                src: target.clone().field(1).into(),
+            },
+        ],
+    );
+
+    let error = validate_body(body).expect_err("whole RawMove must leave every target leaf Dead");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(target.field(1))
+    );
+}
+
+#[test]
+fn raw_assign_snapshots_target_before_raw_move_source_consumes_pointer_operand() {
+    let mut types = TypeTable::new();
+    let pointer_ty = types.push(TypeDef::raw_pointer("recursive_ptr", TypeId(0)));
+    assert_eq!(pointer_ty, TypeId(0));
+
+    let outer = Place::local(LocalId(0));
+    let source = Place::local(LocalId(1));
+    let target = Place::local(LocalId(2));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("outer", pointer_ty, false),
+            LocalDecl::new("source", pointer_ty, false),
+            LocalDecl::new("target", pointer_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: outer.clone(),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Init {
+                dst: source.clone(),
+                src: Operand::AddressOf(outer.clone().into()),
+            },
+            Statement::RawAssign {
+                pointer: outer,
+                src: Operand::RawMove(source.into()),
+            },
+            Statement::RawRead {
+                pointer: target.into(),
+            },
+        ],
+    );
+
+    validate_body(body).expect(
+        "RawAssign target must be snapshotted before RawMove consumes its pointer operand storage",
+    );
 }
