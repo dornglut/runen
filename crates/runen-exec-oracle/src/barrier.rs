@@ -1,55 +1,130 @@
-use crate::{IterationId, coverage::has_exact_unique_coverage};
+use crate::{
+    GroupId, HierarchyFixture, IterationId, SubgroupId, coverage::has_exact_unique_coverage,
+};
 
 /// Verification-only identity token for one dynamic structured barrier fixture.
 ///
-/// The numeric representation carries no barrier order, worker topology,
+/// The private numeric representation carries no barrier order, cohort topology,
 /// physical rendezvous identity, or source-language meaning.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BarrierId(pub u32);
+pub struct BarrierId(u32);
 
-/// Verification-only point relative to one structured barrier instance.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BarrierPhase {
-    Before {
-        barrier: BarrierId,
-        iteration: IterationId,
-    },
-    After {
-        barrier: BarrierId,
-        iteration: IterationId,
-    },
-}
-
-/// Tests only the cross-phase order supplied by the accepted structured barrier.
-///
-/// Every before phase is ordered before every after phase of the same barrier
-/// instance. This relation supplies no within-phase sibling order and no order
-/// between distinct barrier identities.
-#[must_use]
-pub const fn barrier_orders(earlier: BarrierPhase, later: BarrierPhase) -> bool {
-    match (earlier, later) {
-        (
-            BarrierPhase::Before {
-                barrier: earlier_barrier,
-                ..
-            },
-            BarrierPhase::After {
-                barrier: later_barrier,
-                ..
-            },
-        ) => earlier_barrier.0 == later_barrier.0,
-        _ => false,
+impl BarrierId {
+    #[must_use]
+    pub const fn new(token: u32) -> Self {
+        Self(token)
     }
 }
 
-/// Checks that every iteration required by one structured barrier has completed
-/// its before-barrier phase exactly once, independent of completion-list order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BarrierSide {
+    Before,
+    After,
+}
+
+/// Verification-only phase point created by a validated barrier fixture.
 ///
-/// Duplicate required iteration identities are rejected as invalid fixture input.
-#[must_use]
-pub fn has_exact_before_phase_completion(
-    required_iterations: &[IterationId],
-    completed_before: &[IterationId],
-) -> bool {
-    has_exact_unique_coverage(required_iterations, completed_before)
+/// Fields are private so callers cannot fabricate phase participation for an
+/// iteration outside the fixture's selected cohort.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BarrierPhase {
+    barrier: BarrierId,
+    iteration: IterationId,
+    side: BarrierSide,
+}
+
+/// Invalid finite structured-barrier verification fixture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BarrierError {
+    InvalidRootIterations,
+    UnknownGroup,
+    UnknownSubgroup,
+}
+
+/// Validated verification-only structured barrier over one selected cohort.
+///
+/// The participant collection is private and has no semantic enumeration order.
+/// This fixture is not a source barrier API, runtime rendezvous object, or atomic
+/// memory-scope representation.
+pub struct BarrierFixture {
+    id: BarrierId,
+    participants: Vec<IterationId>,
+}
+
+impl BarrierFixture {
+    pub fn root(id: BarrierId, required_iterations: &[IterationId]) -> Result<Self, BarrierError> {
+        if !has_exact_unique_coverage(required_iterations, required_iterations) {
+            return Err(BarrierError::InvalidRootIterations);
+        }
+
+        Ok(Self {
+            id,
+            participants: required_iterations.to_vec(),
+        })
+    }
+
+    pub fn group(
+        id: BarrierId,
+        hierarchy: &HierarchyFixture,
+        group: GroupId,
+    ) -> Result<Self, BarrierError> {
+        let participants = hierarchy
+            .group_members(group)
+            .ok_or(BarrierError::UnknownGroup)?;
+
+        Ok(Self { id, participants })
+    }
+
+    pub fn subgroup(
+        id: BarrierId,
+        hierarchy: &HierarchyFixture,
+        subgroup: SubgroupId,
+    ) -> Result<Self, BarrierError> {
+        let participants = hierarchy
+            .subgroup_members(subgroup)
+            .ok_or(BarrierError::UnknownSubgroup)?;
+
+        Ok(Self { id, participants })
+    }
+
+    #[must_use]
+    pub fn before(&self, iteration: IterationId) -> Option<BarrierPhase> {
+        self.phase(iteration, BarrierSide::Before)
+    }
+
+    #[must_use]
+    pub fn after(&self, iteration: IterationId) -> Option<BarrierPhase> {
+        self.phase(iteration, BarrierSide::After)
+    }
+
+    #[must_use]
+    pub fn has_exact_before_completion(&self, completed_before: &[IterationId]) -> bool {
+        has_exact_unique_coverage(&self.participants, completed_before)
+    }
+
+    /// Tests only the participant cross-phase order supplied by this barrier.
+    ///
+    /// This relation supplies no same-phase sibling order and no order for another
+    /// barrier identity or an iteration outside this fixture's selected cohort.
+    #[must_use]
+    pub fn orders(&self, earlier: BarrierPhase, later: BarrierPhase) -> bool {
+        earlier.barrier == self.id
+            && later.barrier == self.id
+            && earlier.side == BarrierSide::Before
+            && later.side == BarrierSide::After
+            && self.is_participant(earlier.iteration)
+            && self.is_participant(later.iteration)
+    }
+
+    fn phase(&self, iteration: IterationId, side: BarrierSide) -> Option<BarrierPhase> {
+        self.is_participant(iteration).then_some(BarrierPhase {
+            barrier: self.id,
+            iteration,
+            side,
+        })
+    }
+
+    fn is_participant(&self, iteration: IterationId) -> bool {
+        self.participants.contains(&iteration)
+    }
 }
