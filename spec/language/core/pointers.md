@@ -1,10 +1,10 @@
 # Core Pointers and Provenance
 
-Status: **provisional normative; storage identity and raw-pointer formation defined**
+Status: **provisional normative; raw-pointer formation and provenance defined**
 
-This document owns the currently defined Core semantics for dynamic storage-instance identity as observed by pointer formation, structural pointer targets, raw-pointer values, provenance formation, and preservation under ordinary value transport.
+This document owns the currently defined Core semantics for raw-pointer types and values, symbolic pointer targets, provenance formation from existing storage, and provenance preservation under ordinary value transport.
 
-Storage extent, stored-value lifetime, initialization state, replacement, and destruction are owned by [Core value and storage semantics](value-storage.md). Shared/exclusive authority used while forming a pointer from a place is owned by [Core borrowing](borrowing.md).
+Dynamic storage-instance identity, storage extent, structural storage regions, stored-value lifetime, initialization state, replacement, and destruction are owned by [Core value and storage semantics](value-storage.md). Shared/exclusive authority used while selecting storage for pointer formation is owned by [Core borrowing](borrowing.md).
 
 ## Semantic decomposition
 
@@ -30,40 +30,20 @@ In particular:
 - pointer provenance is not defined as a numeric address;
 - a raw pointer is not a source-language reference and does not inherit a loan interval.
 
-## Dynamic storage-instance identity
+## Imported storage identity
 
-Each dynamic local storage extent has one **storage-instance identity**.
+This specification relies on the dynamic storage-instance and structural storage-region semantics defined by [Core value and storage semantics](value-storage.md); it does not redefine their lifecycle here.
 
-For the current single-body Core reference machine, every local creates one such instance when execution of the body begins. Distinct simultaneously existing local storage extents have distinct identities.
+The pointer rules depend on the following consequences of that owner:
 
-The identity remains stable for the complete storage extent. Therefore the following operations do not create a new storage instance while the containing storage extent continues:
+- every dynamic local storage extent has one storage-instance identity;
+- distinct simultaneously existing local storage extents have distinct identities;
+- a storage-instance identity remains stable while its storage extent continues even when stored-value lifetimes begin or end;
+- a structural storage region is that dynamic root identity plus a structural projection path;
+- neither the identity token nor the projection path is a physical address, byte offset, ABI layout, or relocation guarantee;
+- future dynamic storage owners must create their own dynamic instances rather than reinterpret static `LocalId` as globally unique storage identity.
 
-- first initialization;
-- move from the storage;
-- explicit destruction;
-- ordinary replacement or reinitialization;
-- interior replacement or reinitialization.
-
-Those operations may begin or end stored-value lifetimes, but they do not replace the underlying storage instance.
-
-When the storage extent ends, that dynamic storage instance ends. This revision does not define reuse of a former identity by a later storage instance.
-
-A reference implementation may represent storage-instance identity using a deterministic integer or another convenient token for verification. That representation is not Runen-observable and does not define a physical address, allocation number, ABI property, or source-visible identity.
-
-Future dynamic storage owners such as call activations or allocations must create storage-instance identities according to their owning semantics. They must not reinterpret a static `LocalId` as globally unique dynamic storage identity.
-
-## Structural storage region
-
-A **structural storage region** consists of:
-
-1. one dynamic root storage-instance identity; and
-2. zero or more structural projections selecting a sub-place within that root.
-
-The current projection vocabulary contains only struct fields.
-
-The structural projection path is semantic structure. It is not a byte offset, field address, ABI layout, physical range, or promise that the selected storage cannot relocate.
-
-Two different stored-value lifetimes occupying the same structural region remain lifetimes in the same storage region when the root storage extent has not ended.
+Pointer formation consumes those facts; changes to storage-instance creation or lifetime remain owned by the value/storage specification.
 
 ## Raw-pointer type
 
@@ -79,10 +59,12 @@ Raw-pointer types are copyable in the current Core value model.
 
 A non-null raw-pointer value formed by the currently defined operation carries two semantic components:
 
-- a **target structural storage region**; and
+- a **target structural storage region** selected when the pointer is formed; and
 - **provenance** rooted in the dynamic storage instance from which the pointer was formed.
 
 For this initial foundation, provenance is the identity of that target's root storage instance.
+
+The target is symbolic structural metadata selected at formation. It does not mean that the pointer dynamically follows relocated storage, nor does it itself define a physical address or legal dereference. Relocation and address stability are separate, currently undefined concerns.
 
 The target and provenance are represented separately even though the target also names its root instance. This is deliberate: later pointer derivation may refine where within storage a pointer targets without making target position and provenance the same semantic concept.
 
@@ -104,8 +86,8 @@ Formation proceeds conceptually as follows:
 
 1. authorize `src` using the borrowing model's **shared** access requirement;
 2. resolve `src` to one concrete structural place;
-3. identify the dynamic storage instance corresponding to that place's local storage extent;
-4. form the target structural storage region from that storage instance plus the place's structural projection path;
+3. obtain the dynamic storage instance corresponding to that place's local storage extent from the value/storage model;
+4. select the target structural storage region from that storage instance plus the place's structural projection path;
 5. create a raw-pointer value whose target is that region and whose provenance is rooted in that storage instance.
 
 Pointer formation itself does not read, copy, move, mutate, initialize, destroy, or otherwise access the pointee value.
@@ -159,7 +141,7 @@ Pointer-value transport does not reactivate, recreate, or extend any loan from w
 
 ## Determinism and verification
 
-For a fixed validated body and execution, storage-instance creation, structural target formation, and raw-pointer provenance formation are deterministic.
+For a fixed validated body and execution, symbolic target selection and raw-pointer provenance formation are deterministic from the storage identities supplied by the value/storage model.
 
 Reference-oracle instrumentation may expose storage-instance identities and formed pointer components to conformance tests. Such instrumentation is verification-only and is not Runen-observable program behavior.
 
