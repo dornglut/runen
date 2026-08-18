@@ -2,8 +2,8 @@ use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
     Access, AccessKind, BufferId, BufferRegion, ContributionId, EachPhase, IterationId,
-    LogicalBufferState, LogicalStateError, PositionId, ReductionLaws, ValueToken, each_orders,
-    has_exact_contribution_coverage,
+    LogicalBufferState, LogicalStateError, PositionId, UnorderedReductionEvidence, ValueToken,
+    each_orders, has_exact_contribution_coverage,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -20,6 +20,15 @@ fn values(entries: &[(u32, u32)]) -> BTreeMap<PositionId, ValueToken> {
 
 fn state(buffer: u32, entries: &[(u32, u32)]) -> LogicalBufferState {
     LogicalBufferState::new(BufferId(buffer), values(entries))
+}
+
+fn complete_reduction_evidence() -> UnorderedReductionEvidence {
+    UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_associativity()
+        .with_commutativity()
 }
 
 #[test]
@@ -148,14 +157,41 @@ fn overlapping_sibling_changes_conflict_independently_of_physical_order() {
 }
 
 #[test]
-fn unordered_reduction_requires_every_accepted_operator_law() {
-    let lawful = ReductionLaws::new(true, true, true);
-    assert!(lawful.permits_unordered_reduction());
+fn unordered_reduction_requires_the_complete_combination_contract() {
+    assert!(complete_reduction_evidence().permits_unordered_reduction());
+
+    let missing_normality = UnorderedReductionEvidence::none()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_associativity()
+        .with_commutativity();
+    let missing_result_only = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_two_sided_identity()
+        .with_associativity()
+        .with_commutativity();
+    let missing_identity = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_associativity()
+        .with_commutativity();
+    let missing_associativity = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_commutativity();
+    let missing_commutativity = UnorderedReductionEvidence::none()
+        .with_normal_and_closed()
+        .with_result_only()
+        .with_two_sided_identity()
+        .with_associativity();
 
     for insufficient in [
-        ReductionLaws::new(false, true, true),
-        ReductionLaws::new(true, false, true),
-        ReductionLaws::new(true, true, false),
+        missing_normality,
+        missing_result_only,
+        missing_identity,
+        missing_associativity,
+        missing_commutativity,
     ] {
         assert!(!insufficient.permits_unordered_reduction());
     }
@@ -201,14 +237,10 @@ fn lawful_reduction_fixture_is_invariant_to_permutation_tree_and_neutral_identit
         left + right
     }
 
-    let laws = ReductionLaws::new(true, true, true);
-    assert!(laws.permits_unordered_reduction());
+    assert!(complete_reduction_evidence().permits_unordered_reduction());
 
     let identity = 0_i64;
-    let left_tree = combine(
-        combine(combine(combine(identity, 1), 2), 3),
-        4,
-    );
+    let left_tree = combine(combine(combine(combine(identity, 1), 2), 3), 4);
     let permuted_tree = combine(combine(4, 2), combine(1, combine(3, identity)));
     let right_tree = combine(1, combine(2, combine(3, combine(4, identity))));
     let extra_neutral_initializers = combine(
@@ -225,10 +257,9 @@ fn lawful_reduction_fixture_is_invariant_to_permutation_tree_and_neutral_identit
 
 #[test]
 fn reduction_admission_does_not_legalize_ordinary_sibling_conflict() {
-    let laws = ReductionLaws::new(true, true, true);
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
     let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
 
-    assert!(laws.permits_unordered_reduction());
+    assert!(complete_reduction_evidence().permits_unordered_reduction());
     assert!(first_access.conflicts_with(&second_access));
 }
