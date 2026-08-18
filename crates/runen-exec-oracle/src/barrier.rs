@@ -1,6 +1,5 @@
 use crate::{
-    EachId, GroupId, HierarchyFixture, IterationId, SubgroupId,
-    coverage::has_exact_unique_coverage,
+    EachId, GroupId, HierarchyFixture, IterationId, SubgroupId, coverage::has_exact_unique_coverage,
 };
 
 /// Verification-only identity token for one dynamic structured barrier fixture.
