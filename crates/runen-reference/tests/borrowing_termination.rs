@@ -33,8 +33,9 @@ fn defined_return_ends_active_borrow_before_cleanup() {
         )],
     };
 
-    let report =
-        Machine::new(validate_body(body).expect("return borrow MIR must validate")).execute();
+    let report = Machine::new(validate_body(body).expect("return borrow MIR must validate"))
+        .execute()
+        .expect("defined return fixture must not enter undefined behavior");
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert!(
         report
