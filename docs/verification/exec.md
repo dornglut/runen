@@ -80,7 +80,7 @@ These obligations do not define iteration construction, task semantics, fault ag
 
 ## Identity-bearing unordered reduction boundary
 
-These cases exercise the reduction interaction owned by `spec/language/exec/parallelism.md`. Reduction contributions are not modeled as ordinary accesses to a shared accumulator, while ordinary accesses performed outside the reduction interaction remain subject to the ordinary conflict rules.
+These cases exercise the reduction interaction owned by `spec/language/exec/parallelism.md`. Reduction contributions are not modeled as ordinary accesses to a shared accumulator, while ordinary accesses and other semantic actions outside the reduction interaction remain subject to their own applicable contracts.
 
 Required cases:
 
@@ -91,7 +91,7 @@ Required cases:
 - contribution coverage is insensitive to contribution ordering but rejects omitted, duplicated, invented, or ambiguous duplicate fixture identities;
 - lawful test-local exact combination produces the same result across distinct contribution permutations and binary tree shapes;
 - additional identity-valued physical partial initialization is permitted only as neutral realization state and does not count as a semantic contribution;
-- the combination relation itself does not gain fault, divergence, or externally observable effect freedom from the physical reduction tree; the admitted contract represents normal result-only combination;
+- permitted physical regrouping cannot change combination outcome or observable trace because the admitted combination contract requires normal result-only behavior;
 - physical worker, lane, chunk, queue, partial-accumulator, and tree order are not semantic input;
 - reduction admission does not legalize an overlapping ordinary sibling read/write or write/write conflict;
 - a normally completed `each` carrying a reduction exposes its result to normal continuation only after all required iterations complete normally and all produced semantic contributions are incorporated;
