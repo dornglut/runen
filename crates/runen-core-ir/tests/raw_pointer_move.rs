@@ -434,3 +434,112 @@ fn static_validation_still_checks_statements_after_statically_evident_raw_ub() {
         MirValidationErrorKind::TypeMismatch { expected: bool_ty }
     );
 }
+
+#[test]
+fn raw_move_target_loan_conflict_is_not_a_validation_error() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let target = Place::local(LocalId(0));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+            LocalDecl::new("destination", value_ty, false),
+        ],
+        vec![LoanDecl::new("target_shared", value_ty)],
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Borrow {
+                loan: LoanId(0),
+                kind: BorrowKind::Shared,
+                src: target.clone().into(),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(2)),
+                src: Operand::RawMove(Place::local(LocalId(1)).into()),
+            },
+            Statement::Drop {
+                place: target.into(),
+            },
+        ],
+    );
+
+    validate_body(body).expect("raw target loan conflict is UB, not a MIR validation diagnostic");
+}
+
+#[test]
+fn statically_evident_raw_read_ub_has_no_path_state_continuation() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let target = Place::local(LocalId(0));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+        ],
+        Vec::new(),
+        vec![
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::RawRead {
+                pointer: Place::local(LocalId(1)).into(),
+            },
+            Statement::Read { src: target.into() },
+        ],
+    );
+
+    validate_body(body).expect("statically evident RawRead UB has no defined path-state successor");
+}
+
+#[test]
+fn statically_evident_raw_assign_ub_has_no_path_state_continuation() {
+    let mut types = TypeTable::new();
+    let value_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", value_ty));
+    let target = Place::local(LocalId(0));
+    let body = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", value_ty, false),
+            LocalDecl::new("pointer", pointer_ty, false),
+        ],
+        vec![LoanDecl::new("target_shared", value_ty)],
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Borrow {
+                loan: LoanId(0),
+                kind: BorrowKind::Shared,
+                src: target.clone().into(),
+            },
+            Statement::RawAssign {
+                pointer: Place::local(LocalId(1)).into(),
+                src: Operand::Constant(Value::I64(2)),
+            },
+            Statement::Drop {
+                place: target.into(),
+            },
+        ],
+    );
+
+    validate_body(body).expect("statically evident RawAssign UB has no defined path-state successor");
+}
