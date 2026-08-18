@@ -19,7 +19,9 @@ pub use barrier::{BarrierError, BarrierFixture, BarrierId, BarrierPhase};
 pub use buffer::{
     BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
-pub use hierarchy::{GroupId, HierarchyError, HierarchyFixture, HierarchyMembership, SubgroupId};
+pub use hierarchy::{
+    GroupId, HierarchyError, HierarchyFixture, HierarchyId, HierarchyMembership, SubgroupId,
+};
 pub use reduction::{
     ContributionId, ReductionContribution, ReductionError, ReductionFixture, ReductionId,
     UnorderedReductionEvidence,
