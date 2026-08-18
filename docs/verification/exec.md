@@ -4,7 +4,7 @@ Status: **non-normative conformance-obligation documentation**
 
 This document records focused assurance obligations for defined Exec semantic slices. It does not define Runen semantics, conformance profiles, compiler architecture, or repository CI.
 
-The normative ordinary-access rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
+The normative ordinary-access rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Buffer-specific identity, region, and view-access facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
 
 ## Ordinary unordered-access boundary
 
@@ -25,6 +25,24 @@ Required cases:
 - for Core-origin structural storage, root/descendant overlap and sibling-field disjointness are consumed as Core-owned facts rather than redefined by Exec.
 
 These obligations do not authorize atomics, reductions, commutative accumulation, collectives, barriers, or other synchronization mechanisms whose normative contracts remain open.
+
+## Buffer logical-region boundary
+
+Buffer cases consume the Buffer owner's logical identity and overlap relation and the memory-model owner's ordinary conflict relation. They must not infer semantics from physical storage arrangement.
+
+Required cases:
+
+- regions belonging to distinct Buffer identities are disjoint under the Buffer region relation even if a realization can co-locate, reuse, or otherwise relate their physical backing;
+- two regions of one Buffer with disjoint logical element-position sets are disjoint;
+- two regions of one Buffer whose logical element-position sets intersect overlap;
+- overlapping `View` read/read access is non-conflicting under the ordinary-access relation when every other applicable contract permits both accesses;
+- source-unordered overlapping `View` read with a state-changing `ViewMut` access conflicts when no separately defined interaction mechanism applies;
+- source-unordered overlapping state-changing `ViewMut` accesses conflict when no separately defined interaction mechanism applies;
+- source-unordered state-changing accesses through `ViewMut` to disjoint Buffer regions are non-conflicting under the ordinary-access relation;
+- migration, replication, or replacement of physical backing does not change the logical Buffer identity or Buffer region selected by a continuing logical view;
+- physical address, allocation identity, host slice aliasing, host borrow checking, and host scheduler behavior are not semantic oracles for Buffer identity, overlap, view permission, or conflict.
+
+These obligations do not define view construction/lifetime rules, mapping, raw-address exposure, version selection, visibility, synchronization, or a coherence protocol.
 
 ## Future executable evidence
 
