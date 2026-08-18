@@ -608,11 +608,16 @@ fn pointer_target_metadata_participates_in_loop_state_repetition() {
         ],
     };
 
-    let error = validate_body(body).expect_err(
-        "second loop iteration must be validated because the pointer target changed",
+    let error = validate_body(body)
+        .expect_err("second loop iteration must be validated because the pointer target changed");
+    assert_eq!(
+        error.point.as_ref().map(|point| point.block),
+        Some(BasicBlockId(1))
     );
-    assert_eq!(error.point.as_ref().map(|point| point.block), Some(BasicBlockId(1)));
-    assert_eq!(error.point.as_ref().and_then(|point| point.statement), Some(1));
+    assert_eq!(
+        error.point.as_ref().and_then(|point| point.statement),
+        Some(1)
+    );
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(first)
