@@ -3,10 +3,18 @@ use runen_core_ir::{
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
     validate_body,
 };
-use runen_reference::{Machine, TerminalStatus, VerificationEvent, VerificationWriteKind};
+use runen_reference::{
+    ExecutionReport, Machine, TerminalStatus, VerificationEvent, VerificationWriteKind,
+};
 
 fn machine(body: Body) -> Machine {
     Machine::new(validate_body(body).expect("reborrow test MIR must validate"))
+}
+
+fn defined_report(body: Body) -> ExecutionReport {
+    machine(body)
+        .execute()
+        .expect("reborrow fixture must have defined execution")
 }
 
 #[test]
@@ -54,7 +62,7 @@ fn child_borrow_source_resolves_to_concrete_subplace() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert!(
         report
@@ -126,7 +134,7 @@ fn exclusive_child_controls_storage_across_move_and_replacement() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     let events = &report.verification_events;
     assert!(events.contains(&VerificationEvent::Move(value.clone())));
     assert!(events.contains(&VerificationEvent::Write {
@@ -196,7 +204,7 @@ fn explicit_nested_borrow_end_is_leaf_to_root() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     let ends = report
         .verification_events
         .iter()
@@ -245,7 +253,7 @@ fn defined_fault_terminates_nested_forest_before_cleanup() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("NESTED_BORROW_FAULT".into())

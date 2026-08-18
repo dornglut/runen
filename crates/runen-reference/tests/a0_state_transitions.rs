@@ -18,6 +18,12 @@ fn machine(body: Body) -> Machine {
     Machine::new(validate_body(body).expect("A0 test MIR must pass validation"))
 }
 
+fn defined_report(body: Body) -> runen_reference::ExecutionReport {
+    machine(body)
+        .execute()
+        .expect("A0 state-transition fixture must have defined execution")
+}
+
 #[test]
 fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
     let mut types = TypeTable::new();
@@ -94,7 +100,7 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
 
     assert!(
         report
@@ -174,7 +180,7 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert!(
         report
             .verification_events
@@ -219,7 +225,7 @@ fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     let dropped_ids = report
         .verification_events
         .iter()
@@ -268,7 +274,7 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     let drops = report
         .verification_events
         .iter()
@@ -345,7 +351,7 @@ fn assign_starts_a_new_stored_value_lifetime_after_drop() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.verification_events,
         vec![
@@ -394,7 +400,7 @@ fn self_move_assignment_uses_the_post_source_destruction_domain() {
         ],
     );
 
-    let report = machine(body).execute();
+    let report = defined_report(body);
     assert_eq!(
         report.verification_events,
         vec![

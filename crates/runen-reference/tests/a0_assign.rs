@@ -37,7 +37,9 @@ fn assignment_drops_live_old_value_then_writes_replacement() {
         )],
     };
 
-    let report = machine(body).execute();
+    let report = machine(body)
+        .execute()
+        .expect("A0 assignment fixture has defined execution");
     assert_eq!(
         report
             .verification_events

@@ -55,8 +55,9 @@ pub enum ScalarType {
     I64,
     /// Capability-neutral raw pointer to a pointee type.
     ///
-    /// Raw-pointer access is not defined by the current Core slice. The pointee
-    /// edge is semantic indirection rather than structural containment.
+    /// The current Core slice defines formation, ordinary value transport, and one
+    /// non-consuming `RawRead`; broader pointer access remains outside this type.
+    /// The pointee edge is semantic indirection rather than structural containment.
     RawPointer(TypeId),
     /// Verification-only non-copy scalar used to make destruction observable to tests.
     /// This is not a Runen language scalar primitive.
@@ -428,6 +429,13 @@ pub enum Statement {
     /// Readability and its lack of ownership transfer are semantic. Recording the
     /// operation in reference-oracle instrumentation is verification-only.
     Read { src: PlaceAccess },
+    /// Unsafe non-consuming read through a stored raw-pointer value.
+    ///
+    /// Language validation checks the pointer-value access itself. Concrete pointee
+    /// liveness and active-loan compatibility are unsafe execution preconditions.
+    /// The current proving MIR discards the read result and does not create a
+    /// general dereferenced-place representation.
+    RawRead { pointer: PlaceAccess },
     /// Ordinary mutable write/replacement/re-initialization.
     ///
     /// This requires exclusive alias authority and containing-local assignment

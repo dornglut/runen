@@ -20,6 +20,7 @@ fn execute(
     };
     Machine::new(validate_body(body).expect("valid pointer-provenance fixture"))
         .execute()
+        .expect("pointer-provenance fixture must have defined execution")
         .verification_events
 }
 
