@@ -50,6 +50,7 @@ fn first_initialization_begins_value_lifetime_without_replacing_storage_instance
 
     let events = Machine::new(validate_body(body).expect("valid storage-identity fixture"))
         .execute()
+        .expect("storage-identity fixture has defined execution")
         .verification_events;
     let pointers = formed(&events);
 
