@@ -4,7 +4,7 @@ Status: **non-normative conformance-obligation documentation**
 
 This document records focused assurance obligations for defined Exec semantic slices. It does not define Runen semantics, conformance profiles, compiler architecture, or repository CI.
 
-The normative ordinary-access rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Buffer-specific identity, region, and view-access facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
+The normative ordinary-access rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Buffer-specific identity, region, view-access, and logical-coherence facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, and interior-mutability facts remain owned by their Core specifications.
 
 ## Ordinary unordered-access boundary
 
@@ -42,7 +42,23 @@ Required cases:
 - migration, replication, or replacement of physical backing does not change the logical Buffer identity or Buffer region selected by a continuing logical view;
 - physical address, allocation identity, host slice aliasing, host borrow checking, and host scheduler behavior are not semantic oracles for Buffer identity, overlap, view permission, or conflict.
 
-These obligations do not define view construction/lifetime rules, mapping, raw-address exposure, version selection, visibility, synchronization, or a coherence protocol.
+These obligations do not define view construction/lifetime rules, mapping, raw-address exposure, version representation, synchronization, or a physical coherence protocol.
+
+## Buffer ordered-coherence boundary
+
+These cases exercise only the Buffer visibility consequence after some applicable semantic owner has already established an order between accesses. They do not infer semantic order from physical execution or backend submission.
+
+Required cases:
+
+- when a state-changing access to region `R` is semantically ordered before a permitted read of overlapping `R`, that read cannot observe the pre-change logical state solely because a stale physical replica exists;
+- when several state-changing accesses to the same logical element positions are semantically ordered before a later permitted read, the read observes the logical state after those changes in their semantic order rather than an older physical copy;
+- migration, replication, caching, or replacement of backing between an ordered state change and read does not change the logical result required by the established order;
+- state changes and coherence work for region `A` do not require a disjoint region `B` to migrate, synchronize, or serialize unless another applicable contract requires it;
+- Buffer coherence does not legalize source-unordered conflicting `View`/`ViewMut` or `ViewMut`/`ViewMut` ordinary accesses;
+- selecting one physical replica rather than another is not program-observable when both realize the same required logical Buffer state;
+- replica identity, implementation version metadata, physical address, allocation identity, backend queue order, host cache behavior, and transfer implementation are not semantic oracles for ordered Buffer visibility.
+
+These obligations do not define version counters, replica ownership, transfer completion, future atomic/synchronization visibility, mapping, or a coherence implementation algorithm.
 
 ## Future executable evidence
 
