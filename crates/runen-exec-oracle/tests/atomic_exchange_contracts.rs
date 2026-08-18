@@ -1,7 +1,8 @@
 use runen_exec_oracle::{
     Access, AccessKind, AtomicExchange, AtomicExchangeError, AtomicExchangeFixture,
-    AtomicExchangeId, AtomicExchangeSemantics, AtomicLocationId, AtomicValueToken, BufferId,
-    BufferRegion, EachId, EachPhase, IterationId, PositionId, each_orders,
+    AtomicExchangeId, AtomicExchangeScope, AtomicExchangeSemantics, AtomicLocationId,
+    AtomicValueToken, BufferId, BufferRegion, EachId, EachPhase, IterationId, PositionId,
+    each_orders,
 };
 
 fn location(token: u32) -> AtomicLocationId {
@@ -22,6 +23,22 @@ fn exchange(
         exchange_id(location, token),
         AtomicValueToken::new(desired),
         semantics,
+        AtomicExchangeScope::Unscoped,
+    )
+}
+
+fn root_scoped_exchange(
+    location: AtomicLocationId,
+    token: u32,
+    desired: u32,
+    semantics: AtomicExchangeSemantics,
+    each: EachId,
+) -> AtomicExchange {
+    AtomicExchange::new(
+        exchange_id(location, token),
+        AtomicValueToken::new(desired),
+        semantics,
+        AtomicExchangeScope::Root(each),
     )
 }
 
@@ -139,12 +156,14 @@ fn fixture_rejects_duplicate_and_foreign_exchange_identities() {
                 AtomicExchange::new(
                     duplicate,
                     AtomicValueToken::new(20),
-                    AtomicExchangeSemantics::Base
+                    AtomicExchangeSemantics::Base,
+                    AtomicExchangeScope::Unscoped,
                 ),
                 AtomicExchange::new(
                     duplicate,
                     AtomicValueToken::new(30),
-                    AtomicExchangeSemantics::Release
+                    AtomicExchangeSemantics::Release,
+                    AtomicExchangeScope::Root(EachId::new(1)),
                 ),
             ]
         ),
@@ -313,6 +332,167 @@ fn direct_release_predecessor_synchronizes_with_acquire() {
 }
 
 #[test]
+fn same_root_release_predecessor_synchronizes_with_acquire() {
+    let local = location(1);
+    let each = EachId::new(7);
+    let release = exchange_id(local, 1);
+    let acquire = exchange_id(local, 2);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            root_scoped_exchange(local, 1, 20, AtomicExchangeSemantics::Release, each),
+            root_scoped_exchange(local, 2, 30, AtomicExchangeSemantics::Acquire, each),
+        ],
+    )
+    .unwrap();
+    let realization = fixture.realize(&[release, acquire], &[]).unwrap();
+
+    assert!(realization.release_acquire_synchronizes(release, acquire));
+}
+
+#[test]
+fn same_root_acquire_release_combinations_use_existing_capability_rules() {
+    let local = location(1);
+    let each = EachId::new(7);
+    let release = exchange_id(local, 1);
+    let acquire_release = exchange_id(local, 2);
+    let acquire = exchange_id(local, 3);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            root_scoped_exchange(local, 1, 20, AtomicExchangeSemantics::Release, each),
+            root_scoped_exchange(
+                local,
+                2,
+                30,
+                AtomicExchangeSemantics::AcquireRelease,
+                each,
+            ),
+            root_scoped_exchange(local, 3, 40, AtomicExchangeSemantics::Acquire, each),
+        ],
+    )
+    .unwrap();
+    let realization = fixture
+        .realize(&[release, acquire_release, acquire], &[])
+        .unwrap();
+
+    assert!(realization.release_acquire_synchronizes(release, acquire_release));
+    assert!(realization.release_acquire_synchronizes(acquire_release, acquire));
+    assert!(!realization.release_acquire_synchronizes(release, acquire));
+}
+
+#[test]
+fn distinct_root_scopes_do_not_synchronize_but_share_modification_order() {
+    let local = location(1);
+    let first_each = EachId::new(7);
+    let second_each = EachId::new(8);
+    let release = exchange_id(local, 1);
+    let acquire = exchange_id(local, 2);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            root_scoped_exchange(
+                local,
+                1,
+                20,
+                AtomicExchangeSemantics::Release,
+                first_each,
+            ),
+            root_scoped_exchange(
+                local,
+                2,
+                30,
+                AtomicExchangeSemantics::Acquire,
+                second_each,
+            ),
+        ],
+    )
+    .unwrap();
+    let realization = fixture.realize(&[release, acquire], &[]).unwrap();
+
+    assert_eq!(
+        realization.prior_value(release),
+        Some(AtomicValueToken::new(10))
+    );
+    assert_eq!(
+        realization.prior_value(acquire),
+        Some(AtomicValueToken::new(20))
+    );
+    assert_eq!(realization.final_value(), AtomicValueToken::new(30));
+    assert!(!realization.release_acquire_synchronizes(release, acquire));
+}
+
+#[test]
+fn mixed_unscoped_and_root_scoped_exchanges_do_not_synchronize() {
+    let local = location(1);
+    let each = EachId::new(7);
+    let first = exchange_id(local, 1);
+    let second = exchange_id(local, 2);
+
+    let unscoped_release = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            exchange(local, 1, 20, AtomicExchangeSemantics::Release),
+            root_scoped_exchange(local, 2, 30, AtomicExchangeSemantics::Acquire, each),
+        ],
+    )
+    .unwrap()
+    .realize(&[first, second], &[])
+    .unwrap();
+    assert!(!unscoped_release.release_acquire_synchronizes(first, second));
+
+    let root_release = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            root_scoped_exchange(local, 1, 20, AtomicExchangeSemantics::Release, each),
+            exchange(local, 2, 30, AtomicExchangeSemantics::Acquire),
+        ],
+    )
+    .unwrap()
+    .realize(&[first, second], &[])
+    .unwrap();
+    assert!(!root_release.release_acquire_synchronizes(first, second));
+}
+
+#[test]
+fn root_scope_does_not_change_order_constraints_or_values() {
+    let local = location(1);
+    let first_each = EachId::new(7);
+    let second_each = EachId::new(8);
+    let first = exchange_id(local, 1);
+    let second = exchange_id(local, 2);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![
+            root_scoped_exchange(local, 1, 20, AtomicExchangeSemantics::Base, first_each),
+            root_scoped_exchange(local, 2, 30, AtomicExchangeSemantics::Base, second_each),
+        ],
+    )
+    .unwrap();
+
+    assert!(matches!(
+        fixture.realize(&[second, first], &[(first, second)]),
+        Err(AtomicExchangeError::OrderConstraintViolation)
+    ));
+
+    let realized = fixture
+        .realize(&[first, second], &[(first, second)])
+        .unwrap();
+    assert_eq!(realized.prior_value(first), Some(AtomicValueToken::new(10)));
+    assert_eq!(
+        realized.prior_value(second),
+        Some(AtomicValueToken::new(20))
+    );
+    assert_eq!(realized.final_value(), AtomicValueToken::new(30));
+}
+
+#[test]
 fn acquire_release_is_both_acquire_capable_and_release_capable() {
     let local = location(1);
     let release = exchange_id(local, 1);
@@ -460,6 +640,41 @@ fn release_acquire_synchronization_is_location_scoped() {
 }
 
 #[test]
+fn root_scoped_synchronization_still_requires_same_atomic_location() {
+    let first_location = location(1);
+    let second_location = location(2);
+    let each = EachId::new(7);
+    let release = exchange_id(first_location, 1);
+    let acquire = exchange_id(first_location, 2);
+    let foreign_acquire = exchange_id(second_location, 2);
+    let fixture = AtomicExchangeFixture::new(
+        first_location,
+        AtomicValueToken::new(10),
+        vec![
+            root_scoped_exchange(
+                first_location,
+                1,
+                20,
+                AtomicExchangeSemantics::Release,
+                each,
+            ),
+            root_scoped_exchange(
+                first_location,
+                2,
+                30,
+                AtomicExchangeSemantics::Acquire,
+                each,
+            ),
+        ],
+    )
+    .unwrap();
+    let realization = fixture.realize(&[release, acquire], &[]).unwrap();
+
+    assert!(realization.release_acquire_synchronizes(release, acquire));
+    assert!(!realization.release_acquire_synchronizes(release, foreign_acquire));
+}
+
+#[test]
 fn acquire_release_synchronization_is_location_scoped() {
     let first_location = location(1);
     let second_location = location(2);
@@ -511,6 +726,35 @@ fn release_acquire_sync_does_not_change_ordinary_conflict_predicate() {
 
     assert!(first_access.conflicts_with(&second_access));
     assert!(realization.release_acquire_synchronizes(release, acquire));
+}
+
+#[test]
+fn root_scope_identity_does_not_supply_sibling_order_or_legalize_conflict() {
+    let local = location(1);
+    let each = EachId::new(7);
+    let first_exchange = exchange_id(local, 1);
+    let fixture = AtomicExchangeFixture::new(
+        local,
+        AtomicValueToken::new(10),
+        vec![root_scoped_exchange(
+            local,
+            1,
+            20,
+            AtomicExchangeSemantics::Base,
+            each,
+        )],
+    )
+    .unwrap();
+    assert!(fixture.realize(&[first_exchange], &[]).is_ok());
+
+    let first_iteration = EachPhase::Iteration(IterationId::new(each, 1));
+    let second_iteration = EachPhase::Iteration(IterationId::new(each, 2));
+    let first_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+    let second_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+
+    assert!(!each_orders(first_iteration, second_iteration));
+    assert!(!each_orders(second_iteration, first_iteration));
+    assert!(first_access.conflicts_with(&second_access));
 }
 
 #[test]
