@@ -225,7 +225,7 @@ impl TypeTable {
                         .zip(values)
                         .all(|(field, value)| self.value_matches(field.ty, value))
             }
-            TypeKind::Scalar(ScalarType::RawPointer(_)) => false,
+            (TypeKind::Scalar(ScalarType::RawPointer(_)), _) => false,
             _ => false,
         }
     }
