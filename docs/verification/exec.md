@@ -84,13 +84,14 @@ These cases exercise the reduction interaction owned by `spec/language/exec/para
 
 Required cases:
 
-- unordered reduction is admitted only when the represented operator contract establishes two-sided identity, associativity, and commutativity under its applicable result relation;
-- failure to establish any one of those three obligations rejects this unordered reduction form;
+- unordered reduction is admitted only when the represented combination contract establishes normal closed combination, result-only combination, two-sided identity, associativity, and commutativity;
+- failure to establish any one of those obligations rejects this unordered reduction form;
 - the empty semantic contribution collection yields the explicit identity value;
 - every semantic contribution occurrence is incorporated exactly once, including distinct contributions that carry semantically equal values;
 - contribution coverage is insensitive to contribution ordering but rejects omitted, duplicated, invented, or ambiguous duplicate fixture identities;
 - lawful test-local exact combination produces the same result across distinct contribution permutations and binary tree shapes;
 - additional identity-valued physical partial initialization is permitted only as neutral realization state and does not count as a semantic contribution;
+- the combination relation itself does not gain fault, divergence, or externally observable effect freedom from the physical reduction tree; the admitted contract represents normal result-only combination;
 - physical worker, lane, chunk, queue, partial-accumulator, and tree order are not semantic input;
 - reduction admission does not legalize an overlapping ordinary sibling read/write or write/write conflict;
 - a normally completed `each` carrying a reduction exposes its result to normal continuation only after all required iterations complete normally and all produced semantic contributions are incorporated;
@@ -106,9 +107,9 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - ordinary read/state-change conflict classification;
 - the cross-phase `each` normal entry/completion ordering relation, with no sibling or intra-iteration order;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
-- unordered-reduction law admission and exact unordered semantic-contribution coverage.
+- complete unordered-reduction contract admission evidence and exact unordered semantic-contribution coverage.
 
-Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, contribution tokens, finite collections, and reduction-law flags are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, contribution order, operator traits, versioning, physical allocation, scheduling, or backend representation.
+Its `BufferId`, `PositionId`, `ValueToken`, iteration tokens, contribution tokens, finite collections, and reduction-contract evidence flags are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, contribution order, operator traits, versioning, physical allocation, scheduling, or backend representation.
 
 ## Future executable evidence
 
