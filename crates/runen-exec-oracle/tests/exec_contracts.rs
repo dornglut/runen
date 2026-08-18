@@ -9,15 +9,16 @@ fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
     BufferRegion::new(BufferId(buffer), positions.iter().copied().map(PositionId))
 }
 
-fn state(buffer: u32, values: &[(u32, u32)]) -> LogicalBufferState {
-    LogicalBufferState::new(
-        BufferId(buffer),
-        values
-            .iter()
-            .copied()
-            .map(|(position, value)| (PositionId(position), ValueToken(value)))
-            .collect::<BTreeMap<_, _>>(),
-    )
+fn values(entries: &[(u32, u32)]) -> BTreeMap<PositionId, ValueToken> {
+    entries
+        .iter()
+        .copied()
+        .map(|(position, value)| (PositionId(position), ValueToken(value)))
+        .collect()
+}
+
+fn state(buffer: u32, entries: &[(u32, u32)]) -> LogicalBufferState {
+    LogicalBufferState::new(BufferId(buffer), values(entries))
 }
 
 #[test]
@@ -74,14 +75,8 @@ fn ordered_changes_update_one_logical_state_not_a_stale_snapshot() {
     current.apply_change(&selected, ValueToken(20)).unwrap();
     current.apply_change(&selected, ValueToken(30)).unwrap();
 
-    assert_eq!(
-        current.read(&selected).unwrap(),
-        vec![(PositionId(0), ValueToken(30))]
-    );
-    assert_eq!(
-        stale_snapshot.read(&selected).unwrap(),
-        vec![(PositionId(0), ValueToken(10))]
-    );
+    assert_eq!(current.read(&selected).unwrap(), values(&[(0, 30)]));
+    assert_eq!(stale_snapshot.read(&selected).unwrap(), values(&[(0, 10)]));
 }
 
 #[test]
@@ -135,10 +130,7 @@ fn disjoint_sibling_changes_commute_in_the_logical_fixture() {
     assert_eq!(left_then_right, right_then_left);
     assert_eq!(
         left_then_right.read(&region(1, &[0, 1])).unwrap(),
-        vec![
-            (PositionId(0), ValueToken(10)),
-            (PositionId(1), ValueToken(20)),
-        ]
+        values(&[(0, 10), (1, 20)])
     );
 }
 
