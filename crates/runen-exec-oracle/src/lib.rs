@@ -35,7 +35,7 @@ pub use reduction::{
 pub use structured::{EachId, EachPhase, IterationId, each_orders};
 pub use task::{
     TaskCancellationError, TaskCancellationFixture, TaskCancellationObservation,
-    TaskCancellationState, TaskId, TaskScopePhase, TaskStateRetention,
+    TaskCancellationState, TaskCompletionEvidence, TaskId, TaskScopePhase, TaskStateRetention,
     all_state_dependencies_are_detach_safe, has_exact_attached_completion, state_is_detach_safe,
     task_scope_orders,
 };
