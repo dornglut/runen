@@ -1,33 +1,67 @@
-/// Verification-only evidence that an unordered reduction operator contract
-/// establishes the algebraic laws required by the accepted Exec reduction form.
+/// Verification-only evidence for the complete contract required by the accepted
+/// identity-bearing unordered reduction form.
 ///
-/// These booleans do not prove arbitrary operator implementations satisfy the
-/// laws and are not a source-language trait system.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ReductionLaws {
+/// These flags do not prove arbitrary operator implementations satisfy the
+/// represented obligations and are not a source-language trait system.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct UnorderedReductionEvidence {
+    normal_and_closed: bool,
+    result_only: bool,
     two_sided_identity: bool,
     associative: bool,
     commutative: bool,
 }
 
-impl ReductionLaws {
+impl UnorderedReductionEvidence {
     #[must_use]
-    pub const fn new(
-        two_sided_identity: bool,
-        associative: bool,
-        commutative: bool,
-    ) -> Self {
+    pub const fn none() -> Self {
         Self {
-            two_sided_identity,
-            associative,
-            commutative,
+            normal_and_closed: false,
+            result_only: false,
+            two_sided_identity: false,
+            associative: false,
+            commutative: false,
         }
+    }
+
+    #[must_use]
+    pub const fn with_normal_and_closed(mut self) -> Self {
+        self.normal_and_closed = true;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_result_only(mut self) -> Self {
+        self.result_only = true;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_two_sided_identity(mut self) -> Self {
+        self.two_sided_identity = true;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_associativity(mut self) -> Self {
+        self.associative = true;
+        self
+    }
+
+    #[must_use]
+    pub const fn with_commutativity(mut self) -> Self {
+        self.commutative = true;
+        self
     }
 
     /// Whether the represented evidence admits the accepted unordered reduction form.
     #[must_use]
     pub const fn permits_unordered_reduction(self) -> bool {
-        self.two_sided_identity && self.associative && self.commutative
+        self.normal_and_closed
+            && self.result_only
+            && self.two_sided_identity
+            && self.associative
+            && self.commutative
     }
 }
 
@@ -52,9 +86,13 @@ pub fn has_exact_contribution_coverage(
         return false;
     }
 
-    required
-        .iter()
-        .all(|required_id| incorporated.iter().filter(|id| *id == required_id).count() == 1)
+    required.iter().all(|required_id| {
+        incorporated
+            .iter()
+            .filter(|incorporated_id| *incorporated_id == required_id)
+            .count()
+            == 1
+    })
 }
 
 fn contains_duplicate(ids: &[ContributionId]) -> bool {
