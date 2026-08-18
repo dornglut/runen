@@ -72,12 +72,35 @@ A **release-capable exchange** is a release exchange or an acquire-release excha
 
 A release exchange does not gain acquire behavior merely because the exchange also returns a prior value. An acquire exchange does not gain release behavior merely because the exchange also installs a desired value. An acquire-release exchange has both behaviors by definition. A base exchange supplies neither release nor acquire synchronization.
 
+### Exchange synchronization scope
+
+For the direct synchronization relation defined by this revision, each atomic exchange uses exactly one of these scope forms:
+
+- an **unscoped exchange** uses the previously defined direct synchronization relation without a participant-domain restriction; or
+- a **root-cohort-scoped exchange** selects the complete root cohort of one dynamic `each` execution defined by [Exec parallelism](parallelism.md).
+
+A root-cohort scope does not require a hierarchy instance. The selected dynamic `each` identity is semantic scope metadata for this operation; it is not a source handle, numeric index, launch identifier, worker or lane identity, queue identity, scheduler token, or hardware memory-scope enumeration.
+
+Scope does not partition an atomic location or its modification order. Unscoped and root-cohort-scoped exchanges on one semantic location remain atomic exchanges on that same location and participate in the one location-local modification order above. Scope changes only whether the direct release/acquire synchronization relation below is established.
+
+Two exchanges have **compatible synchronization scope** under this revision exactly when either:
+
+- both are unscoped; or
+- both are root-cohort-scoped to the same dynamic `each` identity.
+
+Root-cohort scopes belonging to distinct dynamic `each` executions are not compatible. A mixed unscoped/root-cohort pair is not compatible and therefore does not synchronize through the direct relation defined by this revision.
+
+Root-cohort scope identity by itself establishes no sibling-iteration order, barrier, ordinary-access visibility, hierarchy membership, progress guarantee, physical concurrency, or other synchronization relationship. The scope condition matters only when every other requirement of the explicit direct release/acquire relation below is also satisfied.
+
+Group- and subgroup-cohort atomic scope are not defined by this revision. Those hierarchy-sensitive forms require their own establishment/admission and scope-compatibility contracts before they can affect synchronization.
+
 ### Direct release/acquire synchronization
 
 Let `R` and `A` be two normally completing atomic exchanges on the same semantic location. `R` **synchronizes with** `A` under this revision exactly when:
 
 - `R` is release-capable;
-- `A` is acquire-capable; and
+- `A` is acquire-capable;
+- `R` and `A` have compatible synchronization scope; and
 - `R` is the immediate predecessor of `A` in that location's modification order.
 
 Only that direct predecessor relation carries release/acquire synchronization in this revision. If another exchange occurs between an earlier release-capable exchange and an acquire-capable exchange in modification order, that earlier exchange does not synchronize with the acquire-capable exchange merely because it precedes the intervening exchange. Release-sequence semantics are not defined by this revision.
@@ -86,15 +109,13 @@ When `R` synchronizes with `A`, every semantic action sequenced before `R` in `R
 
 For ordinary non-atomic accesses, this synchronization consumes the existing conflict and unordered-access rules rather than replacing them. A conflicting ordinary pair remains conflicting under the conflict predicate. When one such access is sequenced before `R` and the other is sequenced after a synchronizing `A`, the synchronization supplies semantic order between those accesses, so they are not a source-unordered conflicting pair solely with respect to that relation. Every other applicable authority, validity, effect, resource, and operation-specific contract still has to permit both accesses.
 
-An acquire-capable exchange is not required to synchronize with a release-capable exchange in every permitted execution. Whether it does so depends on the permitted modification order selected for that execution and the class of its immediate predecessor.
-
-The direct synchronization relation above is not conditioned on hierarchy or memory-scope metadata in this revision. Future scoped atomic forms require separate contracts and do not retroactively reinterpret this unscoped form.
+An acquire-capable exchange is not required to synchronize with a release-capable exchange in every permitted execution. Whether it does so depends on the permitted modification order selected for that execution, the class of its immediate predecessor, and the scope compatibility of that pair.
 
 ### Deliberate synchronization boundary
 
-This revision defines only base, release, acquire, and acquire-release exchange classes plus the direct release-to-acquire synchronization relation above.
+This revision defines only base, release, acquire, and acquire-release exchange classes; unscoped and root-cohort-scoped exchange synchronization; and the direct release-to-acquire relation above.
 
-Release sequences, sequential consistency, fences, atomic memory scopes, mixed atomic/non-atomic access rules for the atomic location itself, the complete data-race rule involving atomics, other atomic operations, progress guarantees, and source atomic syntax or types are not defined by this revision. Their absence does not authorize behavior beyond rules already established by their canonical owners.
+Release sequences, sequential consistency, fences, group/subgroup or broader atomic memory scopes, mixed atomic/non-atomic access rules for the atomic location itself, the complete data-race rule involving atomics, other atomic operations, progress guarantees, and source atomic syntax or types are not defined by this revision. Their absence does not authorize behavior beyond rules already established by their canonical owners.
 
 ## Structured barrier synchronization
 
@@ -118,4 +139,4 @@ No host, hardware, or backend memory model is normative by default.
 
 ## Open memory-model rules
 
-The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations beyond the atomic-exchange and structured-barrier relations above, atomic order semantics beyond the base/release/acquire/acquire-release exchange classes, release sequences, atomic scope lattice, mixed atomic/non-atomic access rules, and additional synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.
+The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations beyond the atomic-exchange and structured-barrier relations above, atomic order semantics beyond the base/release/acquire/acquire-release exchange classes, release sequences, atomic scope semantics beyond the root-cohort form defined above, mixed atomic/non-atomic access rules, and additional synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.
