@@ -13,10 +13,7 @@ fn exchange_id(location: AtomicLocationId, token: u32) -> AtomicExchangeId {
 }
 
 fn exchange(location: AtomicLocationId, token: u32, desired: u32) -> AtomicExchange {
-    AtomicExchange::new(
-        exchange_id(location, token),
-        AtomicValueToken::new(desired),
-    )
+    AtomicExchange::new(exchange_id(location, token), AtomicValueToken::new(desired))
 }
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -25,7 +22,8 @@ fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
 
 #[test]
 fn empty_exchange_set_preserves_initial_value() {
-    let fixture = AtomicExchangeFixture::new(location(1), AtomicValueToken::new(10), vec![]).unwrap();
+    let fixture =
+        AtomicExchangeFixture::new(location(1), AtomicValueToken::new(10), vec![]).unwrap();
     let realization = fixture.realize(&[], &[]).unwrap();
 
     assert_eq!(realization.final_value(), AtomicValueToken::new(10));
@@ -71,10 +69,7 @@ fn unordered_exchanges_admit_both_location_local_linearizations() {
         first_then_second.prior_value(second),
         Some(AtomicValueToken::new(20))
     );
-    assert_eq!(
-        first_then_second.final_value(),
-        AtomicValueToken::new(30)
-    );
+    assert_eq!(first_then_second.final_value(), AtomicValueToken::new(30));
 
     let second_then_first = fixture.realize(&[second, first], &[]).unwrap();
     assert_eq!(
@@ -85,10 +80,7 @@ fn unordered_exchanges_admit_both_location_local_linearizations() {
         second_then_first.prior_value(first),
         Some(AtomicValueToken::new(30))
     );
-    assert_eq!(
-        second_then_first.final_value(),
-        AtomicValueToken::new(20)
-    );
+    assert_eq!(second_then_first.final_value(), AtomicValueToken::new(20));
 }
 
 #[test]
@@ -192,11 +184,10 @@ fn semantic_order_constraint_must_be_local_represented_and_respected() {
         Err(AtomicExchangeError::OrderConstraintViolation)
     ));
 
-    let realized = fixture.realize(&[first, second], &[(first, second)]).unwrap();
-    assert_eq!(
-        realized.prior_value(first),
-        Some(AtomicValueToken::new(10))
-    );
+    let realized = fixture
+        .realize(&[first, second], &[(first, second)])
+        .unwrap();
+    assert_eq!(realized.prior_value(first), Some(AtomicValueToken::new(10)));
     assert_eq!(
         realized.prior_value(second),
         Some(AtomicValueToken::new(20))
@@ -208,10 +199,7 @@ fn semantic_order_constraint_must_be_local_represented_and_respected() {
         Err(AtomicExchangeError::InvalidOrderConstraint)
     ));
     assert!(matches!(
-        fixture.realize(
-            &[first, second],
-            &[(first, exchange_id(location(2), 2))]
-        ),
+        fixture.realize(&[first, second], &[(first, exchange_id(location(2), 2))]),
         Err(AtomicExchangeError::InvalidOrderConstraint)
     ));
     assert!(matches!(
