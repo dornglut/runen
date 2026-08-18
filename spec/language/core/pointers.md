@@ -144,7 +144,7 @@ Consequently, while the storage extent continues:
 - interior assignment may do the same while shared loans remain active;
 - forming a pointer before and after such a transition derives from the same root storage-instance identity and the same structural region when the same place is selected.
 
-This revision intentionally makes no claim that dereferencing such a pointer while the target is uninitialized, Dead, replaced, or otherwise invalid is legal. Those access/validity rules belong to later pointer and unsafe-memory slices.
+This revision intentionally makes no claim that dereferencing such a pointer while the target is uninitialized, Dead, replaced, or otherwise invalid is legal. Those access/validity rules belong to later pointer and unsafe-memory semantics.
 
 ## Raw-pointer value transport
 
@@ -189,4 +189,4 @@ This revision deliberately does **not** define:
 - atomics, concurrency, data races, memory ordering, or synchronization;
 - source syntax, public library APIs, ABI, or FFI representation.
 
-Those concerns are intentionally deferred to their owning P0-A or later slices rather than being inferred from pointer formation alone.
+Those concerns are intentionally deferred to their owning later semantics rather than being inferred from pointer formation alone.
