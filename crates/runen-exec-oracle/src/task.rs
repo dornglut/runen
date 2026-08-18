@@ -61,8 +61,6 @@ pub const fn state_is_detach_safe(retention: TaskStateRetention) -> bool {
 /// Whether every represented state dependency required by detached work is
 /// independently valid after the originating structured scope may complete.
 #[must_use]
-pub fn all_state_dependencies_are_detach_safe(
-    required_state: &[TaskStateRetention],
-) -> bool {
+pub fn all_state_dependencies_are_detach_safe(required_state: &[TaskStateRetention]) -> bool {
     required_state.iter().copied().all(state_is_detach_safe)
 }
