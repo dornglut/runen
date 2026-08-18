@@ -4,20 +4,6 @@ use runen_core_ir::{
     TypeDef, TypeTable, Value, validate_body,
 };
 
-fn marked_body(statements: Vec<Statement>, loans: Vec<LoanDecl>) -> Body {
-    let mut types = TypeTable::new();
-    let ty = types.push(
-        TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability(),
-    );
-    Body {
-        types,
-        locals: vec![LocalDecl::new("value", ty, true)],
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
-}
-
 #[test]
 fn interior_capability_does_not_allow_ordinary_assignment_through_shared_loan() {
     let value = Place::local(LocalId(0));
