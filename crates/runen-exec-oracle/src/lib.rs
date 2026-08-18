@@ -15,7 +15,7 @@ mod structured;
 mod task;
 
 pub use access::{Access, AccessKind};
-pub use barrier::{BarrierId, BarrierPhase, barrier_orders, has_exact_before_phase_completion};
+pub use barrier::{BarrierError, BarrierFixture, BarrierId, BarrierPhase};
 pub use buffer::{
     BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
