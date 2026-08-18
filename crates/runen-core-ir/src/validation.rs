@@ -31,6 +31,7 @@ pub enum MirValidationErrorKind {
     },
     CopyOfNonCopy(TypeId),
     AssignToImmutable(LocalId),
+    InteriorMutationRequiresMarkedRegion(Place),
     InitRequiresNeverInitialized(Place),
     UseOfUninitialized(Place),
     DropOfUninitialized(Place),
@@ -82,10 +83,10 @@ impl ValidatedBody {
 
 /// Validates raw Core MIR before it may enter the reference machine.
 ///
-/// The boundary covers all structural, typing, copyability, mutability,
-/// initialization-state, borrow-tree, and place-access rules expressible by the
-/// currently represented Core MIR. Later language domains extend validation in
-/// their owning slices rather than being anticipated here.
+/// The boundary covers all structural, typing, copyability, assignment-mutability,
+/// interior-mutability, initialization-state, borrow-tree, and place-access rules
+/// expressible by the currently represented Core MIR. Later language domains extend
+/// validation in their owning slices rather than being anticipated here.
 pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
     validate_type_table(&body.types)?;
     validate_local_declarations(&body)?;
@@ -232,6 +233,13 @@ fn validate_static_statement(
             }
             validate_operand_type(body, src, expected, point)
         }
+        Statement::InteriorAssign { dst, src } => {
+            let expected = access_type(body, dst, point)?;
+            if let PlaceAccess::Direct(place) = dst {
+                require_interior_mutable_place(body, place, point)?;
+            }
+            validate_operand_type(body, src, expected, point)
+        }
         Statement::Drop { place } => {
             access_type(body, place, point)?;
             Ok(())
@@ -305,6 +313,63 @@ fn require_mutable_local(
             kind: MirValidationErrorKind::AssignToImmutable(place.local),
         })
     }
+}
+
+fn require_interior_mutable_place(
+    body: &Body,
+    place: &Place,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    if is_interior_mutable_place(body, place) {
+        Ok(())
+    } else {
+        Err(point_error(
+            point,
+            MirValidationErrorKind::InteriorMutationRequiresMarkedRegion(place.clone()),
+        ))
+    }
+}
+
+fn is_interior_mutable_place(body: &Body, place: &Place) -> bool {
+    let local = body
+        .local(place.local)
+        .expect("validated place references a known containing local");
+    let mut current = local.ty;
+
+    if body
+        .types
+        .get(current)
+        .expect("validated local type is known")
+        .interior_mutable
+    {
+        return true;
+    }
+
+    for projection in &place.projections {
+        match projection {
+            Projection::Field(index) => {
+                let TypeKind::Struct(fields) = &body
+                    .types
+                    .get(current)
+                    .expect("validated projected type is known")
+                    .kind
+                else {
+                    unreachable!("structural validation rejects field projection from scalar type");
+                };
+                current = fields[*index as usize].ty;
+                if body
+                    .types
+                    .get(current)
+                    .expect("validated field type is known")
+                    .interior_mutable
+                {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
 }
 
 fn loan_decl<'a>(
@@ -441,9 +506,9 @@ struct ActiveLoan {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum AccessMode {
-    Read,
-    Consume,
+enum AccessRequirement {
+    Shared,
+    Exclusive,
 }
 
 fn validate_path_state(body: &Body) -> Result<(), MirValidationError> {
@@ -493,7 +558,7 @@ fn validate_state_statement(
 ) -> Result<(), MirValidationError> {
     match statement {
         Statement::Init { dst, src } => {
-            authorize_direct_access(active_loans, dst, AccessMode::Consume, point)?;
+            authorize_direct_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
             if !place_state(locals, dst).all_never_initialized() {
                 return Err(point_error(
                     point,
@@ -530,12 +595,12 @@ fn validate_state_statement(
                     (place.clone(), None)
                 }
                 PlaceAccess::Loan { loan: parent, .. } => {
-                    let mode = match kind {
-                        BorrowKind::Shared => AccessMode::Read,
-                        BorrowKind::Exclusive => AccessMode::Consume,
+                    let requirement = match kind {
+                        BorrowKind::Shared => AccessRequirement::Shared,
+                        BorrowKind::Exclusive => AccessRequirement::Exclusive,
                     };
                     (
-                        resolve_authorized_access(active_loans, src, mode, point)?,
+                        resolve_authorized_access(active_loans, src, requirement, point)?,
                         Some(*parent),
                     )
                 }
@@ -576,20 +641,37 @@ fn validate_state_statement(
             active_loans[loan.0 as usize] = None;
         }
         Statement::Read { src } => {
-            let place = resolve_authorized_access(active_loans, src, AccessMode::Read, point)?;
+            let place =
+                resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
             require_fully_live(locals, &place, point)?;
         }
         Statement::Assign { dst, src } => {
-            // Authorization and mutability are properties of the destination access,
-            // not effects on storage. Resolve them before source evaluation while
+            // Authorization and assignment mutability are properties of the destination
+            // access, not effects on storage. Resolve them before source evaluation while
             // preserving the accepted source-first value-state transition order.
-            let place = resolve_authorized_access(active_loans, dst, AccessMode::Consume, point)?;
+            let place =
+                resolve_authorized_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
             require_mutable_local(body, &place, point)?;
             validate_operand_state(locals, active_loans, src, point)?;
             place_state_mut(locals, &place).mark_live();
         }
+        Statement::InteriorAssign { dst, src } => {
+            // Interior mutability is independent of local assignment mutability. Shared
+            // alias authority is sufficient only when the concrete destination lies
+            // within an explicitly marked interior-mutable region.
+            let place =
+                resolve_authorized_access(active_loans, dst, AccessRequirement::Shared, point)?;
+            require_interior_mutable_place(body, &place, point)?;
+            validate_operand_state(locals, active_loans, src, point)?;
+            place_state_mut(locals, &place).mark_live();
+        }
         Statement::Drop { place } => {
-            let place = resolve_authorized_access(active_loans, place, AccessMode::Consume, point)?;
+            let place = resolve_authorized_access(
+                active_loans,
+                place,
+                AccessRequirement::Exclusive,
+                point,
+            )?;
             if !place_state(locals, &place).any_live() {
                 return Err(point_error(
                     point,
@@ -611,13 +693,15 @@ fn validate_operand_state(
     match operand {
         Operand::Constant(_) => Ok(()),
         Operand::Move(src) => {
-            let place = resolve_authorized_access(active_loans, src, AccessMode::Consume, point)?;
+            let place =
+                resolve_authorized_access(active_loans, src, AccessRequirement::Exclusive, point)?;
             require_fully_live(locals, &place, point)?;
             place_state_mut(locals, &place).mark_dead();
             Ok(())
         }
         Operand::Copy(src) => {
-            let place = resolve_authorized_access(active_loans, src, AccessMode::Read, point)?;
+            let place =
+                resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
             require_fully_live(locals, &place, point)
         }
     }
@@ -647,13 +731,14 @@ fn delegated_child(
     active_loans: &[Option<ActiveLoan>],
     parent: LoanId,
     place: &Place,
-    mode: AccessMode,
+    requirement: AccessRequirement,
 ) -> Option<LoanId> {
     active_loans.iter().enumerate().find_map(|(index, active)| {
         let active = active.as_ref()?;
         let blocks = active.parent == Some(parent)
             && active.place.overlaps(place)
-            && (mode == AccessMode::Consume || active.kind == BorrowKind::Exclusive);
+            && (requirement == AccessRequirement::Exclusive
+                || active.kind == BorrowKind::Exclusive);
         blocks.then(|| LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")))
     })
 }
@@ -661,12 +746,12 @@ fn delegated_child(
 fn resolve_authorized_access(
     active_loans: &[Option<ActiveLoan>],
     access: &PlaceAccess,
-    mode: AccessMode,
+    requirement: AccessRequirement,
     point: &MirPoint,
 ) -> Result<Place, MirValidationError> {
     match access {
         PlaceAccess::Direct(place) => {
-            authorize_direct_access(active_loans, place, mode, point)?;
+            authorize_direct_access(active_loans, place, requirement, point)?;
             Ok(place.clone())
         }
         PlaceAccess::Loan { loan, projections } => {
@@ -675,7 +760,7 @@ fn resolve_authorized_access(
                 .and_then(Option::as_ref)
                 .ok_or_else(|| point_error(point, MirValidationErrorKind::LoanNotActive(*loan)))?;
 
-            if mode == AccessMode::Consume && active.kind != BorrowKind::Exclusive {
+            if requirement == AccessRequirement::Exclusive && active.kind != BorrowKind::Exclusive {
                 return Err(point_error(
                     point,
                     MirValidationErrorKind::ExclusiveLoanRequired(*loan),
@@ -685,7 +770,7 @@ fn resolve_authorized_access(
             let mut place = active.place.clone();
             place.projections.extend(projections.iter().copied());
 
-            if let Some(child) = delegated_child(active_loans, *loan, &place, mode) {
+            if let Some(child) = delegated_child(active_loans, *loan, &place, requirement) {
                 return Err(point_error(
                     point,
                     MirValidationErrorKind::LoanAccessDelegated {
@@ -704,13 +789,14 @@ fn resolve_authorized_access(
 fn authorize_direct_access(
     active_loans: &[Option<ActiveLoan>],
     place: &Place,
-    mode: AccessMode,
+    requirement: AccessRequirement,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
     if let Some((index, _)) = active_loans.iter().enumerate().find(|(_, active)| {
         active.as_ref().is_some_and(|active| {
             active.place.overlaps(place)
-                && (mode == AccessMode::Consume || active.kind == BorrowKind::Exclusive)
+                && (requirement == AccessRequirement::Exclusive
+                    || active.kind == BorrowKind::Exclusive)
         })
     }) {
         return Err(point_error(

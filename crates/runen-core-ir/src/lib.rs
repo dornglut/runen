@@ -60,6 +60,12 @@ impl Field {
 pub struct TypeDef {
     pub name: String,
     pub kind: TypeKind,
+    /// Whether storage whose structural path enters this type is an
+    /// interior-mutable region for the dedicated Core interior-assignment operation.
+    ///
+    /// This is semantic proving-kernel metadata. It is independent of containing
+    /// local assignment mutability and does not define source-language syntax.
+    pub interior_mutable: bool,
 }
 
 impl TypeDef {
@@ -68,6 +74,7 @@ impl TypeDef {
         Self {
             name: name.into(),
             kind: TypeKind::Scalar(scalar),
+            interior_mutable: false,
         }
     }
 
@@ -76,7 +83,16 @@ impl TypeDef {
         Self {
             name: name.into(),
             kind: TypeKind::Struct(fields),
+            interior_mutable: false,
         }
+    }
+
+    /// Marks storage of this type and its structural descendants as an
+    /// interior-mutable region in the Core proving model.
+    #[must_use]
+    pub fn with_interior_mutability(mut self) -> Self {
+        self.interior_mutable = true;
+        self
     }
 }
 
@@ -355,8 +371,17 @@ pub enum Statement {
     /// Readability and its lack of ownership transfer are semantic. Recording the
     /// operation in reference-oracle instrumentation is verification-only.
     Read { src: PlaceAccess },
-    /// Mutable write/replacement/re-initialization, dropping any live old contents first.
+    /// Ordinary mutable write/replacement/re-initialization.
+    ///
+    /// This requires exclusive alias authority and containing-local assignment
+    /// mutability; interior mutability does not weaken those ordinary rules.
     Assign { dst: PlaceAccess, src: Operand },
+    /// Interior-mutable write/replacement/re-initialization.
+    ///
+    /// This uses the ordinary replacement lifecycle but requires an explicit
+    /// interior-mutable storage region and only shared alias authority. It does not
+    /// grant ordinary assignment mutability or consuming loan authority.
+    InteriorAssign { dst: PlaceAccess, src: Operand },
     /// Explicit destruction of all currently live subobjects in the accessed place.
     Drop { place: PlaceAccess },
 }

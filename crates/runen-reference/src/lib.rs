@@ -11,6 +11,7 @@ use runen_core_ir::{
 pub enum VerificationWriteKind {
     Init,
     Assign,
+    InteriorAssign,
 }
 
 /// Verification-only event emitted by the executable reference oracle.
@@ -164,7 +165,12 @@ impl Machine {
             Statement::Borrow { loan, kind, src } => self.begin_borrow(*loan, *kind, src),
             Statement::EndBorrow { loan } => self.end_borrow(*loan),
             Statement::Read { src } => self.read(src),
-            Statement::Assign { dst, src } => self.assign(dst, src),
+            Statement::Assign { dst, src } => {
+                self.replace(dst, src, VerificationWriteKind::Assign);
+            }
+            Statement::InteriorAssign { dst, src } => {
+                self.replace(dst, src, VerificationWriteKind::InteriorAssign);
+            }
             Statement::Drop { place } => self.drop_explicit(place),
         }
     }
@@ -210,7 +216,9 @@ impl Machine {
             .push(VerificationEvent::BorrowEnd(loan));
     }
 
-    fn assign(&mut self, dst: &PlaceAccess, src: &Operand) {
+    fn replace(&mut self, dst: &PlaceAccess, src: &Operand, kind: VerificationWriteKind) {
+        // Both assignment forms share one accepted source-first replacement lifecycle.
+        // Their legality differs only at the validator boundary.
         let value = self.evaluate_operand(src);
         let dst = self.resolve_access(dst);
         let dst_ty = self.place_type(&dst);
@@ -218,10 +226,8 @@ impl Machine {
         self.drop_place_contents(&dst);
         let dst_state = place_state_mut(&mut self.locals, &dst);
         write_value(&self.body.as_body().types, dst_ty, dst_state, value);
-        self.verification_events.push(VerificationEvent::Write {
-            place: dst,
-            kind: VerificationWriteKind::Assign,
-        });
+        self.verification_events
+            .push(VerificationEvent::Write { place: dst, kind });
     }
 
     fn read(&mut self, src: &PlaceAccess) {

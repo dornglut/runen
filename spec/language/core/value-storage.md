@@ -1,8 +1,10 @@
 # Core Value and Storage Semantics
 
-Status: **provisional normative**
+Status: **provisional normative; interior replacement defined**
 
-This document owns the currently defined Core semantics for values, local storage places, storage extent, stored-value lifetime, initialization state, ownership transfer, assignment, destruction domains, and cleanup.
+This document owns the currently defined Core semantics for values, local storage places, storage extent, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, assignment, destruction domains, and cleanup.
+
+The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md).
 
 ## Terms
 
@@ -10,9 +12,13 @@ This document owns the currently defined Core semantics for values, local storag
 
 A semantic classification for values and places. This revision defines scalar types and closed structural aggregate types for the operations below.
 
+A type may carry an **interior-mutable** semantic marker. The marker belongs to the proving-kernel type model; this revision does not define source syntax for declaring such a type.
+
 ### Local
 
-A typed storage root belonging to one function body. A local is immutable or mutable for assignment purposes.
+A typed storage root belonging to one function body. A local is immutable or mutable for ordinary assignment purposes.
+
+The local's assignment-mutability flag does not determine alias exclusivity and does not determine whether storage inside the local is interior-mutable.
 
 ### Place
 
@@ -27,6 +33,32 @@ A place reached by projecting a field from an aggregate place.
 ### Value
 
 An initialized semantic datum whose structure is compatible with the type required by its use. The currently defined value representation does not carry independent nominal type identity.
+
+### Assignment mutability
+
+Assignment mutability is permission for the ordinary `Assign` operation to replace or reinitialize storage rooted in a local.
+
+In the current Core proving MIR, ordinary assignment mutability is declared by the containing `LocalDecl.mutable` flag.
+
+Assignment mutability is independent of:
+
+- whether current alias authority is shared or exclusive;
+- whether a target lies inside an interior-mutable region.
+
+Therefore an exclusive loan does not make an immutable local ordinarily assignable, and an interior-mutable type does not make ordinary `Assign` legal on an immutable local.
+
+### Interior-mutable region
+
+A place lies **within an interior-mutable region** exactly when, while following the structural path from the containing local's root type to the target place type, the target type or at least one structural ancestor type on that path is marked interior-mutable.
+
+Consequences:
+
+- when a local's root type is marked, the whole local storage region and all structural descendants lie within that interior-mutable region;
+- when only a nested field type is marked, that field and its structural descendants lie within an interior-mutable region;
+- an unmarked containing aggregate does not become wholly interior-mutable merely because one descendant type is marked;
+- a disjoint sibling outside the marked descendant region does not inherit the marker.
+
+Interior mutability is storage/type capability, not alias authority. It does not create or upgrade a loan, permit ownership-consuming access through a shared loan, or imply ordinary local assignment mutability.
 
 ### Storage extent
 
@@ -49,6 +81,8 @@ A stored-value lifetime begins when a semantic write to that scalar leaf complet
 A stored-value lifetime ends when the stored value is consumed by move, destroyed, or destroyed as part of replacement. A later write into the same storage begins a new stored-value lifetime without creating a new storage extent.
 
 `Read` and `Copy` do not end the source stored-value lifetime.
+
+Both ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent.
 
 The current revision defines stored-value lifetime at scalar storage leaves. Aggregate initialization and liveness are derived recursively from the states of those leaves; an aggregate does not acquire a separate hidden lifetime identity.
 
@@ -104,6 +138,8 @@ First initialization does not require the containing local to be mutable.
 
 Each scalar leaf written by a successful `Init` begins its first stored-value lifetime in that storage extent.
 
+`Init` remains an exclusive-access operation under the borrowing rules. Interior mutability does not weaken first-initialization access requirements.
+
 ## Read
 
 `Read(src)` requires `src` to be fully initialized.
@@ -126,6 +162,8 @@ Moving a sub-place affects only that sub-place. Disjoint initialized sibling pla
 
 The semantic value produced by the move may subsequently be written into another place; such a write begins stored-value lifetimes at the destination rather than extending the ended source storage lifetimes.
 
+Interior mutability does not make `Move` a shared-authority operation. The borrowing rules continue to require exclusive alias authority for ownership transfer.
+
 ## Copy
 
 `Copy(src)` requires that `src` is fully initialized and its type is copyable.
@@ -138,9 +176,11 @@ For the structural types defined by this revision, an aggregate is copyable exac
 
 The general language mechanism that determines copyability is not defined by this revision.
 
-## Assignment
+## Ordinary assignment
 
-`Assign(dst, value)` requires the local containing `dst` to be mutable.
+`Assign(dst, value)` requires the local containing `dst` to be mutable for ordinary assignment.
+
+It also requires the exclusive alias authority specified by [Core borrowing](borrowing.md). Interior-mutability markers do not weaken either ordinary-assignment requirement.
 
 Unlike `Init`, `Assign` is path-state tolerant: `dst` may be wholly Never-initialized, partially initialized, fully Live, or contain Dead subobjects.
 
@@ -162,6 +202,42 @@ The source value MUST structurally match the type of `dst`.
 
 Assignment changes stored-value lifetimes but does not by itself end the destination storage extent.
 
+## Interior assignment
+
+The proving MIR has a distinct interior-replacement operation:
+
+```text
+InteriorAssign { dst: PlaceAccess, src: Operand }
+```
+
+`InteriorAssign` is legal only when the resolved concrete destination place lies within an interior-mutable region.
+
+It does **not** require the containing local to be mutable for ordinary assignment. Instead, its alias requirement is independently defined by [Core borrowing](borrowing.md): shared alias authority is sufficient at an interior-mutable target.
+
+`InteriorAssign` uses exactly the same replacement lifecycle and source-first ordering as ordinary `Assign`:
+
+1. authorize and resolve the destination access under the borrowing rules and require the resulting place to lie within an interior-mutable region;
+2. evaluate the source operand completely;
+3. determine the destruction domain of `dst` from the resulting storage state;
+4. destroy exactly that domain in its defined order;
+5. write the new value into `dst`;
+6. mark all written leaves Live, beginning new stored-value lifetimes there.
+
+Like ordinary assignment, interior assignment is path-state tolerant. The destination may be Never-initialized, partially initialized, Live, or contain Dead subobjects. Only then-Live contents belong to the replacement destruction domain.
+
+Interior assignment does not grant any other operation a weaker access requirement:
+
+- `Move` still requires exclusive alias authority;
+- `Drop` still requires exclusive alias authority;
+- exclusive reborrow still requires exclusive parent authority;
+- ordinary `Assign` still requires both exclusive alias authority and mutable-local permission.
+
+An exclusive loan may perform `InteriorAssign` only because exclusive authority includes shared authority; the interior-mutability marker remains independently required.
+
+A shared loan may remain active across a legal interior replacement. The loan governs access to a structural storage region, while the replacement ends old stored-value lifetimes and begins new stored-value lifetimes within that continuing storage extent. Borrowing owns the detailed access and delegation rules.
+
+This revision does not define a `RefCell`-style runtime borrow guard, synchronization, atomics, or a source-level interior-mutability API.
+
 ## Destruction
 
 Destruction consumes only currently Live stored values.
@@ -173,6 +249,8 @@ Destroying an aggregate destroys exactly its destruction domain. The recursive d
 `Drop(place)` requires a non-empty destruction domain. It destroys exactly that domain once. Destroyed leaves become Dead; Never-initialized leaves remain Never-initialized.
 
 A moved or already-destroyed subobject MUST NOT be destroyed a second time.
+
+Interior mutability does not weaken the exclusive alias authority required by explicit `Drop`.
 
 The current revision has no custom destructor body. A later custom-destructor specification may refine actions that occur during destruction, but it must preserve the selected destruction domain and ordering unless the canonical owner of those rules explicitly changes them.
 
@@ -190,7 +268,9 @@ For a cyclic execution that diverges, no termination cleanup occurs merely becau
 
 ## Determinism
 
-For a fixed typed body using only the semantics defined here, state transitions, stored-value lifetime transitions, destruction domains, and destruction order are deterministic.
+For a fixed typed body using only the semantics defined here, state transitions, stored-value lifetime transitions, interior-mutability capability, destruction domains, and destruction order are deterministic.
+
+The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state and no new path-state component beyond the storage transitions it already performs.
 
 The semantics defined here do not depend on physical addresses, host destruction behavior, container iteration order, physical scheduling, or backend behavior.
 
@@ -198,6 +278,8 @@ There is no implicit execution-step budget. Cyclic control flow may diverge.
 
 ## Separate semantic owners
 
-This document does not define heap or raw allocation, deallocation, borrowing or borrow duration, interior mutability, references, raw pointers, provenance, pinning, atomics, custom destructor bodies, panic catching, asynchronous cancellation, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw pointers, provenance, pinning, atomics or concurrency, custom destructor bodies, panic catching, asynchronous cancellation, ABI/layout guarantees, or source grammar.
 
-Where this revision defines lifetime facts that those concerns may later depend on, their canonical owners govern the additional policy. In particular, this document does not decide whether a future borrow or pointer remains valid across mutation, replacement, relocation, or any other operation.
+This revision defines only proving-kernel interior-mutability capability and replacement semantics. It does not define source spelling, library abstractions, dynamic borrow guards, synchronization mechanisms, or which future public types expose that capability.
+
+Where this revision defines lifetime facts that later borrowing, pointer, validity, or concurrency concerns may depend on, their canonical owners govern the additional policy. In particular, no pointer identity, provenance, address stability, data-race rule, or first-class reference guarantee is implied by a shared loan remaining active across an interior replacement.
