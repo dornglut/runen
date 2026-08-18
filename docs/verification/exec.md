@@ -24,17 +24,17 @@ Required cases:
 - Core interior mutability under shared aliases does not by itself legalize overlapping state-changing accesses from source-unordered Exec work;
 - for Core-origin structural storage, root/descendant overlap and sibling-field disjointness are consumed as Core-owned facts rather than redefined by Exec.
 
-These obligations do not authorize atomic behavior beyond the base exchange relation covered separately below, commutative accumulation, collectives, or additional synchronization mechanisms whose normative contracts remain open. The structured barrier and identity-bearing unordered reduction are also covered separately below.
+These obligations do not authorize atomic behavior beyond the exchange and direct release/acquire relations covered separately below, commutative accumulation, collectives, or additional synchronization mechanisms whose normative contracts remain open. The structured barrier and identity-bearing unordered reduction are also covered separately below.
 
-## Atomic exchange base boundary
+## Atomic exchange and direct release/acquire boundary
 
-These cases exercise only the atomic-exchange indivisibility and location-local modification-order relation owned by `spec/language/exec/memory-model.md`. They do not define which source storage forms support atomic access, and they consume location identity plus value/replacement admissibility as facts supplied by the applicable storage/resource owner.
+These cases exercise the atomic-exchange indivisibility, location-local modification-order, and direct release/acquire synchronization relations owned by `spec/language/exec/memory-model.md`. They do not define which source storage forms support atomic access, and they consume location identity plus value/replacement admissibility as facts supplied by the applicable storage/resource owner.
 
 Required cases:
 
 - an empty represented exchange set leaves the initial semantic location value unchanged;
-- one exchange returns the initial value and leaves its desired value as the final location value;
-- two source-unordered exchanges with distinct desired values admit both candidate modification-order permutations, with each exchange returning exactly the value installed immediately before it in that permutation;
+- one base exchange returns the initial value and leaves its desired value as the final location value;
+- two source-unordered base exchanges with distinct desired values admit both candidate modification-order permutations, with each exchange returning exactly the value installed immediately before it in that permutation;
 - equal desired values do not collapse distinct exchange occurrences;
 - duplicate represented exchange identities are rejected;
 - a represented exchange identity belonging to another semantic location is rejected by the fixture;
@@ -43,11 +43,20 @@ Required cases:
 - a candidate modification order that violates such a constraint is rejected, while a satisfying order yields the corresponding prior and final values;
 - exchange identity is structurally scoped by atomic-location identity, so equal private exchange tokens under distinct locations denote distinct occurrences;
 - distinct locations have independent modification-order fixtures and no cross-location order is inferred;
-- validating an atomic exchange realization does not alter the ordinary-access conflict relation or create sibling `each` order.
+- a named immediate-predecessor query exposes only that relation and does not enumerate the accepted modification order;
+- a base exchange does not create release/acquire synchronization;
+- a release exchange that is the immediate modification-order predecessor of an acquire exchange on the same location synchronizes with that acquire;
+- reversing those two exchanges in modification order removes that release-to-acquire synchronization;
+- a base exchange between a release and an acquire prevents the earlier release from synchronizing with the acquire under this direct-predecessor relation;
+- base immediately before acquire does not synchronize, and release immediately before base does not synchronize;
+- equal desired or prior values do not infer synchronization; predecessor exchange identity and exchange semantics control the relation;
+- exchange identities from different atomic locations do not synchronize through this relation;
+- release/acquire synchronization does not change the ordinary-access conflict predicate, even when that synchronization supplies semantic order around a conflicting ordinary pair;
+- validating atomic exchange or release/acquire evidence does not infer sibling `each` order from physical scheduling.
 
-`AtomicLocationId`, location-scoped `AtomicExchangeId`, `AtomicValueToken`, `AtomicExchange`, `AtomicExchangeFixture`, and `AtomicExchangeRealization` are verification representation only. Candidate modification-order slices are supplied as realization evidence and are not exposed by an accepted realization as semantic scheduler order. Verification-only `(before, after)` constraint pairs stand for order facts already owned elsewhere; they do not define a generic Runen execution graph.
+`AtomicLocationId`, location-scoped `AtomicExchangeId`, `AtomicValueToken`, `AtomicExchangeSemantics`, `AtomicExchange`, `AtomicExchangeFixture`, and `AtomicExchangeRealization` are verification representation only. `Base`, `Release`, and `Acquire` are verification classifications of the normative semantic classes rather than a frozen source memory-order enumeration. Candidate modification-order slices are supplied as realization evidence and are not exposed by an accepted realization as semantic scheduler order. Verification-only `(before, after)` constraint pairs stand for order facts already owned elsewhere; they do not define a generic Runen execution graph. Immediate-predecessor evidence is retained only to exercise the direct synchronization relation and does not expose the complete candidate order.
 
-These obligations do not define atomic load/store, compare-exchange, fetch operations, acquire/release/acquire-release/sequentially-consistent semantics, fences, atomic scope, mixed atomic/non-atomic race legality, source atomic syntax/types, storage layout, addresses, progress guarantees, or backend atomic instructions.
+These obligations do not define atomic load/store, compare-exchange, fetch operations, release sequences, acquire-release or sequentially-consistent semantics, fences, atomic scope, mixed atomic/non-atomic race legality for the atomic location itself, source atomic syntax/types, storage layout, addresses, progress guarantees, or backend atomic instructions.
 
 ## Buffer logical-region boundary
 
@@ -81,7 +90,7 @@ Required cases:
 - selecting one physical replica rather than another is not program-observable when both realize the same required logical Buffer state;
 - replica identity, implementation version metadata, physical address, allocation identity, backend queue order, host cache behavior, and transfer implementation are not semantic oracles for ordered Buffer visibility.
 
-These obligations do not define version counters, replica ownership, transfer completion, future atomic/synchronization visibility, mapping, or a coherence implementation algorithm.
+These obligations do not define version counters, replica ownership, transfer completion, atomic access to Buffer storage, mixed atomic/non-atomic Buffer visibility rules, mapping, or a coherence implementation algorithm.
 
 ## Structured `each` normal-completion boundary
 
@@ -157,7 +166,7 @@ Required cases:
 
 `BarrierFixture`, `BarrierId`, `BarrierPhase`, and finite participant collections are verification representation only. The fixture is not a source barrier API, runtime rendezvous object, hardware scope, or atomic memory-scope model. The root case replaces the prior root-only free barrier helpers; no compatibility barrier oracle is retained.
 
-These obligations do not define source barrier syntax, dynamic divergent-barrier validation, atomic order/scope or fence semantics, additional collectives, group-local storage, or physical barrier implementation.
+These obligations do not define source barrier syntax, dynamic divergent-barrier validation, atomic order semantics beyond direct release/acquire, atomic scope or fence semantics, additional collectives, group-local storage, or physical barrier implementation.
 
 ## Cohort-scoped identity-bearing unordered reduction boundary
 
@@ -221,7 +230,7 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 
 - Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
 - ordinary read/state-change conflict classification;
-- validated atomic-exchange occurrence identity, exact candidate modification-order coverage, location-local semantic-order constraints, prior-value observation, and final-value computation;
+- validated atomic-exchange occurrence identity, exchange semantics classification, exact candidate modification-order coverage, location-local semantic-order constraints, prior-value observation, immediate-predecessor identity, direct release/acquire synchronization, and final-value computation;
 - the cross-phase `each` normal entry/completion ordering relation, with no sibling or intra-iteration order;
 - hierarchy-instance-scoped group identity, group-scoped subgroup identity, nested hierarchy membership, foreign-hierarchy rejection, and order-neutral same-group/same-subgroup relations;
 - validated root/group/subgroup structured-barrier cohorts, foreign-hierarchy selector rejection, participant-only phase construction, cross-phase ordering, and exact before-phase completion coverage;
@@ -229,7 +238,7 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - complete unordered-reduction contract admission evidence plus validated root/group/subgroup reduction cohorts, foreign-hierarchy selector rejection, participant-only contribution construction, and exact unordered semantic-contribution coverage;
 - structured task-scope attached-child ordering/completion coverage and detachment state-retention admissibility.
 
-Its atomic-location/exchange/value tokens and fixtures, `BufferId`, `PositionId`, `ValueToken`, iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, atomic storage forms, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+Its atomic-location/exchange/value tokens, exchange-semantics classifications, predecessor evidence and fixtures, `BufferId`, `PositionId`, `ValueToken`, iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, task tokens, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, atomic storage forms, source memory-order enumerations, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
 
 The private generic exact-coverage helper used by atomic, hierarchy, barrier, reduction, and task fixtures and the crate-private hierarchy cohort collection used by barrier and reduction fixtures are mechanical oracle implementation. They own no Runen semantic concept.
 
