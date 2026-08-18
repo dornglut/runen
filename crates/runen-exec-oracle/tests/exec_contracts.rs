@@ -1,7 +1,7 @@
 use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
-    Access, AccessKind, BufferId, BufferRegion, EachPhase, IterationId, LogicalBufferState,
+    Access, AccessKind, BufferId, BufferRegion, EachId, EachPhase, IterationId, LogicalBufferState,
     LogicalStateError, PositionId, ValueToken, each_orders,
 };
 
@@ -51,19 +51,33 @@ fn ordinary_conflict_requires_overlap_and_a_state_change() {
 }
 
 #[test]
-fn each_orders_only_across_the_structured_boundary() {
-    let first = EachPhase::Iteration(IterationId(1));
-    let second = EachPhase::Iteration(IterationId(2));
+fn each_orders_only_across_one_dynamic_structured_boundary() {
+    let each = EachId::new(1);
+    let other = EachId::new(2);
+    let first_id = IterationId::new(each, 1);
+    let second_id = IterationId::new(each, 2);
+    let foreign_same_token = IterationId::new(other, 1);
+    let first = EachPhase::Iteration(first_id);
+    let second = EachPhase::Iteration(second_id);
+    let foreign_first = EachPhase::Iteration(foreign_same_token);
 
-    assert!(each_orders(EachPhase::Before, first));
-    assert!(each_orders(EachPhase::Before, EachPhase::After));
-    assert!(each_orders(first, EachPhase::After));
-    assert!(each_orders(second, EachPhase::After));
+    assert_ne!(first_id, foreign_same_token);
+    assert!(each_orders(EachPhase::Before(each), first));
+    assert!(each_orders(EachPhase::Before(each), EachPhase::After(each)));
+    assert!(each_orders(first, EachPhase::After(each)));
+    assert!(each_orders(second, EachPhase::After(each)));
 
     assert!(!each_orders(first, second));
     assert!(!each_orders(second, first));
     assert!(!each_orders(first, first));
-    assert!(!each_orders(EachPhase::After, first));
+    assert!(!each_orders(EachPhase::After(each), first));
+
+    assert!(!each_orders(EachPhase::Before(each), foreign_first));
+    assert!(!each_orders(first, EachPhase::After(other)));
+    assert!(!each_orders(
+        EachPhase::Before(other),
+        EachPhase::After(each)
+    ));
 }
 
 #[test]
@@ -138,8 +152,9 @@ fn disjoint_sibling_changes_commute_in_the_logical_fixture() {
 fn overlapping_sibling_changes_conflict_independently_of_physical_order() {
     let first_access = Access::new(AccessKind::StateChange, region(1, &[0, 1]));
     let second_access = Access::new(AccessKind::StateChange, region(1, &[1, 2]));
-    let first_iteration = EachPhase::Iteration(IterationId(1));
-    let second_iteration = EachPhase::Iteration(IterationId(2));
+    let each = EachId::new(1);
+    let first_iteration = EachPhase::Iteration(IterationId::new(each, 1));
+    let second_iteration = EachPhase::Iteration(IterationId::new(each, 2));
 
     assert!(first_access.conflicts_with(&second_access));
     assert!(!each_orders(first_iteration, second_iteration));
