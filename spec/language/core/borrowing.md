@@ -1,10 +1,10 @@
 # Core Borrowing
 
-Status: **provisional normative; root borrowing and reborrowing defined**
+Status: **provisional normative; root borrowing, reborrowing, and interior-mutability interaction defined**
 
-This document owns the currently defined Core semantics for structural place overlap, shared/exclusive borrowing, reborrow delegation, borrow intervals, and access permission through active loans.
+This document owns the currently defined Core semantics for structural place overlap, shared/exclusive borrowing, reborrow delegation, borrow intervals, and alias authority through active loans.
 
-The storage existence, stored-value lifetime, initialization-state, ownership-transfer, assignment, destruction-domain, and cleanup rules that borrowing constrains are owned by [Core value and storage semantics](value-storage.md).
+The storage existence, stored-value lifetime, initialization-state, ownership-transfer, assignment-mutability, interior-mutability capability, destruction-domain, and cleanup rules that borrowing constrains are owned by [Core value and storage semantics](value-storage.md).
 
 ## Terms
 
@@ -24,13 +24,29 @@ Place overlap is symmetric. It depends only on semantic place structure and does
 
 ### Loan
 
-A loan is a semantic access permission over one concrete root place.
+A loan is a semantic alias-access permission over one concrete root place.
 
 A loan has a kind: **shared** or **exclusive**.
 
-Shared versus exclusive describes competing-access and consuming-access authority. It is not itself a declaration that the containing local is mutable for assignment.
+Shared versus exclusive describes competing-access authority. It does not itself declare the containing local mutable for ordinary assignment, and it does not itself make storage interior-mutable.
+
+The three concerns are independent:
+
+- **assignment mutability** controls ordinary `Assign` and is owned by the value/storage model;
+- **alias authority** is shared or exclusive and is owned by this borrowing model;
+- **interior mutability** is explicit type/storage capability and is owned by the value/storage model.
 
 A loan is not defined by this revision as a numeric address, pointer bit pattern, source-language reference value, allocation identity, or provenance token.
+
+### Alias authority
+
+**Shared authority** permits operations whose borrowing requirement is shared. In this revision those include `Read`, copyable `Copy`, shared reborrow creation, and `InteriorAssign` when the target independently lies within an interior-mutable region.
+
+**Exclusive authority** includes shared authority and additionally permits operations whose borrowing requirement is exclusive. In this revision those include `Move`, ordinary `Assign`, `Drop`, and exclusive reborrow creation, subject to each operation's independent value/storage preconditions.
+
+`Init` is also an exclusive-authority direct-storage operation.
+
+Interior mutation is deliberately not modeled as a third alias kind. A shared write to explicitly interior-mutable storage still uses shared alias authority plus a separate interior-mutability capability check.
 
 ### Borrow interval
 
@@ -40,7 +56,9 @@ Borrow interval, storage extent, and stored-value lifetime are distinct concepts
 
 Ending a borrow interval does not by itself end the target storage extent or the currently active stored-value lifetime.
 
-Conversely, an exclusive loan may remain active while an operation through that loan ends one stored-value lifetime and later begins another in the same storage extent when the ordinary assignment rule permits that replacement.
+Conversely, an exclusive loan may remain active while an exclusive operation through that loan ends one stored-value lifetime and later begins another in the same storage extent when the ordinary assignment rule permits that replacement.
+
+For interior-mutable storage, a shared loan may likewise remain active while legal `InteriorAssign` ends old stored-value lifetimes and begins replacement lifetimes in the same storage extent. Therefore a shared loan is not a promise that one stored-value lifetime remains unchanged for the entire interval.
 
 The current proving MIR gives a loan declaration a stable body-local `LoanId`. That declaration may be activated again after an earlier interval ends. Each activation is a distinct borrow interval and receives fresh dynamic root, kind, and parent state.
 
@@ -93,7 +111,9 @@ For `PlaceAccess::Direct(p)`:
 - multiple overlapping shared root loans are permitted;
 - an exclusive root borrow may begin only when no active loan of either kind overlaps `p`.
 
-Exclusive borrowing does not by itself require the containing local to be mutable. Assignment mutability remains a separate rule applied when `Assign` is attempted.
+Exclusive borrowing does not by itself require the containing local to be mutable. Assignment mutability remains a separate rule applied when ordinary `Assign` is attempted.
+
+Interior-mutability capability is also irrelevant to whether a root shared or exclusive loan may begin. It affects only the dedicated interior-replacement operation after alias authority has been established.
 
 ### Reborrow creation
 
@@ -101,10 +121,10 @@ For `PlaceAccess::Loan(parent, projections)`, the selected concrete child root i
 
 A shared child may be created from:
 
-- an active shared parent that currently retains read authority over the selected child root;
-- an active exclusive parent that currently retains read authority over the selected child root.
+- an active shared parent that currently retains shared authority over the selected child root;
+- an active exclusive parent that currently retains shared authority over the selected child root.
 
-An exclusive child may be created only from an active exclusive parent that currently retains consuming authority over the selected child root.
+An exclusive child may be created only from an active exclusive parent that currently retains exclusive authority over the selected child root.
 
 Therefore:
 
@@ -128,23 +148,27 @@ This is sufficient because a direct child continues to own its delegated root un
 
 If an active exclusive direct child of `P` overlaps `p`, access through `P` to `p` is suspended completely.
 
-`Read`, `Copy`, `Move`, `Assign`, `Drop`, and overlapping reborrow through `P` are invalid until that child interval ends.
+`Read`, `Copy`, `Move`, ordinary `Assign`, `InteriorAssign`, `Drop`, and overlapping reborrow through `P` are invalid until that child interval ends.
 
 ### Overlapping shared child
 
-If one or more active shared direct children of `P` overlap `p`, `P` retains only shared/non-consuming authority over that overlapping storage:
+If one or more active shared direct children of `P` overlap `p`, `P` retains shared authority over that overlapping storage:
 
 - `Read` is permitted;
 - `Copy` is permitted when the selected type is copyable;
-- `Move`, `Assign`, `Drop`, and exclusive reborrow are invalid.
+- shared reborrow is permitted when its ordinary preconditions hold;
+- `InteriorAssign` is permitted when the selected concrete target independently lies within an interior-mutable region;
+- `Move`, ordinary `Assign`, `Drop`, and exclusive reborrow are invalid.
 
 For an exclusive parent this is a temporary local downgrade from exclusive to shared authority. For a shared parent, an overlapping shared child does not further reduce the parent's already-shared authority.
+
+The availability of `InteriorAssign` here does not mean the shared child grants mutation permission. The child only leaves shared alias authority intact; the distinct interior-mutability capability is checked by the value/storage rules.
 
 ### Disjoint child
 
 A direct child whose concrete root is disjoint from `p` does not constrain access through `P` to `p`.
 
-An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field.
+An exclusive parent over an aggregate may therefore delegate one field to an exclusive child while retaining exclusive authority over a disjoint sibling field. It may also perform `InteriorAssign` on an interior-mutable disjoint sibling because exclusive authority includes shared authority.
 
 ## Direct access while loans are active
 
@@ -154,42 +178,70 @@ For a direct access target `p`:
 
 - `Read(p)` is permitted when no active exclusive loan overlaps `p`;
 - `Copy(p)` is permitted when no active exclusive loan overlaps `p` and the existing copyability rule permits the copy;
-- `Init(p, ...)`, `Move(p)`, `Assign(p, ...)`, and `Drop(p)` are permitted only when no active loan of either kind overlaps `p`, in addition to their existing value/storage preconditions.
+- `InteriorAssign(p, ...)` is permitted when no active exclusive loan overlaps `p` and `p` independently lies within an interior-mutable region;
+- `Init(p, ...)`, `Move(p)`, ordinary `Assign(p, ...)`, and `Drop(p)` are permitted only when no active loan of either kind overlaps `p`, in addition to their existing value/storage preconditions.
+
+Thus overlapping shared loans do not block direct interior replacement of explicitly interior-mutable storage, while an overlapping exclusive loan does.
 
 The direct-access rules apply structurally. Loan delegation never weakens these constraints.
 
 ## Access through a shared loan
 
-Subject to any authority delegated to its own active children, an active shared loan permits non-consuming access to its concrete root or structural sub-places:
+Subject to any authority delegated to its own active children, an active shared loan provides shared alias authority to its concrete root or structural sub-places.
 
-- `Read`;
-- `Copy`, when the selected type is copyable.
-
-A shared loan does not permit `Move`, `Assign`, or `Drop` in this revision.
-
-Shared-loan mutation exceptions are not implicit. Interior mutability is a separate semantic owner and is not defined by this revision.
-
-## Access through an exclusive loan
-
-Subject to any authority delegated to its own active children, an active exclusive loan permits access to its concrete root or structural sub-places using:
+It permits:
 
 - `Read`;
 - `Copy`, when the selected type is copyable;
+- shared reborrow creation;
+- `InteriorAssign`, only when the resolved concrete target lies within an interior-mutable region under the value/storage rules.
+
+A shared loan does not permit `Move`, ordinary `Assign`, `Drop`, or exclusive reborrow in this revision.
+
+Interior assignment therefore does not upgrade a shared loan to exclusive authority. It is one operation whose alias requirement is shared and whose independent storage capability is explicit interior mutability.
+
+## Access through an exclusive loan
+
+Subject to any authority delegated to its own active children, an active exclusive loan provides exclusive alias authority to its concrete root or structural sub-places.
+
+It permits access using:
+
+- `Read`;
+- `Copy`, when the selected type is copyable;
+- shared or exclusive reborrow according to the ordinary child rules;
 - `Move`;
-- `Assign`, when the existing assignment rule permits assignment to the containing local;
+- ordinary `Assign`, when the existing containing-local assignment-mutability rule permits assignment;
+- `InteriorAssign`, when the selected concrete target independently lies within an interior-mutable region;
 - `Drop`.
 
-The ordinary initialization-state, type, assignment-mutability, and destruction-domain rules still apply to the selected concrete place. Exclusive access does not weaken those independent rules.
+The ordinary initialization-state, type, assignment-mutability, interior-mutability, and destruction-domain rules still apply to the selected concrete place. Exclusive access does not weaken those independent rules.
 
-In particular, an exclusive loan over an immutable local may authorize reading, copying, moving, dropping, and exclusive reborrowing according to their ordinary rules, but it does not make assignment to that local legal.
+In particular, an exclusive loan over an immutable local may authorize reading, copying, moving, dropping, and exclusive reborrowing according to their ordinary rules, but it does not make ordinary assignment to that local legal. Likewise, exclusive authority alone does not make an unmarked target eligible for `InteriorAssign`.
 
 An exclusive loan controls access to storage rather than to one immutable stored-value identity. Therefore:
 
 1. `Move` or `Drop` through an exclusive root or child loan may end the selected stored-value lifetime and leave that storage Dead;
 2. the exclusive borrow interval may remain active because the underlying storage extent still exists;
-3. when the containing local is mutable, a later legal `Assign` through the same active exclusive loan may begin a new stored-value lifetime in that storage.
+3. when the containing local is mutable, a later legal ordinary `Assign` through the same active exclusive loan may begin a new stored-value lifetime in that storage;
+4. independently, when the target lies within an interior-mutable region, legal `InteriorAssign` may begin a replacement stored-value lifetime without relying on the containing local's assignment-mutability flag.
 
-This distinction follows the separation between storage extent, stored-value lifetime, borrow interval, access exclusivity, and assignment mutability.
+This distinction follows the separation between storage extent, stored-value lifetime, borrow interval, alias authority, assignment mutability, and interior-mutability capability.
+
+## Interior mutation under shared aliases
+
+Interior mutability is the only defined shared-write exception in the current Core proving model, and it is explicit rather than implicit.
+
+For `InteriorAssign(dst, src)`:
+
+1. the borrowing model first requires shared authority for `dst` and resolves it to one concrete place;
+2. the value/storage model independently requires that concrete place to lie within an interior-mutable region;
+3. source evaluation and replacement follow the value/storage model's source-first lifecycle.
+
+Multiple overlapping shared root loans may therefore remain active over the same marked storage while sequential `InteriorAssign` operations occur in the current single-threaded deterministic Core machine. Those loans continue to govern the same structural storage region; they do not identify one immutable stored-value lifetime.
+
+This rule does not define concurrency safety. Data races, synchronization, atomics, memory ordering, and multi-agent execution belong to P0-B and are not inferred from the single-threaded Core rule.
+
+This rule also does not define a source-language reference representation. A future source reference system may lower to or refine these semantic loans, but it cannot infer pointer identity, provenance, or a value-stability guarantee from this proving-MIR model.
 
 ## Borrow end and termination
 
@@ -211,7 +263,9 @@ For the current deterministic Core MIR, the complete active-loan forest state pa
 
 The repeated-state key therefore includes each active loan's kind, concrete root, and current parent relation in addition to storage state and control-flow position.
 
-Borrow creation, reborrow delegation, access permission, and explicit borrow end are determined solely from typed places, active loans, structural parentage, and structural overlap. They do not depend on host references, backend alias analysis, physical scheduling, addresses, allocation identity, or container iteration order.
+Interior mutability adds no hidden loan or borrow-guard state. A legal `InteriorAssign` changes only the ordinary storage state already represented by the value/storage model.
+
+Borrow creation, reborrow delegation, access permission, interior-assignment alias authorization, and explicit borrow end are determined solely from typed places, active loans, structural parentage, and structural overlap. They do not depend on host references, backend alias analysis, physical scheduling, addresses, allocation identity, or container iteration order.
 
 ## Separate semantic owners
 
@@ -220,12 +274,14 @@ This revision does not define:
 - lifetime parameters, source-level lifetime syntax, lifetime elision, or source borrow inference;
 - first-class reference values, stored references, or their representation/equality;
 - borrowing transient operand values that do not already inhabit a place;
-- interior mutability or shared-write exceptions;
+- source syntax or library APIs for declaring/exposing interior-mutable types;
+- runtime borrow guards such as `RefCell`-style dynamic borrowing;
 - raw pointers, pointer arithmetic, provenance, integer-address conversion, or exposed addresses;
 - relocation or pinning/address stability;
 - heap allocation/deallocation;
 - value validity, invalid bit patterns, or undefined-behavior closure;
+- source `unsafe` constructs or safe-abstraction proof rules;
 - custom destructor bodies;
-- atomics or Exec memory/concurrency semantics.
+- atomics, data races, synchronization, or Exec memory/concurrency semantics.
 
-Illustrative source spellings such as `&T` or `&mut T` do not freeze grammar. Future source references may lower to or refine the semantic loan model, but source representation is not defined here.
+Illustrative source spellings such as `&T`, `&mut T`, or an interior-cell type do not freeze grammar. Future source references and library abstractions may lower to or refine the semantic loan and interior-mutability models, but source representation is not defined here.
