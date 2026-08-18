@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document defines structural place overlap, shared/exclusive borrowing, reborrow delegation, borrow intervals, and alias authority through active loans.
 
-Storage extent, storage-instance identity, stored-value lifetime, initialization state, assignment mutability, interior mutability, destruction, and cleanup are defined by [Core value and storage semantics](value-storage.md). Raw-pointer values and provenance are defined by [Core pointers and provenance](pointers.md).
+Storage extent, storage-instance identity, stored-value lifetime, initialization state, assignment mutability, interior mutability, destruction, and cleanup are defined by [Core value and storage semantics](value-storage.md). Raw-pointer values, provenance, and raw-pointer target-read semantics are defined by [Core pointers and provenance](pointers.md).
 
 ## Terms
 
@@ -48,6 +48,8 @@ A loan is not a numeric address, pointer bit pattern, source-language reference 
 
 Interior mutation is not a third alias kind. A shared write to explicitly interior-mutable storage uses shared alias authority plus a separate interior-mutability capability check.
 
+A raw pointer does not itself carry either alias authority kind. The `RawRead` operation defined by [Core pointers and provenance](pointers.md) instead has a **shared target-access compatibility requirement** against the currently active loan forest: overlapping shared loans are compatible with the target read, while any overlapping exclusive loan makes that unsafe access precondition fail.
+
 ### Borrow interval
 
 A borrow interval is the interval of execution during which one loan activation is active.
@@ -69,6 +71,8 @@ A Core operation may reach storage either directly through a place or through an
 Loan-relative projection does not create a new loan. It selects a sub-place governed by the existing loan.
 
 `PlaceAccess` is proving-MIR access authority. It is not a stored reference value, raw-pointer value, address, dynamic storage-instance identity, or provenance identity.
+
+`RawRead` does not turn a raw pointer target into `PlaceAccess`. Its pointer operand is reached through a `PlaceAccess`, while the raw target is resolved from the pointer value's symbolic target and checked separately against the active loan forest.
 
 ### Loan forest
 
@@ -247,7 +251,22 @@ This rule also does not define a source-language reference representation. A fut
 
 The resulting raw pointer does not contain the `LoanId`, borrow interval, shared/exclusive loan kind, or delegation state used to authorize formation. Forming a pointer does not end, shorten, or extend the source loan, and ending or later reactivating that loan does not alter the already formed pointer.
 
-These rules authorize pointer formation only. They do not authorize dereference, load, store, arithmetic, or any other memory access through the resulting raw pointer.
+Formation authority does not grant later target access through the resulting pointer.
+
+## Raw-pointer target-read compatibility
+
+The `RawRead` operation is defined by [Core pointers and provenance](pointers.md). This document owns only its interaction with currently active loans.
+
+A raw pointer does not carry a `LoanId` or stored shared/exclusive permission. After `RawRead` resolves its symbolic target to one concrete structural place `p`, its unsafe target access has a shared compatibility requirement against the active loan forest:
+
+- the read is compatible when no active exclusive loan overlaps `p`;
+- overlapping shared loans do not by themselves block the read;
+- any overlapping exclusive loan, whether root or child, makes the raw target-access precondition fail;
+- disjoint active loans do not constrain the read.
+
+This check is against every active concrete loan rather than against one source loan from pointer formation. Ending the loan that authorized `AddressOf` therefore neither grants nor revokes later raw access by itself; only the loan state active at the `RawRead` step matters.
+
+Violation of this compatibility requirement is classified by [Core unsafe semantics](unsafe.md), not as a new borrow-validation diagnostic.
 
 ## Borrow end and termination
 
@@ -273,12 +292,12 @@ Interior mutability adds no hidden loan or borrow-guard state. A legal `Interior
 
 Raw-pointer formation likewise adds no hidden borrow state. The formed pointer is ordinary runtime value state after formation.
 
-Borrow creation, reborrow delegation, access permission, address-formation alias authorization, interior-assignment alias authorization, and explicit borrow end are determined solely from typed places, active loans, structural parentage, and structural overlap. They do not depend on host references, backend alias analysis, physical scheduling, physical addresses, pointer provenance, or container iteration order.
+Borrow creation, reborrow delegation, ordinary place-access permission, address-formation alias authorization, interior-assignment alias authorization, raw target-read compatibility, and explicit borrow end are determined from typed places, active loans, structural parentage, and structural overlap. They do not depend on host references, backend alias analysis, physical scheduling, physical addresses, or container iteration order. Raw target selection itself remains owned by the pointer semantics.
 
 ## Separate semantic owners
 
-This revision does not define lifetime parameters or source borrow inference, first-class reference values, borrowing transient operand values, source syntax or library APIs for interior mutability, runtime borrow guards, raw-pointer memory access or arithmetic, numeric-address conversion, complete provenance semantics, relocation or pinning, heap allocation/deallocation, value validity, undefined behavior, source `unsafe`, custom destructor bodies, or concurrency/memory-ordering semantics.
+This revision does not define lifetime parameters or source borrow inference, first-class reference values, borrowing transient operand values, source syntax or library APIs for interior mutability, runtime borrow guards, raw-pointer target selection or target-liveness requirements, raw-pointer stores or arithmetic, numeric-address conversion, complete provenance semantics, relocation or pinning, heap allocation/deallocation, value-validity rules, the complete undefined-behavior taxonomy, source `unsafe`, custom destructor bodies, or concurrency/memory-ordering semantics.
 
-Raw-pointer formation and provenance are defined by [Core pointers and provenance](pointers.md); this document defines only the alias authority required to select storage for that formation.
+Raw-pointer formation, target selection, provenance, and `RawRead` semantics are defined by [Core pointers and provenance](pointers.md); this document defines only the alias-authority rules for formation and active-loan compatibility for the raw target read. Unsafe classification and UB are owned by [Core unsafe semantics](unsafe.md).
 
 Illustrative source spellings such as `&T`, `&mut T`, or an interior-cell type do not freeze grammar. Future source references and library abstractions may lower to or refine the semantic loan and interior-mutability models, but source representation is not defined here.
