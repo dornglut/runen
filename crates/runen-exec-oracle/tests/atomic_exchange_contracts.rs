@@ -1,8 +1,8 @@
 use runen_exec_oracle::{
     Access, AccessKind, AtomicExchange, AtomicExchangeError, AtomicExchangeFixture,
     AtomicExchangeId, AtomicExchangeScope, AtomicExchangeSemantics, AtomicLocationId,
-    AtomicValueToken, BufferId, BufferRegion, EachId, EachPhase, IterationId, PositionId,
-    each_orders,
+    AtomicScopeRelation, AtomicValueToken, BufferId, BufferRegion, EachId, EachPhase, IterationId,
+    PositionId, each_orders,
 };
 
 fn location(token: u32) -> AtomicLocationId {
@@ -325,6 +325,10 @@ fn direct_release_predecessor_synchronizes_with_acquire() {
     .unwrap();
 
     let release_then_acquire = fixture.realize(&[release, acquire], &[]).unwrap();
+    assert_eq!(
+        release_then_acquire.synchronization_scope_relation(release, acquire),
+        Some(AtomicScopeRelation::Compatible)
+    );
     assert!(release_then_acquire.release_acquire_synchronizes(release, acquire));
 
     let acquire_then_release = fixture.realize(&[acquire, release], &[]).unwrap();
@@ -348,6 +352,10 @@ fn same_root_release_predecessor_synchronizes_with_acquire() {
     .unwrap();
     let realization = fixture.realize(&[release, acquire], &[]).unwrap();
 
+    assert_eq!(
+        realization.synchronization_scope_relation(release, acquire),
+        Some(AtomicScopeRelation::Compatible)
+    );
     assert!(realization.release_acquire_synchronizes(release, acquire));
 }
 
@@ -384,7 +392,7 @@ fn same_root_acquire_release_combinations_use_existing_capability_rules() {
 }
 
 #[test]
-fn distinct_root_scopes_do_not_synchronize_but_share_modification_order() {
+fn distinct_root_scopes_are_incompatible_but_share_modification_order() {
     let local = location(1);
     let first_each = EachId::new(7);
     let second_each = EachId::new(8);
@@ -422,11 +430,15 @@ fn distinct_root_scopes_do_not_synchronize_but_share_modification_order() {
         Some(AtomicValueToken::new(20))
     );
     assert_eq!(realization.final_value(), AtomicValueToken::new(30));
+    assert_eq!(
+        realization.synchronization_scope_relation(release, acquire),
+        Some(AtomicScopeRelation::Incompatible)
+    );
     assert!(!realization.release_acquire_synchronizes(release, acquire));
 }
 
 #[test]
-fn mixed_unscoped_and_root_scoped_exchanges_do_not_synchronize() {
+fn mixed_unscoped_and_root_scoped_scope_interaction_remains_open() {
     let local = location(1);
     let each = EachId::new(7);
     let first = exchange_id(local, 1);
@@ -443,6 +455,10 @@ fn mixed_unscoped_and_root_scoped_exchanges_do_not_synchronize() {
     .unwrap()
     .realize(&[first, second], &[])
     .unwrap();
+    assert_eq!(
+        unscoped_release.synchronization_scope_relation(first, second),
+        Some(AtomicScopeRelation::Open)
+    );
     assert!(!unscoped_release.release_acquire_synchronizes(first, second));
 
     let root_release = AtomicExchangeFixture::new(
@@ -456,6 +472,10 @@ fn mixed_unscoped_and_root_scoped_exchanges_do_not_synchronize() {
     .unwrap()
     .realize(&[first, second], &[])
     .unwrap();
+    assert_eq!(
+        root_release.synchronization_scope_relation(first, second),
+        Some(AtomicScopeRelation::Open)
+    );
     assert!(!root_release.release_acquire_synchronizes(first, second));
 }
 
@@ -637,6 +657,10 @@ fn release_acquire_synchronization_is_location_scoped() {
 
     assert!(realization.release_acquire_synchronizes(release, acquire));
     assert!(!realization.release_acquire_synchronizes(release, foreign_acquire));
+    assert_eq!(
+        realization.synchronization_scope_relation(release, foreign_acquire),
+        None
+    );
 }
 
 #[test]
@@ -672,6 +696,10 @@ fn root_scoped_synchronization_still_requires_same_atomic_location() {
 
     assert!(realization.release_acquire_synchronizes(release, acquire));
     assert!(!realization.release_acquire_synchronizes(release, foreign_acquire));
+    assert_eq!(
+        realization.synchronization_scope_relation(release, foreign_acquire),
+        None
+    );
 }
 
 #[test]
