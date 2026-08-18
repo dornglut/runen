@@ -37,9 +37,9 @@ This is a language/profile semantic legality rule. It is not environment admissi
 
 ## Structured barrier synchronization
 
-The full-`each` structured barrier defined by [Exec parallelism](parallelism.md) is an explicit synchronization mechanism.
+The full-`each` structured barrier defined by [Exec parallelism](parallelism.md) is an explicit synchronization mechanism for ordinary accesses.
 
-For one normally completed structured barrier instance, every semantic action in every required iteration's before-barrier phase is ordered before every semantic action in every required iteration's after-barrier phase.
+The phase relation owned by that construct induces this memory-model ordering for one normally completed barrier instance: every ordinary non-atomic access in every required iteration's before-barrier phase is ordered before every ordinary non-atomic access in every required iteration's after-barrier phase.
 
 This relationship is semantic. It does not derive from physical arrival order, release order, worker scheduling, cache operations, or backend queue behavior.
 
@@ -47,9 +47,9 @@ The barrier does not change the ordinary conflict relation. Two overlapping ordi
 
 Conflicting ordinary accesses performed by sibling iterations within the same before-barrier phase or within the same after-barrier phase remain source-unordered unless another semantic contract orders them.
 
-A different barrier identity supplies no ordering by identity alone. Ordering between actions around distinct barriers must arise from their placement or another applicable semantic relationship in the enclosing execution.
+A different barrier identity supplies no memory order by identity alone. Ordering between ordinary accesses around distinct barriers must arise from their placement or another applicable semantic relationship in the enclosing execution.
 
-Buffer logical coherence consumes this barrier-established order through its own canonical contract; this document does not redefine Buffer state or visibility.
+Buffer logical coherence consumes this barrier-established access order through its own canonical contract; this document does not redefine Buffer state or visibility.
 
 No host, hardware, or backend memory model is normative by default.
 
