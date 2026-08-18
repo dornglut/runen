@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns Exec access-conflict, data-race, memory-ordering, and synchronization relations. Resource-specific identity, region, and state semantics remain owned by the resource that is being accessed.
+This document owns Exec access-conflict, data-race, memory-ordering, and synchronization relations. Resource-specific identity, region, and state semantics remain owned by the semantic owner of the storage or resource being accessed.
 
 ## Ordinary non-atomic access
 
@@ -17,6 +17,8 @@ For the conflict relation, an ordinary access is either:
 
 Two ordinary non-atomic accesses **conflict** exactly when their semantic regions overlap and at least one of the accesses is state-changing.
 
+This conflict relation does not erase additional effect, ordering, authority, validity, or resource rules owned elsewhere. An access that does not conflict under this relation is legal only when every other applicable semantic contract also permits it.
+
 For Core-origin storage crossing into Exec, Core remains the owner of storage extent, stored-value state, structural region facts, place overlap, and alias authority. In particular, Core interior mutability under shared aliases is not by itself an Exec synchronization mechanism or permission for conflicting unordered execution.
 
 ## Unordered ordinary access
@@ -25,11 +27,11 @@ Access legality is determined by semantic ordering and interaction contracts, no
 
 For source-unordered work with no separately defined synchronization or interaction mechanism:
 
-- accesses to disjoint semantic regions are mutually legal;
-- overlapping non-state-changing reads are mutually legal;
+- accesses to disjoint semantic regions do not conflict under the ordinary-access relation;
+- overlapping non-state-changing reads do not conflict under the ordinary-access relation;
 - a conflicting pair of ordinary non-atomic accesses is not a legal safe interaction.
 
-Therefore a realization that happens to serialize source-unordered conflicting accesses does not make them legal, and physically parallel execution does not make an otherwise legal shared-read or disjoint-access interaction illegal.
+Therefore a realization that happens to serialize source-unordered conflicting accesses does not make them legal, and physically parallel execution does not by itself make an otherwise permitted non-conflicting interaction illegal.
 
 This is a language/profile semantic legality rule. It is not environment admission and is not an optimization preference. The source-language or compiler mechanism by which a program establishes the required interaction contract is not defined by this revision.
 
