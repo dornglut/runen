@@ -1,30 +1,32 @@
 # Core Value and Storage Semantics
 
-Status: **provisional normative; interior replacement defined**
+Status: **provisional normative; interior replacement and dynamic local storage identity defined**
 
-This document owns the currently defined Core semantics for values, local storage places, storage extent, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, assignment, destruction domains, and cleanup.
+This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, assignment, destruction domains, and cleanup.
 
-The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md).
+The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md).
 
 ## Terms
 
 ### Type
 
-A semantic classification for values and places. This revision defines scalar types and closed structural aggregate types for the operations below.
+A semantic classification for values and places. This revision defines scalar or leaf types and closed structural aggregate types for the operations below.
 
 A type may carry an **interior-mutable** semantic marker. The marker belongs to the proving-kernel type model; this revision does not define source syntax for declaring such a type.
 
 ### Local
 
-A typed storage root belonging to one function body. A local is immutable or mutable for ordinary assignment purposes.
+A typed storage declaration belonging to one function body. A local is immutable or mutable for ordinary assignment purposes.
+
+`LocalId` is a stable identifier for that MIR declaration within one body. It is not the dynamic identity of one execution's storage extent.
 
 The local's assignment-mutability flag does not determine alias exclusivity and does not determine whether storage inside the local is interior-mutable.
 
 ### Place
 
-A storage location denoted by a local plus zero or more structural field projections.
+A static proving-MIR storage designation consisting of a local declaration plus zero or more structural field projections.
 
-A place denotes storage; it is not itself a value.
+A place denotes which structural storage is selected within the current execution's corresponding local storage instance; it is not itself a value, dynamic storage-instance identity, pointer, address, or provenance token.
 
 ### Sub-place
 
@@ -32,7 +34,7 @@ A place reached by projecting a field from an aggregate place.
 
 ### Value
 
-An initialized semantic datum whose structure is compatible with the type required by its use. The currently defined value representation does not carry independent nominal type identity.
+An initialized semantic datum whose structure is compatible with the type required by its use. The currently defined constant-value representation does not carry independent nominal type identity or dynamic raw-pointer provenance.
 
 ### Assignment mutability
 
@@ -64,7 +66,7 @@ Interior mutability is storage/type capability, not alias authority. It does not
 
 The storage extent of a place is the interval of execution during which that storage exists and may potentially hold a value.
 
-For the Core MIR defined by this revision, every local storage root exists from function-body entry through that local's termination cleanup. Structural sub-place storage exists within the storage extent of its containing local.
+For the Core MIR defined by this revision, every dynamic local storage root exists from function-body entry through that local's termination cleanup. Structural sub-place storage exists within the storage extent of its containing local.
 
 Storage extent is independent of initialization state. Never-initialized, Live, and Dead storage all continue to exist until their storage extent ends.
 
@@ -72,21 +74,45 @@ Ending, moving, destroying, or replacing a stored value does not by itself end t
 
 Storage extent does not imply a physical address, allocation identity, relocation rule, or pointer provenance.
 
+### Dynamic storage-instance identity
+
+Every dynamic local storage extent has one semantic **storage-instance identity** for the complete duration of that extent.
+
+Distinct simultaneously existing local storage extents have distinct storage-instance identities.
+
+For the current one-body proving machine, one dynamic local storage instance is created for each local declaration when execution begins. The static `LocalId` identifies the declaration; the dynamic storage-instance identity identifies that execution's storage extent. They are different semantic concepts even when a reference implementation allocates deterministic verification tokens in local-declaration order.
+
+The storage-instance identity remains stable while the storage extent continues. In particular, none of the following creates a new storage instance:
+
+- first initialization;
+- moving a stored value out;
+- explicit destruction;
+- ordinary assignment or reinitialization;
+- interior assignment or reinitialization.
+
+Those operations affect stored-value lifetimes and initialization state, not storage-instance identity.
+
+The current reference oracle may represent storage-instance identity using an opaque deterministic integer so tests can distinguish and compare instances. That numeric representation is verification-only. It is not Runen-observable, not a physical address, not an ABI promise, and not permission to access storage.
+
+When a local's storage extent ends after cleanup, that dynamic storage instance ends. This revision does not define identity reuse by later call activations, allocations, or other future storage owners; their owning semantics must create distinct dynamic identities rather than treating `LocalId` as globally unique storage identity.
+
+A static place resolved during execution therefore denotes a **structural storage region** within the current dynamic local storage instance: the root storage-instance identity plus the place's structural projection path. The projection path is structural semantics, not a byte offset or layout guarantee.
+
 ### Stored-value lifetime
 
 A stored-value lifetime is the interval during which one scalar storage leaf is Live with one stored semantic value.
 
 A stored-value lifetime begins when a semantic write to that scalar leaf completes and changes it to Live.
 
-A stored-value lifetime ends when the stored value is consumed by move, destroyed, or destroyed as part of replacement. A later write into the same storage begins a new stored-value lifetime without creating a new storage extent.
+A stored-value lifetime ends when the stored value is consumed by move, destroyed, or destroyed as part of replacement. A later write into the same storage begins a new stored-value lifetime without creating a new storage extent or storage-instance identity.
 
 `Read` and `Copy` do not end the source stored-value lifetime.
 
-Both ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent.
+Both ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
 
 The current revision defines stored-value lifetime at scalar storage leaves. Aggregate initialization and liveness are derived recursively from the states of those leaves; an aggregate does not acquire a separate hidden lifetime identity.
 
-Transient values produced while evaluating constants, moves, or copies are semantic values. This revision does not give such transient operand results independently addressable storage or a separately specified storage extent.
+Transient values produced while evaluating constants, moves, copies, or pointer formation are semantic values. This revision does not give ordinary transient operand results independently addressable storage or a separately specified storage extent.
 
 ### Live
 
@@ -124,7 +150,7 @@ An aggregate may be partially initialized when only a strict subset of its leave
 
 A move from one field affects only that field. A partially initialized aggregate cannot be read, moved, or copied as a whole until every required leaf is Live again.
 
-Partial initialization does not change storage extent. It changes only which scalar leaves currently have stored-value lifetimes.
+Partial initialization does not change storage extent or storage-instance identity. It changes only which scalar leaves currently have stored-value lifetimes.
 
 ## First initialization
 
@@ -140,11 +166,13 @@ Each scalar leaf written by a successful `Init` begins its first stored-value li
 
 `Init` remains an exclusive-access operation under the borrowing rules. Interior mutability does not weaken first-initialization access requirements.
 
+First initialization does not create the local's storage-instance identity; that identity already exists for the storage extent before initialization occurs.
+
 ## Read
 
 `Read(src)` requires `src` to be fully initialized.
 
-`Read` does not transfer ownership, change initialization state, or end any stored-value lifetime.
+`Read` does not transfer ownership, change initialization state, end any stored-value lifetime, or change storage-instance identity.
 
 Reading a partially initialized or Dead place is invalid in safe Core.
 
@@ -162,6 +190,8 @@ Moving a sub-place affects only that sub-place. Disjoint initialized sibling pla
 
 The semantic value produced by the move may subsequently be written into another place; such a write begins stored-value lifetimes at the destination rather than extending the ended source storage lifetimes.
 
+Move does not end the source storage extent or change its storage-instance identity.
+
 Interior mutability does not make `Move` a shared-authority operation. The borrowing rules continue to require exclusive alias authority for ownership transfer.
 
 ## Copy
@@ -172,7 +202,7 @@ It produces an equal owned value while leaving `src` Live. The source stored-val
 
 When the produced copy is written into destination storage, that write begins distinct stored-value lifetimes at the destination leaves.
 
-For the structural types defined by this revision, an aggregate is copyable exactly when all of its fields are copyable.
+For the structural types defined by this revision, an aggregate is copyable exactly when all of its fields are copyable. Raw-pointer leaf types are copyable; their pointer-specific target/provenance preservation is owned by [Core pointers and provenance](pointers.md).
 
 The general language mechanism that determines copyability is not defined by this revision.
 
@@ -200,7 +230,7 @@ Never-initialized and Dead subobjects have nothing to destroy before the write.
 
 The source value MUST structurally match the type of `dst`.
 
-Assignment changes stored-value lifetimes but does not by itself end the destination storage extent.
+Assignment changes stored-value lifetimes but does not by itself end the destination storage extent or change its storage-instance identity.
 
 ## Interior assignment
 
@@ -234,7 +264,7 @@ Interior assignment does not grant any other operation a weaker access requireme
 
 An exclusive loan may perform `InteriorAssign` only because exclusive authority includes shared authority; the interior-mutability marker remains independently required.
 
-A shared loan may remain active across a legal interior replacement. The loan governs access to a structural storage region, while the replacement ends old stored-value lifetimes and begins new stored-value lifetimes within that continuing storage extent. Borrowing owns the detailed access and delegation rules.
+A shared loan may remain active across a legal interior replacement. The loan governs access to a structural storage region, while the replacement ends old stored-value lifetimes and begins new stored-value lifetimes within that continuing storage extent and storage instance. Borrowing owns the detailed access and delegation rules.
 
 This revision does not define a `RefCell`-style runtime borrow guard, synchronization, atomics, or a source-level interior-mutability API.
 
@@ -250,6 +280,8 @@ Destroying an aggregate destroys exactly its destruction domain. The recursive d
 
 A moved or already-destroyed subobject MUST NOT be destroyed a second time.
 
+Destruction does not by itself end the containing storage extent or change its storage-instance identity.
+
 Interior mutability does not weaken the exclusive alias authority required by explicit `Drop`.
 
 The current revision has no custom destructor body. A later custom-destructor specification may refine actions that occur during destruction, but it must preserve the selected destruction domain and ordering unless the canonical owner of those rules explicitly changes them.
@@ -260,7 +292,7 @@ On both defined `Return` and defined `Fault`, function locals are cleaned in rev
 
 When a local is reached for cleanup, its then-current destruction domain is computed and destroyed. Partial initialization is therefore respected and Never-initialized, Dead, moved, or already-destroyed leaves are skipped.
 
-A local's storage extent continues through its cleanup and ends after that cleanup completes. Structural sub-place storage ends with the containing local.
+A local's storage extent and storage-instance identity continue through its cleanup and end after that cleanup completes. Structural sub-place storage ends with the containing local storage instance.
 
 Defined `Fault` uses the same stored-value lifetime and destruction-domain rules as defined `Return`. `Fault` is a defined terminal state, not undefined behavior.
 
@@ -268,7 +300,9 @@ For a cyclic execution that diverges, no termination cleanup occurs merely becau
 
 ## Determinism
 
-For a fixed typed body using only the semantics defined here, state transitions, stored-value lifetime transitions, interior-mutability capability, destruction domains, and destruction order are deterministic.
+For a fixed typed body using only the semantics defined here, state transitions, dynamic local storage-instance creation, stored-value lifetime transitions, interior-mutability capability, destruction domains, and destruction order are deterministic.
+
+The actual verification token chosen to represent a storage-instance identity is not program-observable. Semantics depend on instance distinction and stability, not on a particular integer assignment.
 
 The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state and no new path-state component beyond the storage transitions it already performs.
 
@@ -278,8 +312,10 @@ There is no implicit execution-step budget. Cyclic control flow may diverge.
 
 ## Separate semantic owners
 
-This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw pointers, provenance, pinning, atomics or concurrency, custom destructor bodies, panic catching, asynchronous cancellation, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, pinning, atomics or concurrency, custom destructor bodies, panic catching, asynchronous cancellation, ABI/layout guarantees, or source grammar.
 
-This revision defines only proving-kernel interior-mutability capability and replacement semantics. It does not define source spelling, library abstractions, dynamic borrow guards, synchronization mechanisms, or which future public types expose that capability.
+Raw-pointer type/value formation and provenance derived from the storage-instance identity defined here are owned by [Core pointers and provenance](pointers.md). That pointer specification does not change the storage extent or stored-value lifetime rules in this document.
 
-Where this revision defines lifetime facts that later borrowing, pointer, validity, or concurrency concerns may depend on, their canonical owners govern the additional policy. In particular, no pointer identity, provenance, address stability, data-race rule, or first-class reference guarantee is implied by a shared loan remaining active across an interior replacement.
+This revision defines only proving-kernel interior-mutability capability and replacement semantics; it does not define source spelling, library abstractions, dynamic borrow guards, synchronization mechanisms, or which future public types expose that capability.
+
+Where this revision defines storage or lifetime facts that later borrowing, pointer access, validity, or concurrency concerns may depend on, their canonical owners govern the additional policy. In particular, a shared loan remaining active across an interior replacement implies stable structural storage identity for that continuing extent, but does not imply physical address stability, legal raw-pointer dereference, data-race freedom, or a first-class reference guarantee.

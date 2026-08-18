@@ -16,9 +16,29 @@ pub use validation::{
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypeId(pub u32);
 
-/// Stable-in-one-body identifier for a local storage slot.
+/// Stable-in-one-body identifier for a local storage declaration.
+///
+/// A `LocalId` identifies MIR syntax. It is not the dynamic identity of one
+/// execution's local storage extent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LocalId(pub u32);
+
+/// Execution-scoped semantic identity for one dynamic root storage extent.
+///
+/// The numeric field is an oracle/proving representation only. Runen programs do
+/// not observe this number, and future storage owners need not derive it from a
+/// `LocalId` or any physical address.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StorageInstanceId(pub u64);
+
+/// One structural region inside a dynamic root storage instance.
+///
+/// The projection path is semantic structure, not a byte offset or ABI layout.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct StorageRegion {
+    pub instance: StorageInstanceId,
+    pub projections: Vec<Projection>,
+}
 
 /// Stable-in-one-body identifier for a semantic loan declaration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -28,11 +48,16 @@ pub struct LoanId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BasicBlockId(pub u32);
 
-/// Scalar kinds represented by the Core proving kernel.
+/// Scalar or leaf kinds represented by the Core proving kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarType {
     Bool,
     I64,
+    /// Capability-neutral raw pointer to a pointee type.
+    ///
+    /// Raw-pointer access is not defined by the current Core slice. The pointee
+    /// edge is semantic indirection rather than structural containment.
+    RawPointer(TypeId),
     /// Verification-only non-copy scalar used to make destruction observable to tests.
     /// This is not a Runen language scalar primitive.
     TrackedFixture,
@@ -76,6 +101,11 @@ impl TypeDef {
             kind: TypeKind::Scalar(scalar),
             interior_mutable: false,
         }
+    }
+
+    #[must_use]
+    pub fn raw_pointer(name: impl Into<String>, pointee: TypeId) -> Self {
+        Self::scalar(name, ScalarType::RawPointer(pointee))
     }
 
     #[must_use]
@@ -136,11 +166,21 @@ impl TypeTable {
         self.defs.is_empty()
     }
 
+    #[must_use]
+    pub fn raw_pointer_pointee(&self, ty: TypeId) -> Option<TypeId> {
+        match &self.get(ty)?.kind {
+            TypeKind::Scalar(ScalarType::RawPointer(pointee)) => Some(*pointee),
+            TypeKind::Scalar(_) | TypeKind::Struct(_) => None,
+        }
+    }
+
     /// Copyability in the represented Core subset is structural and compiler-known.
     #[must_use]
     pub fn is_copy(&self, ty: TypeId) -> bool {
         match self.get(ty).map(|def| &def.kind) {
-            Some(TypeKind::Scalar(ScalarType::Bool | ScalarType::I64)) => true,
+            Some(TypeKind::Scalar(
+                ScalarType::Bool | ScalarType::I64 | ScalarType::RawPointer(_),
+            )) => true,
             Some(TypeKind::Scalar(ScalarType::TrackedFixture)) | None => false,
             Some(TypeKind::Struct(fields)) => fields.iter().all(|field| self.is_copy(field.ty)),
         }
@@ -163,7 +203,11 @@ impl TypeTable {
         Some(current)
     }
 
-    /// Checks whether a semantic value has the declared structural type.
+    /// Checks whether a MIR constant has the declared structural type.
+    ///
+    /// Non-null raw pointers are intentionally absent from [`Value`] and therefore
+    /// cannot be fabricated as constants. They are runtime semantic values produced
+    /// only by [`Operand::AddressOf`] in the current slice.
     #[must_use]
     pub fn value_matches(&self, ty: TypeId, value: &Value) -> bool {
         let Some(def) = self.get(ty) else {
@@ -181,12 +225,16 @@ impl TypeTable {
                         .zip(values)
                         .all(|(field, value)| self.value_matches(field.ty, value))
             }
+            (TypeKind::Scalar(ScalarType::RawPointer(_)), _) => false,
             _ => false,
         }
     }
 }
 
-/// Value representation used by Core proving MIR and its verification fixtures.
+/// Constant value representation used by Core proving MIR and verification fixtures.
+///
+/// Dynamic raw-pointer values are deliberately not represented here because their
+/// storage-instance provenance exists only during execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Bool(bool),
@@ -203,7 +251,10 @@ pub enum Projection {
     Field(u32),
 }
 
-/// A typed MIR place: one local storage slot plus structural projections.
+/// A typed MIR place: one local storage declaration plus structural projections.
+///
+/// `Place` is static proving-MIR identity. Executing a place resolves it to a
+/// [`StorageRegion`] within the current dynamic storage instance.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Place {
     pub local: LocalId,
@@ -235,7 +286,8 @@ impl Place {
     /// Whether two structural places denote overlapping storage.
     ///
     /// The current field-only place model overlaps exactly when both places have
-    /// the same local root and either projection sequence is a prefix of the other.
+    /// the same local declaration root and either projection sequence is a prefix
+    /// of the other. Dynamic storage-instance identity is resolved during execution.
     #[must_use]
     pub fn overlaps(&self, other: &Self) -> bool {
         self.local == other.local
@@ -284,7 +336,7 @@ impl LoanDecl {
 ///
 /// `Direct` names storage through its local place. `Loan` names a place relative
 /// to an active semantic loan root. This is proving-MIR access authority, not a
-/// source-language reference value or pointer representation.
+/// source-language reference value, raw-pointer value, or provenance identity.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PlaceAccess {
     Direct(Place),
@@ -343,7 +395,7 @@ impl LocalDecl {
     }
 }
 
-/// Source of an owned value for an initialization or assignment.
+/// Source of an owned runtime value for an initialization or assignment.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operand {
     Constant(Value),
@@ -351,6 +403,11 @@ pub enum Operand {
     Move(PlaceAccess),
     /// Non-consuming owned duplication. Requires a copyable type.
     Copy(PlaceAccess),
+    /// Forms a non-null symbolic raw pointer to existing storage.
+    ///
+    /// Formation requires shared alias authorization for the selected storage but
+    /// does not read the pointee value and therefore does not require it to be Live.
+    AddressOf(PlaceAccess),
 }
 
 /// Core MIR operations represented by the current proving kernel.

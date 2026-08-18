@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use crate::{
     BasicBlockId, Body, BorrowKind, LoanId, LocalId, Operand, Place, PlaceAccess, Projection,
-    Statement, Terminator, TypeId, TypeKind, TypeTable,
+    ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable,
 };
 
 /// Location within Core MIR used by validation diagnostics.
@@ -116,6 +116,15 @@ fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
                 .expect("type-validation stack contains a known table index");
 
             match &definition.kind {
+                TypeKind::Scalar(ScalarType::RawPointer(pointee)) => {
+                    if types.get(*pointee).is_none() {
+                        return Err(type_error(MirValidationErrorKind::UnknownType(*pointee)));
+                    }
+                    // Raw-pointer pointee edges are semantic indirection rather than
+                    // structural containment, so they do not participate in the
+                    // direct-recursion DFS.
+                    marks[current_index] = 2;
+                }
                 TypeKind::Scalar(_) => {
                     marks[current_index] = 2;
                 }
@@ -278,6 +287,17 @@ fn validate_operand_type(
                 });
             }
             Ok(())
+        }
+        Operand::AddressOf(src) => {
+            let actual = access_type(body, src, point)?;
+            if body.types.raw_pointer_pointee(expected) == Some(actual) {
+                Ok(())
+            } else {
+                Err(MirValidationError {
+                    point: Some(point.clone()),
+                    kind: MirValidationErrorKind::TypeMismatch { expected },
+                })
+            }
         }
     }
 }
@@ -703,6 +723,13 @@ fn validate_operand_state(
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
             require_fully_live(locals, &place, point)
+        }
+        Operand::AddressOf(src) => {
+            // Address formation authorizes access to existing storage but does not
+            // read the pointee value, so NeverInitialized and Dead storage are valid
+            // targets in this slice.
+            resolve_authorized_access(active_loans, src, AccessRequirement::Shared, point)?;
+            Ok(())
         }
     }
 }
