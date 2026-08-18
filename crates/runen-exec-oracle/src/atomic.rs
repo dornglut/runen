@@ -1,4 +1,4 @@
-use crate::coverage::has_exact_unique_coverage;
+use crate::{IterationId, coverage::has_exact_unique_coverage};
 
 /// Verification-only opaque identity for one semantic atomic location.
 ///
@@ -63,12 +63,37 @@ pub enum AtomicExchangeSemantics {
     AcquireRelease,
 }
 
+/// Verification-only synchronization-scope classification for one atomic exchange.
+///
+/// `Root` records the iteration that performs the scoped exchange. The selected
+/// root cohort is derived from that iteration's containing dynamic `each`; there is
+/// no independent root identity that can disagree with the producer. These variants
+/// are not source memory-scope spellings, a hardware scope lattice, hierarchy
+/// topology, or scheduling metadata.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomicExchangeScope {
+    Unscoped,
+    Root(IterationId),
+}
+
+/// Verification-only result of comparing two represented exchange scope forms.
+///
+/// `Open` records an interaction that the normative specification deliberately has
+/// not defined yet; it is not another kind of incompatibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AtomicScopeRelation {
+    Compatible,
+    Incompatible,
+    Open,
+}
+
 /// Verification-only description of one semantic atomic exchange occurrence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicExchange {
     id: AtomicExchangeId,
     desired: AtomicValueToken,
     semantics: AtomicExchangeSemantics,
+    scope: AtomicExchangeScope,
 }
 
 impl AtomicExchange {
@@ -77,11 +102,13 @@ impl AtomicExchange {
         id: AtomicExchangeId,
         desired: AtomicValueToken,
         semantics: AtomicExchangeSemantics,
+        scope: AtomicExchangeScope,
     ) -> Self {
         Self {
             id,
             desired,
             semantics,
+            scope,
         }
     }
 }
@@ -99,7 +126,8 @@ pub enum AtomicExchangeError {
 /// Validated verification-only exchange set for one semantic atomic location.
 ///
 /// Exchange storage order is not semantic modification order. A candidate
-/// modification order is supplied only when checking one realization.
+/// modification order is supplied only when checking one realization. Exchange
+/// synchronization scope does not partition or duplicate that location-local order.
 pub struct AtomicExchangeFixture {
     location: AtomicLocationId,
     initial: AtomicValueToken,
@@ -182,6 +210,7 @@ impl AtomicExchangeFixture {
         let mut prior_values = Vec::with_capacity(candidate_order.len());
         let mut predecessors = Vec::with_capacity(candidate_order.len());
         let mut semantics = Vec::with_capacity(candidate_order.len());
+        let mut scopes = Vec::with_capacity(candidate_order.len());
         let mut previous = None;
 
         for exchange_id in candidate_order {
@@ -193,6 +222,7 @@ impl AtomicExchangeFixture {
             prior_values.push((exchange.id, current));
             predecessors.push((exchange.id, previous));
             semantics.push((exchange.id, exchange.semantics));
+            scopes.push((exchange.id, exchange.scope));
             current = exchange.desired;
             previous = Some(exchange.id);
         }
@@ -202,6 +232,7 @@ impl AtomicExchangeFixture {
             prior_values,
             predecessors,
             semantics,
+            scopes,
             final_value: current,
         })
     }
@@ -215,6 +246,7 @@ pub struct AtomicExchangeRealization {
     prior_values: Vec<(AtomicExchangeId, AtomicValueToken)>,
     predecessors: Vec<(AtomicExchangeId, Option<AtomicExchangeId>)>,
     semantics: Vec<(AtomicExchangeId, AtomicExchangeSemantics)>,
+    scopes: Vec<(AtomicExchangeId, AtomicExchangeScope)>,
     final_value: AtomicValueToken,
 }
 
@@ -230,8 +262,46 @@ impl AtomicExchangeRealization {
             .find_map(|(candidate, prior)| (*candidate == exchange).then_some(*prior))
     }
 
+    /// The currently defined synchronization-scope relationship between two
+    /// represented exchanges on this location.
+    ///
+    /// `None` means one or both identities are not represented on this realization.
+    /// `Open` means the pair is represented but the normative interaction is not
+    /// defined by the current revision.
+    #[must_use]
+    pub fn synchronization_scope_relation(
+        &self,
+        left: AtomicExchangeId,
+        right: AtomicExchangeId,
+    ) -> Option<AtomicScopeRelation> {
+        let left_scope = self.scope_of(left)?;
+        let right_scope = self.scope_of(right)?;
+
+        Some(match (left_scope, right_scope) {
+            (AtomicExchangeScope::Unscoped, AtomicExchangeScope::Unscoped) => {
+                AtomicScopeRelation::Compatible
+            }
+            (
+                AtomicExchangeScope::Root(left_iteration),
+                AtomicExchangeScope::Root(right_iteration),
+            ) => {
+                if left_iteration.each() == right_iteration.each() {
+                    AtomicScopeRelation::Compatible
+                } else {
+                    AtomicScopeRelation::Incompatible
+                }
+            }
+            _ => AtomicScopeRelation::Open,
+        })
+    }
+
     /// Whether the named release-capable exchange directly synchronizes with the
-    /// named acquire-capable exchange under the accepted direct-predecessor relation.
+    /// named acquire-capable exchange under the accepted direct-predecessor and
+    /// synchronization-scope relations.
+    ///
+    /// A pair whose scope relationship is `Open` does not receive a synchronization
+    /// edge from this represented relation; callers must not reinterpret that as a
+    /// normative proof that the open interaction is incompatible.
     #[must_use]
     pub fn release_acquire_synchronizes(
         &self,
@@ -248,7 +318,9 @@ impl AtomicExchangeRealization {
         ) && matches!(
             self.semantics_of(acquire),
             Some(AtomicExchangeSemantics::Acquire | AtomicExchangeSemantics::AcquireRelease)
-        ) && self.immediate_predecessor(acquire) == Some(release)
+        ) && self.synchronization_scope_relation(release, acquire)
+            == Some(AtomicScopeRelation::Compatible)
+            && self.immediate_predecessor(acquire) == Some(release)
     }
 
     #[must_use]
@@ -271,5 +343,15 @@ impl AtomicExchangeRealization {
         self.semantics
             .iter()
             .find_map(|(candidate, semantics)| (*candidate == exchange).then_some(*semantics))
+    }
+
+    fn scope_of(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeScope> {
+        if exchange.location() != self.location {
+            return None;
+        }
+
+        self.scopes
+            .iter()
+            .find_map(|(candidate, scope)| (*candidate == exchange).then_some(*scope))
     }
 }
