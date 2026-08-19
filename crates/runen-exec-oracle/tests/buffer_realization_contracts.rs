@@ -42,32 +42,19 @@ fn ordered_buffer_case_preserves_semantic_result_across_distinct_physical_arrang
     // Realization A uses one physical execution agent and one allocation for both
     // already-semantically-ordered accesses.
     let mut single_allocation = allocation(10, &[1]);
-    let single_mapping = BufferMappingFixture::new(
-        101,
-        selected.clone(),
-        agent(1),
-        &mut single_allocation,
-    )
-    .unwrap();
+    let single_mapping =
+        BufferMappingFixture::new(101, selected.clone(), agent(1), &mut single_allocation).unwrap();
 
     // Realization B uses distinct agents and allocations for the same semantic
     // state change and later read. The mapping occurrence tokens also differ.
     let mut split_write_allocation = allocation(20, &[2]);
     let mut split_read_allocation = allocation(30, &[3]);
-    let split_write_mapping = BufferMappingFixture::new(
-        201,
-        selected.clone(),
-        agent(2),
-        &mut split_write_allocation,
-    )
-    .unwrap();
-    let split_read_mapping = BufferMappingFixture::new(
-        301,
-        selected.clone(),
-        agent(3),
-        &mut split_read_allocation,
-    )
-    .unwrap();
+    let split_write_mapping =
+        BufferMappingFixture::new(201, selected.clone(), agent(2), &mut split_write_allocation)
+            .unwrap();
+    let split_read_mapping =
+        BufferMappingFixture::new(301, selected.clone(), agent(3), &mut split_read_allocation)
+            .unwrap();
 
     assert_ne!(single_mapping.agent(), split_write_mapping.agent());
     assert_ne!(single_mapping.agent(), split_read_mapping.agent());
@@ -93,7 +80,9 @@ fn ordered_buffer_case_preserves_semantic_result_across_distinct_physical_arrang
     single_mapping
         .mapped_change(&mut single_state, &selected, ValueToken(20))
         .unwrap();
-    let single_read = single_mapping.mapped_read(&single_state, &selected).unwrap();
+    let single_read = single_mapping
+        .mapped_read(&single_state, &selected)
+        .unwrap();
 
     // Running realization A must not mutate realization B's independent logical
     // execution state.
@@ -120,30 +109,16 @@ fn physical_arrangement_does_not_change_ordinary_conflict_classification() {
     // Both arrangements below are physically admissible mappings. Neither mapping
     // arrangement supplies semantic order or changes the ordinary conflict relation.
     let mut shared_allocation = allocation(10, &[1]);
-    let _shared_mapping = BufferMappingFixture::new(
-        101,
-        selected.clone(),
-        agent(1),
-        &mut shared_allocation,
-    )
-    .unwrap();
+    let _shared_mapping =
+        BufferMappingFixture::new(101, selected.clone(), agent(1), &mut shared_allocation).unwrap();
 
     let mut split_read_allocation = allocation(20, &[2]);
     let mut split_change_allocation = allocation(30, &[3]);
-    let _split_read_mapping = BufferMappingFixture::new(
-        201,
-        selected.clone(),
-        agent(2),
-        &mut split_read_allocation,
-    )
-    .unwrap();
-    let _split_change_mapping = BufferMappingFixture::new(
-        301,
-        selected,
-        agent(3),
-        &mut split_change_allocation,
-    )
-    .unwrap();
+    let _split_read_mapping =
+        BufferMappingFixture::new(201, selected.clone(), agent(2), &mut split_read_allocation)
+            .unwrap();
+    let _split_change_mapping =
+        BufferMappingFixture::new(301, selected, agent(3), &mut split_change_allocation).unwrap();
 
     assert!(read.conflicts_with(&change));
     assert!(change.conflicts_with(&read));
