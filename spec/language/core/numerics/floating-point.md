@@ -231,6 +231,26 @@ Therefore, when a nonzero exact finite result rounds to zero under this boundary
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` zero-boundary rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. A backend flush-to-zero or denormal mode supplies no such relaxation by itself.
 
+## Fast subnormal input flushing
+
+For one already-defined basic floating `+`, `-`, `*`, or `/` operation occurrence under `fast`, before applying that operation's numerical and result-class rules, each consumed operand occurrence whose value is a nonzero subnormal MAY independently be replaced by the signed-zero value having the same sign. Leaving the operand as its original subnormal value remains permitted.
+
+After the input-flush choices for that operation occurrence have been made, the existing Runen rules apply to the resulting operand values. A subnormal divisor replaced by signed zero is therefore governed by the existing signed-zero divisor rules; a subnormal operand replaced by zero next to infinity is governed by the existing zero/infinity and NaN-class rules. This section does not create a duplicate result table for those consequences.
+
+Input flushing under this section preserves sign. A negative subnormal input can flush only to `-0`, and a positive subnormal input only to `+0`. This section grants no general permission to ignore or merge signed zero.
+
+For a use considered for finite multiply-add contraction, the input-flush choices affecting the multiplication operands `x` and `y` and the other addition operand `z` are made before the finite contraction eligibility of that `fast` evaluation choice is tested. The contraction rule consumes those post-substitution operand values. Because the accepted contraction rule requires `x`, `y`, and `z` to be nonzero finite values, replacing any of them by signed zero makes that contraction choice ineligible. `fast` may instead leave a subnormal operand unflushed and contract when every other contraction condition holds.
+
+If the multiplication evaluation has other semantic consumers, its input-flush choices are the same choices that govern its ordinary multiplication result. Contracting one addition use does not authorize that contracted use to recover a pre-flush `x` or `y` value that the multiplication evaluation did not consume.
+
+For an ordinary basic operation after input substitution, the existing arithmetic/result rules determine its result first; the separate `fast` subnormal result-flushing rule below may then apply when that result is nonzero subnormal. For a multiply-add use that remains eligible and is contracted, the contraction rule determines its one final result and result flushing may then apply to that final result when subnormal.
+
+`standard` and `reproducible` gain no subnormal input-flushing permission from this section.
+
+Backend FTZ/DAZ modes, WGSL latitude, SPIR-V denormal execution modes, LLVM denormal environment settings, or another physical mechanism do not widen this permission. A realization using such a mechanism MUST preserve the ordering and every Runen obligation not explicitly relaxed by an applicable rule.
+
+This section does not define positive-zero replacement of a negative subnormal input, flushing of normal, infinity, NaN, or already-zero inputs, conversion or literal input flushing, transcendental or reduction input flushing, contraction of post-flush zero/special-value multiply-add cases, reduced precision, approximation, source selection of `fast`, compiler IR, physical instructions, or environment capability requirements.
+
 ## Fast subnormal result flushing
 
 For one already-defined basic floating `+`, `-`, `*`, or `/` operation occurrence under `fast`, first determine its result using every otherwise-applicable Runen numerical rule, including any separately permitted finite multiply-add contraction choice that changes how that addition result is computed.
@@ -241,11 +261,11 @@ This relaxation applies independently to each basic-operation result occurrence.
 
 Flushing under this section preserves sign. A negative subnormal result can flush only to `-0`, and a positive subnormal result only to `+0`. This section grants no general permission to ignore or merge signed zero.
 
-`standard` and `reproducible` gain no subnormal result-flushing permission from this section. A realization MUST NOT treat a subnormal input as zero under authority of this result-flushing rule.
+`standard` and `reproducible` gain no subnormal result-flushing permission from this section. A realization MUST NOT treat a subnormal input as zero under authority of this result-flushing rule; input flushing is governed only by the separate rule above.
 
-Backend FTZ/DAZ modes, WGSL latitude, SPIR-V denormal execution modes, LLVM denormal environment settings, or another physical mechanism do not widen this permission. A realization using such a mechanism MUST preserve every applicable Runen obligation not explicitly relaxed here.
+Backend FTZ/DAZ modes, WGSL latitude, SPIR-V denormal execution modes, LLVM denormal environment settings, or another physical mechanism do not widen this permission. A realization using such a mechanism MUST preserve every applicable Runen obligation not explicitly relaxed by an applicable rule.
 
-This section does not define input-subnormal flushing, positive-zero replacement of a negative subnormal result, source selection of `fast`, conversion or literal flushing, transcendental or reduction flushing, reduced precision, approximation, compiler IR, physical instructions, or environment capability requirements.
+This section does not define positive-zero replacement of a negative subnormal result, source selection of `fast`, conversion or literal flushing, transcendental or reduction flushing, reduced precision, approximation, compiler IR, physical instructions, or environment capability requirements.
 
 ## Upper-bound rounding
 
@@ -276,4 +296,4 @@ This `fast` reassociation permission does not by itself authorize operand permut
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, input-subnormal handling and subnormal handling outside the `fast` basic-result rule above, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
