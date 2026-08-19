@@ -169,6 +169,31 @@ The unresolved NaN member-selection rule is an open semantic obligation, not imp
 
 By the contract-refinement rules, `reproducible` and `fast` inherit the NaN-class outcome requirement unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, canonicalization, payload propagation, aggregate fast-math behavior, or physical signaling behavior supplies no implicit Runen relaxation.
 
+## Finite multiply-add contraction
+
+An **eligible finite multiply-add contraction occurrence** is one dynamic evaluation of an already-established floating addition for which one consumed operand value is the result value of an already-established floating multiplication evaluation and the other consumed addition operand is an already-established value `z`. Let `x` and `y` be the operand values consumed by that multiplication evaluation. Eligibility requires all of the following for that occurrence:
+
+- `x`, `y`, and `z` are nonzero finite floating values;
+- the established multiplication result type and addition result type are the same binary floating type governed by this document;
+- the exact mathematical value `(x * y) + z` is nonzero;
+- no conversion, semantic operation, or other value-producing boundary transforms the multiplication result value before that value is consumed as the addition operand.
+
+Without contraction, evaluation remains the already-defined basic-operation semantics: the multiplication result is rounded according to its result type, and the addition then consumes that rounded value and produces its own rounded result.
+
+Under `fast`, a realization MAY instead contract an eligible occurrence. Contracted evaluation computes the exact real quantity `(x * y) + z` as if with unbounded intermediate range and precision. No Runen rounding, overflow-result selection, underflow-result selection, or finite-format truncation occurs between multiplication and addition. The one exact result is then consumed by the accepted rounding rules for the established addition result type exactly once.
+
+Therefore an eligible `fast` occurrence explicitly permits either the ordinary uncontracted result or the contracted one-round result. Choosing whether to contract is permitted numerical variation under the `fast` contract; backend behavior is not additional semantic input.
+
+Eligibility and permission are occurrence-local. A realization that performs contraction before the operand values of affected dynamic evaluations are known MUST establish that every affected occurrence satisfies these eligibility conditions, or otherwise prove that the transformed realization preserves the applicable Runen semantics for ineligible occurrences. This rule does not make an ineligible occurrence eligible merely because it shares source, IR, or physical instruction structure with an eligible one.
+
+The multiplication result value may occupy either operand position of the addition. This permission does not reorder the addition operands and does not authorize reassociation, operand permutation, omission, duplication, reciprocal replacement, reduced precision, approximation, or changes to the evaluation or effects that establish `x`, `y`, or `z`. The multiplication evaluation may still have other semantic consumers; contracting this use does not by itself remove or alter obligations for those other consumers. This rule does not manufacture a contraction opportunity by regrouping a mixed arithmetic expression. Any other transformation composed with contraction requires independent Runen authority.
+
+`standard` and `reproducible` gain no result-changing contraction permission from this section. A realization may physically fuse their operations only when it proves that the resulting Runen-observable behavior remains permitted by the already-applicable contract.
+
+Backend fused instructions, LLVM-style contraction flags, WGSL fusion latitude, or another physical realization mechanism do not widen the eligible set and are not semantic input.
+
+This section does not define an exact-zero contracted result, contraction involving signed-zero, signed-infinity, or NaN operand values, NaN member selection or propagation, multiply-subtract or negated fused variants, a standalone fused operation, source syntax, compiler IR, physical instructions, or environment capability requirements.
+
 ## Interior finite rounding
 
 For an otherwise-defined floating arithmetic operation whose applicable contract determines an exact finite real result `x`, `standard` uses the following rounding rule when the operation's result type has the binary finite value format above.
@@ -185,7 +210,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, conversions, literals, transcendental accuracy, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -231,8 +256,8 @@ Under `standard` and `reproducible`, semantic grouping of separately represented
 
 Under `fast`, a realization MAY reassociate a pure finite tree of already-established floating-point operand values when every internal operation in that tree is addition, or when every internal operation in that tree is multiplication. Reassociation may change only the grouping of those operations: the ordered leaf-value sequence and the operation kind MUST remain unchanged.
 
-This `fast` permission does not authorize operand permutation, omission, duplication, substitution of another operation, reciprocal replacement, contraction or fused multiply-add formation, reduced precision, approximate functions, assumptions about NaN, infinity, or signed zero, or changes to the evaluation or effects by which the leaf values were obtained. Every other applicable `fast` rule continues to constrain the reassociated computation and its result.
+This `fast` reassociation permission does not by itself authorize operand permutation, omission, duplication, substitution of another operation, reciprocal replacement, contraction, reduced precision, approximate functions, assumptions about NaN, infinity, or signed zero, or changes to the evaluation or effects by which the leaf values were obtained. Contraction is permitted only where the finite multiply-add contraction rule above applies. Every other applicable `fast` rule continues to constrain the reassociated computation and its result.
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction or FMA behavior, transcendental behavior, exact-zero sign outside the basic operations above, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
