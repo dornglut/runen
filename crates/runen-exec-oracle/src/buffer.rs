@@ -7,6 +7,7 @@ use crate::{
         AtomicExchangeRealization, AtomicExchangeScope, AtomicExchangeSemantics, AtomicLocationId,
         AtomicValueToken,
     },
+    coverage::has_exact_unique_coverage,
     realization::RealizationAgentId,
 };
 
@@ -232,6 +233,44 @@ impl BufferAtomicExchangeFixture {
         }
     }
 
+    /// Physically services one complete represented exchange set through an exact
+    /// per-exchange selection of active typed mappings.
+    ///
+    /// Mapping assignment is verification-only physical-servicing evidence. It must
+    /// cover every represented exchange identity exactly once, and every selected
+    /// mapping must cover this fixture's exact atomic singleton region. Assignment
+    /// order, mapping identity, allocation identity, and execution-agent identity do
+    /// not become atomic order or synchronization. All assignments are validated
+    /// before the atomic fixture can observe or mutate logical Buffer state.
+    pub fn realize_mapped_by_exchange(
+        self,
+        logical_state: &mut LogicalBufferState,
+        exchanges: Vec<BufferAtomicExchange>,
+        assignments: &[(BufferAtomicExchangeId, &BufferMappingFixture)],
+        candidate_order: &[BufferAtomicExchangeId],
+        ordered_before: &[(BufferAtomicExchangeId, BufferAtomicExchangeId)],
+    ) -> Result<BufferAtomicExchangeRealization, BufferMappingError> {
+        let required = exchanges.iter().map(|exchange| exchange.id()).collect::<Vec<_>>();
+        let observed = assignments
+            .iter()
+            .map(|(exchange, _)| *exchange)
+            .collect::<Vec<_>>();
+
+        if !has_exact_unique_coverage(&required, &observed) {
+            return Err(BufferMappingError::AtomicAssignmentCoverage);
+        }
+
+        let location_region = self.location.region();
+        for (exchange, mapping) in assignments {
+            self.validate_location(*exchange)
+                .map_err(BufferMappingError::Atomic)?;
+            mapping.validate_access_region(&location_region)?;
+        }
+
+        self.realize(logical_state, exchanges, candidate_order, ordered_before)
+            .map_err(BufferMappingError::Atomic)
+    }
+
     /// Checks this fixture's one represented atomic-exchange set against the
     /// existing generic oracle and commits its final value into the same logical
     /// Buffer element only after the complete candidate realization is accepted.
@@ -359,6 +398,7 @@ pub enum BufferMappingError {
         actual: AllocationId,
     },
     OutsideMappedRegion,
+    AtomicAssignmentCoverage,
     LogicalState(LogicalStateError),
     Atomic(BufferAtomicExchangeError),
 }
