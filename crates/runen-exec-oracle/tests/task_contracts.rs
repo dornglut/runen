@@ -127,11 +127,12 @@ fn scope_membership_does_not_legalize_ordinary_sibling_conflict() {
 #[test]
 fn normal_join_requires_normal_completion_of_exact_target() {
     let target = TaskId(1);
+    let join = TaskJoinId::new(target, 9);
 
-    assert!(task_join_can_complete_normally(target, normal(target)));
-    assert!(!task_join_can_complete_normally(target, normal(TaskId(2))));
+    assert!(task_join_can_complete_normally(join, normal(target)));
+    assert!(!task_join_can_complete_normally(join, normal(TaskId(2))));
     assert!(!task_join_can_complete_normally(
-        target,
+        join,
         TaskCompletionEvidence::Cancelled(target)
     ));
 }
@@ -144,6 +145,11 @@ fn join_identity_is_structurally_bound_to_exact_target() {
 
     assert_eq!(first, same);
     assert_ne!(first, foreign_target_same_token);
+    assert!(task_join_can_complete_normally(first, normal(TaskId(1))));
+    assert!(!task_join_can_complete_normally(
+        foreign_target_same_token,
+        normal(TaskId(1))
+    ));
 }
 
 #[test]
