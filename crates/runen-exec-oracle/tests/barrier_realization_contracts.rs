@@ -46,12 +46,7 @@ fn subgroup_id(each: EachId, group: u32, subgroup: u32) -> SubgroupId {
     SubgroupId::new(group_id(each, group), subgroup)
 }
 
-fn membership(
-    each: EachId,
-    iteration: u32,
-    group: u32,
-    subgroup: u32,
-) -> HierarchyMembership {
+fn membership(each: EachId, iteration: u32, group: u32, subgroup: u32) -> HierarchyMembership {
     HierarchyMembership::new(
         IterationId::new(each, iteration),
         subgroup_id(each, group, subgroup),
@@ -184,11 +179,7 @@ fn group_barrier_visibility_is_preserved_across_physical_arrangements() {
     let producer = IterationId::new(each, 1);
     let consumer = IterationId::new(each, 3);
     let nonparticipant = IterationId::new(each, 4);
-    let participants = [
-        producer,
-        IterationId::new(each, 2),
-        consumer,
-    ];
+    let participants = [producer, IterationId::new(each, 2), consumer];
     let barrier = BarrierFixture::group(BarrierId::new(2), &hierarchy, group_id(each, 10)).unwrap();
 
     // The selected group is semantic hierarchy structure. The distinct physical
@@ -210,12 +201,8 @@ fn subgroup_barrier_visibility_is_preserved_across_physical_arrangements() {
     let consumer = IterationId::new(each, 2);
     let nonparticipant = IterationId::new(each, 3);
     let participants = [producer, consumer];
-    let barrier = BarrierFixture::subgroup(
-        BarrierId::new(3),
-        &hierarchy,
-        subgroup_id(each, 10, 1),
-    )
-    .unwrap();
+    let barrier =
+        BarrierFixture::subgroup(BarrierId::new(3), &hierarchy, subgroup_id(each, 10, 1)).unwrap();
 
     // The nonparticipant deliberately belongs to the same semantic group but a
     // different subgroup. Narrower cohort selection, not physical placement,
