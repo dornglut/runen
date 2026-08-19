@@ -27,7 +27,10 @@ fn allocation_extent_cannot_end_while_mapping_is_active() {
     let mut allocation = AllocationFixture::new(AllocationId(7));
     let mut mapping = BufferMappingFixture::new(1, region(1, &[0]), &mut allocation).unwrap();
 
-    assert_eq!(allocation.end_extent(), Err(AllocationError::ActiveMappings));
+    assert_eq!(
+        allocation.end_extent(),
+        Err(AllocationError::ActiveMappings)
+    );
     assert!(allocation.is_live());
 
     mapping.end(&mut allocation).unwrap();
@@ -83,14 +86,20 @@ fn mapping_end_requires_its_exact_allocation_and_disables_access() {
         })
     );
     assert!(mapping.is_active());
-    assert_eq!(mapping.mapped_read(&logical, &selected).unwrap(), values(&[(0, 10)]));
+    assert_eq!(
+        mapping.mapped_read(&logical, &selected).unwrap(),
+        values(&[(0, 10)])
+    );
 
     mapping.end(&mut allocation).unwrap();
     assert_eq!(
         mapping.mapped_read(&logical, &selected),
         Err(BufferMappingError::Inactive)
     );
-    assert_eq!(mapping.end(&mut allocation), Err(BufferMappingError::Inactive));
+    assert_eq!(
+        mapping.end(&mut allocation),
+        Err(BufferMappingError::Inactive)
+    );
 }
 
 #[test]
@@ -101,7 +110,10 @@ fn mapping_is_region_local_not_whole_buffer_accessibility() {
     let mapping = BufferMappingFixture::new(1, mapped.clone(), &mut allocation).unwrap();
     let logical = state(1, &[(0, 10), (1, 11)]);
 
-    assert_eq!(mapping.mapped_read(&logical, &mapped).unwrap(), values(&[(0, 10)]));
+    assert_eq!(
+        mapping.mapped_read(&logical, &mapped).unwrap(),
+        values(&[(0, 10)])
+    );
     assert_eq!(
         mapping.mapped_read(&logical, &disjoint),
         Err(BufferMappingError::OutsideMappedRegion)
@@ -122,8 +134,14 @@ fn mapped_typed_access_reuses_one_logical_buffer_state() {
         .mapped_change(&mut logical, &changed, ValueToken(20))
         .unwrap();
 
-    assert_eq!(mapping.mapped_read(&logical, &changed).unwrap(), values(&[(0, 20)]));
-    assert_eq!(mapping.mapped_read(&logical, &untouched).unwrap(), values(&[(1, 11)]));
+    assert_eq!(
+        mapping.mapped_read(&logical, &changed).unwrap(),
+        values(&[(0, 20)])
+    );
+    assert_eq!(
+        mapping.mapped_read(&logical, &untouched).unwrap(),
+        values(&[(1, 11)])
+    );
     assert_eq!(stale_snapshot.read(&changed).unwrap(), values(&[(0, 10)]));
 }
 
@@ -140,7 +158,10 @@ fn remapping_same_logical_region_to_another_allocation_preserves_current_state()
         .mapped_change(&mut logical, &selected, ValueToken(20))
         .unwrap();
 
-    assert_eq!(second.mapped_read(&logical, &selected).unwrap(), values(&[(0, 20)]));
+    assert_eq!(
+        second.mapped_read(&logical, &selected).unwrap(),
+        values(&[(0, 20)])
+    );
     assert_eq!(first.region(), second.region());
     assert_ne!(first.id().allocation(), second.id().allocation());
 }
