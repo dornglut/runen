@@ -69,7 +69,7 @@ Beginning or ending a typed mapping does not itself create semantic order, synch
 
 A legal realization MAY service a typed mapping directly from existing physical backing or through a staging/copying strategy. The chosen allocation identity, physical copy, transfer schedule, cache state, and mapping implementation are realization details and are not program-observable under this contract.
 
-Ending a typed mapping terminates only that temporary physical-accessibility relation. It does not change Buffer identity, logical region identity, or existing `View` / `ViewMut` permission semantics. A mapping MUST NOT remain active beyond the extent of the physical allocation that backs it, as required by [Exec Allocations](allocations.md).
+Ending a typed mapping terminates only that temporary physical-accessibility relation. It does not change Buffer identity, logical region identity, or existing `View` / `ViewMut` permission semantics. The backing allocation remains subject to the allocation-extent requirement owned by [Exec Allocations](allocations.md).
 
 This mapping form exposes no pointer, raw or numeric address, byte sequence, bit pattern, layout, alignment, stride, physical contiguity, or representation. It therefore establishes no address-stability, pinning, pointer-provenance, or representation-validity contract.
 
