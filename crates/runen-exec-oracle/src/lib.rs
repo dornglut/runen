@@ -18,8 +18,8 @@ mod task;
 pub use access::{Access, AccessKind};
 pub use atomic::{
     AtomicExchange, AtomicExchangeError, AtomicExchangeFixture, AtomicExchangeId,
-    AtomicExchangeRealization, AtomicExchangeScope, AtomicExchangeSemantics, AtomicLocationId,
-    AtomicScopeRelation, AtomicValueToken,
+    AtomicExchangeRealization, AtomicExchangeScope, AtomicExchangeSemantics, AtomicGroupScope,
+    AtomicLocationId, AtomicScopeRelation, AtomicValueToken,
 };
 pub use barrier::{BarrierError, BarrierFixture, BarrierId, BarrierPhase};
 pub use buffer::{
