@@ -40,9 +40,10 @@ fn buffer_atomic_location_identity_is_exact_buffer_position_identity() {
     assert!(location.region().overlaps(&same.region()));
     assert!(!location.region().overlaps(&other_position.region()));
     assert!(!location.region().overlaps(&other_buffer.region()));
-    assert!(location
-        .region()
-        .overlaps(&BufferRegion::new(BufferId(1), [PositionId(6), PositionId(7)])));
+    assert!(location.region().overlaps(&BufferRegion::new(
+        BufferId(1),
+        [PositionId(6), PositionId(7)]
+    )));
 }
 
 #[test]
@@ -213,10 +214,8 @@ fn wrong_buffer_and_unknown_position_are_rejected_before_atomic_realization() {
     ));
     assert_eq!(state, before);
 
-    let unknown_position = BufferAtomicExchangeFixture::new(
-        BufferAtomicLocation::new(buffer, PositionId(99)),
-        200,
-    );
+    let unknown_position =
+        BufferAtomicExchangeFixture::new(BufferAtomicLocation::new(buffer, PositionId(99)), 200);
     assert!(matches!(
         unknown_position.realize(&mut state, vec![], &[], &[]),
         Err(BufferAtomicExchangeError::LogicalState(
