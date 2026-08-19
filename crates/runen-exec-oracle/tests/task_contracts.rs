@@ -1,9 +1,9 @@
 use runen_exec_oracle::{
     Access, AccessKind, BufferId, BufferRegion, PositionId, TaskCancellationError,
     TaskCancellationFixture, TaskCancellationObservation, TaskCancellationState,
-    TaskCompletionEvidence, TaskId, TaskScopeId, TaskScopePhase, TaskStateRetention,
-    all_state_dependencies_are_detach_safe, has_exact_attached_completion, state_is_detach_safe,
-    task_scope_orders,
+    TaskCompletionEvidence, TaskId, TaskJoinId, TaskJoinPhase, TaskScopeId, TaskScopePhase,
+    TaskStateRetention, all_state_dependencies_are_detach_safe, has_exact_attached_completion,
+    state_is_detach_safe, task_join_can_complete_normally, task_join_orders, task_scope_orders,
 };
 
 fn region(buffer: u32, positions: &[u32]) -> BufferRegion {
@@ -20,6 +20,14 @@ fn attached(scope: TaskScopeId, task: TaskId) -> TaskScopePhase {
 
 fn detached(scope: TaskScopeId, task: TaskId) -> TaskScopePhase {
     TaskScopePhase::DetachedFromScope { scope, task }
+}
+
+fn joined_target(task: TaskId) -> TaskJoinPhase {
+    TaskJoinPhase::TargetTask(task)
+}
+
+fn after_join(target: TaskId, token: u32) -> TaskJoinPhase {
+    TaskJoinPhase::After(TaskJoinId::new(target, token))
 }
 
 #[test]
@@ -114,6 +122,88 @@ fn scope_membership_does_not_legalize_ordinary_sibling_conflict() {
     assert!(!task_scope_orders(first_task, second_task));
     assert!(!task_scope_orders(second_task, first_task));
     assert!(first_access.conflicts_with(&second_access));
+}
+
+#[test]
+fn normal_join_requires_normal_completion_of_exact_target() {
+    let target = TaskId(1);
+    let join = TaskJoinId::new(target, 9);
+
+    assert!(task_join_can_complete_normally(join, normal(target)));
+    assert!(!task_join_can_complete_normally(join, normal(TaskId(2))));
+    assert!(!task_join_can_complete_normally(
+        join,
+        TaskCompletionEvidence::Cancelled(target)
+    ));
+}
+
+#[test]
+fn join_identity_is_structurally_bound_to_exact_target() {
+    let first = TaskJoinId::new(TaskId(1), 9);
+    let same = TaskJoinId::new(TaskId(1), 9);
+    let foreign_target_same_token = TaskJoinId::new(TaskId(2), 9);
+
+    assert_eq!(first, same);
+    assert_ne!(first, foreign_target_same_token);
+    assert!(task_join_can_complete_normally(first, normal(TaskId(1))));
+    assert!(!task_join_can_complete_normally(
+        foreign_target_same_token,
+        normal(TaskId(1))
+    ));
+}
+
+#[test]
+fn normal_join_orders_only_exact_target_before_post_join_continuation() {
+    let target = TaskId(1);
+    let unrelated = TaskId(2);
+    let target_phase = joined_target(target);
+    let after = after_join(target, 9);
+
+    assert!(task_join_orders(target_phase, after));
+    assert!(!task_join_orders(after, target_phase));
+    assert!(!task_join_orders(joined_target(unrelated), after));
+}
+
+#[test]
+fn distinct_join_occurrences_do_not_order_each_other() {
+    let target = TaskId(1);
+    let first_after = after_join(target, 9);
+    let second_after = after_join(target, 10);
+
+    assert!(task_join_orders(joined_target(target), first_after));
+    assert!(task_join_orders(joined_target(target), second_after));
+    assert!(!task_join_orders(first_after, second_after));
+    assert!(!task_join_orders(second_after, first_after));
+}
+
+#[test]
+fn detached_task_can_gain_later_join_order_without_regaining_scope_order() {
+    let scope = TaskScopeId::new(7);
+    let task = TaskId(1);
+    let scope_detached = detached(scope, task);
+    let scope_after = TaskScopePhase::After(scope);
+    let join_after = after_join(task, 9);
+
+    assert!(!task_scope_orders(scope_detached, scope_after));
+    assert!(task_join_orders(joined_target(task), join_after));
+
+    assert!(!state_is_detach_safe(TaskStateRetention::ScopeBound));
+    assert!(state_is_detach_safe(TaskStateRetention::Owned));
+    assert!(state_is_detach_safe(
+        TaskStateRetention::IndependentlyRetained
+    ));
+}
+
+#[test]
+fn join_does_not_order_unrelated_task_or_legalize_its_conflict() {
+    let target = TaskId(1);
+    let sibling = TaskId(2);
+    let after = after_join(target, 9);
+    let target_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+    let sibling_access = Access::new(AccessKind::StateChange, region(1, &[0]));
+
+    assert!(!task_join_orders(joined_target(sibling), after));
+    assert!(target_access.conflicts_with(&sibling_access));
 }
 
 #[test]

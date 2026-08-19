@@ -45,6 +45,54 @@ pub fn task_scope_orders(earlier: TaskScopePhase, later: TaskScopePhase) -> bool
     )
 }
 
+/// Verification-only opaque identity for one explicit normal task-join occurrence.
+///
+/// Identity is structurally scoped by the exact target task so one join identity
+/// cannot be paired with contradictory targets. The private token otherwise carries
+/// equality only. This is not a source task handle, runtime wait object, scheduler
+/// event, progress token, or generic dependency-graph node.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TaskJoinId {
+    target: TaskId,
+    token: u32,
+}
+
+impl TaskJoinId {
+    #[must_use]
+    pub const fn new(target: TaskId, token: u32) -> Self {
+        Self { target, token }
+    }
+
+    const fn target(self) -> TaskId {
+        self.target
+    }
+}
+
+/// Verification-only phase points for the focused normal task-join relation.
+///
+/// `TargetTask` stands for actions of the named target task that precede its normal
+/// completion. `After` stands for the normal continuation of one exact target-bound
+/// join. These are not source task states or runtime wait phases.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TaskJoinPhase {
+    TargetTask(TaskId),
+    After(TaskJoinId),
+}
+
+/// Tests only the target-task -> post-join ordering supplied by one explicit normal
+/// task join.
+///
+/// Join identity does not order distinct post-join continuations, and an unrelated
+/// task receives no order merely because another task is joined.
+#[must_use]
+pub fn task_join_orders(earlier: TaskJoinPhase, later: TaskJoinPhase) -> bool {
+    matches!(
+        (earlier, later),
+        (TaskJoinPhase::TargetTask(task), TaskJoinPhase::After(join))
+            if task == join.target()
+    )
+}
+
 /// Verification-only completion evidence for the task outcomes represented by the
 /// current structured-scope/cancellation oracle.
 ///
@@ -54,6 +102,20 @@ pub fn task_scope_orders(earlier: TaskScopePhase, later: TaskScopePhase) -> bool
 pub enum TaskCompletionEvidence {
     Normal(TaskId),
     Cancelled(TaskId),
+}
+
+/// Whether the focused normal join may complete from the supplied represented
+/// completion evidence for its exact target task.
+///
+/// The target is consumed from the join identity rather than supplied separately,
+/// so the fixture has one target authority. This predicate does not claim progress
+/// or define abnormal join behavior.
+#[must_use]
+pub fn task_join_can_complete_normally(
+    join: TaskJoinId,
+    completion: TaskCompletionEvidence,
+) -> bool {
+    matches!(completion, TaskCompletionEvidence::Normal(task) if task == join.target())
 }
 
 /// Checks that every attached child required for normal scope completion has

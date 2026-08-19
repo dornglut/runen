@@ -22,7 +22,7 @@ Attachment to the same structured task scope does not by itself establish a rela
 
 This revision defines only normal structured task-scope completion. If an attached child faults, is cancelled, diverges, or otherwise fails to complete normally, the scope's resulting fault, cancellation, result, and completion behavior are not defined by this revision.
 
-The source or runtime operations that create a task, create or identify a structured task scope, attach a child to a scope, wait for it, or produce its result are not defined by this revision.
+The source or runtime operations that create a task, create or identify a structured task scope, attach a child to a scope, identify a task for the explicit normal join defined below, or produce a task result are not defined by this revision. The join section defines only the semantic normal-completion and ordering consequence once an applicable mechanism performs such a join.
 
 ## Borrowed and permission-bearing state
 
@@ -49,7 +49,29 @@ A detached task MUST NOT depend, after detachment, on state whose validity is bo
 
 Detachment does not convert a borrow or view into ownership or independent retention and does not extend the validity of borrowed state. State no longer required by the detached work imposes no retention obligation merely because it was used before detachment.
 
-The operation that performs detachment, whether every task form is detachable, and any later operation that explicitly waits for or reorders detached work are not defined by this revision.
+The operation that performs detachment and whether every task form is detachable are not defined by this revision. The explicit normal join below is one independently defined later ordering mechanism for a target task; other waits or reorderings remain not defined by this revision.
+
+## Explicit normal task join
+
+An **explicit normal task join** is a semantic interaction that targets exactly one task and establishes one normal-completion ordering boundary for that target.
+
+The join target is one semantic task identity. Implementation or debug tokens that do not denote that task are not semantic authority for the target. How source or runtime mechanisms obtain or represent the target remains not defined by this revision.
+
+A join completes normally only after its target task has completed normally. When the join completes normally, semantic actions performed by the target task in the applicable defined continuation occur before semantic actions in the continuation after that join.
+
+If the target task has already completed normally when the join is reached, the join may complete normally without re-executing, restarting, or otherwise changing the target task. The same target-task-to-post-join ordering consequence applies.
+
+The join orders only its target task to that join's normal continuation. It does not by itself establish relative order between unrelated tasks, between sibling tasks generally, or between the normal continuations of two distinct join occurrences merely because they target the same task or have related implementation identities.
+
+Joining a task does not attach or detach that task, change its structured-scope membership, change its terminal outcome, retain its state, or define a task result. Attachment and explicit join are independent ordering mechanisms: attachment relates an attached child to the normal continuation of its dynamic structured scope, while an explicit join relates exactly its target task to exactly its own normal continuation.
+
+Detachment from an originating structured scope does not prevent an otherwise-valid later explicit join. Such a join does not retroactively restore the originating scope's completion obligation or make an invalid post-detachment use of scope-bounded state legal. Every use performed after detachment remains subject to the state-retention requirements above independently of whether the task is later joined.
+
+If the target task is cancelled, faults, diverges, or otherwise does not complete normally, this revision defines no normal completion of the join and does not define the joining context's fault, cancellation, result, retry, or other abnormal behavior.
+
+Normal join completion is an ordering condition, not a progress guarantee. This revision does not require the target task eventually to complete, require a joining execution context eventually to continue, or prescribe host blocking, polling, suspension, wakeup, scheduling, or another physical waiting mechanism.
+
+The source spelling, task-handle representation, task-target acquisition, eligibility or multiplicity of joins, and any operation that both waits and obtains a task result are not defined by this revision.
 
 ## Cooperative cancellation observation
 
@@ -84,6 +106,8 @@ Structured task-scope membership is not a synchronization mechanism between sibl
 
 Ordinary accesses by child tasks remain governed by [Exec memory model](memory-model.md), and attachment does not legalize an otherwise-conflicting unordered ordinary interaction. Cancellation request, pending state, and cancellation observation likewise do not by themselves legalize, order, or synchronize an otherwise-conflicting sibling interaction.
 
-Buffer logical coherence may consume the semantic order from an attached child's normal completion to that same structured task scope's normal continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue.
+An explicit normal join supplies semantic order from its target task to its post-join continuation without changing the ordinary-access conflict predicate. An ordinary conflicting pair separated by that defined join order is therefore not source-unordered solely with respect to that relation, while every other applicable authority, validity, effect, resource, and operation-specific contract still applies.
 
-The exact spawn, await, task result, task fault-propagation, cancellation-request authority, source-unordered request/observation interaction, containing-scope abnormal-completion rules, source task-scope formation or identity-observation mechanisms, and scope nesting relationships remain not defined by this revision.
+Buffer logical coherence may consume semantic order from an attached child's normal completion to that same structured task scope's normal continuation and from a normally completed explicit task join to its post-join continuation according to [Exec Buffers](resources/buffers.md). Detachment alone supplies no corresponding ordering or visibility relationship after the originating scope may continue.
+
+The exact spawn operation, source `await`/join spelling, task-handle representation, task result, task fault-propagation, cancellation-request authority, source-unordered request/observation interaction, containing-scope abnormal-completion rules, source task-scope formation or identity-observation mechanisms, scope nesting relationships, and abnormal explicit-join behavior remain not defined by this revision.
