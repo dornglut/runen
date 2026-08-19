@@ -128,7 +128,7 @@ These obligations do not define iteration construction, task semantics, fault ag
 
 ## Group and subgroup hierarchy boundary
 
-These cases exercise only the nested logical participant hierarchy owned by `spec/language/exec/parallelism.md`. They do not make hierarchy membership a synchronization, scheduling, or hardware-topology mechanism.
+These cases exercise the nested logical participant hierarchy and semantic establishment/binding relation owned by `spec/language/exec/parallelism.md`. They do not make hierarchy establishment or membership a synchronization, scheduling, source, or hardware-topology mechanism.
 
 Required cases:
 
@@ -138,6 +138,8 @@ Required cases:
 - a required iteration or membership iteration from another dynamic `each` is rejected even when its private iteration token matches a local token;
 - membership whose group/subgroup identity belongs to another hierarchy fixture is rejected;
 - hierarchy identity is scoped by the containing dynamic `each`, so equal private hierarchy tokens under distinct `EachId`s denote distinct hierarchy identities;
+- two distinct verification hierarchy fixtures may use distinct `HierarchyId`s under the same `EachId`; representing that case does not assert that source semantics always permit multiple hierarchy instances;
+- equal private group/subgroup tokens under two distinct same-`each` hierarchy identities remain distinct scoped identities;
 - groups form a disjoint and exhaustive partition of the required `each` iteration set;
 - subgroups within one group form a disjoint and exhaustive partition of that group;
 - group identity is scoped by the containing hierarchy and therefore transitively by the dynamic `each`, so equal private group tokens under distinct hierarchy IDs denote distinct group identities;
@@ -145,12 +147,14 @@ Required cases:
 - same-subgroup membership implies same-group membership;
 - reordering the private finite membership storage for the same hierarchy identity does not change membership, same-group, or same-subgroup results;
 - hierarchy, group, and subgroup identities expose equality only and do not become numeric indices, coordinates, lanes, hardware cohorts, or scheduling order;
-- hierarchy membership supplies no sibling iteration order and does not legalize an otherwise-conflicting ordinary sibling access;
-- root barrier and root reduction participation each remain the complete required `each` set independent of hierarchy membership, while narrower forms require an explicit group or subgroup selection.
+- a group/subgroup barrier fixture bound to hierarchy A rejects an otherwise equal-token selector belonging to distinct hierarchy B even when both hierarchy fixtures use the same `EachId`;
+- a group/subgroup reduction fixture bound to hierarchy A likewise rejects a hierarchy-B selector under the same dynamic `each`;
+- hierarchy establishment, identity, and membership supply no sibling iteration order and do not legalize an otherwise-conflicting ordinary sibling access;
+- root barrier and root reduction participation each remain the complete required `each` set independent of hierarchy membership, while narrower forms require an explicit group or subgroup selection from one exact established hierarchy instance.
 
-`HierarchyId`, hierarchy-scoped `GroupId`, group-scoped `SubgroupId`, `HierarchyMembership`, and the finite hierarchy fixture are verification representation only. Their identity scoping consumes `EachId`; it does not define source hierarchy or iteration handles, hierarchy selection/admission, group or subgroup sizes, dimensions, coordinates, enumeration order, launch geometry, runtime worker topology, or hardware subgroup identity.
+`HierarchyId`, hierarchy-scoped `GroupId`, group-scoped `SubgroupId`, `HierarchyMembership`, and the finite hierarchy fixture are verification representation only. A `HierarchyFixture` stands for one already-established semantic hierarchy instance for the focused verification question; representing multiple fixtures under one `EachId` does not define source-level hierarchy multiplicity. Their identity scoping consumes `EachId`; it does not define source hierarchy or iteration handles, hierarchy construction, selection, observation, admission, multiplicity, group or subgroup sizes, dimensions, coordinates, enumeration order, launch geometry, runtime worker topology, or hardware subgroup identity.
 
-These obligations do not define group/subgroup atomic or fence scope, collectives beyond the unordered reduction covered separately below, group-local storage, broadcast, shuffle, scans, or another hierarchy-sensitive operation. Root-cohort atomic exchange scope is covered separately above and requires no hierarchy instance. Other hierarchy-sensitive operations require their own normative contracts before executable evidence is extended to cover them.
+These obligations do not define group/subgroup atomic or fence scope, collectives beyond the unordered reduction covered separately below, group-local storage, broadcast, shuffle, scans, or another hierarchy-sensitive operation. Root-cohort atomic exchange scope is covered separately above and requires no hierarchy instance. Other hierarchy-sensitive operations may consume the normative establishment/binding rule but still require their own operation-specific contracts before executable evidence is extended to cover them.
 
 ## Cohort-scoped structured barrier boundary
 
@@ -161,10 +165,10 @@ Required cases:
 - a root barrier is explicitly bound to one dynamic `EachId`, selects exactly that execution's complete required iteration set without requiring a hierarchy, and preserves the identity even for an empty root cohort;
 - duplicate required root fixture iteration identities are rejected;
 - a root barrier rejects a required iteration from another dynamic `each` even when its private token matches a local participant token;
-- a group barrier selects exactly one existing group from a validated hierarchy and rejects an unknown group;
-- a subgroup barrier selects exactly one existing group-scoped subgroup and rejects an unknown subgroup;
-- a group barrier rejects a group identity from another hierarchy even when the private group token matches a local group;
-- a subgroup barrier rejects a subgroup identity from another hierarchy even when the private group/subgroup tokens match a local subgroup;
+- a group barrier selects exactly one existing group from one represented established hierarchy instance and rejects an unknown group;
+- a subgroup barrier selects exactly one existing group-scoped subgroup from that exact hierarchy instance and rejects an unknown subgroup;
+- a group barrier rejects a group identity from another hierarchy even when the private group token matches a local group, including across distinct hierarchy identities under the same `EachId`;
+- a subgroup barrier rejects a subgroup identity from another hierarchy even when the private group/subgroup tokens match a local subgroup, including across distinct hierarchy identities under the same `EachId`;
 - equal private subgroup tokens under distinct groups select distinct subgroup cohorts;
 - a group or subgroup barrier does not admit an iteration from another dynamic `each` as a participant merely because its private iteration token matches a local participant;
 - a group barrier excludes iterations belonging to other groups;
@@ -199,10 +203,10 @@ Required cases:
 - a root reduction is explicitly bound to one dynamic `EachId`, selects exactly that execution's complete required iteration set without requiring a hierarchy, and preserves the identity even for an empty root cohort;
 - duplicate required root fixture iteration identities are rejected;
 - a root reduction rejects a required iteration from another dynamic `each` even when its private token matches a local participant token;
-- a group reduction selects exactly one existing group from a validated hierarchy and rejects an unknown group;
-- a subgroup reduction selects exactly one existing group-scoped subgroup and rejects an unknown subgroup;
-- a group reduction rejects a group identity from another hierarchy even when the private group token matches a local group;
-- a subgroup reduction rejects a subgroup identity from another hierarchy even when the private group/subgroup tokens match a local subgroup;
+- a group reduction selects exactly one existing group from one represented established hierarchy instance and rejects an unknown group;
+- a subgroup reduction selects exactly one existing group-scoped subgroup from that exact hierarchy instance and rejects an unknown subgroup;
+- a group reduction rejects a group identity from another hierarchy even when the private group token matches a local group, including across distinct hierarchy identities under the same `EachId`;
+- a subgroup reduction rejects a subgroup identity from another hierarchy even when the private group/subgroup tokens match a local subgroup, including across distinct hierarchy identities under the same `EachId`;
 - equal private subgroup tokens under distinct groups select distinct reduction cohorts;
 - a group or subgroup reduction does not admit an iteration from another dynamic `each` as a participant or contribution producer merely because its private iteration token matches a local participant;
 - the exact participant set is private verification state and supplies no public enumeration order;
@@ -280,13 +284,13 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - ordinary read/state-change conflict classification;
 - validated atomic-exchange occurrence identity, exchange semantics and producer-derived root-scope classification, exact candidate modification-order coverage across scope forms, location-local semantic-order constraints, prior-value observation, private immediate-predecessor/exact-scope-producer evidence, focused compatible/incompatible/open scope-relation evidence, direct scope-compatible release/acquire synchronization, and final-value computation;
 - dynamic-`each`-scoped iteration identity plus the instance-local cross-phase `each` normal entry/completion ordering relation, with no sibling, intra-iteration, or cross-`each` order;
-- dynamic-`each`-scoped hierarchy identity, hierarchy-instance-scoped group identity, group-scoped subgroup identity, nested hierarchy membership, foreign-`each`/foreign-hierarchy rejection, and order-neutral same-group/same-subgroup relations;
-- validated root/group/subgroup structured-barrier cohorts, explicit root `EachId`, foreign-`each`/foreign-hierarchy rejection, participant-only phase construction, cross-phase ordering, and exact before-phase completion coverage;
+- dynamic-`each`-scoped hierarchy identity, exact established-hierarchy fixture binding, hierarchy-instance-scoped group identity, group-scoped subgroup identity, nested hierarchy membership, foreign-`each`/foreign-hierarchy rejection including same-`each` distinct-hierarchy selectors, and order-neutral same-group/same-subgroup relations;
+- validated root/group/subgroup structured-barrier cohorts, explicit root `EachId`, exact established-hierarchy binding for narrower cohorts, foreign-`each`/foreign-hierarchy rejection, participant-only phase construction, cross-phase ordering, and exact before-phase completion coverage;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
-- complete unordered-reduction contract admission evidence plus validated root/group/subgroup reduction cohorts, explicit root `EachId`, foreign-`each`/foreign-hierarchy rejection, participant-only contribution construction, and exact unordered semantic-contribution coverage;
+- complete unordered-reduction contract admission evidence plus validated root/group/subgroup reduction cohorts, explicit root `EachId`, exact established-hierarchy binding for narrower cohorts, foreign-`each`/foreign-hierarchy rejection, participant-only contribution construction, and exact unordered semantic-contribution coverage;
 - dynamic-task-scope-local attached-child ordering, outcome-aware normal-completion coverage, detachment state-retention admissibility, and explicitly sequenced cooperative cancellation request/observation transitions.
 
-Its atomic-location/exchange/value tokens, exchange-semantics/scope/scope-relation classifications, private predecessor/exact-scope-producer evidence and fixtures, `BufferId`, `PositionId`, `ValueToken`, `EachId`, scoped iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, `TaskScopeId`, task tokens, cancellation fixture/state/result/error classifications, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, source iteration or hierarchy handles, atomic storage forms, source memory-order or memory-scope enumerations, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, task-scope handles or nesting, cancellation handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+Its atomic-location/exchange/value tokens, exchange-semantics/scope/scope-relation classifications, private predecessor/exact-scope-producer evidence and fixtures, `BufferId`, `PositionId`, `ValueToken`, `EachId`, scoped iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, `TaskScopeId`, task tokens, cancellation fixture/state/result/error classifications, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, source iteration or hierarchy handles, source hierarchy construction/observation/multiplicity, atomic storage forms, source memory-order or memory-scope enumerations, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, task-scope handles or nesting, cancellation handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
 
 The private generic exact-coverage helper used by atomic, hierarchy, barrier, reduction, and task fixtures, the crate-private dynamic-`each` identity relation used by structured/hierarchy/barrier/reduction/atomic fixtures, and the crate-private hierarchy cohort collection used by barrier and reduction fixtures are mechanical oracle implementation. They own no Runen semantic concept.
 
