@@ -49,7 +49,7 @@ The normal and subnormal sets above are semantic value sets. Their membership, `
 
 This value-format definition does not prescribe a storage width, byte layout, exponent-field or significand-field encoding, ABI representation, NaN payload encoding, or address-level representation. It also does not define which source types select a binary floating format or which concrete `(p, emin, emax)` triples those types use.
 
-The semantics of positive and negative zero, infinities, NaN identity or payloads, operation-specific subnormal handling, rounding, overflow and underflow result selection, flushing, conversions, and literals remain to be defined by their applicable contracts.
+This value-format section by itself does not define positive or negative zero, infinities, NaN identity or payloads, operation-specific subnormal handling, rounding, overflow or underflow result selection, flushing, conversions, or literals. Those concerns have semantics only where another applicable rule explicitly defines them.
 
 ## Interior finite rounding
 
