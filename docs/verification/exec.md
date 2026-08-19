@@ -4,7 +4,7 @@ Status: **non-normative conformance-obligation documentation**
 
 This document records focused assurance obligations for defined Exec semantic slices. It does not define Runen semantics, conformance profiles, compiler architecture, or repository CI.
 
-The normative ordinary-access and structured-iteration rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Structured task lifetime, detachment, dynamic task-scope identity, explicit normal task join, and cooperative cancellation observation are owned by `spec/language/exec/tasks.md`. Buffer-specific identity, region, view-access, and logical-coherence facts are owned by `spec/language/exec/resources/buffers.md`. Core storage, overlap, borrowing, interior-mutability, and function-termination cleanup facts remain owned by their Core specifications.
+The normative ordinary-access and structured-iteration rules exercised here are owned by `spec/language/exec/memory-model.md` and `spec/language/exec/parallelism.md`. Structured task lifetime, detachment, dynamic task-scope identity, explicit normal task join, and cooperative cancellation observation are owned by `spec/language/exec/tasks.md`. Buffer-specific identity, region, view-access, logical-coherence, and address-free typed-mapping facts are owned by `spec/language/exec/resources/buffers.md`; physical allocation identity and allocation extent are owned by `spec/language/exec/resources/allocations.md`. Core storage, overlap, borrowing, interior-mutability, and function-termination cleanup facts remain owned by their Core specifications.
 
 `crates/runen-exec-oracle` is the verification-only executable conformance model for the currently represented Exec relations below. It is not source or compiler Exec IR, a runtime, a scheduler, a backend, or a normative owner. Future compiler/runtime realizations must remain independently accountable to the normative specification rather than treating the oracle representation as language semantics.
 
@@ -95,7 +95,7 @@ Required cases:
 - migration, replication, or replacement of physical backing does not change the logical Buffer identity or Buffer region selected by a continuing logical view;
 - physical address, allocation identity, host slice aliasing, host borrow checking, and host scheduler behavior are not semantic oracles for Buffer identity, overlap, view permission, or conflict.
 
-These obligations do not define view construction/lifetime rules, mapping, raw-address exposure, version representation, synchronization, or a physical coherence protocol.
+These obligations do not define view construction/lifetime rules, raw-address or byte-level mapping, raw-address exposure, version representation, synchronization, or a physical coherence protocol.
 
 ## Buffer ordered-coherence boundary
 
@@ -111,7 +111,35 @@ Required cases:
 - selecting one physical replica rather than another is not program-observable when both realize the same required logical Buffer state;
 - replica identity, implementation version metadata, physical address, allocation identity, backend queue order, host cache behavior, and transfer implementation are not semantic oracles for ordered Buffer visibility.
 
-These obligations do not define version counters, replica ownership, transfer completion, atomic access to Buffer storage, mixed atomic/non-atomic Buffer visibility rules, mapping, or a coherence implementation algorithm.
+These obligations do not define version counters, replica ownership, transfer completion, atomic access to Buffer storage, mixed atomic/non-atomic Buffer visibility rules, raw-address or byte-level mapping, or a coherence implementation algorithm.
+
+## Address-free typed Buffer mapping and allocation-extent boundary
+
+These cases exercise only the typed physical-accessibility relation owned by `spec/language/exec/resources/buffers.md` and the physical allocation identity/extent relation owned by `spec/language/exec/resources/allocations.md`. Mapping does not become logical access permission, synchronization, or an address/representation model.
+
+Required cases:
+
+- one allocation fixture has one equality-only physical allocation identity and one represented live extent;
+- one typed mapping occurrence is structurally bound to exactly one allocation identity and exactly one logical Buffer region;
+- equal private mapping tokens under distinct allocation identities denote distinct mapping occurrences;
+- a mapping cannot begin after its backing allocation extent has ended;
+- an allocation extent cannot end while a represented mapping still depends on it;
+- ending the exact mapping releases only that extent dependency, after which the allocation extent may end;
+- attempting to end a mapping through another allocation identity is rejected without ending the mapping;
+- an ended mapping cannot supply further mapped-access evidence;
+- duplicate mapping occurrence identity within one allocation fixture is rejected;
+- one mapping admits typed access evidence only for logical positions contained in its selected Buffer region; a disjoint same-Buffer region is not made physically accessible by that mapping;
+- mapping the same logical Buffer region through distinct allocation identities does not change Buffer identity, region equality, or region overlap semantics;
+- a mapped state-changing access updates the same `LogicalBufferState` fixture used by ordinary ordered-coherence evidence rather than a second physical/staging state;
+- a later mapped read through another allocation identity observes the current logical Buffer state after an already-established logical change, not an allocation-local stale copy;
+- ending a mapping does not mutate logical Buffer state;
+- existence of a mapping does not change `Access::conflicts_with`: overlapping source-unordered read/change and change/change pairs remain conflicting under the ordinary relation;
+- equal numeric fixture fields used by `AllocationId` and `BufferId` do not merge those distinct identity domains;
+- no raw address, pointer, byte sequence, layout, alignment, stride, contiguity, allocation-space class, version/dirty state, transfer queue, scheduler order, or backend operation is semantic evidence for the mapping relation.
+
+`AllocationId`, `AllocationFixture`, `AllocationError`, `BufferMappingId`, `BufferMappingFixture`, and `BufferMappingError` are verification representation only. Allocation-fixture begin/end and private active-mapping bookkeeping are mechanical lifetime evidence, not allocator or source mapping operations. `mapped_read` and `mapped_change` stand only for typed accesses whose independent logical permission/order/legality obligations are already satisfied; they do not grant access authority. The fixture stores no physical value copy, address, byte state, version, transfer state, or mapping-derived order.
+
+These obligations do not define allocation creation/destruction APIs, allocation spaces or interoperability, raw-address/pinned/byte mappings, relocation, address stability, pointer provenance, representation validity, Buffer source API spelling, flush/invalidate semantics, atomic Buffer access, mixed atomic/non-atomic Buffer access, or a physical coherence protocol.
 
 ## Structured `each` normal-completion boundary
 
@@ -314,6 +342,7 @@ These obligations do not define cancellation-request authority, source spawn/awa
 The current `runen-exec-oracle` executable subset covers only relations already defined above:
 
 - Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
+- physical allocation identity/extent plus active typed-mapping lifetime nesting, exact Buffer-region mapping coverage, and mapped typed access through the one logical Buffer-state fixture;
 - ordinary read/state-change conflict classification;
 - validated atomic-exchange occurrence identity, exchange semantics and producer-derived root/group/subgroup-scope classification, exact candidate modification-order coverage across scope forms, location-local semantic-order constraints, prior-value observation, private immediate-predecessor/exact-scope evidence, focused compatible/incompatible/open scope-relation evidence, direct scope-compatible release/acquire synchronization, and final-value computation;
 - dynamic-`each`-scoped iteration identity plus the instance-local cross-phase `each` normal entry/completion ordering relation, with no sibling, intra-iteration, or cross-`each` order;
@@ -323,9 +352,9 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - complete unordered-reduction contract admission evidence plus validated root/group/subgroup reduction cohorts, explicit root `EachId`, exact established-hierarchy binding for narrower cohorts, foreign-`each`/foreign-hierarchy rejection, participant-only contribution construction, and exact unordered semantic-contribution coverage;
 - dynamic-task-scope-local attached-child ordering, outcome-aware normal-completion coverage, detachment state-retention admissibility, explicit normal task-join target-to-continuation ordering plus exact normal-target completion evidence, and explicitly sequenced cooperative cancellation request/observation transitions.
 
-Its atomic-location/exchange/value tokens, exchange-semantics/scope/scope-relation classifications, validated atomic group/subgroup-scope admission tokens, private predecessor/exact-scope evidence and fixtures, `BufferId`, `PositionId`, `ValueToken`, `EachId`, scoped iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, `TaskScopeId`, task tokens, `TaskJoinId`, task-join phase classifications, cancellation fixture/state/result/error classifications, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, source iteration or hierarchy handles, source hierarchy construction/observation/multiplicity, atomic storage forms, source memory-order or memory-scope enumerations, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, source join handles or runtime waits, task-scope handles or nesting, cancellation handles, task parentage, retention mechanisms, versioning, physical allocation, scheduling, or backend representation.
+Its atomic-location/exchange/value tokens, exchange-semantics/scope/scope-relation classifications, validated atomic group/subgroup-scope admission tokens, private predecessor/exact-scope evidence and fixtures, `AllocationId`, allocation extent fixture/error classifications, `BufferId`, `PositionId`, `ValueToken`, `BufferMappingId`, mapping fixture/error classifications, `EachId`, scoped iteration tokens, hierarchy tokens and memberships, barrier tokens and validated fixtures, reduction/contribution tokens and validated fixtures, `TaskScopeId`, task tokens, `TaskJoinId`, task-join phase classifications, cancellation fixture/state/result/error classifications, finite collections, reduction-contract evidence flags, and task-retention classifications are verification representation only. They do not freeze language values, source syntax, indexing, dimensional shape, compiler IR identities, source iteration or hierarchy handles, source hierarchy construction/observation/multiplicity, atomic storage forms, source memory-order or memory-scope enumerations, modification-order representation, hierarchy enumeration order, barrier participant order/topology, reduction participant or contribution order, operator traits, task handles, source join handles or runtime waits, task-scope handles or nesting, cancellation handles, task parentage, retention mechanisms, allocation APIs or spaces, physical or numeric addresses, mapping source handles, layout or representation, versioning, physical-copy state, scheduling, or backend representation.
 
-The private generic exact-coverage helper used by atomic, hierarchy, barrier, reduction, and task fixtures, the crate-private dynamic-`each` identity relation used by structured/hierarchy/barrier/reduction/atomic fixtures, and the crate-private hierarchy cohort collection used by barrier and reduction fixtures are mechanical oracle implementation. They own no Runen semantic concept.
+The private generic exact-coverage helper used by atomic, hierarchy, barrier, reduction, and task fixtures, the crate-private dynamic-`each` identity relation used by structured/hierarchy/barrier/reduction/atomic fixtures, the crate-private hierarchy cohort collection used by barrier and reduction fixtures, and the allocation fixture's private active-mapping-token bookkeeping are mechanical oracle implementation. They own no Runen semantic concept.
 
 ## Future executable evidence
 
