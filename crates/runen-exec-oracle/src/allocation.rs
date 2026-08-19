@@ -2,11 +2,18 @@ use std::collections::BTreeSet;
 
 /// Verification-only identity token for one physical allocation fixture.
 ///
-/// The numeric representation carries equality only. It is not a Buffer identity,
-/// numeric address, pointer provenance, source handle, memory-space identifier, or
-/// ordering token.
+/// The private numeric representation carries equality only. It is not a Buffer
+/// identity, numeric address, pointer provenance, source handle, memory-space
+/// identifier, or ordering token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct AllocationId(pub u32);
+pub struct AllocationId(u32);
+
+impl AllocationId {
+    #[must_use]
+    pub const fn new(token: u32) -> Self {
+        Self(token)
+    }
+}
 
 /// Invalid lifetime transition for the focused physical-allocation fixture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -22,7 +29,8 @@ pub enum AllocationError {
 /// This fixture models only whether the allocation extent still exists and whether
 /// typed Buffer mappings are still nested inside it. It is not an allocator, memory
 /// space, byte store, address range, relocation model, or runtime allocation object.
-#[derive(Debug, PartialEq, Eq)]
+/// Its private active-mapping bookkeeping intentionally exposes no public debug or
+/// fixture-equality surface.
 pub struct AllocationFixture {
     id: AllocationId,
     live: bool,
