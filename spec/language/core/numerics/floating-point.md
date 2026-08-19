@@ -95,6 +95,25 @@ This revision does not determine whether a type's NaN set contains one or multip
 
 A later representation or ABI contract may refine how physical NaN encodings map to semantic NaN values while preserving every accepted semantic rule. This section requires neither an injective nor a canonical mapping and does not define source NaN literals, bitcasts, bytes, ABI layout, or serialization.
 
+## Finite basic arithmetic exact results
+
+For an already-admitted basic binary floating operation, suppose both operand values are nonzero finite floating values and an applicable contract has already established a binary floating result type governed by this document. This section defines only the numerical result relation after those facts are established; it does not define operand typing, promotions, conversions, or result-type selection.
+
+Interpret each admitted operand by the exact real value supplied by its applicable finite value format. Under `standard`, when the exact mathematical result named below is nonzero:
+
+- floating addition supplies the exact real result `x + y`;
+- floating subtraction supplies the exact real result `x - y`;
+- floating multiplication supplies the exact real result `x * y`;
+- floating division supplies the exact real result `x / y`.
+
+The admitted operand domain makes the divisor in the division case nonzero. For addition or subtraction, if the exact mathematical result is zero, this section supplies no operation result; the sign and result of that exact-zero case remain open.
+
+The exact real result supplied here is a mathematical semantic quantity consumed by the applicable rounding rules below for the already-established result type. It is not a separately observable Runen value and need not itself be representable in that result type. In particular, a nonzero exact real result beyond the largest finite representable magnitude is handled by the upper-bound rounding rule rather than by host or backend overflow behavior.
+
+By the contract-refinement rules, `reproducible` and `fast` follow this exact-result relation unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. The existing `fast` reassociation permission may change grouping only where that permission applies; it does not by itself alter the exact-result relation of an individual basic operation.
+
+This section does not define arithmetic with signed-zero operands, division by zero, arithmetic involving infinity, NaN production or propagation, unary negation, remainder, fused operations, source operator spellings, or physical instructions.
+
 ## Interior finite rounding
 
 For an otherwise-defined floating arithmetic operation whose applicable contract determines an exact finite real result `x`, `standard` uses the following rounding rule when the operation's result type has the binary finite value format above.
@@ -161,4 +180,4 @@ This `fast` permission does not authorize operand permutation, omission, duplica
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-Exact operation accuracy beyond the finite rounding rules above, contraction or FMA behavior, transcendental behavior, NaN operation semantics, operation-specific infinity behavior, operation-specific exact-zero sign, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+Operation semantics outside the finite nonzero basic arithmetic relation above, contraction or FMA behavior, transcendental behavior, NaN operation semantics, operation-specific infinity behavior, operation-specific exact-zero sign, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
