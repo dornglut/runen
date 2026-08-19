@@ -2,6 +2,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     allocation::{AllocationError, AllocationFixture, AllocationId},
+    atomic::{
+        AtomicExchange, AtomicExchangeError, AtomicExchangeFixture, AtomicExchangeId,
+        AtomicExchangeRealization, AtomicLocationId, AtomicValueToken,
+    },
     realization::RealizationAgentId,
 };
 
@@ -58,6 +62,40 @@ impl BufferRegion {
     }
 }
 
+/// Verification-only identity of one Buffer-owned atomic element location.
+///
+/// Identity is exactly one logical Buffer identity plus one logical element
+/// position. It is not an address, allocation, mapping, atomic-oracle token, or
+/// source atomic handle.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BufferAtomicLocation {
+    buffer: BufferId,
+    position: PositionId,
+}
+
+impl BufferAtomicLocation {
+    #[must_use]
+    pub const fn new(buffer: BufferId, position: PositionId) -> Self {
+        Self { buffer, position }
+    }
+
+    #[must_use]
+    pub const fn buffer(self) -> BufferId {
+        self.buffer
+    }
+
+    #[must_use]
+    pub const fn position(self) -> PositionId {
+        self.position
+    }
+
+    /// Singleton logical Buffer region occupied by this atomic location.
+    #[must_use]
+    pub fn region(self) -> BufferRegion {
+        BufferRegion::new(self.buffer, [self.position])
+    }
+}
+
 /// Invalid use of the finite logical Buffer-state verification fixture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogicalStateError {
@@ -66,6 +104,89 @@ pub enum LogicalStateError {
         actual: BufferId,
     },
     UnknownPosition(PositionId),
+}
+
+/// Invalid use of the focused Buffer atomic-location/state bridge fixture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BufferAtomicExchangeError {
+    Atomic(AtomicExchangeError),
+    LogicalState(LogicalStateError),
+}
+
+/// Verification-only bridge from one Buffer atomic element location to the generic
+/// atomic-exchange oracle.
+///
+/// `atomic_location_token` supplied at construction scopes generic atomic-oracle
+/// occurrence identities inside this independent fixture only. The Buffer-owned
+/// semantic location identity remains [`BufferAtomicLocation`]. The fixture stores
+/// no second atomic value: successful realization starts from and commits back to
+/// the exact position in [`LogicalBufferState`].
+pub struct BufferAtomicExchangeFixture {
+    location: BufferAtomicLocation,
+    atomic_location: AtomicLocationId,
+}
+
+impl BufferAtomicExchangeFixture {
+    #[must_use]
+    pub const fn new(location: BufferAtomicLocation, atomic_location_token: u32) -> Self {
+        Self {
+            location,
+            atomic_location: AtomicLocationId::new(atomic_location_token),
+        }
+    }
+
+    #[must_use]
+    pub const fn location(&self) -> BufferAtomicLocation {
+        self.location
+    }
+
+    /// Constructs one verification-only exchange occurrence identity scoped to this
+    /// fixture's private adapter location.
+    #[must_use]
+    pub const fn exchange_id(&self, token: u32) -> AtomicExchangeId {
+        AtomicExchangeId::new(self.atomic_location, token)
+    }
+
+    /// Checks one atomic-exchange realization against the existing generic oracle
+    /// and commits its final value into the same logical Buffer element only after
+    /// the complete candidate realization has been accepted.
+    ///
+    /// This fixture does not admit atomic access, define mixed ordinary/atomic
+    /// legality, or model physical atomic servicing.
+    pub fn realize(
+        &self,
+        logical_state: &mut LogicalBufferState,
+        exchanges: Vec<AtomicExchange>,
+        candidate_order: &[AtomicExchangeId],
+        ordered_before: &[(AtomicExchangeId, AtomicExchangeId)],
+    ) -> Result<AtomicExchangeRealization, BufferAtomicExchangeError> {
+        let region = self.location.region();
+        let current = logical_state
+            .read(&region)
+            .map_err(BufferAtomicExchangeError::LogicalState)?
+            .get(&self.location.position)
+            .copied()
+            .expect("validated singleton Buffer region contains its exact position");
+
+        let fixture = AtomicExchangeFixture::new(
+            self.atomic_location,
+            AtomicValueToken::new(current.0),
+            exchanges,
+        )
+        .map_err(BufferAtomicExchangeError::Atomic)?;
+        let realization = fixture
+            .realize(candidate_order, ordered_before)
+            .map_err(BufferAtomicExchangeError::Atomic)?;
+
+        logical_state
+            .apply_change(
+                &region,
+                ValueToken(realization.final_value().fixture_token()),
+            )
+            .map_err(BufferAtomicExchangeError::LogicalState)?;
+
+        Ok(realization)
+    }
 }
 
 /// Verification-only equality identity for one typed Buffer mapping occurrence.
