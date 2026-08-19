@@ -252,7 +252,7 @@ fn equal_private_subgroup_tokens_under_distinct_same_each_hierarchies_remain_inc
 }
 
 #[test]
-fn group_release_directly_synchronizes_with_mutually_included_subgroup_acquire() {
+fn group_release_directly_synchronizes_with_exact_subgroup_acquire() {
     let each = EachId::new(1);
     let hierarchy = hierarchy(each, 1, &[(1, 1, 1), (2, 1, 1)]);
     let location = AtomicLocationId::new(1);
@@ -304,7 +304,7 @@ fn group_release_directly_synchronizes_with_mutually_included_subgroup_acquire()
 }
 
 #[test]
-fn subgroup_release_directly_synchronizes_with_mutually_included_group_acquire() {
+fn subgroup_release_directly_synchronizes_with_exact_group_acquire() {
     let each = EachId::new(1);
     let hierarchy = hierarchy(each, 1, &[(1, 1, 1), (2, 1, 1)]);
     let location = AtomicLocationId::new(1);
@@ -435,8 +435,8 @@ fn group_subgroup_scope_is_incompatible_across_distinct_groups() {
 #[test]
 fn equal_mixed_scope_tokens_under_distinct_hierarchies_do_not_create_compatibility() {
     let each = EachId::new(1);
-    let first_hierarchy = hierarchy(each, 7, &[(1, 3, 5)]);
-    let second_hierarchy = hierarchy(each, 8, &[(2, 3, 5)]);
+    let first_hierarchy = hierarchy(each, 7, &[(1, 3, 5), (2, 4, 9)]);
+    let second_hierarchy = hierarchy(each, 8, &[(1, 4, 9), (2, 3, 5)]);
     let location = AtomicLocationId::new(1);
     let group_release = exchange_id(location, 1);
     let subgroup_acquire = exchange_id(location, 2);
