@@ -479,6 +479,34 @@ A submitted NaN value remains outside the same-format unordered sum semantics de
 
 This section also does not define mixed floating formats or promotions, other reduction operations, a source-visible accumulator type, physical accumulator representation, a `fast` reduction-specific native-tree/FTZ/approximation relaxation, source reduction syntax or placement, hierarchy selection syntax, numeric-contract selection syntax, or abnormal completion.
 
+## Fast tree-rounded unordered floating sum relaxation
+
+For an already-admitted same-format unordered floating sum reduction under `fast`, when every submitted value belongs to the currently defined sum input domain above, `fast` retains the inherited exact-state result and additionally MAY select any **tree-rounded candidate** defined by this section. Submitted NaN values remain outside the sum input domain and are not made admissible by this relaxation.
+
+For a non-empty reduction occurrence, a tree-rounded candidate is constructed as follows:
+
+1. choose any full binary tree whose leaves are in bijection with the semantic contribution occurrences selected by the existing Exec reduction contract;
+2. assign each contribution occurrence to exactly one leaf; because this is an unordered sum and this `fast` result rule explicitly admits permutation, any bijection between the contribution occurrences and the tree leaves is permitted;
+3. each leaf initially carries the submitted semantic floating value of `T` for that contribution occurrence;
+4. evaluate each internal node from its two child outcomes using the baseline `standard` basic floating **addition** result relation already defined for `T`, rather than any `fast` basic-operation relaxation;
+5. the root outcome is one tree-rounded candidate.
+
+If an internal addition is a NaN-class case, that node has a NaN-class outcome. Every ancestor is then also a NaN-class outcome because baseline addition with a NaN operand has a NaN-class result. This construction defines only NaN class membership; it does not select or propagate a NaN member.
+
+For an empty reduction there is no tree-rounded alternative and the inherited exact-state result `+0` remains controlling. For a singleton reduction, the one leaf value is its tree-rounded candidate.
+
+Therefore the `fast` result set for this slice contains the inherited exact-state result plus every tree-rounded candidate constructed above. Tree shape and contribution permutation may change the selected result only because this section names that variation explicitly. Exact-once contribution coverage is unchanged: omission, duplication, or introduction of another contribution is not permitted.
+
+This result-set relaxation does not replace the operation-private exact sum state as the semantic Exec combination domain and does not assert that rounded floating addition satisfies Exec's associativity/commutativity requirements. A physical realization may use a native parallel addition tree or permutation when its produced result belongs to this explicitly permitted `fast` result set.
+
+`standard` and `reproducible` gain no tree-rounded result variation from this section.
+
+Internal tree nodes deliberately use the baseline `standard` addition relation so this rule grants only tree/permutation rounding variation. It does not additionally permit reduction-internal subnormal input flushing, subnormal result flushing, reduced precision, approximate addition, contraction, operand omission or duplication, or another backend fast-math behavior. Existing `fast` basic-operation FTZ, reassociation, and contraction permissions apply only to semantic basic operation occurrences already governed by those sections and do not automatically apply to these reduction-internal tree nodes.
+
+A later reduction-specific rule may explicitly add FTZ, reduced-precision, approximation, or another numerical relaxation if justified. Backend aggregate fast-math mode, physical FTZ state, native reduction instruction behavior, or target latitude supplies no such permission by itself.
+
+This section does not define submitted NaN reduction semantics, mixed floating formats or promotions, other reduction operations, source-visible tree or accumulator APIs, physical tree topology, source reduction syntax or placement, hierarchy selection syntax, or abnormal completion.
+
 ## Reassociation
 
 Under `standard` and `reproducible`, semantic grouping of separately represented floating-point additions or multiplications is result-significant. A realization MUST NOT use real-number associativity to regroup those operations when doing so can change Runen-observable behavior permitted by the selected contract. A realization MAY physically restructure the computation when it proves that the resulting behavior still satisfies the selected contract.
@@ -487,6 +515,6 @@ Under `fast`, a realization MAY reassociate a pure finite tree of already-establ
 
 This `fast` reassociation permission does not by itself authorize operand permutation, omission, duplication, substitution of another operation, reciprocal replacement, contraction, reduced precision, approximate functions, assumptions about NaN, infinity, or signed zero, or changes to the evaluation or effects by which the leaf values were obtained. Contraction is permitted only where the finite multiply-add contraction rule above applies. Every other applicable `fast` rule continues to constrain the reassociated computation and its result.
 
-Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
+Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. The separate fast tree-rounded sum rule above owns the specific tree/permutation latitude it grants. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, submitted-NaN and other reduction-specific numeric behavior outside the same-format unordered sum rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, submitted-NaN and other reduction-specific numeric behavior outside the same-format unordered sum and explicit fast tree-rounded rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
