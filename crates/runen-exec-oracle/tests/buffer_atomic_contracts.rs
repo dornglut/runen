@@ -187,6 +187,87 @@ fn foreign_buffer_atomic_location_is_rejected_without_mutating_state() {
 }
 
 #[test]
+fn foreign_candidate_order_identity_is_rejected_without_mutating_state() {
+    let buffer = BufferId(1);
+    let location = BufferAtomicLocation::new(buffer, PositionId(1));
+    let foreign_location = BufferAtomicLocation::new(buffer, PositionId(2));
+    let fixture = BufferAtomicExchangeFixture::new(location);
+    let foreign_fixture = BufferAtomicExchangeFixture::new(foreign_location);
+    let local_exchange = fixture.exchange(
+        1,
+        AtomicValueToken::new(20),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let foreign_id = foreign_fixture
+        .exchange(
+            1,
+            AtomicValueToken::new(30),
+            AtomicExchangeSemantics::Base,
+            AtomicExchangeScope::Unscoped,
+        )
+        .id();
+    let mut state = logical_state(buffer);
+    let before = state.clone();
+
+    assert!(matches!(
+        fixture.realize(&mut state, vec![local_exchange], &[foreign_id], &[]),
+        Err(BufferAtomicExchangeError::ForeignLocation {
+            expected,
+            actual
+        }) if expected == location && actual == foreign_location
+    ));
+    assert_eq!(state, before);
+}
+
+#[test]
+fn foreign_order_constraint_identity_is_rejected_without_mutating_state() {
+    let buffer = BufferId(1);
+    let location = BufferAtomicLocation::new(buffer, PositionId(1));
+    let foreign_location = BufferAtomicLocation::new(buffer, PositionId(2));
+    let fixture = BufferAtomicExchangeFixture::new(location);
+    let foreign_fixture = BufferAtomicExchangeFixture::new(foreign_location);
+    let first = fixture.exchange(
+        1,
+        AtomicValueToken::new(20),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let second = fixture.exchange(
+        2,
+        AtomicValueToken::new(30),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let first_id = first.id();
+    let second_id = second.id();
+    let foreign_id = foreign_fixture
+        .exchange(
+            3,
+            AtomicValueToken::new(40),
+            AtomicExchangeSemantics::Base,
+            AtomicExchangeScope::Unscoped,
+        )
+        .id();
+    let mut state = logical_state(buffer);
+    let before = state.clone();
+
+    assert!(matches!(
+        fixture.realize(
+            &mut state,
+            vec![first, second],
+            &[first_id, second_id],
+            &[(first_id, foreign_id)],
+        ),
+        Err(BufferAtomicExchangeError::ForeignLocation {
+            expected,
+            actual
+        }) if expected == location && actual == foreign_location
+    ));
+    assert_eq!(state, before);
+}
+
+#[test]
 fn rejected_atomic_order_is_transactional_with_respect_to_buffer_state() {
     let buffer = BufferId(1);
     let location = BufferAtomicLocation::new(buffer, PositionId(1));
