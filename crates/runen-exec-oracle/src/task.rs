@@ -107,10 +107,15 @@ pub enum TaskCompletionEvidence {
 /// Whether the focused normal join may complete from the supplied represented
 /// completion evidence for its exact target task.
 ///
-/// This predicate does not claim progress or define abnormal join behavior.
+/// The target is consumed from the join identity rather than supplied separately,
+/// so the fixture has one target authority. This predicate does not claim progress
+/// or define abnormal join behavior.
 #[must_use]
-pub fn task_join_can_complete_normally(target: TaskId, completion: TaskCompletionEvidence) -> bool {
-    matches!(completion, TaskCompletionEvidence::Normal(task) if task == target)
+pub fn task_join_can_complete_normally(
+    join: TaskJoinId,
+    completion: TaskCompletionEvidence,
+) -> bool {
+    matches!(completion, TaskCompletionEvidence::Normal(task) if task == join.target())
 }
 
 /// Checks that every attached child required for normal scope completion has
@@ -153,7 +158,7 @@ pub enum TaskStateRetention {
 }
 
 /// Whether one represented state dependency is safe to keep using after detachment
-/// from the originating structured scope.
+/// from the originating structured task scope.
 #[must_use]
 pub const fn state_is_detach_safe(retention: TaskStateRetention) -> bool {
     matches!(
@@ -163,7 +168,7 @@ pub const fn state_is_detach_safe(retention: TaskStateRetention) -> bool {
 }
 
 /// Whether every represented state dependency required by detached work is
-/// independently valid after the originating structured scope may complete.
+/// independently valid after the originating structured task scope may complete.
 #[must_use]
 pub fn all_state_dependencies_are_detach_safe(required_state: &[TaskStateRetention]) -> bool {
     required_state.iter().copied().all(state_is_detach_safe)
