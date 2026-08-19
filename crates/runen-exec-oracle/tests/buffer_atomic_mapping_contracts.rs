@@ -4,8 +4,8 @@ use runen_exec_oracle::{
     AllocationFixture, AllocationId, AtomicExchangeError, AtomicExchangeScope,
     AtomicExchangeSemantics, AtomicValueToken, BufferAtomicExchangeError,
     BufferAtomicExchangeFixture, BufferAtomicLocation, BufferId, BufferMappingError,
-    BufferMappingFixture, BufferRegion, LogicalBufferState, PositionId, RealizationAgentId,
-    ValueToken,
+    BufferMappingFixture, BufferRegion, EachId, IterationId, LogicalBufferState, PositionId,
+    RealizationAgentId, ValueToken,
 };
 
 fn agent(token: u32) -> RealizationAgentId {
@@ -180,6 +180,49 @@ fn rejected_atomic_realization_through_valid_mapping_is_transactional() {
         ))
     ));
     assert_eq!(logical, before);
+}
+
+#[test]
+fn mapped_exchange_set_preserves_distinct_scope_forms_in_one_modification_order() {
+    let location = BufferAtomicLocation::new(BufferId(1), PositionId(0));
+    let mut allocation = allocation(7, &[1]);
+    let mapping = BufferMappingFixture::new(1, region(1, &[0]), agent(1), &mut allocation).unwrap();
+    let fixture = BufferAtomicExchangeFixture::new(location);
+    let release_unscoped = fixture.exchange(
+        1,
+        AtomicValueToken::new(20),
+        AtomicExchangeSemantics::Release,
+        AtomicExchangeScope::Unscoped,
+    );
+    let acquire_root = fixture.exchange(
+        2,
+        AtomicValueToken::new(30),
+        AtomicExchangeSemantics::Acquire,
+        AtomicExchangeScope::Root(IterationId::new(EachId::new(9), 1)),
+    );
+    let release_id = release_unscoped.id();
+    let acquire_id = acquire_root.id();
+    let mut logical = state(1, &[(0, 10)]);
+
+    let realization = mapping
+        .mapped_atomic_exchange(
+            &mut logical,
+            fixture,
+            vec![release_unscoped, acquire_root],
+            &[release_id, acquire_id],
+            &[],
+        )
+        .unwrap();
+
+    assert_eq!(
+        realization.prior_value(release_id),
+        Some(AtomicValueToken::new(10))
+    );
+    assert_eq!(
+        realization.prior_value(acquire_id),
+        Some(AtomicValueToken::new(20))
+    );
+    assert_eq!(realization.final_value(), AtomicValueToken::new(30));
 }
 
 #[test]
