@@ -167,6 +167,28 @@ The two arrangements are generic verification choices, not CPU, GPU, host, devic
 
 These obligations do not prove the complete cross-realization memory model, atomic or mixed atomic/non-atomic interactions, structured-barrier or parallel-realization equivalence, transfer completion, cache coherence, flush/invalidate behavior, numeric equivalence, source lowering, runtime/backend conformance, progress, or full P0-B closure.
 
+## Cross-realization structured `each` ordinary Buffer schedule-preservation witness
+
+This boundary is verification evidence only. It composes the already-defined schedule-independence, structured-`each`, ordinary-access, Buffer-coherence/mapping, allocation-accessibility, and realization-preservation contracts; it owns no new Runen semantic rule.
+
+Required cases:
+
+- two independent logical executions initialized to the same Buffer identity, logical element domain, and values represent the same two-sibling structured-`each` case;
+- the two sibling state-changing accesses select disjoint Buffer regions and are non-conflicting under the ordinary-access relation;
+- neither sibling iteration is semantically ordered before the other, while both sibling iterations are ordered before the represented normal continuation of their dynamic `each`;
+- one legal physical arrangement may service both sibling changes through one execution agent and one allocation and may serialize their fixture calls;
+- another legal physical arrangement may service the same two sibling changes through distinct execution agents and distinct allocations and may represent the opposite fixture call order;
+- the two fixture call orders are physical schedule evidence only and do not become semantic sibling order in either execution;
+- after both sibling changes in the represented normal path, a permitted continuation read observes their combined logical Buffer state in both independent executions;
+- the continuation read result and final `LogicalBufferState` are equal across the two executions even though their physical agent, allocation, mapping, and fixture-call arrangements differ;
+- running one realization fixture does not mutate the other realization's independent logical-state fixture;
+- a source-unordered overlapping sibling write/write counterexample remains conflicting and semantically unordered even when one physical mapping could service both operations serially; the illegal pair is not executed as though physical serialization admitted it;
+- distinct execution agents are only physical placement evidence and do not by themselves prove actual physical concurrency, worker/lane identity, queue topology, progress, or fairness.
+
+The compared arrangements are generic verification choices, not CPU, GPU, host, device, worker, queue, or memory-space language classes. The witness reuses `EachId`, `IterationId`, `EachPhase`, `each_orders`, ordinary `Access`, Buffer mapping/allocation fixtures, and `LogicalBufferState`; it does not define a schedule IR, `RealizationId`, generic realization graph, production backend model, or second Buffer-state semantics.
+
+These obligations do not prove structured-barrier, reduction, atomic, or mixed atomic/non-atomic cross-realization behavior, actual physical concurrency, numeric reproducibility, source lowering, runtime/backend conformance, abnormal `each` completion, progress/fairness, or full P0-B closure.
+
 ## Structured `each` normal-completion boundary
 
 These cases exercise only normal structured entry/completion. They do not define abnormal iteration completion or infer sibling order from a physical schedule.
@@ -370,6 +392,7 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
 - opaque physical execution-agent identity plus physical allocation identity/extent/accessibility, active typed-mapping lifetime nesting, exact agent/allocation/Buffer-region mapping binding, inaccessible-agent rejection, and mapped typed access through the one logical Buffer-state fixture;
 - independent cross-realization ordinary Buffer preservation for one already-ordered mapped change/read case across distinct legal physical agent/allocation/mapping arrangements, using separate logical-state executions and comparing only semantic state/read results;
+- independent cross-realization structured-`each` ordinary Buffer schedule preservation for one two-sibling disjoint mapped-change case across a single-placement serialized order and a split-placement opposite fixture order, comparing the normal-continuation read and final logical state while preserving sibling unorderedness;
 - ordinary read/state-change conflict classification;
 - validated atomic-exchange occurrence identity, exchange semantics and producer-derived root/group/subgroup-scope classification, exact candidate modification-order coverage across scope forms, location-local semantic-order constraints, prior-value observation, private immediate-predecessor/exact-scope evidence, focused compatible/incompatible/open scope-relation evidence, direct scope-compatible release/acquire synchronization, and final-value computation;
 - dynamic-`each`-scoped iteration identity plus the instance-local cross-phase `each` normal entry/completion ordering relation, with no sibling, intra-iteration, or cross-`each` order;
