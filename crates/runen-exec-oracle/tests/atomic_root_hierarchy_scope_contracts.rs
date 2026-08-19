@@ -2,8 +2,8 @@ use runen_exec_oracle::{
     Access, AccessKind, AtomicExchange, AtomicExchangeFixture, AtomicExchangeId,
     AtomicExchangeScope, AtomicExchangeSemantics, AtomicGroupScope, AtomicLocationId,
     AtomicScopeRelation, AtomicSubgroupScope, AtomicValueToken, BufferId, BufferRegion, EachId,
-    EachPhase, GroupId, HierarchyFixture, HierarchyId, HierarchyMembership, IterationId, PositionId,
-    SubgroupId, each_orders,
+    EachPhase, GroupId, HierarchyFixture, HierarchyId, HierarchyMembership, IterationId,
+    PositionId, SubgroupId, each_orders,
 };
 
 fn hierarchy(
@@ -114,7 +114,10 @@ fn root_release_directly_synchronizes_with_group_acquire_when_root_producer_is_i
     .unwrap();
     let realization = fixture.realize(&[release, acquire], &[]).unwrap();
 
-    assert_eq!(realization.synchronization_scope_relation(release, acquire), None);
+    assert_eq!(
+        realization.synchronization_scope_relation(release, acquire),
+        None
+    );
     assert_eq!(
         realization.synchronization_scope_relation_in_hierarchy(release, acquire, &hierarchy),
         Some(AtomicScopeRelation::Compatible)
@@ -124,11 +127,7 @@ fn root_release_directly_synchronizes_with_group_acquire_when_root_producer_is_i
         Some(AtomicScopeRelation::Compatible)
     );
     assert!(!realization.release_acquire_synchronizes(release, acquire));
-    assert!(realization.release_acquire_synchronizes_in_hierarchy(
-        release,
-        acquire,
-        &hierarchy
-    ));
+    assert!(realization.release_acquire_synchronizes_in_hierarchy(release, acquire, &hierarchy));
 }
 
 #[test]
@@ -166,11 +165,7 @@ fn group_release_directly_synchronizes_with_root_acquire_symmetrically() {
         realization.synchronization_scope_relation_in_hierarchy(release, acquire, &hierarchy),
         Some(AtomicScopeRelation::Compatible)
     );
-    assert!(realization.release_acquire_synchronizes_in_hierarchy(
-        release,
-        acquire,
-        &hierarchy
-    ));
+    assert!(realization.release_acquire_synchronizes_in_hierarchy(release, acquire, &hierarchy));
 }
 
 #[test]
@@ -208,13 +203,15 @@ fn root_group_scope_is_incompatible_when_root_producer_belongs_to_another_group(
         realization.synchronization_scope_relation_in_hierarchy(release, acquire, &hierarchy),
         Some(AtomicScopeRelation::Incompatible)
     );
-    assert!(!realization.release_acquire_synchronizes_in_hierarchy(
-        release,
-        acquire,
-        &hierarchy
-    ));
-    assert_eq!(realization.prior_value(release), Some(AtomicValueToken::new(10)));
-    assert_eq!(realization.prior_value(acquire), Some(AtomicValueToken::new(20)));
+    assert!(!realization.release_acquire_synchronizes_in_hierarchy(release, acquire, &hierarchy));
+    assert_eq!(
+        realization.prior_value(release),
+        Some(AtomicValueToken::new(10))
+    );
+    assert_eq!(
+        realization.prior_value(acquire),
+        Some(AtomicValueToken::new(20))
+    );
     assert_eq!(realization.final_value(), AtomicValueToken::new(30));
 }
 
@@ -249,7 +246,10 @@ fn root_release_directly_synchronizes_with_subgroup_acquire_when_root_producer_i
     .unwrap();
     let realization = fixture.realize(&[release, acquire], &[]).unwrap();
 
-    assert_eq!(realization.synchronization_scope_relation(release, acquire), None);
+    assert_eq!(
+        realization.synchronization_scope_relation(release, acquire),
+        None
+    );
     assert_eq!(
         realization.synchronization_scope_relation_in_hierarchy(release, acquire, &hierarchy),
         Some(AtomicScopeRelation::Compatible)
@@ -258,11 +258,7 @@ fn root_release_directly_synchronizes_with_subgroup_acquire_when_root_producer_i
         realization.synchronization_scope_relation_in_hierarchy(acquire, release, &hierarchy),
         Some(AtomicScopeRelation::Compatible)
     );
-    assert!(realization.release_acquire_synchronizes_in_hierarchy(
-        release,
-        acquire,
-        &hierarchy
-    ));
+    assert!(realization.release_acquire_synchronizes_in_hierarchy(release, acquire, &hierarchy));
 }
 
 #[test]
@@ -300,11 +296,7 @@ fn subgroup_release_directly_synchronizes_with_root_acquire_symmetrically() {
         realization.synchronization_scope_relation_in_hierarchy(release, acquire, &hierarchy),
         Some(AtomicScopeRelation::Compatible)
     );
-    assert!(realization.release_acquire_synchronizes_in_hierarchy(
-        release,
-        acquire,
-        &hierarchy
-    ));
+    assert!(realization.release_acquire_synchronizes_in_hierarchy(release, acquire, &hierarchy));
 }
 
 #[test]
@@ -342,11 +334,7 @@ fn root_subgroup_scope_is_incompatible_for_same_group_different_subgroup() {
         realization.synchronization_scope_relation_in_hierarchy(release, acquire, &hierarchy),
         Some(AtomicScopeRelation::Incompatible)
     );
-    assert!(!realization.release_acquire_synchronizes_in_hierarchy(
-        release,
-        acquire,
-        &hierarchy
-    ));
+    assert!(!realization.release_acquire_synchronizes_in_hierarchy(release, acquire, &hierarchy));
 }
 
 #[test]
@@ -434,17 +422,60 @@ fn distinct_same_each_hierarchy_cannot_retarget_root_to_narrower_scope_evidence(
         None
     );
     assert_eq!(
-        realization.synchronization_scope_relation_in_hierarchy(
-            root,
-            subgroup,
-            &foreign_hierarchy
-        ),
+        realization.synchronization_scope_relation_in_hierarchy(root, subgroup, &foreign_hierarchy),
         None
     );
     assert!(!realization.release_acquire_synchronizes_in_hierarchy(
         root,
         group,
         &foreign_hierarchy
+    ));
+}
+
+#[test]
+fn missing_root_membership_is_insufficient_evidence_not_scope_incompatibility() {
+    let each = EachId::new(1);
+    let selected_hierarchy = hierarchy(each, 7, &[(1, 3, 5), (2, 3, 5)]);
+    let incomplete_evidence = hierarchy(each, 7, &[(2, 3, 5)]);
+    let location = AtomicLocationId::new(1);
+    let root = exchange_id(location, 1);
+    let subgroup = exchange_id(location, 2);
+    let fixture = AtomicExchangeFixture::new(
+        location,
+        AtomicValueToken::new(10),
+        vec![
+            root_exchange(
+                location,
+                1,
+                20,
+                AtomicExchangeSemantics::Release,
+                IterationId::new(each, 1),
+            ),
+            subgroup_exchange(
+                location,
+                2,
+                30,
+                AtomicExchangeSemantics::Acquire,
+                &selected_hierarchy,
+                IterationId::new(each, 2),
+            ),
+        ],
+    )
+    .unwrap();
+    let realization = fixture.realize(&[root, subgroup], &[]).unwrap();
+
+    assert_eq!(
+        realization.synchronization_scope_relation_in_hierarchy(
+            root,
+            subgroup,
+            &incomplete_evidence
+        ),
+        None
+    );
+    assert!(!realization.release_acquire_synchronizes_in_hierarchy(
+        root,
+        subgroup,
+        &incomplete_evidence
     ));
 }
 
