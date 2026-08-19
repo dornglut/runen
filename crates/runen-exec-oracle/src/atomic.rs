@@ -1,4 +1,6 @@
-use crate::{GroupId, HierarchyFixture, IterationId, coverage::has_exact_unique_coverage};
+use crate::{
+    GroupId, HierarchyFixture, IterationId, SubgroupId, coverage::has_exact_unique_coverage,
+};
 
 /// Verification-only opaque identity for one semantic atomic location.
 ///
@@ -91,19 +93,48 @@ impl AtomicGroupScope {
     }
 }
 
+/// Verification-only evidence that one producer iteration is admitted for
+/// subgroup-cohort atomic scope by one already-validated hierarchy fixture.
+///
+/// The producer and selected subgroup are derived together from validated hierarchy
+/// membership. There is no public constructor that can pair an iteration with an
+/// unrelated subgroup identity. This is not a source hierarchy handle, scheduling
+/// token, hardware subgroup identity, or reusable participant-domain abstraction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AtomicSubgroupScope {
+    producer: IterationId,
+    subgroup: SubgroupId,
+}
+
+impl AtomicSubgroupScope {
+    #[must_use]
+    pub fn from_hierarchy(hierarchy: &HierarchyFixture, producer: IterationId) -> Option<Self> {
+        let membership = hierarchy.membership(producer)?;
+        Some(Self {
+            producer,
+            subgroup: membership.subgroup(),
+        })
+    }
+
+    const fn subgroup(self) -> SubgroupId {
+        self.subgroup
+    }
+}
+
 /// Verification-only synchronization-scope classification for one atomic exchange.
 ///
 /// `Root` records the iteration that performs the scoped exchange. The selected
 /// root cohort is derived from that iteration's containing dynamic `each`.
-/// `Group` carries validated evidence tying the producer to its actual group in an
-/// already-established hierarchy fixture. These variants are not source memory-
-/// scope spellings, a hardware scope lattice, hierarchy topology, or scheduling
-/// metadata.
+/// `Group` and `Subgroup` carry validated evidence tying the producer to its actual
+/// cohort in an already-established hierarchy fixture. These variants are not source
+/// memory-scope spellings, a hardware scope lattice, hierarchy topology, or
+/// scheduling metadata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AtomicExchangeScope {
     Unscoped,
     Root(IterationId),
     Group(AtomicGroupScope),
+    Subgroup(AtomicSubgroupScope),
 }
 
 /// Verification-only result of comparing two represented exchange scope forms.
@@ -323,6 +354,13 @@ impl AtomicExchangeRealization {
             }
             (AtomicExchangeScope::Group(left), AtomicExchangeScope::Group(right)) => {
                 if left.group() == right.group() {
+                    AtomicScopeRelation::Compatible
+                } else {
+                    AtomicScopeRelation::Incompatible
+                }
+            }
+            (AtomicExchangeScope::Subgroup(left), AtomicExchangeScope::Subgroup(right)) => {
+                if left.subgroup() == right.subgroup() {
                     AtomicScopeRelation::Compatible
                 } else {
                     AtomicScopeRelation::Incompatible
