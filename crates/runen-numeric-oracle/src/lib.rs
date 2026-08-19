@@ -301,7 +301,7 @@ pub fn reduce_finite_sum(
     format: BinaryFormat,
     contributions: &[BinaryValueFixture],
 ) -> Result<RoundedBinaryValue, NumericOracleError> {
-    let mut minimum_exponent = None;
+    let mut minimum_exponent: Option<i32> = None;
     let mut empty = true;
     let mut negative_zero_only = true;
 
