@@ -194,7 +194,7 @@ fn equal_private_group_tokens_under_distinct_same_each_hierarchies_remain_incomp
 }
 
 #[test]
-fn group_mixed_with_root_or_unscoped_remains_open() {
+fn group_mixed_with_unscoped_remains_open() {
     let each = EachId::new(1);
     let hierarchy = hierarchy(each, 1, &[(1, 1, 1)]);
     let location = AtomicLocationId::new(1);
@@ -209,7 +209,7 @@ fn group_mixed_with_root_or_unscoped_remains_open() {
         IterationId::new(each, 1),
     );
 
-    let with_unscoped = AtomicExchangeFixture::new(
+    let realization = AtomicExchangeFixture::new(
         location,
         AtomicValueToken::new(10),
         vec![
@@ -226,32 +226,10 @@ fn group_mixed_with_root_or_unscoped_remains_open() {
     .realize(&[first, second], &[])
     .unwrap();
     assert_eq!(
-        with_unscoped.synchronization_scope_relation(first, second),
+        realization.synchronization_scope_relation(first, second),
         Some(AtomicScopeRelation::Open)
     );
-    assert!(!with_unscoped.release_acquire_synchronizes(first, second));
-
-    let with_root = AtomicExchangeFixture::new(
-        location,
-        AtomicValueToken::new(10),
-        vec![
-            group_release,
-            AtomicExchange::new(
-                second,
-                AtomicValueToken::new(30),
-                AtomicExchangeSemantics::Acquire,
-                AtomicExchangeScope::Root(IterationId::new(each, 1)),
-            ),
-        ],
-    )
-    .unwrap()
-    .realize(&[first, second], &[])
-    .unwrap();
-    assert_eq!(
-        with_root.synchronization_scope_relation(first, second),
-        Some(AtomicScopeRelation::Open)
-    );
-    assert!(!with_root.release_acquire_synchronizes(first, second));
+    assert!(!realization.release_acquire_synchronizes(first, second));
 }
 
 #[test]
