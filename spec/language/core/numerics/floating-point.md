@@ -391,6 +391,52 @@ By the contract-refinement rule, `reproducible` and `fast` follow this `standard
 
 This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, literals, or transcendental accuracy.
 
+## Finite unordered floating sum reduction
+
+For an already-admitted unordered floating sum reduction, suppose one binary floating type `T` governed by this document is already established as the type of every submitted floating value and as the final floating result type. This section defines the `standard` numerical rule only for a normally completed reduction occurrence whose submitted values are all nonzero finite values of `T` or signed zero values of `T`, and whose semantic contribution collection is finite.
+
+This numerical rule consumes the participant, cohort, contribution-occurrence, exact-once coverage, identity, and normal-completion obligations of the Exec unordered-reduction contract. It does not reinterpret participant selection, hierarchy, contribution occurrence identity, completion, scheduling, or physical reduction structure.
+
+The floating-sum operation supplies Exec with an internal semantic combination domain of **finite sum states**. A finite sum state is operation-private semantic structure used as the contribution and partial-result value of this reduction contract. It is not a source-visible Runen type, an ordinary program value, a storage representation, an ABI value, or a required physical accumulator.
+
+A finite sum state is a pair `(s, z)` where:
+
+- `s` is the exact mathematical finite real sum represented by the state, interpreting either signed zero as mathematical zero;
+- `z` is exactly one of:
+  - `empty` — no submitted floating value is represented by the state;
+  - `negative-zero-only` — at least one submitted value is represented and every represented value is `-0`;
+  - `other` — every other non-empty represented collection.
+
+Each submitted floating value is injected into exactly one singleton semantic contribution state before Exec combines contributions:
+
+- a nonzero finite value with exact real value `x` becomes `(x, other)`;
+- `+0` becomes `(0, other)`;
+- `-0` becomes `(0, negative-zero-only)`.
+
+The reduction identity value `e` is the state `(0, empty)`.
+
+Combining `(s1, z1)` and `(s2, z2)` produces a finite sum state whose exact sum is the mathematical real value `s1 + s2`, computed with unbounded semantic range and precision and with no floating rounding. Its zero-sign classification is combined by these rules:
+
+- `empty` is a two-sided identity for the classification;
+- `negative-zero-only` combined with `negative-zero-only` yields `negative-zero-only`;
+- every other combination of two non-empty classifications yields `other`.
+
+Under exact equality of both state components, this combination is normally completing, closed over finite sum states, result-only, has the two-sided identity `e`, and is associative and commutative. It therefore supplies a combination domain satisfying the existing Exec unordered-reduction law boundary. This statement does not make ordinary binary floating `+` associative or commutative under its rounded operation semantics and does not make ordinary floating values a generic lawful unordered-reduction combination domain.
+
+After Exec has incorporated every singleton semantic contribution exactly once, the numeric operation finalizes the resulting state `(s, z)` to `T`:
+
+- if `s != 0`, it explicitly supplies that one exact finite real quantity to the binary floating rounding relation for `T` exactly once;
+- if `s = 0` and `z = negative-zero-only`, it produces `-0`;
+- otherwise, when `s = 0`, it produces `+0`.
+
+Consequently an empty floating sum produces `+0`; a non-empty sum whose submitted values are all `-0` produces `-0`; mixed signed zeros produce `+0`; and exact cancellation involving any nonzero finite contribution produces `+0`. A nonzero exact sum may lie beyond the finite representable range of `T`; the accepted upper-bound rounding rule then determines whether the final result is finite or signed infinity. No intermediate floating rounding occurs in the semantic sum state.
+
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` finite same-format sum-reduction rule unless a later reduction-specific rule explicitly narrows or relaxes the named numerical behavior. Existing `fast` permissions for basic-operation subnormal input flushing, subnormal result flushing, reassociation, and finite multiply-add contraction apply only to the operation occurrences they explicitly name and do not alter singleton injection, exact sum-state combination, or finalization under this reduction rule.
+
+Physical tree shape, contribution permutation, lane or worker identity, queue or chunk order, native reduction instructions, host floating addition, and backend aggregate fast-math behavior are not semantic input. A realization MAY use an exact, binned, superaccumulator, or another implementation technique when it proves that technique preserves the result permitted here; absence of a direct native exact-sum primitive is not permission to substitute a result-changing ordinary floating-addition tree.
+
+This section does not define submitted NaN or signed-infinity behavior, NaN member selection or propagation, mixed floating formats or promotions, products, dot products, min/max, scans, ordered reductions, generic user-defined floating combination operators, a source-visible exact accumulator type, physical accumulator width or layout, a required summation algorithm, a `fast` reduction-specific tree/approximation/flushing relaxation, source reduction syntax or placement, hierarchy selection syntax, numeric-contract selection syntax, or abnormal reduction completion.
+
 ## Reassociation
 
 Under `standard` and `reproducible`, semantic grouping of separately represented floating-point additions or multiplications is result-significant. A realization MUST NOT use real-number associativity to regroup those operations when doing so can change Runen-observable behavior permitted by the selected contract. A realization MAY physically restructure the computation when it proves that the resulting behavior still satisfies the selected contract.
@@ -401,4 +447,4 @@ This `fast` reassociation permission does not by itself authorize operand permut
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, reduction-specific numeric behavior outside the finite same-format unordered sum reduction above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
