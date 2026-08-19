@@ -107,7 +107,7 @@ Interpret each admitted nonzero finite operand by the exact real value supplied 
 
 Under `standard`, floating addition, subtraction, multiplication, and division use the exact real relations `x + y`, `x - y`, `x * y`, and `x / y`, respectively. The division relation in this section applies only when the divisor is a nonzero finite value; a signed-zero divisor remains outside this section.
 
-When that exact mathematical result is nonzero, it is a mathematical semantic quantity consumed by the applicable rounding rules below for the already-established result type. It is not a separately observable Runen value and need not itself be representable in that result type. In particular, a nonzero exact real result beyond the largest finite representable magnitude is handled by the upper-bound rounding rule rather than by host or backend overflow behavior.
+When that exact mathematical result is nonzero, the operation explicitly supplies it as a nonzero exact finite real quantity to the binary floating rounding relation below for the already-established result type exactly once. It is not a separately observable Runen value and need not itself be representable in that result type. In particular, a nonzero exact real result beyond the largest finite representable magnitude is handled by the upper-bound rounding rule rather than by host or backend overflow behavior.
 
 When the exact mathematical result is zero, `standard` selects a signed-zero result as follows:
 
@@ -173,6 +173,16 @@ The unresolved NaN member-selection rule is an open semantic obligation, not imp
 
 By the contract-refinement rules, `reproducible` and `fast` inherit the NaN-class outcome requirement unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, canonicalization, payload propagation, aggregate fast-math behavior, or physical signaling behavior supplies no implicit Runen relaxation.
 
+## Fixed-width integer to binary floating conversion
+
+For an already-admitted conversion whose source is a semantic fixed-width integer value `n` and whose result type is an already-established binary floating type governed by this document, interpret `n` as its exact mathematical integer value and therefore as an exact finite real quantity.
+
+Under `standard`, integer zero converts to `+0`. A nonzero integer value explicitly supplies its exact finite real quantity to the binary floating rounding relation below for the established result type exactly once. An exactly representable integer therefore converts exactly; a nonrepresentable integer is rounded only by that relation, including its lower and upper format boundaries.
+
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` conversion unless a later conversion-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not by themselves flush this conversion's source or result.
+
+This conversion uses the semantic integer value, not a physical integer encoding or bit pattern. It does not define source cast syntax, implicit conversion or promotion, conversion insertion, concrete integer or floating source type spellings, vector conversion, floating-to-integer or floating-to-floating conversion, literals, constant-evaluation diagnostics, physical representation, ABI, backend instructions, or target behavior.
+
 ## Finite multiply-add contraction
 
 An **eligible finite multiply-add contraction occurrence** is one dynamic evaluation of an already-established floating addition for which one consumed operand value is the result value of an already-established floating multiplication evaluation and the other consumed addition operand is an already-established value `z`. Let `x` and `y` be the operand values consumed by that multiplication evaluation. Eligibility requires all of the following for that occurrence:
@@ -184,7 +194,7 @@ An **eligible finite multiply-add contraction occurrence** is one dynamic evalua
 
 Without contraction, evaluation remains the already-defined basic-operation semantics: the multiplication result is rounded according to its result type, and the addition then consumes that rounded value and produces its own rounded result.
 
-Under `fast`, a realization MAY instead contract an eligible occurrence. Contracted evaluation computes the exact real quantity `(x * y) + z` as if with unbounded intermediate range and precision. No Runen rounding, overflow-result selection, underflow-result selection, or finite-format truncation occurs between multiplication and addition. The one exact result is then consumed by the accepted rounding rules for the established addition result type exactly once.
+Under `fast`, a realization MAY instead contract an eligible occurrence. Contracted evaluation computes the exact real quantity `(x * y) + z` as if with unbounded intermediate range and precision. No Runen rounding, overflow-result selection, underflow-result selection, or finite-format truncation occurs between multiplication and addition. The one exact result is then explicitly supplied as a nonzero exact finite real quantity to the binary floating rounding relation below for the established addition result type exactly once.
 
 Therefore an eligible `fast` occurrence explicitly permits either the ordinary uncontracted result or the contracted one-round result. Choosing whether to contract is permitted numerical variation under the `fast` contract; backend behavior is not additional semantic input.
 
@@ -198,9 +208,11 @@ Backend fused instructions, LLVM-style contraction flags, WGSL fusion latitude, 
 
 This section does not define an exact-zero contracted result, contraction involving signed-zero, signed-infinity, or NaN operand values, NaN member selection or propagation, multiply-subtract or negated fused variants, a standalone fused operation, source syntax, compiler IR, physical instructions, or environment capability requirements.
 
+The **binary floating rounding relation** is the result relation supplied collectively by the interior finite, zero-boundary, and upper-bound rounding sections below. An applicable operation consumes this relation only when its own canonical semantics explicitly supplies a nonzero exact finite real quantity `x` and an already-established binary floating result type to it. Merely having a real-valued mathematical interpretation does not make another operation consume this relation.
+
 ## Interior finite rounding
 
-For an otherwise-defined floating arithmetic operation whose applicable contract determines an exact finite real result `x`, `standard` uses the following rounding rule when the operation's result type has the binary finite value format above.
+For a nonzero exact finite real quantity `x` explicitly supplied to the binary floating rounding relation, `standard` uses the following rounding rule when the already-established result type has the binary finite value format above.
 
 If `x` is a nonzero finite value exactly representable by that result format, the rounded result is exactly `x`.
 
@@ -214,13 +226,13 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, conversions, literals, transcendental accuracy, reduced precision, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, remaining conversions, literals, transcendental accuracy, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
 Let `q = 2^(emin - (p - 1))`, the smallest positive subnormal magnitude of a binary floating result format.
 
-For an otherwise-defined floating arithmetic operation whose exact finite real result `x` is nonzero and satisfies `|x| < q`, `standard` extends the nearest/ties-to-even rule to the signed-zero boundary:
+For a nonzero exact finite real quantity `x` explicitly supplied to the binary floating rounding relation and satisfying `|x| < q`, `standard` extends nearest/ties-to-even to the signed-zero boundary:
 
 - if `0 < x < q / 2`, the rounded result is `+0`;
 - if `q / 2 < x < q`, the rounded result is `+q`;
@@ -279,7 +291,7 @@ For a binary floating result format, define:
 - the positive upper limit `U = 2^(emax + 1)`, the next power-of-two value in the mathematical continuation of the format spacing beyond `L`;
 - the overflow midpoint `H = (L + U) / 2 = U - 2^(emax - p)`.
 
-For an otherwise-defined floating arithmetic operation whose exact real result `x` is finite and satisfies `|x| > L`, `standard` extends nearest/ties-to-even to the upper finite boundary:
+For a nonzero exact finite real quantity `x` explicitly supplied to the binary floating rounding relation and satisfying `|x| > L`, `standard` extends nearest/ties-to-even to the upper finite boundary:
 
 - if `L < |x| < H`, the rounded result is the maximum finite value with the sign of `x`;
 - if `|x| >= H`, the rounded result is the signed infinity with the sign of `x`.
@@ -288,7 +300,7 @@ At `|x| = H`, the infinity side is the ties-to-even choice. The maximum finite c
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` upper-bound rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. Backend finite-only, saturation, overflow-mode, or fast-math behavior supplies no such relaxation by itself.
 
-This section rounds only an otherwise-defined finite exact real result. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, conversions, literals, or transcendental accuracy.
+This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, remaining conversions, literals, or transcendental accuracy.
 
 ## Reassociation
 
