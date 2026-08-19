@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
-    AtomicExchange, AtomicExchangeError, AtomicExchangeScope, AtomicExchangeSemantics,
-    AtomicValueToken, BufferAtomicExchangeError, BufferAtomicExchangeFixture, BufferAtomicLocation,
-    BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
+    AtomicExchangeError, AtomicExchangeScope, AtomicExchangeSemantics, AtomicValueToken,
+    BufferAtomicExchangeError, BufferAtomicExchangeFixture, BufferAtomicLocation, BufferId,
+    BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
 
 fn logical_state(buffer: BufferId) -> LogicalBufferState {
@@ -47,41 +47,65 @@ fn buffer_atomic_location_identity_is_exact_buffer_position_identity() {
 }
 
 #[test]
-fn fixture_adapter_token_does_not_replace_buffer_atomic_location_identity() {
+fn buffer_atomic_exchange_identity_is_structurally_scoped_by_location() {
     let location = BufferAtomicLocation::new(BufferId(1), PositionId(7));
-    let first_fixture = BufferAtomicExchangeFixture::new(location, 100);
-    let second_fixture = BufferAtomicExchangeFixture::new(location, 200);
+    let same_location = BufferAtomicExchangeFixture::new(location);
+    let same_again = BufferAtomicExchangeFixture::new(location);
+    let other_location =
+        BufferAtomicExchangeFixture::new(BufferAtomicLocation::new(BufferId(1), PositionId(8)));
 
-    assert_eq!(first_fixture.location(), location);
-    assert_eq!(second_fixture.location(), location);
-    assert_eq!(first_fixture.location(), second_fixture.location());
-    assert_ne!(first_fixture.exchange_id(1), second_fixture.exchange_id(1));
+    let first = same_location
+        .exchange(
+            1,
+            AtomicValueToken::new(20),
+            AtomicExchangeSemantics::Base,
+            AtomicExchangeScope::Unscoped,
+        )
+        .id();
+    let same = same_again
+        .exchange(
+            1,
+            AtomicValueToken::new(30),
+            AtomicExchangeSemantics::Acquire,
+            AtomicExchangeScope::Unscoped,
+        )
+        .id();
+    let other = other_location
+        .exchange(
+            1,
+            AtomicValueToken::new(20),
+            AtomicExchangeSemantics::Base,
+            AtomicExchangeScope::Unscoped,
+        )
+        .id();
+
+    assert_eq!(first, same);
+    assert_ne!(first, other);
+    assert_eq!(first.location(), location);
+    assert_eq!(other.location(), BufferAtomicLocation::new(BufferId(1), PositionId(8)));
 }
 
 #[test]
 fn atomic_exchange_reads_and_replaces_the_same_logical_buffer_value() {
     let buffer = BufferId(1);
     let location = BufferAtomicLocation::new(buffer, PositionId(1));
-    let fixture = BufferAtomicExchangeFixture::new(location, 100);
-    let exchange = fixture.exchange_id(1);
+    let fixture = BufferAtomicExchangeFixture::new(location);
+    let exchange = fixture.exchange(
+        1,
+        AtomicValueToken::new(20),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let exchange_id = exchange.id();
     let mut state = logical_state(buffer);
 
     let realization = fixture
-        .realize(
-            &mut state,
-            vec![AtomicExchange::new(
-                exchange,
-                AtomicValueToken::new(20),
-                AtomicExchangeSemantics::Base,
-                AtomicExchangeScope::Unscoped,
-            )],
-            &[exchange],
-            &[],
-        )
+        .realize(&mut state, vec![exchange], &[exchange_id], &[])
         .unwrap();
 
+    assert_eq!(realization.location(), location);
     assert_eq!(
-        realization.prior_value(exchange),
+        realization.prior_value(exchange_id),
         Some(AtomicValueToken::new(10))
     );
     assert_eq!(realization.final_value(), AtomicValueToken::new(20));
@@ -99,39 +123,33 @@ fn atomic_exchange_reads_and_replaces_the_same_logical_buffer_value() {
 fn candidate_modification_order_commits_only_its_atomic_final_value_to_buffer_state() {
     let buffer = BufferId(1);
     let location = BufferAtomicLocation::new(buffer, PositionId(1));
-    let fixture = BufferAtomicExchangeFixture::new(location, 100);
-    let first = fixture.exchange_id(1);
-    let second = fixture.exchange_id(2);
+    let fixture = BufferAtomicExchangeFixture::new(location);
+    let first = fixture.exchange(
+        1,
+        AtomicValueToken::new(20),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let second = fixture.exchange(
+        2,
+        AtomicValueToken::new(30),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let first_id = first.id();
+    let second_id = second.id();
     let mut state = logical_state(buffer);
 
     let realization = fixture
-        .realize(
-            &mut state,
-            vec![
-                AtomicExchange::new(
-                    first,
-                    AtomicValueToken::new(20),
-                    AtomicExchangeSemantics::Base,
-                    AtomicExchangeScope::Unscoped,
-                ),
-                AtomicExchange::new(
-                    second,
-                    AtomicValueToken::new(30),
-                    AtomicExchangeSemantics::Base,
-                    AtomicExchangeScope::Unscoped,
-                ),
-            ],
-            &[second, first],
-            &[],
-        )
+        .realize(&mut state, vec![first, second], &[second_id, first_id], &[])
         .unwrap();
 
     assert_eq!(
-        realization.prior_value(second),
+        realization.prior_value(second_id),
         Some(AtomicValueToken::new(10))
     );
     assert_eq!(
-        realization.prior_value(first),
+        realization.prior_value(first_id),
         Some(AtomicValueToken::new(30))
     );
     assert_eq!(realization.final_value(), AtomicValueToken::new(20));
@@ -139,31 +157,28 @@ fn candidate_modification_order_commits_only_its_atomic_final_value_to_buffer_st
 }
 
 #[test]
-fn foreign_atomic_location_is_rejected_without_mutating_buffer_state() {
+fn foreign_buffer_atomic_location_is_rejected_without_mutating_state() {
     let buffer = BufferId(1);
     let location = BufferAtomicLocation::new(buffer, PositionId(1));
     let foreign_location = BufferAtomicLocation::new(buffer, PositionId(2));
-    let fixture = BufferAtomicExchangeFixture::new(location, 100);
-    let foreign_fixture = BufferAtomicExchangeFixture::new(foreign_location, 200);
-    let foreign_exchange = foreign_fixture.exchange_id(1);
+    let fixture = BufferAtomicExchangeFixture::new(location);
+    let foreign_fixture = BufferAtomicExchangeFixture::new(foreign_location);
+    let foreign_exchange = foreign_fixture.exchange(
+        1,
+        AtomicValueToken::new(20),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let foreign_id = foreign_exchange.id();
     let mut state = logical_state(buffer);
     let before = state.clone();
 
     assert!(matches!(
-        fixture.realize(
-            &mut state,
-            vec![AtomicExchange::new(
-                foreign_exchange,
-                AtomicValueToken::new(20),
-                AtomicExchangeSemantics::Base,
-                AtomicExchangeScope::Unscoped,
-            )],
-            &[foreign_exchange],
-            &[],
-        ),
-        Err(BufferAtomicExchangeError::Atomic(
-            AtomicExchangeError::ForeignExchangeIdentity
-        ))
+        fixture.realize(&mut state, vec![foreign_exchange], &[foreign_id], &[]),
+        Err(BufferAtomicExchangeError::ForeignLocation {
+            expected,
+            actual
+        }) if expected == location && actual == foreign_location
     ));
     assert_eq!(state, before);
 }
@@ -172,31 +187,30 @@ fn foreign_atomic_location_is_rejected_without_mutating_buffer_state() {
 fn rejected_atomic_order_is_transactional_with_respect_to_buffer_state() {
     let buffer = BufferId(1);
     let location = BufferAtomicLocation::new(buffer, PositionId(1));
-    let fixture = BufferAtomicExchangeFixture::new(location, 100);
-    let first = fixture.exchange_id(1);
-    let second = fixture.exchange_id(2);
+    let fixture = BufferAtomicExchangeFixture::new(location);
+    let first = fixture.exchange(
+        1,
+        AtomicValueToken::new(20),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let second = fixture.exchange(
+        2,
+        AtomicValueToken::new(30),
+        AtomicExchangeSemantics::Base,
+        AtomicExchangeScope::Unscoped,
+    );
+    let first_id = first.id();
+    let second_id = second.id();
     let mut state = logical_state(buffer);
     let before = state.clone();
 
     assert!(matches!(
         fixture.realize(
             &mut state,
-            vec![
-                AtomicExchange::new(
-                    first,
-                    AtomicValueToken::new(20),
-                    AtomicExchangeSemantics::Base,
-                    AtomicExchangeScope::Unscoped,
-                ),
-                AtomicExchange::new(
-                    second,
-                    AtomicValueToken::new(30),
-                    AtomicExchangeSemantics::Base,
-                    AtomicExchangeScope::Unscoped,
-                ),
-            ],
-            &[second, first],
-            &[(first, second)],
+            vec![first, second],
+            &[second_id, first_id],
+            &[(first_id, second_id)],
         ),
         Err(BufferAtomicExchangeError::Atomic(
             AtomicExchangeError::OrderConstraintViolation
@@ -211,10 +225,8 @@ fn wrong_buffer_and_unknown_position_are_rejected_before_atomic_realization() {
     let mut state = logical_state(buffer);
     let before = state.clone();
 
-    let wrong_buffer = BufferAtomicExchangeFixture::new(
-        BufferAtomicLocation::new(BufferId(2), PositionId(1)),
-        100,
-    );
+    let wrong_buffer =
+        BufferAtomicExchangeFixture::new(BufferAtomicLocation::new(BufferId(2), PositionId(1)));
     assert!(matches!(
         wrong_buffer.realize(&mut state, vec![], &[], &[]),
         Err(BufferAtomicExchangeError::LogicalState(
@@ -227,7 +239,7 @@ fn wrong_buffer_and_unknown_position_are_rejected_before_atomic_realization() {
     assert_eq!(state, before);
 
     let unknown_position =
-        BufferAtomicExchangeFixture::new(BufferAtomicLocation::new(buffer, PositionId(99)), 200);
+        BufferAtomicExchangeFixture::new(BufferAtomicLocation::new(buffer, PositionId(99)));
     assert!(matches!(
         unknown_position.realize(&mut state, vec![], &[], &[]),
         Err(BufferAtomicExchangeError::LogicalState(
