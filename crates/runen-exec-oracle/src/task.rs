@@ -158,7 +158,7 @@ pub enum TaskStateRetention {
 }
 
 /// Whether one represented state dependency is safe to keep using after detachment
-/// from the originating structured task scope.
+/// from the originating structured scope.
 #[must_use]
 pub const fn state_is_detach_safe(retention: TaskStateRetention) -> bool {
     matches!(
@@ -168,7 +168,7 @@ pub const fn state_is_detach_safe(retention: TaskStateRetention) -> bool {
 }
 
 /// Whether every represented state dependency required by detached work is
-/// independently valid after the originating structured task scope may complete.
+/// independently valid after the originating structured scope may complete.
 #[must_use]
 pub fn all_state_dependencies_are_detach_safe(required_state: &[TaskStateRetention]) -> bool {
     required_state.iter().copied().all(state_is_detach_safe)
