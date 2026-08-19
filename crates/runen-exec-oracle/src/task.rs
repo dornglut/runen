@@ -47,27 +47,36 @@ pub fn task_scope_orders(earlier: TaskScopePhase, later: TaskScopePhase) -> bool
 
 /// Verification-only opaque identity for one explicit normal task-join occurrence.
 ///
-/// The private token carries equality only. It is not a source task handle, runtime
-/// wait object, scheduler event, progress token, or generic dependency-graph node.
+/// Identity is structurally scoped by the exact target task so one join identity
+/// cannot be paired with contradictory targets. The private token otherwise carries
+/// equality only. This is not a source task handle, runtime wait object, scheduler
+/// event, progress token, or generic dependency-graph node.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TaskJoinId(u32);
+pub struct TaskJoinId {
+    target: TaskId,
+    token: u32,
+}
 
 impl TaskJoinId {
     #[must_use]
-    pub const fn new(token: u32) -> Self {
-        Self(token)
+    pub const fn new(target: TaskId, token: u32) -> Self {
+        Self { target, token }
+    }
+
+    const fn target(self) -> TaskId {
+        self.target
     }
 }
 
 /// Verification-only phase points for the focused normal task-join relation.
 ///
 /// `TargetTask` stands for actions of the named target task that precede its normal
-/// completion. `After` stands for the normal continuation of one explicit join that
-/// targets that exact task. These are not source task states or runtime wait phases.
+/// completion. `After` stands for the normal continuation of one exact target-bound
+/// join. These are not source task states or runtime wait phases.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TaskJoinPhase {
     TargetTask(TaskId),
-    After { join: TaskJoinId, target: TaskId },
+    After(TaskJoinId),
 }
 
 /// Tests only the target-task -> post-join ordering supplied by one explicit normal
@@ -79,10 +88,8 @@ pub enum TaskJoinPhase {
 pub fn task_join_orders(earlier: TaskJoinPhase, later: TaskJoinPhase) -> bool {
     matches!(
         (earlier, later),
-        (
-            TaskJoinPhase::TargetTask(task),
-            TaskJoinPhase::After { target, .. },
-        ) if task == target
+        (TaskJoinPhase::TargetTask(task), TaskJoinPhase::After(join))
+            if task == join.target()
     )
 }
 
