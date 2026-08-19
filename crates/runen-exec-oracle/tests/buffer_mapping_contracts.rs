@@ -76,8 +76,7 @@ fn mapping_identity_is_scoped_by_exact_allocation() {
 #[test]
 fn duplicate_mapping_identity_is_rejected_within_one_allocation() {
     let mut allocation = allocation_fixture(7, &[1]);
-    let _first =
-        BufferMappingFixture::new(1, region(1, &[0]), agent(1), &mut allocation).unwrap();
+    let _first = BufferMappingFixture::new(1, region(1, &[0]), agent(1), &mut allocation).unwrap();
 
     assert!(matches!(
         BufferMappingFixture::new(1, region(1, &[1]), agent(1), &mut allocation),
@@ -125,10 +124,8 @@ fn inaccessible_agent_is_rejected_before_mapping_identity_is_consumed() {
 fn one_allocation_may_admit_multiple_distinct_agents() {
     let selected = region(1, &[0]);
     let mut allocation = allocation_fixture(7, &[1, 2]);
-    let first =
-        BufferMappingFixture::new(1, selected.clone(), agent(1), &mut allocation).unwrap();
-    let second =
-        BufferMappingFixture::new(2, selected.clone(), agent(2), &mut allocation).unwrap();
+    let first = BufferMappingFixture::new(1, selected.clone(), agent(1), &mut allocation).unwrap();
+    let second = BufferMappingFixture::new(2, selected.clone(), agent(2), &mut allocation).unwrap();
     let mut logical = state(1, &[(0, 10)]);
 
     first
@@ -149,13 +146,8 @@ fn distinct_allocations_may_differ_in_accessibility_to_same_agent() {
     let mut first_allocation = allocation_fixture(7, &[1]);
     let mut second_allocation = allocation_fixture(8, &[2]);
 
-    let first = BufferMappingFixture::new(
-        1,
-        selected.clone(),
-        agent(1),
-        &mut first_allocation,
-    )
-    .unwrap();
+    let first =
+        BufferMappingFixture::new(1, selected.clone(), agent(1), &mut first_allocation).unwrap();
     assert_eq!(first.agent(), agent(1));
 
     assert_eq!(
@@ -208,8 +200,7 @@ fn mapping_is_region_local_not_whole_buffer_accessibility() {
     let mut allocation = allocation_fixture(7, &[1]);
     let mapped = region(1, &[0]);
     let disjoint = region(1, &[1]);
-    let mapping =
-        BufferMappingFixture::new(1, mapped.clone(), agent(1), &mut allocation).unwrap();
+    let mapping = BufferMappingFixture::new(1, mapped.clone(), agent(1), &mut allocation).unwrap();
     let logical = state(1, &[(0, 10), (1, 11)]);
 
     assert_eq!(
@@ -252,20 +243,10 @@ fn remapping_same_logical_region_across_agents_and_allocations_preserves_current
     let selected = region(1, &[0]);
     let mut first_allocation = allocation_fixture(7, &[1]);
     let mut second_allocation = allocation_fixture(8, &[2]);
-    let first = BufferMappingFixture::new(
-        1,
-        selected.clone(),
-        agent(1),
-        &mut first_allocation,
-    )
-    .unwrap();
-    let second = BufferMappingFixture::new(
-        1,
-        selected.clone(),
-        agent(2),
-        &mut second_allocation,
-    )
-    .unwrap();
+    let first =
+        BufferMappingFixture::new(1, selected.clone(), agent(1), &mut first_allocation).unwrap();
+    let second =
+        BufferMappingFixture::new(1, selected.clone(), agent(2), &mut second_allocation).unwrap();
     let mut logical = state(1, &[(0, 10)]);
 
     first
@@ -284,8 +265,7 @@ fn remapping_same_logical_region_across_agents_and_allocations_preserves_current
 #[test]
 fn invalid_mapped_change_is_rejected_before_logical_state_mutation() {
     let mut allocation = allocation_fixture(7, &[1]);
-    let mapping =
-        BufferMappingFixture::new(1, region(1, &[0]), agent(1), &mut allocation).unwrap();
+    let mapping = BufferMappingFixture::new(1, region(1, &[0]), agent(1), &mut allocation).unwrap();
     let mut logical = state(1, &[(0, 10), (1, 11)]);
     let original = logical.clone();
 
@@ -314,8 +294,7 @@ fn mapping_does_not_change_ordinary_conflict_legality() {
 fn mapping_end_does_not_mutate_logical_buffer_state() {
     let mut allocation = allocation_fixture(7, &[1]);
     let selected = region(1, &[0]);
-    let mut mapping =
-        BufferMappingFixture::new(1, selected, agent(1), &mut allocation).unwrap();
+    let mut mapping = BufferMappingFixture::new(1, selected, agent(1), &mut allocation).unwrap();
     let logical = state(1, &[(0, 10)]);
     let original = logical.clone();
 
@@ -327,8 +306,7 @@ fn mapping_end_does_not_mutate_logical_buffer_state() {
 #[test]
 fn equal_private_numeric_tokens_do_not_merge_identity_domains() {
     let mut allocation = allocation_fixture(1, &[1]);
-    let mapping =
-        BufferMappingFixture::new(1, region(1, &[0]), agent(1), &mut allocation).unwrap();
+    let mapping = BufferMappingFixture::new(1, region(1, &[0]), agent(1), &mut allocation).unwrap();
 
     assert_eq!(mapping.id().allocation(), AllocationId::new(1));
     assert_eq!(mapping.region().buffer(), BufferId(1));
