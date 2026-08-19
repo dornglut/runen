@@ -268,7 +268,7 @@ impl AtomicExchangeFixture {
             let after_index = candidate_order
                 .iter()
                 .position(|candidate| candidate == after)
-                .expect("exact coverage guarantees represented exchange presence");
+                .expect("exact coverage guarantees constrained exchange presence");
             before_index >= after_index
         }) {
             return Err(AtomicExchangeError::OrderConstraintViolation);
