@@ -55,7 +55,7 @@ The operation that performs detachment and whether every task form is detachable
 
 An **explicit normal task join** is a semantic interaction that targets exactly one task and establishes one normal-completion ordering boundary for that target.
 
-The target is one semantic task identity. A source or runtime mechanism that requests a join MUST therefore identify the intended semantic task according to its own future contract; an implementation or debug token that does not denote that task is not semantic authority for the join target.
+The join target is one semantic task identity. Implementation or debug tokens that do not denote that task are not semantic authority for the target. How source or runtime mechanisms obtain or represent the target remains not defined by this revision.
 
 A join completes normally only after its target task has completed normally. When the join completes normally, semantic actions performed by the target task in the applicable defined continuation occur before semantic actions in the continuation after that join.
 
