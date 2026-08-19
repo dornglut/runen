@@ -29,11 +29,12 @@ pub enum AllocationError {
 /// This fixture models only whether the allocation extent still exists and whether
 /// typed Buffer mappings are still nested inside it. It is not an allocator, memory
 /// space, byte store, address range, relocation model, or runtime allocation object.
-/// Its private active-mapping bookkeeping intentionally exposes no public debug or
+/// Its private mapping-token bookkeeping intentionally exposes no public debug or
 /// fixture-equality surface.
 pub struct AllocationFixture {
     id: AllocationId,
     live: bool,
+    used_mapping_tokens: BTreeSet<u32>,
     active_mapping_tokens: BTreeSet<u32>,
 }
 
@@ -43,6 +44,7 @@ impl AllocationFixture {
         Self {
             id,
             live: true,
+            used_mapping_tokens: BTreeSet::new(),
             active_mapping_tokens: BTreeSet::new(),
         }
     }
@@ -75,10 +77,12 @@ impl AllocationFixture {
         if !self.live {
             return Err(AllocationError::Ended);
         }
-        if !self.active_mapping_tokens.insert(token) {
+        if !self.used_mapping_tokens.insert(token) {
             return Err(AllocationError::MappingIdentityInUse);
         }
 
+        let inserted = self.active_mapping_tokens.insert(token);
+        debug_assert!(inserted, "new mapping occurrence is not already active");
         Ok(())
     }
 
