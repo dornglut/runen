@@ -4,7 +4,8 @@ use crate::{
     allocation::{AllocationError, AllocationFixture, AllocationId},
     atomic::{
         AtomicExchange, AtomicExchangeError, AtomicExchangeFixture, AtomicExchangeId,
-        AtomicExchangeRealization, AtomicLocationId, AtomicValueToken,
+        AtomicExchangeRealization, AtomicExchangeScope, AtomicExchangeSemantics, AtomicLocationId,
+        AtomicValueToken,
     },
     realization::RealizationAgentId,
 };
@@ -96,6 +97,46 @@ impl BufferAtomicLocation {
     }
 }
 
+/// Verification-only identity for one atomic exchange occurrence on a Buffer
+/// atomic location.
+///
+/// Identity is structurally scoped by the exact [`BufferAtomicLocation`]. The
+/// private token is not an address, generic atomic-location identity, source handle,
+/// or execution order.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BufferAtomicExchangeId {
+    location: BufferAtomicLocation,
+    token: u32,
+}
+
+impl BufferAtomicExchangeId {
+    const fn new(location: BufferAtomicLocation, token: u32) -> Self {
+        Self { location, token }
+    }
+
+    #[must_use]
+    pub const fn location(self) -> BufferAtomicLocation {
+        self.location
+    }
+}
+
+/// Verification-only description of one already-admitted atomic exchange on one
+/// Buffer atomic location.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BufferAtomicExchange {
+    id: BufferAtomicExchangeId,
+    desired: AtomicValueToken,
+    semantics: AtomicExchangeSemantics,
+    scope: AtomicExchangeScope,
+}
+
+impl BufferAtomicExchange {
+    #[must_use]
+    pub const fn id(self) -> BufferAtomicExchangeId {
+        self.id
+    }
+}
+
 /// Invalid use of the finite logical Buffer-state verification fixture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LogicalStateError {
@@ -111,29 +152,59 @@ pub enum LogicalStateError {
 pub enum BufferAtomicExchangeError {
     Atomic(AtomicExchangeError),
     LogicalState(LogicalStateError),
+    ForeignLocation {
+        expected: BufferAtomicLocation,
+        actual: BufferAtomicLocation,
+    },
+}
+
+/// Verification-only accepted realization of one Buffer atomic exchange set.
+pub struct BufferAtomicExchangeRealization {
+    location: BufferAtomicLocation,
+    internal_location: AtomicLocationId,
+    atomic: AtomicExchangeRealization,
+}
+
+impl BufferAtomicExchangeRealization {
+    #[must_use]
+    pub const fn location(&self) -> BufferAtomicLocation {
+        self.location
+    }
+
+    #[must_use]
+    pub fn prior_value(&self, exchange: BufferAtomicExchangeId) -> Option<AtomicValueToken> {
+        if exchange.location != self.location {
+            return None;
+        }
+
+        self.atomic
+            .prior_value(AtomicExchangeId::new(self.internal_location, exchange.token))
+    }
+
+    #[must_use]
+    pub const fn final_value(&self) -> AtomicValueToken {
+        self.atomic.final_value()
+    }
 }
 
 /// Verification-only bridge from one Buffer atomic element location to one generic
 /// atomic-exchange fixture.
 ///
-/// `atomic_location_token` supplied at construction scopes generic atomic-oracle
-/// occurrence identities inside this independent fixture only. The Buffer-owned
-/// semantic location identity remains [`BufferAtomicLocation`]. The fixture stores
-/// no second atomic value: successful realization starts from and commits back to
-/// the exact position in [`LogicalBufferState`]. One bridge fixture represents one
-/// atomic exchange set and is consumed when that set is realized.
+/// Buffer-side exchange identities are structurally scoped by
+/// [`BufferAtomicLocation`]. A private generic `AtomicLocationId` is synthesized only
+/// inside realization so the existing atomic oracle can validate one represented
+/// exchange set. It is not supplied by callers and is not another resource identity.
+/// The fixture stores no second atomic value: successful realization starts from and
+/// commits back to the exact position in [`LogicalBufferState`]. One bridge fixture
+/// represents one atomic exchange set and is consumed when that set is realized.
 pub struct BufferAtomicExchangeFixture {
     location: BufferAtomicLocation,
-    atomic_location: AtomicLocationId,
 }
 
 impl BufferAtomicExchangeFixture {
     #[must_use]
-    pub const fn new(location: BufferAtomicLocation, atomic_location_token: u32) -> Self {
-        Self {
-            location,
-            atomic_location: AtomicLocationId::new(atomic_location_token),
-        }
+    pub const fn new(location: BufferAtomicLocation) -> Self {
+        Self { location }
     }
 
     #[must_use]
@@ -141,11 +212,22 @@ impl BufferAtomicExchangeFixture {
         self.location
     }
 
-    /// Constructs one verification-only exchange occurrence identity scoped to this
-    /// fixture's private adapter location.
+    /// Constructs one verification-only exchange occurrence already bound to this
+    /// fixture's exact Buffer atomic location.
     #[must_use]
-    pub const fn exchange_id(&self, token: u32) -> AtomicExchangeId {
-        AtomicExchangeId::new(self.atomic_location, token)
+    pub const fn exchange(
+        &self,
+        token: u32,
+        desired: AtomicValueToken,
+        semantics: AtomicExchangeSemantics,
+        scope: AtomicExchangeScope,
+    ) -> BufferAtomicExchange {
+        BufferAtomicExchange {
+            id: BufferAtomicExchangeId::new(self.location, token),
+            desired,
+            semantics,
+            scope,
+        }
     }
 
     /// Checks this fixture's one represented atomic-exchange set against the
@@ -157,10 +239,21 @@ impl BufferAtomicExchangeFixture {
     pub fn realize(
         self,
         logical_state: &mut LogicalBufferState,
-        exchanges: Vec<AtomicExchange>,
-        candidate_order: &[AtomicExchangeId],
-        ordered_before: &[(AtomicExchangeId, AtomicExchangeId)],
-    ) -> Result<AtomicExchangeRealization, BufferAtomicExchangeError> {
+        exchanges: Vec<BufferAtomicExchange>,
+        candidate_order: &[BufferAtomicExchangeId],
+        ordered_before: &[(BufferAtomicExchangeId, BufferAtomicExchangeId)],
+    ) -> Result<BufferAtomicExchangeRealization, BufferAtomicExchangeError> {
+        for exchange in &exchanges {
+            self.validate_location(exchange.id)?;
+        }
+        for exchange in candidate_order {
+            self.validate_location(*exchange)?;
+        }
+        for (before, after) in ordered_before {
+            self.validate_location(*before)?;
+            self.validate_location(*after)?;
+        }
+
         let region = self.location.region();
         let current = logical_state
             .read(&region)
@@ -169,24 +262,70 @@ impl BufferAtomicExchangeFixture {
             .copied()
             .expect("validated singleton Buffer region contains its exact position");
 
+        // This identity is private mechanical namespace for exactly one consumed
+        // generic atomic fixture. BufferAtomicLocation remains the resource identity.
+        let internal_location = AtomicLocationId::new(0);
+        let generic_id = |id: BufferAtomicExchangeId| {
+            AtomicExchangeId::new(internal_location, id.token)
+        };
+        let generic_exchanges = exchanges
+            .into_iter()
+            .map(|exchange| {
+                AtomicExchange::new(
+                    generic_id(exchange.id),
+                    exchange.desired,
+                    exchange.semantics,
+                    exchange.scope,
+                )
+            })
+            .collect();
+        let generic_order = candidate_order
+            .iter()
+            .copied()
+            .map(generic_id)
+            .collect::<Vec<_>>();
+        let generic_constraints = ordered_before
+            .iter()
+            .copied()
+            .map(|(before, after)| (generic_id(before), generic_id(after)))
+            .collect::<Vec<_>>();
+
         let fixture = AtomicExchangeFixture::new(
-            self.atomic_location,
+            internal_location,
             AtomicValueToken::new(current.0),
-            exchanges,
+            generic_exchanges,
         )
         .map_err(BufferAtomicExchangeError::Atomic)?;
-        let realization = fixture
-            .realize(candidate_order, ordered_before)
+        let atomic = fixture
+            .realize(&generic_order, &generic_constraints)
             .map_err(BufferAtomicExchangeError::Atomic)?;
 
         logical_state
             .apply_change(
                 &region,
-                ValueToken(realization.final_value().fixture_token()),
+                ValueToken(atomic.final_value().fixture_token()),
             )
             .map_err(BufferAtomicExchangeError::LogicalState)?;
 
-        Ok(realization)
+        Ok(BufferAtomicExchangeRealization {
+            location: self.location,
+            internal_location,
+            atomic,
+        })
+    }
+
+    fn validate_location(
+        &self,
+        exchange: BufferAtomicExchangeId,
+    ) -> Result<(), BufferAtomicExchangeError> {
+        if exchange.location != self.location {
+            return Err(BufferAtomicExchangeError::ForeignLocation {
+                expected: self.location,
+                actual: exchange.location,
+            });
+        }
+
+        Ok(())
     }
 }
 
