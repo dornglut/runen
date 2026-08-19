@@ -26,8 +26,8 @@ fn joined_target(task: TaskId) -> TaskJoinPhase {
     TaskJoinPhase::TargetTask(task)
 }
 
-fn after_join(join: TaskJoinId, target: TaskId) -> TaskJoinPhase {
-    TaskJoinPhase::After { join, target }
+fn after_join(target: TaskId, token: u32) -> TaskJoinPhase {
+    TaskJoinPhase::After(TaskJoinId::new(target, token))
 }
 
 #[test]
@@ -137,12 +137,21 @@ fn normal_join_requires_normal_completion_of_exact_target() {
 }
 
 #[test]
+fn join_identity_is_structurally_bound_to_exact_target() {
+    let first = TaskJoinId::new(TaskId(1), 9);
+    let same = TaskJoinId::new(TaskId(1), 9);
+    let foreign_target_same_token = TaskJoinId::new(TaskId(2), 9);
+
+    assert_eq!(first, same);
+    assert_ne!(first, foreign_target_same_token);
+}
+
+#[test]
 fn normal_join_orders_only_exact_target_before_post_join_continuation() {
     let target = TaskId(1);
     let unrelated = TaskId(2);
-    let join = TaskJoinId::new(9);
     let target_phase = joined_target(target);
-    let after = after_join(join, target);
+    let after = after_join(target, 9);
 
     assert!(task_join_orders(target_phase, after));
     assert!(!task_join_orders(after, target_phase));
@@ -152,8 +161,8 @@ fn normal_join_orders_only_exact_target_before_post_join_continuation() {
 #[test]
 fn distinct_join_occurrences_do_not_order_each_other() {
     let target = TaskId(1);
-    let first_after = after_join(TaskJoinId::new(9), target);
-    let second_after = after_join(TaskJoinId::new(10), target);
+    let first_after = after_join(target, 9);
+    let second_after = after_join(target, 10);
 
     assert!(task_join_orders(joined_target(target), first_after));
     assert!(task_join_orders(joined_target(target), second_after));
@@ -167,7 +176,7 @@ fn detached_task_can_gain_later_join_order_without_regaining_scope_order() {
     let task = TaskId(1);
     let scope_detached = detached(scope, task);
     let scope_after = TaskScopePhase::After(scope);
-    let join_after = after_join(TaskJoinId::new(9), task);
+    let join_after = after_join(task, 9);
 
     assert!(!task_scope_orders(scope_detached, scope_after));
     assert!(task_join_orders(joined_target(task), join_after));
@@ -183,7 +192,7 @@ fn detached_task_can_gain_later_join_order_without_regaining_scope_order() {
 fn join_does_not_order_unrelated_task_or_legalize_its_conflict() {
     let target = TaskId(1);
     let sibling = TaskId(2);
-    let after = after_join(TaskJoinId::new(9), target);
+    let after = after_join(target, 9);
     let target_access = Access::new(AccessKind::StateChange, region(1, &[0]));
     let sibling_access = Access::new(AccessKind::StateChange, region(1, &[0]));
 
