@@ -336,27 +336,28 @@ Required cases:
 
 These obligations do not define source barrier syntax, dynamic divergent-barrier validation, atomic order semantics beyond direct release/acquire, broader atomic scope or fence semantics, additional collectives, group-local storage, or physical barrier implementation. Root-, group-, and subgroup-cohort atomic exchange scope are covered separately above.
 
-## Cross-realization root structured-barrier ordinary Buffer visibility witness
+## Cross-realization structured-barrier ordinary Buffer visibility witness
 
-This boundary is verification evidence only. It composes the already-defined root-barrier participation/completion relation, barrier ordinary-access synchronization, Buffer coherence/mapping, allocation accessibility, and realization preservation; it owns no new Runen semantic rule.
+This boundary is verification evidence only. It composes the already-defined root/group/subgroup barrier participation/completion relations, hierarchy binding for narrower cohorts, barrier ordinary-access synchronization, Buffer coherence/mapping, allocation accessibility, and realization preservation; it owns no new Runen semantic rule.
 
 Required cases:
 
-- one semantic root barrier selects the same two required participants for the case being compared;
+- the represented root, group, or subgroup barrier selects the exact semantic participant cohort for the case being compared; group/subgroup cases consume one exact established hierarchy binding;
 - exact before-phase completion coverage is independent of completion-list order and is not treated as physical arrival order;
 - a participant state-changing ordinary access in a before-barrier phase and another participant read of the overlapping Buffer region in an after-barrier phase remain conflicting under `Access::conflicts_with`;
 - the exact normally completed barrier orders that before phase before that after phase, supplying the semantic order consumed by the Buffer visibility contract;
+- an iteration outside the selected cohort receives no before/after phase from that barrier; the group case exercises a participant from another group, while the subgroup case exercises a same-group iteration from another subgroup;
 - two independent logical executions initialized to the same Buffer state realize that same ordered before-change/after-read case;
 - one physical arrangement may service both accesses through one execution agent and one allocation mapping, while another legal arrangement may service the before change and after read through distinct execution agents and distinct allocations/mappings;
 - both after-phase reads observe the same post-change logical Buffer state and both final `LogicalBufferState` fixtures agree;
 - running one realization fixture does not mutate the other realization's independent logical-state fixture;
-- mapping construction/order, agent identity, allocation identity, and Rust call order do not create or replace the barrier's semantic synchronization relation;
-- a same-before-phase overlapping sibling write/write counterexample remains conflicting and unordered even when one physical mapping could service both operations serially; that illegal pair is not executed as though physical serialization admitted it;
+- mapping construction/order, agent identity, allocation identity, Rust call order, and the chosen physical arrangement do not create or replace the barrier's semantic synchronization relation;
+- the existing same-before-phase overlapping sibling write/write counterexample remains conflicting and unordered even when one physical mapping could service both operations serially; that illegal pair is not executed as though physical serialization admitted it;
 - distinct physical agents do not by themselves imply actual physical concurrency, hardware rendezvous, cache flushing, queue order, progress, or fairness.
 
-This first synchronization-bearing cross-realization witness deliberately uses only the root barrier. Existing verification separately covers group/subgroup cohort identity and barrier binding; this witness does not claim separate physical-realization coverage for those narrower cohorts. It reuses the existing public oracle surface and does not define a synchronization graph, `RealizationId`, backend barrier model, hardware memory scope, or second Buffer-state semantics.
+The witness covers root, group, and subgroup structured-barrier cohorts using the existing public oracle surface. Group and subgroup identities plus hierarchy membership are semantic participant structure for the represented operation, not hardware work-group/subgroup topology, worker/lane identity, or placement. The witness does not define a synchronization graph, `RealizationId`, backend barrier model, hardware memory scope, or second Buffer-state semantics.
 
-These obligations do not prove group/subgroup physical barrier realization variants, reductions, atomics beyond the focused mapped-atomic servicing relation, fences, cache/flush/invalidate protocols, source lowering, runtime/backend conformance, abnormal barrier completion, progress/fairness, or full P0-B closure.
+These obligations do not prove reductions, atomics beyond the focused mapped-atomic servicing relation, fences, cache/flush/invalidate protocols, source lowering, runtime/backend conformance, abnormal barrier completion, progress/fairness, or full P0-B closure.
 
 ## Cohort-scoped identity-bearing unordered reduction boundary
 
@@ -416,7 +417,7 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 - dynamic-`each`-scoped iteration identity plus the instance-local cross-phase `each` normal entry/completion ordering relation, with no sibling, intra-iteration, or cross-`each` order;
 - dynamic-`each`-scoped hierarchy identity, exact established-hierarchy fixture binding, hierarchy-instance-scoped group identity, group-scoped subgroup identity, nested hierarchy membership, foreign-`each`/foreign-hierarchy rejection including same-`each` distinct-hierarchy selectors, and order-neutral same-group/same-subgroup relations;
 - validated root/group/subgroup structured-barrier cohorts, explicit root `EachId`, exact established-hierarchy binding for narrower cohorts, foreign-`each`/foreign-hierarchy rejection, participant-only phase construction, cross-phase ordering, and exact before-phase completion coverage;
-- independent cross-realization root structured-barrier ordinary Buffer visibility for one conflicting before-change/after-read pair across a single-placement mapping arrangement and a split-agent/split-allocation mapping arrangement, consuming exact barrier completion/order evidence and comparing only semantic read/final-state results;
+- independent cross-realization root/group/subgroup structured-barrier ordinary Buffer visibility for selected conflicting before-change/after-read pairs across a single-placement mapping arrangement and a split-agent/split-allocation mapping arrangement, consuming exact selected-cohort completion/order and nonparticipant evidence and comparing only semantic read/final-state results;
 - a finite logical Buffer-state fixture for ordered state changes and reads, independent of physical replicas;
 - complete unordered-reduction contract admission evidence plus validated root/group/subgroup reduction cohorts, explicit root `EachId`, exact established-hierarchy binding for narrower cohorts, foreign-`each`/foreign-hierarchy rejection, participant-only contribution construction, and exact unordered semantic-contribution coverage;
 - dynamic-task-scope-local attached-child ordering, outcome-aware normal-completion coverage, detachment state-retention admissibility, explicit normal task-join target-to-continuation ordering plus exact normal-target completion evidence, and explicitly sequenced cooperative cancellation request/observation transitions.
