@@ -86,6 +86,7 @@ pub enum NumericOracleError {
     ZeroExactInput,
     NonFiniteReductionInput,
     NaNReductionInput,
+    InvalidRoundedValueFixture,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -339,6 +340,23 @@ pub fn reduce_sum(
     reduce_finite_sum(format, contributions).map(SumReductionResult::Value)
 }
 
+/// Evaluate one verification-only tree-rounded internal addition using the
+/// baseline `standard` addition relation. This follows the `fast` unordered-sum
+/// tree-candidate rule; it does not model a source-visible tree or Exec combine.
+pub fn add_standard_tree_node(
+    format: BinaryFormat,
+    left: SumReductionResult,
+    right: SumReductionResult,
+) -> Result<SumReductionResult, NumericOracleError> {
+    let (SumReductionResult::Value(left), SumReductionResult::Value(right)) = (left, right) else {
+        return Ok(SumReductionResult::NaNClass);
+    };
+
+    let left = rounded_value_to_fixture(format, left)?;
+    let right = rounded_value_to_fixture(format, right)?;
+    reduce_sum(format, &[left, right])
+}
+
 /// Verification-only oracle for the accepted finite same-format unordered
 /// floating sum reduction.
 ///
@@ -521,6 +539,46 @@ fn convert_binary_to_unsigned(
 enum TruncatedMagnitude {
     Exact(u128),
     AboveU128,
+}
+
+fn rounded_value_to_fixture(
+    format: BinaryFormat,
+    value: RoundedBinaryValue,
+) -> Result<BinaryValueFixture, NumericOracleError> {
+    let normal_minimum = 1_u128 << (format.precision - 1);
+    let carry = 1_u128 << format.precision;
+
+    Ok(match value {
+        RoundedBinaryValue::Zero(sign) => BinaryValueFixture::Zero(sign),
+        RoundedBinaryValue::Infinity(sign) => BinaryValueFixture::Infinity(sign),
+        RoundedBinaryValue::Subnormal { sign, significand }
+            if (1..normal_minimum).contains(&significand) =>
+        {
+            BinaryValueFixture::Finite(ExactDyadic::from_parts(
+                sign,
+                significand,
+                format.q_exponent()?,
+            ))
+        }
+        RoundedBinaryValue::Normal {
+            sign,
+            significand,
+            exponent,
+        } if (normal_minimum..carry).contains(&significand)
+            && (format.emin..=format.emax).contains(&exponent) =>
+        {
+            let precision_tail = (format.precision - 1) as i32;
+            let exact_exponent = exponent
+                .checked_sub(precision_tail)
+                .ok_or(NumericOracleError::ExponentArithmeticOverflow)?;
+            BinaryValueFixture::Finite(ExactDyadic::from_parts(
+                sign,
+                significand,
+                exact_exponent,
+            ))
+        }
+        _ => return Err(NumericOracleError::InvalidRoundedValueFixture),
+    })
 }
 
 fn truncate_dyadic_magnitude(exact: ExactDyadic) -> Result<TruncatedMagnitude, NumericOracleError> {
