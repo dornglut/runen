@@ -2,12 +2,13 @@
 //! Verification-only executable oracle for accepted Runen numeric relations.
 //!
 //! This crate is not Runen source syntax, compiler IR, a runtime floating-point
-//! implementation, a backend model, or a normative semantic owner. The first
-//! slice covers only exact dyadic inputs to the accepted binary floating rounding
-//! relation and semantic integer-to-floating conversion.
+//! implementation, a backend model, or a normative semantic owner. It covers
+//! exact dyadic inputs to the accepted binary floating rounding relation plus
+//! class-level scalar integer/floating conversion evidence.
 //!
-//! The `i128`/`u128` carriers and `i32` exponents are executable fixture capacity
-//! only. They do not define Runen integer widths or floating exponent limits.
+//! The `i128`/`u128` carriers, `i32` exponents, and integer widths up to 128 bits
+//! are executable fixture capacity only. They do not define Runen integer widths
+//! or floating exponent limits.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sign {
@@ -41,10 +42,38 @@ pub enum RoundedBinaryValue {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BinaryValueFixture {
+    Finite(ExactDyadic),
+    Zero(Sign),
+    Infinity(Sign),
+    NaNClass,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BinaryConversionResult {
+    Value(RoundedBinaryValue),
+    NaNClass,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IntegerSignedness {
+    Signed,
+    Unsigned,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum IntegerConversionResult {
+    Signed(i128),
+    Unsigned(u128),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NumericOracleError {
     PrecisionTooSmall,
     PrecisionTooLarge,
     InvalidExponentRange,
+    IntegerWidthZero,
+    IntegerWidthTooLarge,
     ExponentArithmeticOverflow,
     InternalRangeExceeded,
     ZeroExactInput,
@@ -88,6 +117,46 @@ impl BinaryFormat {
         self.emin
             .checked_sub(precision_tail)
             .ok_or(NumericOracleError::ExponentArithmeticOverflow)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct IntegerFormat {
+    width: u32,
+    signedness: IntegerSignedness,
+}
+
+impl IntegerFormat {
+    pub fn new(width: u32, signedness: IntegerSignedness) -> Result<Self, NumericOracleError> {
+        if width == 0 {
+            return Err(NumericOracleError::IntegerWidthZero);
+        }
+        if width > 128 {
+            return Err(NumericOracleError::IntegerWidthTooLarge);
+        }
+
+        Ok(Self { width, signedness })
+    }
+
+    fn signed_bounds(self) -> (i128, i128) {
+        if self.width == 128 {
+            return (i128::MIN, i128::MAX);
+        }
+
+        let magnitude = 1_i128 << (self.width - 1);
+        (-magnitude, magnitude - 1)
+    }
+
+    fn signed_minimum_magnitude(self) -> u128 {
+        1_u128 << (self.width - 1)
+    }
+
+    fn unsigned_maximum(self) -> u128 {
+        if self.width == 128 {
+            u128::MAX
+        } else {
+            (1_u128 << self.width) - 1
+        }
     }
 }
 
@@ -218,6 +287,123 @@ pub fn convert_unsigned_integer(
         return Ok(RoundedBinaryValue::Zero(Sign::Positive));
     }
     round_dyadic(format, ExactDyadic::from_unsigned_integer(value))
+}
+
+pub fn convert_binary_to_binary(
+    destination: BinaryFormat,
+    source: BinaryValueFixture,
+) -> Result<BinaryConversionResult, NumericOracleError> {
+    Ok(match source {
+        BinaryValueFixture::Finite(exact) => {
+            BinaryConversionResult::Value(round_dyadic(destination, exact)?)
+        }
+        BinaryValueFixture::Zero(sign) => {
+            BinaryConversionResult::Value(RoundedBinaryValue::Zero(sign))
+        }
+        BinaryValueFixture::Infinity(sign) => {
+            BinaryConversionResult::Value(RoundedBinaryValue::Infinity(sign))
+        }
+        BinaryValueFixture::NaNClass => BinaryConversionResult::NaNClass,
+    })
+}
+
+pub fn convert_binary_to_integer(
+    destination: IntegerFormat,
+    source: BinaryValueFixture,
+) -> Result<IntegerConversionResult, NumericOracleError> {
+    match destination.signedness {
+        IntegerSignedness::Signed => convert_binary_to_signed(destination, source),
+        IntegerSignedness::Unsigned => convert_binary_to_unsigned(destination, source),
+    }
+}
+
+fn convert_binary_to_signed(
+    destination: IntegerFormat,
+    source: BinaryValueFixture,
+) -> Result<IntegerConversionResult, NumericOracleError> {
+    let (minimum, maximum) = destination.signed_bounds();
+    let value = match source {
+        BinaryValueFixture::Zero(_) | BinaryValueFixture::NaNClass => 0,
+        BinaryValueFixture::Infinity(Sign::Positive) => maximum,
+        BinaryValueFixture::Infinity(Sign::Negative) => minimum,
+        BinaryValueFixture::Finite(exact) => {
+            let truncated = truncate_dyadic_magnitude(exact)?;
+            match (exact.sign, truncated) {
+                (Sign::Positive, TruncatedMagnitude::AboveU128) => maximum,
+                (Sign::Positive, TruncatedMagnitude::Exact(magnitude)) => {
+                    if magnitude > maximum as u128 {
+                        maximum
+                    } else {
+                        magnitude as i128
+                    }
+                }
+                (Sign::Negative, TruncatedMagnitude::AboveU128) => minimum,
+                (Sign::Negative, TruncatedMagnitude::Exact(magnitude)) => {
+                    if magnitude >= destination.signed_minimum_magnitude() {
+                        minimum
+                    } else {
+                        -(magnitude as i128)
+                    }
+                }
+            }
+        }
+    };
+
+    Ok(IntegerConversionResult::Signed(value))
+}
+
+fn convert_binary_to_unsigned(
+    destination: IntegerFormat,
+    source: BinaryValueFixture,
+) -> Result<IntegerConversionResult, NumericOracleError> {
+    let maximum = destination.unsigned_maximum();
+    let value = match source {
+        BinaryValueFixture::Zero(_)
+        | BinaryValueFixture::NaNClass
+        | BinaryValueFixture::Infinity(Sign::Negative) => 0,
+        BinaryValueFixture::Infinity(Sign::Positive) => maximum,
+        BinaryValueFixture::Finite(exact) if exact.sign == Sign::Negative => {
+            if exact.magnitude == 0 {
+                return Err(NumericOracleError::ZeroExactInput);
+            }
+            0
+        }
+        BinaryValueFixture::Finite(exact) => match truncate_dyadic_magnitude(exact)? {
+            TruncatedMagnitude::AboveU128 => maximum,
+            TruncatedMagnitude::Exact(magnitude) => magnitude.min(maximum),
+        },
+    };
+
+    Ok(IntegerConversionResult::Unsigned(value))
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TruncatedMagnitude {
+    Exact(u128),
+    AboveU128,
+}
+
+fn truncate_dyadic_magnitude(
+    exact: ExactDyadic,
+) -> Result<TruncatedMagnitude, NumericOracleError> {
+    if exact.magnitude == 0 {
+        return Err(NumericOracleError::ZeroExactInput);
+    }
+
+    if exact.exponent >= 0 {
+        let shift = exact.exponent as u32;
+        if shift >= u128::BITS || exact.magnitude > (u128::MAX >> shift) {
+            return Ok(TruncatedMagnitude::AboveU128);
+        }
+        return Ok(TruncatedMagnitude::Exact(exact.magnitude << shift));
+    }
+
+    let distance = exact.exponent.unsigned_abs();
+    if distance >= u128::BITS {
+        return Ok(TruncatedMagnitude::Exact(0));
+    }
+
+    Ok(TruncatedMagnitude::Exact(exact.magnitude >> distance))
 }
 
 fn round_to_integer_grid(
