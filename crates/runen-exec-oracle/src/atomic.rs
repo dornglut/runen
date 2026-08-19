@@ -1,6 +1,4 @@
-use crate::{
-    GroupId, HierarchyFixture, IterationId, coverage::has_exact_unique_coverage,
-};
+use crate::{GroupId, HierarchyFixture, IterationId, coverage::has_exact_unique_coverage};
 
 /// Verification-only opaque identity for one semantic atomic location.
 ///
