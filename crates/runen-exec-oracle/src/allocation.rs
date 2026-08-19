@@ -1,0 +1,87 @@
+use std::collections::BTreeSet;
+
+/// Verification-only identity token for one physical allocation fixture.
+///
+/// The numeric representation carries equality only. It is not a Buffer identity,
+/// numeric address, pointer provenance, source handle, memory-space identifier, or
+/// ordering token.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AllocationId(pub u32);
+
+/// Invalid lifetime transition for the focused physical-allocation fixture.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AllocationError {
+    Ended,
+    ActiveMappings,
+    MappingIdentityInUse,
+    UnknownMapping,
+}
+
+/// Verification-only finite evidence for one physical allocation extent.
+///
+/// This fixture models only whether the allocation extent still exists and whether
+/// typed Buffer mappings are still nested inside it. It is not an allocator, memory
+/// space, byte store, address range, relocation model, or runtime allocation object.
+#[derive(Debug, PartialEq, Eq)]
+pub struct AllocationFixture {
+    id: AllocationId,
+    live: bool,
+    active_mapping_tokens: BTreeSet<u32>,
+}
+
+impl AllocationFixture {
+    #[must_use]
+    pub fn new(id: AllocationId) -> Self {
+        Self {
+            id,
+            live: true,
+            active_mapping_tokens: BTreeSet::new(),
+        }
+    }
+
+    #[must_use]
+    pub const fn id(&self) -> AllocationId {
+        self.id
+    }
+
+    #[must_use]
+    pub const fn is_live(&self) -> bool {
+        self.live
+    }
+
+    /// Ends the represented allocation extent only when no mapping still depends on
+    /// it. This is verification evidence for lifetime nesting, not an allocator API.
+    pub fn end_extent(&mut self) -> Result<(), AllocationError> {
+        if !self.live {
+            return Err(AllocationError::Ended);
+        }
+        if !self.active_mapping_tokens.is_empty() {
+            return Err(AllocationError::ActiveMappings);
+        }
+
+        self.live = false;
+        Ok(())
+    }
+
+    pub(crate) fn begin_mapping(&mut self, token: u32) -> Result<(), AllocationError> {
+        if !self.live {
+            return Err(AllocationError::Ended);
+        }
+        if !self.active_mapping_tokens.insert(token) {
+            return Err(AllocationError::MappingIdentityInUse);
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn end_mapping(&mut self, token: u32) -> Result<(), AllocationError> {
+        if !self.live {
+            return Err(AllocationError::Ended);
+        }
+        if !self.active_mapping_tokens.remove(&token) {
+            return Err(AllocationError::UnknownMapping);
+        }
+
+        Ok(())
+    }
+}
