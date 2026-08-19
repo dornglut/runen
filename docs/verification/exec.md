@@ -241,6 +241,7 @@ Required cases:
 - a group/subgroup reduction fixture bound to hierarchy A likewise rejects a hierarchy-B selector under the same dynamic `each`;
 - hierarchy establishment, identity, and membership supply no sibling iteration order and do not legalize an otherwise-conflicting ordinary sibling access;
 - root barrier and root reduction participation each remain the complete required `each` set independent of hierarchy membership, while narrower forms require an explicit group or subgroup selection from one exact established hierarchy instance.
+
 `HierarchyId`, hierarchy-scoped `GroupId`, group-scoped `SubgroupId`, `HierarchyMembership`, and the finite hierarchy fixture are verification representation only. A `HierarchyFixture` stands for one already-established semantic hierarchy instance for the focused verification question; representing multiple fixtures under one `EachId` does not define source-level hierarchy multiplicity. Their identity scoping consumes `EachId`; it does not define source hierarchy or iteration handles, hierarchy construction, selection, observation, admission, multiplicity, group or subgroup sizes, dimensions, coordinates, enumeration order, launch geometry, runtime worker topology, or hardware subgroup identity.
 
 These obligations do not define broader atomic or fence scope, collectives beyond the unordered reduction covered separately below, group-local storage, broadcast, shuffle, scans, or another hierarchy-sensitive operation. Root-, group-, and subgroup-cohort atomic exchange scope are covered separately above. Group and subgroup scope consume one exact established hierarchy binding and the producer's membership without redefining hierarchy establishment. Other hierarchy-sensitive operations may consume the normative establishment/binding rule but still require their own operation-specific contracts before executable evidence is extended to cover them.
@@ -360,6 +361,7 @@ Required cases:
 - detached work is detach-safe only when every state dependency it still requires is owned or independently retained;
 - task-scope identity or membership does not legalize an otherwise-conflicting ordinary sibling access;
 - no fault/result behavior is inferred when an attached child does not complete normally.
+
 `TaskScopeId`, `TaskId`, task-scope phases, and `TaskStateRetention` are verification-only tokens/classifications. `TaskScopeId` is not a source scope handle, runtime parent object, nesting level, executor identity, scheduler identity, or observable ordering token. `IndependentlyRetained` does not prescribe reference counting, allocation ownership, a runtime handle, or another retention implementation.
 
 ## Explicit normal task join boundary
