@@ -21,7 +21,7 @@ This rule applies whether or not `x` is already in range. An out-of-range exact 
 
 This is an overflow-result rule, not an operation-domain rule. It does not make an operation defined when another applicable contract supplies no exact mathematical integer result, and it does not define division-by-zero behavior, shift-count validity, conversions, source operator spelling, constant-evaluation diagnostics, or which integer operations or widths exist.
 
-Selecting an explicit checked, wrapping, saturating, or other overflow mode is not plain arithmetic under this rule. Explicit wrapping overflow semantics are defined separately below; checked and saturating overflow semantics and the source forms of all explicit modes remain to be defined by their applicable contracts.
+Selecting an explicit checked, wrapping, saturating, or other overflow mode is not plain arithmetic under this rule. Explicit wrapping and saturating overflow semantics are defined separately below; checked overflow semantics and the source forms of all explicit modes remain to be defined by their applicable contracts.
 
 The modular result above is a semantic value-domain rule. It does not require a physical integer representation, byte layout, ABI representation, or address-level interpretation.
 
@@ -33,4 +33,19 @@ When such an operation is otherwise defined and its operation-specific semantics
 
 Overflow of an explicit wrapping operation therefore does not by itself produce a defined fault and is not undefined behavior. The numerical result intentionally coincides with plain fixed-width overflow; wrapping remains a distinct explicitly selected operation contract rather than reliance on the plain default.
 
-This is an overflow-result rule, not an operation-domain or source-form rule. It does not define checked or saturating arithmetic, division-by-zero behavior, shift-count validity, conversions, source spelling, constant-evaluation diagnostics, which operations or widths exist, or a physical integer representation. A realization MUST NOT derive a different wrapping result from host behavior, backend overflow metadata, optimizer assumptions, or physical representation.
+This is an overflow-result rule, not an operation-domain or source-form rule. It does not define checked arithmetic, division-by-zero behavior, shift-count validity, conversions, source spelling, constant-evaluation diagnostics, which operations or widths exist, or a physical integer representation. A realization MUST NOT derive a different wrapping result from host behavior, backend overflow metadata, optimizer assumptions, or physical representation.
+
+## Explicit saturating overflow
+
+An **explicit saturating fixed-width integer arithmetic operation** is one whose applicable operation contract selects saturating overflow behavior.
+
+When such an operation is otherwise defined and its operation-specific semantics determine an exact mathematical integer result `x` for a fixed-width integer result type of width `N`, let `[lo, hi]` be the mathematical value interval of that result type:
+
+- for an unsigned result type, `lo = 0` and `hi = 2^N - 1`;
+- for a signed result type, `lo = -2^(N-1)` and `hi = 2^(N-1) - 1`.
+
+The Runen result is `lo` when `x < lo`, exactly `x` when `lo <= x <= hi`, and `hi` when `x > hi`. Lower and upper out-of-range exact results therefore clamp to the nearest destination bound.
+
+An out-of-range exact result of an explicit saturating operation does not by itself produce a defined fault and is not undefined behavior. Saturation is defined over the mathematical value interval and does not require a physical integer representation.
+
+This is an overflow-result rule, not an operation-domain or source-form rule. It does not define checked arithmetic, division-by-zero behavior, shift-count validity, conversions, source spelling, constant-evaluation diagnostics, which operations or widths exist, or a physical saturation instruction. A realization MUST NOT derive a different saturating result from host behavior, backend overflow metadata, optimizer assumptions, or physical representation.
