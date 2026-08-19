@@ -1,4 +1,4 @@
-use crate::{IterationId, coverage::has_exact_unique_coverage};
+use crate::{GroupId, HierarchyFixture, IterationId, coverage::has_exact_unique_coverage};
 
 /// Verification-only opaque identity for one semantic atomic location.
 ///
@@ -63,17 +63,47 @@ pub enum AtomicExchangeSemantics {
     AcquireRelease,
 }
 
+/// Verification-only evidence that one producer iteration is admitted for
+/// group-cohort atomic scope by one already-validated hierarchy fixture.
+///
+/// The producer and selected group are derived together from validated hierarchy
+/// membership. There is no public constructor that can pair an iteration with an
+/// unrelated group identity. This is not a source hierarchy handle, scheduling
+/// token, hardware work-group identity, or reusable participant-domain abstraction.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct AtomicGroupScope {
+    producer: IterationId,
+    group: GroupId,
+}
+
+impl AtomicGroupScope {
+    #[must_use]
+    pub fn from_hierarchy(hierarchy: &HierarchyFixture, producer: IterationId) -> Option<Self> {
+        let membership = hierarchy.membership(producer)?;
+        Some(Self {
+            producer,
+            group: membership.group(),
+        })
+    }
+
+    const fn group(self) -> GroupId {
+        self.group
+    }
+}
+
 /// Verification-only synchronization-scope classification for one atomic exchange.
 ///
 /// `Root` records the iteration that performs the scoped exchange. The selected
-/// root cohort is derived from that iteration's containing dynamic `each`; there is
-/// no independent root identity that can disagree with the producer. These variants
-/// are not source memory-scope spellings, a hardware scope lattice, hierarchy
-/// topology, or scheduling metadata.
+/// root cohort is derived from that iteration's containing dynamic `each`.
+/// `Group` carries validated evidence tying the producer to its actual group in an
+/// already-established hierarchy fixture. These variants are not source memory-
+/// scope spellings, a hardware scope lattice, hierarchy topology, or scheduling
+/// metadata.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AtomicExchangeScope {
     Unscoped,
     Root(IterationId),
+    Group(AtomicGroupScope),
 }
 
 /// Verification-only result of comparing two represented exchange scope forms.
@@ -286,6 +316,13 @@ impl AtomicExchangeRealization {
                 AtomicExchangeScope::Root(right_iteration),
             ) => {
                 if left_iteration.each() == right_iteration.each() {
+                    AtomicScopeRelation::Compatible
+                } else {
+                    AtomicScopeRelation::Incompatible
+                }
+            }
+            (AtomicExchangeScope::Group(left), AtomicExchangeScope::Group(right)) => {
+                if left.group() == right.group() {
                     AtomicScopeRelation::Compatible
                 } else {
                     AtomicScopeRelation::Incompatible
