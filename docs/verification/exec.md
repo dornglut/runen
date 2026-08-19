@@ -252,7 +252,7 @@ Required cases:
 - a group reduction rejects a group identity from another hierarchy even when the private group token matches a local group, including across distinct hierarchy identities under the same `EachId`;
 - a subgroup reduction rejects a subgroup identity from another hierarchy even when the private group/subgroup tokens match a local subgroup, including across distinct hierarchy identities under the same `EachId`;
 - equal private subgroup tokens under distinct groups select distinct reduction cohorts;
-- a group or subgroup reduction does not admit an iteration from another dynamic `each` as a participant or contribution producer merely because a private iteration token matches a local participant;
+- a group or subgroup reduction does not admit an iteration from another dynamic `each` as a participant or contribution producer merely because its private iteration token matches a local participant;
 - the exact participant set is private verification state and supplies no public enumeration order;
 - a semantic contribution token can be created only for an actual reduction participant; nonparticipants cannot fabricate contribution membership through the public oracle API;
 - one participant may produce multiple distinct semantic contribution occurrences when the enclosing reduction operation permits that cardinality;
