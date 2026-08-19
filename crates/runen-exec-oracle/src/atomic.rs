@@ -1,5 +1,6 @@
 use crate::{
-    GroupId, HierarchyFixture, IterationId, SubgroupId, coverage::has_exact_unique_coverage,
+    GroupId, HierarchyFixture, HierarchyMembership, IterationId, SubgroupId,
+    coverage::has_exact_unique_coverage,
 };
 
 /// Verification-only opaque identity for one semantic atomic location.
@@ -69,27 +70,30 @@ pub enum AtomicExchangeSemantics {
 /// group-cohort atomic scope by one already-validated hierarchy fixture.
 ///
 /// The producer and selected group are derived together from validated hierarchy
-/// membership. There is no public constructor that can pair an iteration with an
-/// unrelated group identity. This is not a source hierarchy handle, scheduling
-/// token, hardware work-group identity, or reusable participant-domain abstraction.
+/// membership. Retaining that complete membership permits the focused mixed
+/// group/subgroup scope relation to ask whether the producer belongs to the other
+/// selected cohort without accepting a free-standing membership label. This is not
+/// a source hierarchy handle, scheduling token, hardware work-group identity, or
+/// reusable participant-domain abstraction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicGroupScope {
-    producer: IterationId,
-    group: GroupId,
+    membership: HierarchyMembership,
 }
 
 impl AtomicGroupScope {
     #[must_use]
     pub fn from_hierarchy(hierarchy: &HierarchyFixture, producer: IterationId) -> Option<Self> {
-        let membership = hierarchy.membership(producer)?;
         Some(Self {
-            producer,
-            group: membership.group(),
+            membership: hierarchy.membership(producer)?,
         })
     }
 
     const fn group(self) -> GroupId {
-        self.group
+        self.membership.group()
+    }
+
+    const fn subgroup(self) -> SubgroupId {
+        self.membership.subgroup()
     }
 }
 
@@ -97,27 +101,30 @@ impl AtomicGroupScope {
 /// subgroup-cohort atomic scope by one already-validated hierarchy fixture.
 ///
 /// The producer and selected subgroup are derived together from validated hierarchy
-/// membership. There is no public constructor that can pair an iteration with an
-/// unrelated subgroup identity. This is not a source hierarchy handle, scheduling
-/// token, hardware subgroup identity, or reusable participant-domain abstraction.
+/// membership. Retaining that complete membership permits the focused mixed
+/// group/subgroup scope relation to ask whether the producer belongs to the other
+/// selected cohort without accepting a free-standing membership label. This is not
+/// a source hierarchy handle, scheduling token, hardware subgroup identity, or
+/// reusable participant-domain abstraction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicSubgroupScope {
-    producer: IterationId,
-    subgroup: SubgroupId,
+    membership: HierarchyMembership,
 }
 
 impl AtomicSubgroupScope {
     #[must_use]
     pub fn from_hierarchy(hierarchy: &HierarchyFixture, producer: IterationId) -> Option<Self> {
-        let membership = hierarchy.membership(producer)?;
         Some(Self {
-            producer,
-            subgroup: membership.subgroup(),
+            membership: hierarchy.membership(producer)?,
         })
     }
 
+    const fn group(self) -> GroupId {
+        self.membership.group()
+    }
+
     const fn subgroup(self) -> SubgroupId {
-        self.subgroup
+        self.membership.subgroup()
     }
 }
 
@@ -361,6 +368,14 @@ impl AtomicExchangeRealization {
             }
             (AtomicExchangeScope::Subgroup(left), AtomicExchangeScope::Subgroup(right)) => {
                 if left.subgroup() == right.subgroup() {
+                    AtomicScopeRelation::Compatible
+                } else {
+                    AtomicScopeRelation::Incompatible
+                }
+            }
+            (AtomicExchangeScope::Group(group), AtomicExchangeScope::Subgroup(subgroup))
+            | (AtomicExchangeScope::Subgroup(subgroup), AtomicExchangeScope::Group(group)) => {
+                if group.subgroup() == subgroup.subgroup() && subgroup.group() == group.group() {
                     AtomicScopeRelation::Compatible
                 } else {
                     AtomicScopeRelation::Incompatible
