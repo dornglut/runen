@@ -571,11 +571,7 @@ fn rounded_value_to_fixture(
             let exact_exponent = exponent
                 .checked_sub(precision_tail)
                 .ok_or(NumericOracleError::ExponentArithmeticOverflow)?;
-            BinaryValueFixture::Finite(ExactDyadic::from_parts(
-                sign,
-                significand,
-                exact_exponent,
-            ))
+            BinaryValueFixture::Finite(ExactDyadic::from_parts(sign, significand, exact_exponent))
         }
         _ => return Err(NumericOracleError::InvalidRoundedValueFixture),
     })
