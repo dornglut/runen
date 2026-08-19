@@ -217,11 +217,11 @@ fn wrong_buffer_and_unknown_position_are_rejected_before_atomic_realization() {
         BufferAtomicLocation::new(buffer, PositionId(99)),
         200,
     );
-    assert_eq!(
+    assert!(matches!(
         unknown_position.realize(&mut state, vec![], &[], &[]),
         Err(BufferAtomicExchangeError::LogicalState(
             LogicalStateError::UnknownPosition(PositionId(99))
         ))
-    );
+    ));
     assert_eq!(state, before);
 }
