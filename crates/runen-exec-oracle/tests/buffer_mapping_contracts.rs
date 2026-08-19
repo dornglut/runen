@@ -128,6 +128,24 @@ fn mapped_typed_access_reuses_one_logical_buffer_state() {
 }
 
 #[test]
+fn remapping_same_logical_region_to_another_allocation_preserves_current_state() {
+    let selected = region(1, &[0]);
+    let mut first_allocation = AllocationFixture::new(AllocationId(7));
+    let mut second_allocation = AllocationFixture::new(AllocationId(8));
+    let first = BufferMappingFixture::new(1, selected.clone(), &mut first_allocation).unwrap();
+    let second = BufferMappingFixture::new(1, selected.clone(), &mut second_allocation).unwrap();
+    let mut logical = state(1, &[(0, 10)]);
+
+    first
+        .mapped_change(&mut logical, &selected, ValueToken(20))
+        .unwrap();
+
+    assert_eq!(second.mapped_read(&logical, &selected).unwrap(), values(&[(0, 20)]));
+    assert_eq!(first.region(), second.region());
+    assert_ne!(first.id().allocation(), second.id().allocation());
+}
+
+#[test]
 fn invalid_mapped_change_is_rejected_before_logical_state_mutation() {
     let mut allocation = AllocationFixture::new(AllocationId(7));
     let mapping = BufferMappingFixture::new(1, region(1, &[0]), &mut allocation).unwrap();
