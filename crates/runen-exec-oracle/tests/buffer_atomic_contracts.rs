@@ -82,7 +82,10 @@ fn buffer_atomic_exchange_identity_is_structurally_scoped_by_location() {
     assert_eq!(first, same);
     assert_ne!(first, other);
     assert_eq!(first.location(), location);
-    assert_eq!(other.location(), BufferAtomicLocation::new(BufferId(1), PositionId(8)));
+    assert_eq!(
+        other.location(),
+        BufferAtomicLocation::new(BufferId(1), PositionId(8))
+    );
 }
 
 #[test]
