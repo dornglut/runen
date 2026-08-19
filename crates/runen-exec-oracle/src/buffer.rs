@@ -177,8 +177,10 @@ impl BufferAtomicExchangeRealization {
             return None;
         }
 
-        self.atomic
-            .prior_value(AtomicExchangeId::new(self.internal_location, exchange.token))
+        self.atomic.prior_value(AtomicExchangeId::new(
+            self.internal_location,
+            exchange.token,
+        ))
     }
 
     #[must_use]
@@ -265,9 +267,8 @@ impl BufferAtomicExchangeFixture {
         // This identity is private mechanical namespace for exactly one consumed
         // generic atomic fixture. BufferAtomicLocation remains the resource identity.
         let internal_location = AtomicLocationId::new(0);
-        let generic_id = |id: BufferAtomicExchangeId| {
-            AtomicExchangeId::new(internal_location, id.token)
-        };
+        let generic_id =
+            |id: BufferAtomicExchangeId| AtomicExchangeId::new(internal_location, id.token);
         let generic_exchanges = exchanges
             .into_iter()
             .map(|exchange| {
@@ -301,10 +302,7 @@ impl BufferAtomicExchangeFixture {
             .map_err(BufferAtomicExchangeError::Atomic)?;
 
         logical_state
-            .apply_change(
-                &region,
-                ValueToken(atomic.final_value().fixture_token()),
-            )
+            .apply_change(&region, ValueToken(atomic.final_value().fixture_token()))
             .map_err(BufferAtomicExchangeError::LogicalState)?;
 
         Ok(BufferAtomicExchangeRealization {
