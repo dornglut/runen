@@ -360,6 +360,7 @@ pub enum BufferMappingError {
     },
     OutsideMappedRegion,
     LogicalState(LogicalStateError),
+    Atomic(BufferAtomicExchangeError),
 }
 
 /// Verification-only finite evidence for one address-free typed Buffer mapping.
@@ -473,6 +474,33 @@ impl BufferMappingFixture {
         logical_state
             .apply_change(region, value)
             .map_err(BufferMappingError::LogicalState)
+    }
+
+    /// Physically services one already-admitted Buffer atomic exchange set through
+    /// this exact active mapping relation.
+    ///
+    /// The mapping supplies only physical coverage through its exact agent and
+    /// allocation. It does not admit atomic access, create atomic-location identity,
+    /// change exchange scope or modification order, or establish synchronization.
+    /// Mapping validity is checked before the atomic fixture can observe or mutate
+    /// logical Buffer state.
+    pub fn mapped_atomic_exchange(
+        &self,
+        logical_state: &mut LogicalBufferState,
+        fixture: BufferAtomicExchangeFixture,
+        exchanges: Vec<BufferAtomicExchange>,
+        candidate_order: &[BufferAtomicExchangeId],
+        ordered_before: &[(BufferAtomicExchangeId, BufferAtomicExchangeId)],
+    ) -> Result<BufferAtomicExchangeRealization, BufferMappingError> {
+        self.validate_access_region(&fixture.location().region())?;
+        fixture
+            .realize(
+                logical_state,
+                exchanges,
+                candidate_order,
+                ordered_before,
+            )
+            .map_err(BufferMappingError::Atomic)
     }
 
     fn validate_access_region(&self, region: &BufferRegion) -> Result<(), BufferMappingError> {
