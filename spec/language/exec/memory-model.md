@@ -74,28 +74,33 @@ A release exchange does not gain acquire behavior merely because the exchange al
 
 ### Exchange synchronization scope
 
-For the direct synchronization relation defined by this revision, an atomic exchange may use either of these currently represented scope forms:
+For the direct synchronization relation defined by this revision, an atomic exchange may use any of these currently represented scope forms:
 
-- an **unscoped exchange** participates in the previously defined unscoped direct synchronization relation when paired with another unscoped exchange; or
-- a **root-cohort-scoped exchange** is performed by one iteration of a dynamic `each` execution and selects the complete root cohort of that iteration's containing dynamic `each`, as defined by [Exec parallelism](parallelism.md).
+- an **unscoped exchange** participates in the previously defined unscoped direct synchronization relation when paired with another unscoped exchange;
+- a **root-cohort-scoped exchange** is performed by one iteration of a dynamic `each` execution and selects the complete root cohort of that iteration's containing dynamic `each`, as defined by [Exec parallelism](parallelism.md); or
+- a **group-cohort-scoped exchange** is performed by one iteration of a dynamic `each` execution for which an applicable hierarchy instance has already been established and selects exactly the group containing that producer iteration in that hierarchy instance.
 
 A root-cohort scope does not require a hierarchy instance. The scoped exchange's executing iteration identity determines the selected dynamic `each` identity; there is no independent root-cohort identity supplied to the operation that can disagree with that producer. The iteration and dynamic-`each` identities remain the opaque semantic identities owned by Exec parallelism, not source handles, numeric indices, launch identifiers, worker or lane identities, queue identities, scheduler tokens, or hardware memory-scope enumerations.
 
-The source or lowering mechanism that identifies the current iteration and requests this scoped exchange form is not defined by this revision. That open source/lowering boundary does not make the semantic root scope a free-floating label: a root-cohort-scoped exchange belongs to the executing iteration recorded by the operation and selects that iteration's containing root cohort.
+A group-cohort-scoped exchange requires an already-established hierarchy instance belonging to the producer iteration's dynamic `each`. The operation does not establish a hierarchy instance and MUST NOT treat hierarchy choice as an arbitrary hidden scheduling or realization choice. The selected group is the producer iteration's stable group membership in that established hierarchy; there is no independently supplied group identity that can disagree with the producer's membership. Hierarchy establishment, hierarchy/group identity, and membership remain owned by [Exec parallelism](parallelism.md).
 
-Scope does not partition an atomic location or its modification order. Unscoped and root-cohort-scoped exchanges on one semantic location remain atomic exchanges on that same location and participate in the one location-local modification order above. Scope changes only the synchronization relationship that may be established between exchange occurrences.
+The source or lowering mechanism that identifies the current iteration and requests a scoped exchange form is not defined by this revision. The source mechanism that causes an applicable hierarchy to be established or obtains hierarchy/group identities is likewise not defined here. Those open source/lowering boundaries do not make semantic scope a free-floating label: a root-cohort-scoped exchange belongs to its recorded producer iteration, and a group-cohort-scoped exchange additionally consumes that producer's already-established hierarchy membership.
+
+Scope does not partition an atomic location or its modification order. Unscoped, root-cohort-scoped, and group-cohort-scoped exchanges on one semantic location remain atomic exchanges on that same location and participate in the one location-local modification order above. Scope changes only the synchronization relationship that may be established between exchange occurrences.
 
 The **synchronization-scope relationship** for two exchanges is defined by this revision in these cases:
 
 - two unscoped exchanges are **scope-compatible**, preserving the accepted unscoped relation;
 - two root-cohort-scoped exchanges whose executing iterations belong to the same dynamic `each` are **scope-compatible**;
-- two root-cohort-scoped exchanges whose executing iterations belong to distinct dynamic `each` identities are **scope-incompatible**.
+- two root-cohort-scoped exchanges whose executing iterations belong to distinct dynamic `each` identities are **scope-incompatible**;
+- two group-cohort-scoped exchanges whose selected groups have the same semantic group identity are **scope-compatible**; and
+- two group-cohort-scoped exchanges whose selected groups have distinct semantic group identities are **scope-incompatible**, including groups with equal implementation or debug tokens scoped by different hierarchy instances.
 
-The synchronization-scope relationship of a mixed unscoped/root-cohort pair is **not defined by this revision**. In particular, absence of a synchronization edge from the relations defined here is not a normative statement that such a future mixed-scope interaction must be incompatible. Defining that interoperability requires a broader execution-context or participant-inclusion contract that this root-only slice does not establish.
+The synchronization-scope relationship of a mixed pair drawn from different represented scope forms is **not defined by this revision**. This includes unscoped/root-cohort, unscoped/group-cohort, and root-cohort/group-cohort pairs. In particular, absence of a synchronization edge from the relations defined here is not a normative statement that such a future mixed-scope interaction must be incompatible. Defining that interoperability requires a broader execution-context or participant-inclusion contract that these same-form scope slices do not establish.
 
-Root-cohort scope identity by itself establishes no sibling-iteration order, barrier, ordinary-access visibility, hierarchy membership, progress guarantee, physical concurrency, or other synchronization relationship. The scope condition matters only when every other requirement of the explicit direct release/acquire relation below is also satisfied.
+Root- or group-cohort scope identity by itself establishes no sibling-iteration order, barrier, ordinary-access visibility, hierarchy establishment, progress guarantee, physical concurrency, or other synchronization relationship. The scope condition matters only when every other requirement of the explicit direct release/acquire relation below is also satisfied.
 
-Group- and subgroup-cohort atomic scope are not defined by this revision. Those hierarchy-sensitive forms require their own establishment/admission and scope-relationship contracts before they can affect synchronization.
+Subgroup-cohort and broader atomic scope are not defined by this revision. A subgroup form requires its own producer-membership admission and scope-relationship contract before it can affect synchronization.
 
 ### Direct release/acquire synchronization
 
@@ -116,9 +121,9 @@ An acquire-capable exchange is not required to synchronize with a release-capabl
 
 ### Deliberate synchronization boundary
 
-This revision defines only base, release, acquire, and acquire-release exchange classes; unscoped/unscoped and root-cohort/root-cohort synchronization-scope relationships; and the direct release-to-acquire relation above for pairs whose scope relationship is defined.
+This revision defines only base, release, acquire, and acquire-release exchange classes; unscoped/unscoped, root-cohort/root-cohort, and group-cohort/group-cohort synchronization-scope relationships; and the direct release-to-acquire relation above for pairs whose scope relationship is defined.
 
-Release sequences, sequential consistency, fences, group/subgroup or broader atomic memory scopes, mixed unscoped/root-cohort scope interoperability, mixed atomic/non-atomic access rules for the atomic location itself, the complete data-race rule involving atomics, other atomic operations, progress guarantees, and source atomic syntax or types are not defined by this revision. Their absence does not authorize behavior beyond rules already established by their canonical owners.
+Release sequences, sequential consistency, fences, subgroup or broader atomic memory scopes, mixed interoperability among the represented unscoped/root-cohort/group-cohort forms, mixed atomic/non-atomic access rules for the atomic location itself, the complete data-race rule involving atomics, other atomic operations, progress guarantees, and source atomic syntax or types are not defined by this revision. Their absence does not authorize behavior beyond rules already established by their canonical owners.
 
 ## Structured barrier synchronization
 
@@ -142,4 +147,4 @@ No host, hardware, or backend memory model is normative by default.
 
 ## Open memory-model rules
 
-The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations beyond the atomic-exchange and structured-barrier relations above, atomic order semantics beyond the base/release/acquire/acquire-release exchange classes, release sequences, atomic scope semantics beyond the root-cohort form defined above, mixed unscoped/root-cohort scope interoperability, mixed atomic/non-atomic access rules, and additional synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.
+The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations beyond the atomic-exchange and structured-barrier relations above, atomic order semantics beyond the base/release/acquire/acquire-release exchange classes, release sequences, atomic scope semantics beyond the group-cohort form defined above, mixed interoperability among represented atomic scope forms, mixed atomic/non-atomic access rules, and additional synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.
