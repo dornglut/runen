@@ -61,7 +61,7 @@ The normal and subnormal sets above are semantic value sets. Their membership, `
 
 This value-format definition does not prescribe a storage width, byte layout, exponent-field or significand-field encoding, ABI representation, NaN payload encoding, or address-level representation. It also does not define which source types select a binary floating format or which concrete `(p, emin, emax)` triples those types use.
 
-This value-format section by itself does not define signed zero, signed infinity, NaN identity or payloads, operation-specific subnormal handling, rounding, overflow or underflow result selection, flushing, conversions, or literals. Those concerns have semantics only where another applicable rule explicitly defines them.
+This value-format section by itself does not define signed zero, signed infinity, NaN class structure or identity, operation-specific subnormal handling, rounding, overflow or underflow result selection, flushing, conversions, or literals. Those concerns have semantics only where another applicable rule explicitly defines them.
 
 ## Signed zero value domain
 
@@ -83,6 +83,18 @@ This value-domain distinction does not define equality, comparison, hashing, mat
 
 No physical exponent pattern, sign bit, storage layout, ABI encoding, byte representation, or source spelling follows from the two semantic infinity values. A future `fast` rule may relax infinity-related numerical behavior only if it explicitly grants that relaxation under the contract-refinement rules above; backend `ninf` or aggregate fast-math behavior is not semantic authority by itself.
 
+## NaN value class
+
+Every binary floating type governed by these contracts contains a non-empty set of **NaN values**. Every NaN value is a special floating value distinct from every finite value, signed zero, and signed infinity value of that type.
+
+A NaN value does not denote an exact real-number value or real magnitude for the arithmetic and rounding rules in this document that operate on exact real results. Those rules therefore do not apply to a NaN merely because a physical representation uses the same floating format.
+
+NaN membership is a semantic type fact. A realization MUST NOT remove the NaN value class or assume that NaN values are absent merely because a backend or target can operate under a no-NaN assumption. The `fast` contract gains no implicit no-NaN relaxation from backend `nnan` or aggregate fast-math behavior.
+
+This revision does not determine whether a type's NaN set contains one or multiple semantic values. It does not assign semantic sign, payload, quiet or signaling state, canonical or preferred identity, ordering, or representation to NaN values. Equality, comparison, hashing, NaN production, propagation, and result selection remain owned by later applicable rules.
+
+A later representation or ABI contract may refine how physical NaN encodings map to semantic NaN values while preserving every accepted semantic rule. This section requires neither an injective nor a canonical mapping and does not define source NaN literals, bitcasts, bytes, ABI layout, or serialization.
+
 ## Interior finite rounding
 
 For an otherwise-defined floating arithmetic operation whose applicable contract determines an exact finite real result `x`, `standard` uses the following rounding rule when the operation's result type has the binary finite value format above.
@@ -99,7 +111,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Operation-specific exact-zero sign, arithmetic involving infinity, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Operation-specific exact-zero sign, arithmetic involving infinity, NaN operation behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -149,4 +161,4 @@ This `fast` permission does not authorize operand permutation, omission, duplica
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-Exact operation accuracy beyond the finite rounding rules above, contraction or FMA behavior, transcendental behavior, NaN handling, operation-specific infinity behavior, operation-specific exact-zero sign, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+Exact operation accuracy beyond the finite rounding rules above, contraction or FMA behavior, transcendental behavior, NaN operation semantics, operation-specific infinity behavior, operation-specific exact-zero sign, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
