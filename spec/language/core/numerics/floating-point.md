@@ -91,7 +91,7 @@ A NaN value does not denote an exact real-number value or real magnitude for the
 
 NaN membership is a semantic type fact. A realization MUST NOT remove the NaN value class or assume that NaN values are absent merely because a backend or target can operate under a no-NaN assumption. The `fast` contract gains no implicit no-NaN relaxation from backend `nnan` or aggregate fast-math behavior.
 
-This revision does not determine whether a type's NaN set contains one or multiple semantic values. It does not assign semantic sign, payload, quiet or signaling state, canonical or preferred identity, ordering, or representation to NaN values. Equality, comparison, hashing, NaN production, propagation, and result selection remain owned by later applicable rules.
+This revision does not determine whether a type's NaN set contains one or multiple semantic values. It does not assign semantic sign, payload, quiet or signaling state, canonical or preferred identity, ordering, or representation to NaN values. Basic arithmetic class-outcome rules below may require a result to belong to this NaN class, but equality, comparison, hashing, NaN member selection, propagation beyond class membership, and representation remain owned by later applicable rules.
 
 A later representation or ABI contract may refine how physical NaN encodings map to semantic NaN values while preserving every accepted semantic rule. This section requires neither an injective nor a canonical mapping and does not define source NaN literals, bitcasts, bytes, ABI layout, or serialization.
 
@@ -116,7 +116,7 @@ These exact-zero rules do not apply when a nonzero exact mathematical result mer
 
 By the contract-refinement rules, `reproducible` and `fast` follow these basic-operation rules unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. The existing `fast` reassociation permission may change grouping only where that permission applies; it does not by itself alter the numerical relation or signed-zero result rule of an individual basic operation. Backend `nsz`, target latitude around signed zero, or aggregate fast-math behavior supplies no implicit Runen relaxation.
 
-Additional determinate infinity and zero-divisor cases are defined separately below. This section does not define NaN-producing basic-operation forms, behavior when an operand is already NaN, unary negation, remainder, fused operations, source operator spellings, comparison or hashing behavior, sign-inspection APIs, or physical instructions.
+Additional determinate infinity and zero-divisor cases are defined separately below. NaN-class outcomes for basic arithmetic are also defined separately below. This section does not define NaN member selection, unary negation, remainder, fused operations, source operator spellings, comparison or hashing behavior, sign-inspection APIs, or physical instructions.
 
 ## Determinate special-value basic arithmetic
 
@@ -149,7 +149,25 @@ Under `standard`, cases already covered by finite basic arithmetic and its round
 
 By the contract-refinement rules, `reproducible` and `fast` follow these determinate special-value rules unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, `ninf`, `nsz`, aggregate fast-math behavior, physical floating exception behavior, or target latitude supplies no implicit Runen relaxation.
 
-The following non-NaN input forms are not defined by this revision because their result requires a NaN-result contract: opposite-sign infinity addition, same-sign infinity subtraction, signed zero multiplied by infinity in either order, infinity divided by infinity, and signed zero divided by signed zero. This section also does not define behavior when either operand is already NaN, NaN production or propagation, equality, comparison, hashing, total ordering, sign-observation APIs, unary negation, remainder, fused operations, source operator spellings, or physical instructions.
+The remaining basic-operation forms whose result belongs to the NaN class are defined separately below. This section does not define NaN member selection, equality, comparison, hashing, total ordering, sign-observation APIs, unary negation, remainder, fused operations, source operator spellings, or physical instructions.
+
+## NaN-class basic arithmetic outcomes
+
+For an already-admitted basic binary floating operation with an already-established binary floating result type governed by this document, `standard` requires the operation result to belong to that result type's NaN value class when either operand is already a NaN value.
+
+When both operands are non-NaN, `standard` likewise requires a NaN-class result for exactly the following basic-operation forms not covered by the finite or determinate special-value rules above:
+
+- addition of opposite-sign infinities;
+- subtraction of same-sign infinities;
+- multiplication of signed zero by signed infinity, in either operand order;
+- division of signed infinity by signed infinity;
+- division of signed zero by signed zero.
+
+These requirements define only the **value class** of the result. This revision does not define which NaN member of the result type is selected for any such operation occurrence, whether two occurrences select the same semantic NaN, whether an input NaN is propagated or otherwise related to the selected result, or any sign, payload, quiet/signaling, preferred, canonical, equality, ordering, hashing, or representation property of that result.
+
+The unresolved NaN member-selection rule is an open semantic obligation, not implementation freedom. In particular, this section does not state that every member of the result type's NaN class is a permitted `standard` result and a realization MUST NOT derive NaN member identity, propagation, payload, or signaling behavior merely from its backend or physical target.
+
+By the contract-refinement rules, `reproducible` and `fast` inherit the NaN-class outcome requirement unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, canonicalization, payload propagation, aggregate fast-math behavior, or physical signaling behavior supplies no implicit Runen relaxation.
 
 ## Interior finite rounding
 
@@ -167,7 +185,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results are defined above. Exact-zero sign outside the basic operations defined above, NaN-producing and NaN-input operation behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -205,7 +223,7 @@ At `|x| = H`, the infinity side is the ties-to-even choice. The maximum finite c
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` upper-bound rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. Backend finite-only, saturation, overflow-mode, or fast-math behavior supplies no such relaxation by itself.
 
-This section rounds only an otherwise-defined finite exact real result. Determinate basic infinity and zero-divisor results are defined separately above. This section does not define NaN-producing or NaN-input operation behavior, conversions, literals, or transcendental accuracy.
+This section rounds only an otherwise-defined finite exact real result. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, conversions, literals, or transcendental accuracy.
 
 ## Reassociation
 
@@ -217,4 +235,4 @@ This `fast` permission does not authorize operand permutation, omission, duplica
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN-producing and NaN-input basic-operation semantics, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction or FMA behavior, transcendental behavior, exact-zero sign outside the basic operations above, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction or FMA behavior, transcendental behavior, exact-zero sign outside the basic operations above, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
