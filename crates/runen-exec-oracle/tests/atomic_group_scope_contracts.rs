@@ -1,8 +1,9 @@
 use runen_exec_oracle::{
-    Access, AccessKind, AtomicExchange, AtomicExchangeFixture, AtomicExchangeId,
-    AtomicExchangeScope, AtomicExchangeSemantics, AtomicGroupScope, AtomicLocationId,
-    AtomicScopeRelation, AtomicValueToken, BufferId, BufferRegion, EachId, GroupId,
-    HierarchyFixture, HierarchyId, HierarchyMembership, IterationId, PositionId, SubgroupId,
+    Access, AccessKind, AtomicExchange, AtomicExchangeError, AtomicExchangeFixture,
+    AtomicExchangeId, AtomicExchangeScope, AtomicExchangeSemantics, AtomicGroupScope,
+    AtomicLocationId, AtomicScopeRelation, AtomicValueToken, BufferId, BufferRegion, EachId,
+    GroupId, HierarchyFixture, HierarchyId, HierarchyMembership, IterationId, PositionId,
+    SubgroupId,
 };
 
 fn hierarchy(
@@ -147,6 +148,10 @@ fn distinct_groups_are_incompatible_without_partitioning_modification_order() {
         Some(AtomicValueToken::new(20))
     );
     assert_eq!(realization.final_value(), AtomicValueToken::new(30));
+    assert!(matches!(
+        fixture.realize(&[acquire, release], &[(release, acquire)]),
+        Err(AtomicExchangeError::OrderConstraintViolation)
+    ));
 }
 
 #[test]
@@ -249,6 +254,50 @@ fn group_mixed_with_root_or_unscoped_remains_open() {
         Some(AtomicScopeRelation::Open)
     );
     assert!(!with_root.release_acquire_synchronizes(first, second));
+}
+
+#[test]
+fn group_scope_does_not_synchronize_foreign_atomic_locations() {
+    let each = EachId::new(1);
+    let hierarchy = hierarchy(each, 1, &[(1, 1, 1), (2, 1, 2)]);
+    let first_location = AtomicLocationId::new(1);
+    let second_location = AtomicLocationId::new(2);
+    let first = exchange_id(first_location, 1);
+    let second = exchange_id(second_location, 1);
+    let first_fixture = AtomicExchangeFixture::new(
+        first_location,
+        AtomicValueToken::new(10),
+        vec![group_exchange(
+            first_location,
+            1,
+            20,
+            AtomicExchangeSemantics::Release,
+            &hierarchy,
+            IterationId::new(each, 1),
+        )],
+    )
+    .unwrap();
+    let second_fixture = AtomicExchangeFixture::new(
+        second_location,
+        AtomicValueToken::new(30),
+        vec![group_exchange(
+            second_location,
+            1,
+            40,
+            AtomicExchangeSemantics::Acquire,
+            &hierarchy,
+            IterationId::new(each, 2),
+        )],
+    )
+    .unwrap();
+
+    let first_realization = first_fixture.realize(&[first], &[]).unwrap();
+    assert_eq!(
+        first_realization.synchronization_scope_relation(first, second),
+        None
+    );
+    assert!(!first_realization.release_acquire_synchronizes(first, second));
+    assert!(second_fixture.realize(&[second], &[]).is_ok());
 }
 
 #[test]
