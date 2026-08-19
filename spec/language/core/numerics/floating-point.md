@@ -181,7 +181,7 @@ Under `standard`, integer zero converts to `+0`. A nonzero integer value explici
 
 By the contract-refinement rules, `reproducible` and `fast` follow this `standard` conversion unless a later conversion-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not by themselves flush this conversion's source or result.
 
-This conversion uses the semantic integer value, not a physical integer encoding or bit pattern. It does not define source cast syntax, implicit conversion or promotion, conversion insertion, concrete integer or floating source type spellings, vector conversion, floating-to-integer conversion, literals, constant-evaluation diagnostics, physical representation, ABI, backend instructions, or target behavior.
+This conversion uses the semantic integer value, not a physical integer encoding or bit pattern. It does not define source cast syntax, implicit conversion or promotion, conversion insertion, concrete integer or floating source type spellings, vector conversion, floating-to-integer outcomes outside the finite in-range relation below, literals, constant-evaluation diagnostics, physical representation, ABI, backend instructions, or target behavior.
 
 ## Binary floating to binary floating conversion
 
@@ -203,7 +203,35 @@ By the contract-refinement rules, `reproducible` and `fast` follow this `standar
 
 A same-format conversion follows these same semantic value rules. For a nonzero finite source, the destination has the same exact real value because that value is exactly representable in the same format; signed zeros and signed infinities retain their sign. No physical bit-identity rule follows for NaN values while NaN member selection remains open.
 
-This conversion does not define source cast syntax, implicit conversion or promotion, conversion insertion, concrete binary floating source type spellings, vector conversion, floating-to-integer conversion, NaN member selection or propagation beyond destination class membership, literals, constant-evaluation diagnostics, physical representation, bitcasts, ABI, backend instructions, or target behavior.
+This conversion does not define source cast syntax, implicit conversion or promotion, conversion insertion, concrete binary floating source type spellings, vector conversion, floating-to-integer outcomes outside the finite in-range relation below, NaN member selection or propagation beyond destination class membership, literals, constant-evaluation diagnostics, physical representation, bitcasts, ABI, backend instructions, or target behavior.
+
+## Finite in-range binary floating to fixed-width integer conversion
+
+For an already-admitted conversion whose source is a semantic binary floating value governed by this document and whose result type is an already-established fixed-width integer type of width `N` and signedness, this section defines the `standard` result only when the source is finite and truncation toward zero produces an integer admitted by the destination value interval.
+
+Interpret a nonzero finite source by the exact real value `x` supplied by its source floating format. For either signed-zero source, let `x = 0` for this conversion.
+
+The **truncation toward zero** of `x`, written `t`, is the unique integer satisfying:
+
+- when `x >= 0`, `t <= x < t + 1`;
+- when `x < 0`, `t - 1 < x <= t`.
+
+The destination integer value interval is:
+
+- `[0, 2^N - 1]` for an unsigned result type;
+- `[-2^(N-1), 2^(N-1) - 1]` for a signed result type.
+
+If `t` belongs to that destination interval, the Runen conversion result is exactly destination integer value `t`.
+
+The admissibility test is applied to `t`, not directly to `x`. A finite source whose exact real value lies slightly beyond a destination bound may therefore still have a defined result under this section when truncation yields the boundary integer. Likewise, a negative finite source strictly between `-1` and `0` truncates to integer zero and is admitted by an unsigned destination.
+
+Both `+0` and `-0` convert to integer `0`; this section introduces no integer zero-sign distinction.
+
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` finite in-range conversion unless a later conversion-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not alter the source value for this conversion.
+
+This section does not define the conversion outcome when the source is NaN or signed infinity, or when truncation produces an integer outside the destination interval. Those cases remain open semantic obligations and MUST NOT be filled from backend behavior, host-language casts, integer arithmetic overflow modes, or physical target conventions.
+
+This section does not decide whether those open cases later fault, saturate, return an ordinary recoverable result, select an explicit conversion mode, or have another defined outcome. It also does not define source cast syntax, implicit conversion or promotion, conversion insertion, vector conversion, literals, constant-evaluation diagnostics, physical representation, ABI, backend instructions, target behavior, compiler IR, or executable oracle representation.
 
 ## Finite multiply-add contraction
 
@@ -248,7 +276,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, floating-to-integer conversion, literals, transcendental accuracy, reduced precision, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, floating-to-integer outcomes outside the finite in-range conversion above, literals, transcendental accuracy, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -322,7 +350,7 @@ At `|x| = H`, the infinity side is the ties-to-even choice. The maximum finite c
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` upper-bound rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. Backend finite-only, saturation, overflow-mode, or fast-math behavior supplies no such relaxation by itself.
 
-This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, floating-to-integer conversion, literals, or transcendental accuracy.
+This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, floating-to-integer outcomes outside the finite in-range conversion above, literals, or transcendental accuracy.
 
 ## Reassociation
 
@@ -334,4 +362,4 @@ This `fast` reassociation permission does not by itself authorize operand permut
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, floating-to-integer conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, floating-to-integer outcomes outside the finite in-range conversion above, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
