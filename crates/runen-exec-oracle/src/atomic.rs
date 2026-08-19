@@ -75,10 +75,10 @@ pub enum AtomicExchangeSemantics {
 ///
 /// The producer and selected group are derived together from validated hierarchy
 /// membership. Retaining that complete membership permits the focused mixed
-/// group/subgroup scope relation to ask whether the producer belongs to the other
-/// selected cohort without accepting a free-standing membership label. This is not
-/// a source hierarchy handle, scheduling token, hardware work-group identity, or
-/// reusable participant-domain abstraction.
+/// group/subgroup and root/group scope relations to consume exact hierarchy evidence
+/// without accepting a free-standing membership label. This is not a source hierarchy
+/// handle, scheduling token, hardware work-group identity, or reusable
+/// participant-domain abstraction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicGroupScope {
     membership: HierarchyMembership,
@@ -90,6 +90,10 @@ impl AtomicGroupScope {
         Some(Self {
             membership: hierarchy.membership(producer)?,
         })
+    }
+
+    const fn membership(self) -> HierarchyMembership {
+        self.membership
     }
 
     const fn group(self) -> GroupId {
@@ -106,10 +110,10 @@ impl AtomicGroupScope {
 ///
 /// The producer and selected subgroup are derived together from validated hierarchy
 /// membership. Retaining that complete membership permits the focused mixed
-/// group/subgroup scope relation to ask whether the producer belongs to the other
-/// selected cohort without accepting a free-standing membership label. This is not
-/// a source hierarchy handle, scheduling token, hardware subgroup identity, or
-/// reusable participant-domain abstraction.
+/// group/subgroup and root/subgroup scope relations to consume exact hierarchy
+/// evidence without accepting a free-standing membership label. This is not a source
+/// hierarchy handle, scheduling token, hardware subgroup identity, or reusable
+/// participant-domain abstraction.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AtomicSubgroupScope {
     membership: HierarchyMembership,
@@ -121,6 +125,10 @@ impl AtomicSubgroupScope {
         Some(Self {
             membership: hierarchy.membership(producer)?,
         })
+    }
+
+    const fn membership(self) -> HierarchyMembership {
+        self.membership
     }
 
     const fn group(self) -> GroupId {
@@ -334,12 +342,15 @@ impl AtomicExchangeRealization {
             .find_map(|(candidate, prior)| (*candidate == exchange).then_some(*prior))
     }
 
-    /// The currently defined synchronization-scope relationship between two
-    /// represented exchanges on this location.
+    /// The synchronization-scope relationship that can be decided from the two
+    /// represented exchange scopes alone.
     ///
-    /// `None` means one or both identities are not represented on this realization.
-    /// `Open` means the pair is represented but the normative interaction is not
-    /// defined by the current revision.
+    /// `None` means one or both identities are not represented, or the represented
+    /// pair is a root/group or root/subgroup interaction whose now-defined relation
+    /// requires the exact hierarchy evidence selected by the narrower scope. Use
+    /// [`Self::synchronization_scope_relation_in_hierarchy`] for that case.
+    /// `Open` is reserved for a represented interaction whose normative relationship
+    /// remains undefined by the current revision.
     #[must_use]
     pub fn synchronization_scope_relation(
         &self,
@@ -385,17 +396,55 @@ impl AtomicExchangeRealization {
                     AtomicScopeRelation::Incompatible
                 }
             }
+            (AtomicExchangeScope::Root(_), AtomicExchangeScope::Group(_))
+            | (AtomicExchangeScope::Group(_), AtomicExchangeScope::Root(_))
+            | (AtomicExchangeScope::Root(_), AtomicExchangeScope::Subgroup(_))
+            | (AtomicExchangeScope::Subgroup(_), AtomicExchangeScope::Root(_)) => return None,
             _ => AtomicScopeRelation::Open,
         })
     }
 
-    /// Whether the named release-capable exchange directly synchronizes with the
-    /// named acquire-capable exchange under the accepted direct-predecessor and
-    /// synchronization-scope relations.
+    /// The synchronization-scope relationship with one exact hierarchy fixture as
+    /// focused evidence for root/group or root/subgroup membership.
     ///
-    /// A pair whose scope relationship is `Open` does not receive a synchronization
-    /// edge from this represented relation; callers must not reinterpret that as a
-    /// normative proof that the open interaction is incompatible.
+    /// The supplied hierarchy is accepted for a narrower scope only when it returns
+    /// the exact stored producer membership that created that scope. A distinct
+    /// same-`each` hierarchy with equal private cohort tokens therefore cannot
+    /// retarget the operation. `None` means an identity is unrepresented or the
+    /// supplied hierarchy is not exact/sufficient evidence for the represented
+    /// root-to-narrower pair.
+    #[must_use]
+    pub fn synchronization_scope_relation_in_hierarchy(
+        &self,
+        left: AtomicExchangeId,
+        right: AtomicExchangeId,
+        hierarchy: &HierarchyFixture,
+    ) -> Option<AtomicScopeRelation> {
+        let left_scope = self.scope_of(left)?;
+        let right_scope = self.scope_of(right)?;
+
+        match (left_scope, right_scope) {
+            (AtomicExchangeScope::Root(root), AtomicExchangeScope::Group(group))
+            | (AtomicExchangeScope::Group(group), AtomicExchangeScope::Root(root)) => {
+                Self::root_group_scope_relation(root, group, hierarchy)
+            }
+            (AtomicExchangeScope::Root(root), AtomicExchangeScope::Subgroup(subgroup))
+            | (AtomicExchangeScope::Subgroup(subgroup), AtomicExchangeScope::Root(root)) => {
+                Self::root_subgroup_scope_relation(root, subgroup, hierarchy)
+            }
+            _ => self.synchronization_scope_relation(left, right),
+        }
+    }
+
+    /// Whether the named release-capable exchange directly synchronizes with the
+    /// named acquire-capable exchange under the context-free accepted
+    /// direct-predecessor and synchronization-scope relations.
+    ///
+    /// Root/group and root/subgroup pairs whose defined relation requires exact
+    /// hierarchy evidence do not synchronize through this context-free query; use
+    /// [`Self::release_acquire_synchronizes_in_hierarchy`] for those pairs. A pair
+    /// whose scope relationship is `Open` likewise receives no synchronization edge
+    /// here, without proving that the open interaction is incompatible.
     #[must_use]
     pub fn release_acquire_synchronizes(
         &self,
@@ -417,9 +466,76 @@ impl AtomicExchangeRealization {
             && self.immediate_predecessor(acquire) == Some(release)
     }
 
+    /// Whether the named release-capable exchange directly synchronizes with the
+    /// named acquire-capable exchange when exact hierarchy evidence is required for
+    /// a root/group or root/subgroup scope relationship.
+    #[must_use]
+    pub fn release_acquire_synchronizes_in_hierarchy(
+        &self,
+        release: AtomicExchangeId,
+        acquire: AtomicExchangeId,
+        hierarchy: &HierarchyFixture,
+    ) -> bool {
+        if release.location() != self.location || acquire.location() != self.location {
+            return false;
+        }
+
+        matches!(
+            self.semantics_of(release),
+            Some(AtomicExchangeSemantics::Release | AtomicExchangeSemantics::AcquireRelease)
+        ) && matches!(
+            self.semantics_of(acquire),
+            Some(AtomicExchangeSemantics::Acquire | AtomicExchangeSemantics::AcquireRelease)
+        ) && self.synchronization_scope_relation_in_hierarchy(release, acquire, hierarchy)
+            == Some(AtomicScopeRelation::Compatible)
+            && self.immediate_predecessor(acquire) == Some(release)
+    }
+
     #[must_use]
     pub const fn final_value(&self) -> AtomicValueToken {
         self.final_value
+    }
+
+    fn root_group_scope_relation(
+        root: IterationId,
+        group: AtomicGroupScope,
+        hierarchy: &HierarchyFixture,
+    ) -> Option<AtomicScopeRelation> {
+        let group_membership = group.membership();
+        if hierarchy.membership(group_membership.iteration()) != Some(group_membership) {
+            return None;
+        }
+        if root.each() != group_membership.iteration().each() {
+            return Some(AtomicScopeRelation::Incompatible);
+        }
+
+        let root_membership = hierarchy.membership(root)?;
+        Some(if root_membership.group() == group.group() {
+            AtomicScopeRelation::Compatible
+        } else {
+            AtomicScopeRelation::Incompatible
+        })
+    }
+
+    fn root_subgroup_scope_relation(
+        root: IterationId,
+        subgroup: AtomicSubgroupScope,
+        hierarchy: &HierarchyFixture,
+    ) -> Option<AtomicScopeRelation> {
+        let subgroup_membership = subgroup.membership();
+        if hierarchy.membership(subgroup_membership.iteration()) != Some(subgroup_membership) {
+            return None;
+        }
+        if root.each() != subgroup_membership.iteration().each() {
+            return Some(AtomicScopeRelation::Incompatible);
+        }
+
+        let root_membership = hierarchy.membership(root)?;
+        Some(if root_membership.subgroup() == subgroup.subgroup() {
+            AtomicScopeRelation::Compatible
+        } else {
+            AtomicScopeRelation::Incompatible
+        })
     }
 
     fn immediate_predecessor(&self, exchange: AtomicExchangeId) -> Option<AtomicExchangeId> {
