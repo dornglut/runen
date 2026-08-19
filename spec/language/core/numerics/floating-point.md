@@ -32,6 +32,27 @@ A `fast` numerical relaxation does not by implication relax evaluation authority
 
 These refinement relationships compose the obligations of an already-selected numeric contract. They do not select a contract for an operation and do not authorize a realization to switch contracts; the numeric-contract authority rules above remain controlling.
 
+## Binary floating finite value format
+
+For every binary floating type governed by these contracts, the applicable semantic type contract fixes three value-format parameters:
+
+- the complete significand precision `p`, an integer with `p >= 2`;
+- the minimum normal exponent `emin`;
+- the maximum normal exponent `emax`, with `emin <= emax`.
+
+The nonzero finite values of that semantic format are exactly the following values and their negatives:
+
+- **normal values:** `m * 2^(e - (p - 1))`, where `e` is an integer in `[emin, emax]` and `m` is an integer in `[2^(p - 1), 2^p - 1]`;
+- **subnormal values:** `m * 2^(emin - (p - 1))`, where `m` is an integer in `[1, 2^(p - 1) - 1]`.
+
+The normal and subnormal sets above are semantic value sets. Their membership, `p`, `emin`, and `emax` are fixed by the type contract and MUST NOT change with numeric-contract selection or physical realization. A backend MUST NOT silently substitute another finite value lattice merely because another native format is preferred or available.
+
+A realization MAY use greater intermediate physical precision only where the selected numeric contract permits the resulting Runen-observable behavior. Such intermediate precision does not change the semantic result type's value format.
+
+This value-format definition does not prescribe a storage width, byte layout, exponent-field or significand-field encoding, ABI representation, NaN payload encoding, or address-level representation. It also does not define which source types select a binary floating format or which concrete `(p, emin, emax)` triples those types use.
+
+The semantics of positive and negative zero, infinities, NaN identity or payloads, operation-specific subnormal handling, rounding, overflow and underflow result selection, flushing, conversions, and literals remain to be defined by their applicable contracts.
+
 ## Reassociation
 
 Under `standard` and `reproducible`, semantic grouping of separately represented floating-point additions or multiplications is result-significant. A realization MUST NOT use real-number associativity to regroup those operations when doing so can change Runen-observable behavior permitted by the selected contract. A realization MAY physically restructure the computation when it proves that the resulting behavior still satisfies the selected contract.
@@ -42,4 +63,4 @@ This `fast` permission does not authorize operand permutation, omission, duplica
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-Exact operation accuracy, contraction or FMA behavior, transcendental behavior, NaN handling, subnormal handling, rounding and conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+Exact operation accuracy, contraction or FMA behavior, transcendental behavior, NaN handling, operation-specific subnormal handling, rounding and conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
