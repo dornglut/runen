@@ -12,6 +12,7 @@ mod barrier;
 mod buffer;
 mod coverage;
 mod hierarchy;
+mod realization;
 mod reduction;
 mod structured;
 mod task;
@@ -31,6 +32,7 @@ pub use buffer::{
 pub use hierarchy::{
     GroupId, HierarchyError, HierarchyFixture, HierarchyId, HierarchyMembership, SubgroupId,
 };
+pub use realization::RealizationAgentId;
 pub use reduction::{
     ContributionId, ReductionContribution, ReductionError, ReductionFixture, ReductionId,
     UnorderedReductionEvidence,
