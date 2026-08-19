@@ -24,6 +24,8 @@ Core MIR       Exec IR         Logical IR
              Target IR(s)
 ```
 
+This diagram describes compiler responsibilities, not a prescribed pass pipeline.
+
 Names and exact boundaries may change when implementation evidence warrants it.
 
 ## Responsibilities
