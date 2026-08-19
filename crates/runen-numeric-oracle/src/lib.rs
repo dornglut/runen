@@ -4,7 +4,7 @@
 //! This crate is not Runen source syntax, compiler IR, a runtime floating-point
 //! implementation, a backend model, or a normative semantic owner. It covers
 //! exact dyadic inputs to the accepted binary floating rounding relation plus
-//! class-level scalar integer/floating conversion and finite sum-reduction evidence.
+//! class-level scalar integer/floating conversion and sum-reduction evidence.
 //!
 //! The `i128`/`u128` carriers, `i32` exponents, integer widths up to 128 bits,
 //! and exact finite-sum accumulator capacity are executable fixture limits only.
@@ -57,6 +57,12 @@ pub enum BinaryConversionResult {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SumReductionResult {
+    Value(RoundedBinaryValue),
+    NaNClass,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum IntegerSignedness {
     Signed,
     Unsigned,
@@ -79,6 +85,7 @@ pub enum NumericOracleError {
     InternalRangeExceeded,
     ZeroExactInput,
     NonFiniteReductionInput,
+    NaNReductionInput,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -289,6 +296,47 @@ pub fn convert_unsigned_integer(
         return Ok(RoundedBinaryValue::Zero(Sign::Positive));
     }
     round_dyadic(format, ExactDyadic::from_unsigned_integer(value))
+}
+
+/// Verification-only oracle for the accepted same-format unordered floating
+/// sum reduction including its signed-infinity extension.
+///
+/// Submitted NaNs remain outside this slice. Finite-only inputs delegate to the
+/// accepted bounded exact finite-sum oracle below.
+pub fn reduce_sum(
+    format: BinaryFormat,
+    contributions: &[BinaryValueFixture],
+) -> Result<SumReductionResult, NumericOracleError> {
+    let mut positive_infinity = false;
+    let mut negative_infinity = false;
+
+    for contribution in contributions {
+        match contribution {
+            BinaryValueFixture::Finite(exact) if exact.magnitude == 0 => {
+                return Err(NumericOracleError::ZeroExactInput);
+            }
+            BinaryValueFixture::Finite(_) | BinaryValueFixture::Zero(_) => {}
+            BinaryValueFixture::Infinity(Sign::Positive) => positive_infinity = true,
+            BinaryValueFixture::Infinity(Sign::Negative) => negative_infinity = true,
+            BinaryValueFixture::NaNClass => return Err(NumericOracleError::NaNReductionInput),
+        }
+    }
+
+    if positive_infinity && negative_infinity {
+        return Ok(SumReductionResult::NaNClass);
+    }
+    if positive_infinity {
+        return Ok(SumReductionResult::Value(RoundedBinaryValue::Infinity(
+            Sign::Positive,
+        )));
+    }
+    if negative_infinity {
+        return Ok(SumReductionResult::Value(RoundedBinaryValue::Infinity(
+            Sign::Negative,
+        )));
+    }
+
+    reduce_finite_sum(format, contributions).map(SumReductionResult::Value)
 }
 
 /// Verification-only oracle for the accepted finite same-format unordered

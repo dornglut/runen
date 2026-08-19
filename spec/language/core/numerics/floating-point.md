@@ -437,6 +437,48 @@ Physical tree shape, contribution permutation, lane or worker identity, queue or
 
 This section does not define submitted NaN or signed-infinity behavior, NaN member selection or propagation, mixed floating formats or promotions, products, dot products, min/max, scans, ordered reductions, generic user-defined floating combination operators, a source-visible exact accumulator type, physical accumulator width or layout, a required summation algorithm, a `fast` reduction-specific tree/approximation/flushing relaxation, source reduction syntax or placement, hierarchy selection syntax, numeric-contract selection syntax, or abnormal reduction completion.
 
+## Signed-infinity extension for unordered floating sum reduction
+
+For the same already-admitted same-format unordered floating sum reduction, `standard` extends the accepted finite rule to submitted signed infinity values of `T`. Submitted NaN values remain outside this section.
+
+Keep the accepted finite sum state `f = (s, z)` unchanged. The broader operation-private **sum state** is the product `(f, i)`, where `i` records the set of signed infinity values represented by the state and is exactly one of:
+
+- `none` — no signed infinity is represented;
+- `positive` — one or more `+∞` values and no `-∞` value are represented;
+- `negative` — one or more `-∞` values and no `+∞` value are represented;
+- `both` — both infinity signs are represented.
+
+Singleton injection is:
+
+- a finite or signed-zero submitted value `v` becomes `(inj_f(v), none)`, where `inj_f` is exactly the accepted finite-state injection above;
+- `+∞` becomes `(e_f, positive)`;
+- `-∞` becomes `(e_f, negative)`, where `e_f = (0, empty)` is the accepted finite-state identity.
+
+The broader reduction identity is `(e_f, none)`.
+
+Combine the product state componentwise. The `f` component uses exactly the accepted finite-state combine. The infinity-presence component combines by set union of represented infinity signs: `none` is the two-sided identity, combining identical single-sign classes preserves that class, and combining `positive` with `negative` yields `both`.
+
+Under exact product-state equality, the infinity-presence component is a commutative monoid and its product with the already-accepted finite-state commutative monoid remains normally completing, closed, result-only, associative, commutative, and equipped with the true two-sided identity `(e_f, none)`. The existing Exec unordered-reduction law boundary therefore remains satisfied without making ordinary floating addition the combination operation.
+
+After exact-once contribution coverage, finalization is:
+
+- `i = positive` produces `+∞`;
+- `i = negative` produces `-∞`;
+- `i = both` produces a value belonging to `T`'s NaN value class;
+- `i = none` uses the accepted finite-state finalization unchanged.
+
+The `both` result defines only NaN class membership. It does not select a NaN member, propagate an input NaN, assign sign/payload/quiet-signaling state, or define representation. NaN member selection remains an open semantic obligation.
+
+Finite contributions do not change a result determined by one submitted infinity sign. A finite exact sum that later rounds to signed infinity when `i = none` remains a finite-state finalization result; it does not become an infinity-presence contribution and does not interact with the presence component retroactively.
+
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` signed-infinity extension unless a later reduction-specific rule explicitly narrows or relaxes it. Existing `fast` permissions for basic-operation subnormal flushing, reassociation, and finite multiply-add contraction remain scoped to the operation occurrences they name and do not alter singleton injection, finite-state combine, infinity-presence combine, or finalization here.
+
+Physical reduction tree or permutation, native infinity handling, lane or worker order, backend fast-math flags, and target conventions are not semantic input.
+
+A submitted NaN value remains outside the same-format unordered sum semantics defined so far. Its future reduction behavior is an open semantic obligation, not implementation freedom. In particular, this section does not decide whether a reduction preserves an input NaN member, selects among input members, constructs another member, canonicalizes, or exposes payload/signaling relationships.
+
+This section also does not define mixed floating formats or promotions, other reduction operations, a source-visible accumulator type, physical accumulator representation, a `fast` reduction-specific native-tree/FTZ/approximation relaxation, source reduction syntax or placement, hierarchy selection syntax, numeric-contract selection syntax, or abnormal completion.
+
 ## Reassociation
 
 Under `standard` and `reproducible`, semantic grouping of separately represented floating-point additions or multiplications is result-significant. A realization MUST NOT use real-number associativity to regroup those operations when doing so can change Runen-observable behavior permitted by the selected contract. A realization MAY physically restructure the computation when it proves that the resulting behavior still satisfies the selected contract.
@@ -447,4 +489,4 @@ This `fast` reassociation permission does not by itself authorize operand permut
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, reduction-specific numeric behavior outside the finite same-format unordered sum reduction above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, submitted-NaN and other reduction-specific numeric behavior outside the same-format unordered sum rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
