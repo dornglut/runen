@@ -69,9 +69,26 @@ fn duplicate_mapping_identity_is_rejected_within_one_allocation() {
     assert!(matches!(
         BufferMappingFixture::new(1, region(1, &[1]), &mut allocation),
         Err(BufferMappingError::Allocation(
-            AllocationError::MappingIdentityInUse
+            AllocationError::DuplicateMappingIdentity
         ))
     ));
+}
+
+#[test]
+fn ended_mapping_identity_cannot_be_reused_for_another_occurrence() {
+    let mut allocation = allocation_fixture(7);
+    let mut first = BufferMappingFixture::new(1, region(1, &[0]), &mut allocation).unwrap();
+    let first_id = first.id();
+
+    first.end(&mut allocation).unwrap();
+
+    assert!(matches!(
+        BufferMappingFixture::new(1, region(1, &[1]), &mut allocation),
+        Err(BufferMappingError::Allocation(
+            AllocationError::DuplicateMappingIdentity
+        ))
+    ));
+    assert_eq!(first.id(), first_id);
 }
 
 #[test]
