@@ -1,7 +1,8 @@
 use runen_exec_oracle::{
-    Access, AccessKind, BarrierFixture, BarrierId, BufferId, BufferRegion, EachId, EachPhase,
-    GroupId, HierarchyError, HierarchyFixture, HierarchyId, HierarchyMembership, IterationId,
-    PositionId, SubgroupId, each_orders,
+    Access, AccessKind, BarrierError, BarrierFixture, BarrierId, BufferId, BufferRegion, EachId,
+    EachPhase, GroupId, HierarchyError, HierarchyFixture, HierarchyId, HierarchyMembership,
+    IterationId, PositionId, ReductionError, ReductionFixture, ReductionId, SubgroupId,
+    each_orders,
 };
 
 fn each_id() -> EachId {
@@ -217,6 +218,63 @@ fn hierarchy_group_and_subgroup_identity_are_scoped_by_dynamic_each() {
     assert_ne!(first_hierarchy, second_hierarchy);
     assert_ne!(first_group, second_group);
     assert_ne!(first_subgroup, second_subgroup);
+}
+
+#[test]
+fn distinct_same_each_hierarchies_bind_consumers_to_exact_instance() {
+    let each = each_id();
+    let required = [iteration(1), iteration(2)];
+    let first_id = HierarchyId::new(each, 1);
+    let second_id = HierarchyId::new(each, 2);
+    let first_group = GroupId::new(first_id, 10);
+    let second_group = GroupId::new(second_id, 10);
+    let first_subgroup = SubgroupId::new(first_group, 7);
+    let second_subgroup = SubgroupId::new(second_group, 7);
+
+    let first = HierarchyFixture::new(
+        first_id,
+        &required,
+        vec![
+            membership_in(first_id, iteration(1), 10, 7),
+            membership_in(first_id, iteration(2), 10, 7),
+        ],
+    )
+    .unwrap();
+    let second = HierarchyFixture::new(
+        second_id,
+        &required,
+        vec![
+            membership_in(second_id, iteration(1), 10, 7),
+            membership_in(second_id, iteration(2), 10, 7),
+        ],
+    )
+    .unwrap();
+
+    assert_ne!(first_id, second_id);
+    assert_ne!(first_group, second_group);
+    assert_ne!(first_subgroup, second_subgroup);
+    assert!(first.same_group(iteration(1), iteration(2)));
+    assert!(second.same_group(iteration(1), iteration(2)));
+
+    assert!(matches!(
+        BarrierFixture::group(BarrierId::new(1), &first, second_group),
+        Err(BarrierError::UnknownGroup)
+    ));
+    assert!(matches!(
+        BarrierFixture::subgroup(BarrierId::new(2), &first, second_subgroup),
+        Err(BarrierError::UnknownSubgroup)
+    ));
+    assert!(matches!(
+        ReductionFixture::group(ReductionId::new(1), &first, second_group),
+        Err(ReductionError::UnknownGroup)
+    ));
+    assert!(matches!(
+        ReductionFixture::subgroup(ReductionId::new(2), &first, second_subgroup),
+        Err(ReductionError::UnknownSubgroup)
+    ));
+
+    assert!(BarrierFixture::group(BarrierId::new(3), &first, first_group).is_ok());
+    assert!(ReductionFixture::subgroup(ReductionId::new(3), &first, first_subgroup).is_ok());
 }
 
 #[test]
