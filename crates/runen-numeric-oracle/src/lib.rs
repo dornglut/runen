@@ -383,9 +383,7 @@ enum TruncatedMagnitude {
     AboveU128,
 }
 
-fn truncate_dyadic_magnitude(
-    exact: ExactDyadic,
-) -> Result<TruncatedMagnitude, NumericOracleError> {
+fn truncate_dyadic_magnitude(exact: ExactDyadic) -> Result<TruncatedMagnitude, NumericOracleError> {
     if exact.magnitude == 0 {
         return Err(NumericOracleError::ZeroExactInput);
     }
