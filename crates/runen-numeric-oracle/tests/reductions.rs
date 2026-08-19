@@ -160,6 +160,40 @@ fn exact_sum_differs_from_complete_tree_rounded_candidates() {
 }
 
 #[test]
+fn complete_tree_rounded_candidate_can_change_with_leaf_permutation() {
+    let format = tiny_format();
+    let a = sum_leaf(format, finite(Sign::Negative, 8, 1)); // -16
+    let b = sum_leaf(format, finite(Sign::Negative, 8, 1)); // -16
+    let c = sum_leaf(format, finite(Sign::Negative, 11, -1)); // -5.5
+
+    // Same full binary tree shape: ((leaf0 + leaf1) + leaf2).
+    // Only the contribution-to-leaf bijection changes.
+    let ab = add_standard_tree_node(format, a, b).unwrap();
+    let abc = add_standard_tree_node(format, ab, c).unwrap();
+
+    let ac = add_standard_tree_node(format, a, c).unwrap();
+    let acb = add_standard_tree_node(format, ac, b).unwrap();
+
+    assert_eq!(
+        abc,
+        SumReductionResult::Value(RoundedBinaryValue::Normal {
+            sign: Sign::Negative,
+            significand: 9,
+            exponent: 5,
+        })
+    );
+    assert_eq!(
+        acb,
+        SumReductionResult::Value(RoundedBinaryValue::Normal {
+            sign: Sign::Negative,
+            significand: 10,
+            exponent: 5,
+        })
+    );
+    assert_ne!(abc, acb);
+}
+
+#[test]
 fn nonfinite_contributions_are_outside_finite_oracle_slice() {
     for contribution in [
         BinaryValueFixture::Infinity(Sign::Positive),
