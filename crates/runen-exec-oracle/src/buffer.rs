@@ -113,14 +113,15 @@ pub enum BufferAtomicExchangeError {
     LogicalState(LogicalStateError),
 }
 
-/// Verification-only bridge from one Buffer atomic element location to the generic
-/// atomic-exchange oracle.
+/// Verification-only bridge from one Buffer atomic element location to one generic
+/// atomic-exchange fixture.
 ///
 /// `atomic_location_token` supplied at construction scopes generic atomic-oracle
 /// occurrence identities inside this independent fixture only. The Buffer-owned
 /// semantic location identity remains [`BufferAtomicLocation`]. The fixture stores
 /// no second atomic value: successful realization starts from and commits back to
-/// the exact position in [`LogicalBufferState`].
+/// the exact position in [`LogicalBufferState`]. One bridge fixture represents one
+/// atomic exchange set and is consumed when that set is realized.
 pub struct BufferAtomicExchangeFixture {
     location: BufferAtomicLocation,
     atomic_location: AtomicLocationId,
@@ -147,14 +148,14 @@ impl BufferAtomicExchangeFixture {
         AtomicExchangeId::new(self.atomic_location, token)
     }
 
-    /// Checks one atomic-exchange realization against the existing generic oracle
-    /// and commits its final value into the same logical Buffer element only after
-    /// the complete candidate realization has been accepted.
+    /// Checks this fixture's one represented atomic-exchange set against the
+    /// existing generic oracle and commits its final value into the same logical
+    /// Buffer element only after the complete candidate realization is accepted.
     ///
     /// This fixture does not admit atomic access, define mixed ordinary/atomic
     /// legality, or model physical atomic servicing.
     pub fn realize(
-        &self,
+        self,
         logical_state: &mut LogicalBufferState,
         exchanges: Vec<AtomicExchange>,
         candidate_order: &[AtomicExchangeId],
