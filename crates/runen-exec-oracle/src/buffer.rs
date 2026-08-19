@@ -494,12 +494,7 @@ impl BufferMappingFixture {
     ) -> Result<BufferAtomicExchangeRealization, BufferMappingError> {
         self.validate_access_region(&fixture.location().region())?;
         fixture
-            .realize(
-                logical_state,
-                exchanges,
-                candidate_order,
-                ordered_before,
-            )
+            .realize(logical_state, exchanges, candidate_order, ordered_before)
             .map_err(BufferMappingError::Atomic)
     }
 
