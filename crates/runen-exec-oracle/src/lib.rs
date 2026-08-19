@@ -6,6 +6,7 @@
 //! make accepted Exec contracts executable in conformance tests.
 
 mod access;
+mod allocation;
 mod atomic;
 mod barrier;
 mod buffer;
@@ -16,6 +17,7 @@ mod structured;
 mod task;
 
 pub use access::{Access, AccessKind};
+pub use allocation::{AllocationError, AllocationFixture, AllocationId};
 pub use atomic::{
     AtomicExchange, AtomicExchangeError, AtomicExchangeFixture, AtomicExchangeId,
     AtomicExchangeRealization, AtomicExchangeScope, AtomicExchangeSemantics, AtomicGroupScope,
@@ -23,7 +25,8 @@ pub use atomic::{
 };
 pub use barrier::{BarrierError, BarrierFixture, BarrierId, BarrierPhase};
 pub use buffer::{
-    BufferId, BufferRegion, LogicalBufferState, LogicalStateError, PositionId, ValueToken,
+    BufferId, BufferMappingError, BufferMappingFixture, BufferMappingId, BufferRegion,
+    LogicalBufferState, LogicalStateError, PositionId, ValueToken,
 };
 pub use hierarchy::{
     GroupId, HierarchyError, HierarchyFixture, HierarchyId, HierarchyMembership, SubgroupId,
