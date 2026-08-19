@@ -2,8 +2,8 @@ use runen_exec_oracle::{
     Access, AccessKind, AtomicExchange, AtomicExchangeError, AtomicExchangeFixture,
     AtomicExchangeId, AtomicExchangeScope, AtomicExchangeSemantics, AtomicGroupScope,
     AtomicLocationId, AtomicScopeRelation, AtomicSubgroupScope, AtomicValueToken, BufferId,
-    BufferRegion, EachId, EachPhase, GroupId, HierarchyFixture, HierarchyId,
-    HierarchyMembership, IterationId, PositionId, SubgroupId, each_orders,
+    BufferRegion, EachId, EachPhase, GroupId, HierarchyFixture, HierarchyId, HierarchyMembership,
+    IterationId, PositionId, SubgroupId, each_orders,
 };
 
 fn hierarchy(
@@ -55,12 +55,8 @@ fn subgroup_scope_admission_requires_validated_producer_membership() {
     let each = EachId::new(1);
     let hierarchy = hierarchy(each, 1, &[(1, 1, 1), (2, 1, 2)]);
 
-    assert!(
-        AtomicSubgroupScope::from_hierarchy(&hierarchy, IterationId::new(each, 1)).is_some()
-    );
-    assert!(
-        AtomicSubgroupScope::from_hierarchy(&hierarchy, IterationId::new(each, 99)).is_none()
-    );
+    assert!(AtomicSubgroupScope::from_hierarchy(&hierarchy, IterationId::new(each, 1)).is_some());
+    assert!(AtomicSubgroupScope::from_hierarchy(&hierarchy, IterationId::new(each, 99)).is_none());
     assert!(
         AtomicSubgroupScope::from_hierarchy(&hierarchy, IterationId::new(EachId::new(2), 1))
             .is_none()
