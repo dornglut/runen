@@ -20,6 +20,18 @@ A physical implementation may use greater internal precision or another stronger
 
 The `fast` contract authorizes only numerical relaxations that Runen explicitly grants to `fast`; enabling a backend's aggregate fast-math mode does not by itself make all of that mode's transformations legal. Conversely, `standard` and `reproducible` gain no implicit transformation freedom merely because a target or backend supports it.
 
+## Contract refinement
+
+`standard` supplies the baseline floating-point numerical obligations and permissions.
+
+`reproducible` inherits every applicable `standard` rule. A `reproducible`-specific rule MAY strengthen an obligation or narrow the numerical behavior permitted by `standard`; it MUST NOT weaken an applicable `standard` requirement or admit numerical behavior that the applicable `standard` rule forbids.
+
+`fast` also inherits every applicable `standard` rule. A `fast`-specific rule MAY grant an additional numerical relaxation only for the behavior that rule explicitly names. In the absence of such a `fast`-specific relaxation, the applicable `standard` rule remains controlling. Selecting `fast` is therefore not a general license to ignore unspecified baseline requirements.
+
+A `fast` numerical relaxation does not by implication relax evaluation authority, effects, control flow, memory semantics, Exec ordering or synchronization, resource rules, or another non-numeric semantic contract. Any change to those semantics requires authority from their own normative owners.
+
+These refinement relationships compose the obligations of an already-selected numeric contract. They do not select a contract for an operation and do not authorize a realization to switch contracts; the numeric-contract authority rules above remain controlling.
+
 ## Reassociation
 
 Under `standard` and `reproducible`, semantic grouping of separately represented floating-point additions or multiplications is result-significant. A realization MUST NOT use real-number associativity to regroup those operations when doing so can change Runen-observable behavior permitted by the selected contract. A realization MAY physically restructure the computation when it proves that the resulting behavior still satisfies the selected contract.
