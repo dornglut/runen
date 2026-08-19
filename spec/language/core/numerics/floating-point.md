@@ -49,7 +49,25 @@ The normal and subnormal sets above are semantic value sets. Their membership, `
 
 This value-format definition does not prescribe a storage width, byte layout, exponent-field or significand-field encoding, ABI representation, NaN payload encoding, or address-level representation. It also does not define which source types select a binary floating format or which concrete `(p, emin, emax)` triples those types use.
 
-The semantics of positive and negative zero, infinities, NaN identity or payloads, operation-specific subnormal handling, rounding, overflow and underflow result selection, flushing, conversions, and literals remain to be defined by their applicable contracts.
+This value-format section by itself does not define positive or negative zero, infinities, NaN identity or payloads, operation-specific subnormal handling, rounding, overflow or underflow result selection, flushing, conversions, or literals. Those concerns have semantics only where another applicable rule explicitly defines them.
+
+## Interior finite rounding
+
+For an otherwise-defined floating arithmetic operation whose applicable contract determines an exact finite real result `x`, `standard` uses the following rounding rule when the operation's result type has the binary finite value format above.
+
+If `x` is a nonzero finite value exactly representable by that result format, the rounded result is exactly `x`.
+
+Otherwise, this section supplies a rounded result only when there are two nonzero finite representable values `a < x < b` such that `a`, `x`, and `b` have the same sign and no other nonzero finite representable value lies strictly between `a` and `b`. In that case:
+
+- if `|x - a| < |b - x|`, the rounded result is `a`;
+- if `|b - x| < |x - a|`, the rounded result is `b`;
+- if `|x - a| = |b - x|`, the rounded result is the one of `a` or `b` whose magnitude has an even canonical format significand integer `m`.
+
+For every positive nonzero finite representable value, its **canonical format significand integer** is the unique `m` supplied by its normal or subnormal representation in the value-format definition above. A negative value uses the canonical `m` of its positive magnitude. For adjacent same-sign representable values in a tie, exactly one candidate has even canonical `m`.
+
+By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
+
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. It does not supply a result when zero would be a bounding candidate or when the exact result lies beyond the largest finite magnitude. Positive/negative zero, final underflow-to-zero, infinity and overflow result selection, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, floating exception/status behavior, and any contract-specific flushing relaxation remain open.
 
 ## Reassociation
 
@@ -61,4 +79,4 @@ This `fast` permission does not authorize operand permutation, omission, duplica
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-Exact operation accuracy, contraction or FMA behavior, transcendental behavior, NaN handling, operation-specific subnormal handling, rounding and conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+Exact operation accuracy beyond the interior finite rounding rule, contraction or FMA behavior, transcendental behavior, NaN handling, zero-boundary and contract-specific subnormal handling, remaining rounding and conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
