@@ -1,7 +1,8 @@
 use runen_exec_oracle::{
     Access, AccessKind, BarrierError, BarrierFixture, BarrierId, BufferId, BufferRegion, EachId,
     EachPhase, GroupId, HierarchyError, HierarchyFixture, HierarchyId, HierarchyMembership,
-    IterationId, PositionId, ReductionError, ReductionFixture, ReductionId, SubgroupId, each_orders,
+    IterationId, PositionId, ReductionError, ReductionFixture, ReductionId, SubgroupId,
+    each_orders,
 };
 
 fn each_id() -> EachId {
