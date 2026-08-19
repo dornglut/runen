@@ -12,7 +12,7 @@ Runen distinguishes:
 
 A **physical execution agent** is an opaque realization entity used only where a physical placement or resource contract must distinguish which physical entity may service an operation.
 
-One physical execution agent has one opaque identity for the applicable realization. Agent identity is physical-realization identity. It is not source-visible program state, a Core or Exec semantic execution context, task identity, dynamic `each` or iteration identity, hierarchy/group/subgroup identity, a worker or lane index, queue identity, device class, memory-space identity, scheduling order, concurrency relation, synchronization relation, or progress guarantee.
+One physical execution agent has one opaque identity for the applicable realization. Distinct physical execution agents within that realization have distinct agent identities. Agent identity is physical-realization identity. It is not source-visible program state, a Core or Exec semantic execution context, task identity, dynamic `each` or iteration identity, hierarchy/group/subgroup identity, a worker or lane index, queue identity, device class, memory-space identity, scheduling order, concurrency relation, synchronization relation, or progress guarantee.
 
 Assigning an applicable Exec operation to a physical execution agent is a realization choice. That choice MUST preserve every applicable language semantic contract and admitted environment contract.
 
