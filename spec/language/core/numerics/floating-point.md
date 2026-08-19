@@ -47,8 +47,6 @@ The nonzero finite values of that semantic format are exactly the following valu
 
 The normal and subnormal sets above are semantic value sets. Their membership, `p`, `emin`, and `emax` are fixed by the type contract and MUST NOT change with numeric-contract selection or physical realization. A backend MUST NOT silently substitute another finite value lattice merely because another native format is preferred or available.
 
-A realization MAY use greater intermediate physical precision only where the selected numeric contract permits the resulting Runen-observable behavior. Such intermediate precision does not change the semantic result type's value format.
-
 This value-format definition does not prescribe a storage width, byte layout, exponent-field or significand-field encoding, ABI representation, NaN payload encoding, or address-level representation. It also does not define which source types select a binary floating format or which concrete `(p, emin, emax)` triples those types use.
 
 The semantics of positive and negative zero, infinities, NaN identity or payloads, operation-specific subnormal handling, rounding, overflow and underflow result selection, flushing, conversions, and literals remain to be defined by their applicable contracts.
