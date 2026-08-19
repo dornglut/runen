@@ -68,9 +68,7 @@ fn disjoint_each_case_preserves_continuation_result_across_physical_schedules() 
     single_mapping
         .mapped_change(&mut single_state, &right, ValueToken(20))
         .unwrap();
-    let single_read = single_mapping
-        .mapped_read(&single_state, &whole)
-        .unwrap();
+    let single_read = single_mapping.mapped_read(&single_state, &whole).unwrap();
 
     // Running arrangement A does not mutate arrangement B's independent logical
     // execution state.
@@ -85,13 +83,9 @@ fn disjoint_each_case_preserves_continuation_result_across_physical_schedules() 
     let mut split_continuation_allocation = allocation(40, &[4]);
     let split_left_mapping =
         BufferMappingFixture::new(201, left.clone(), agent(2), &mut split_left_allocation).unwrap();
-    let split_right_mapping = BufferMappingFixture::new(
-        301,
-        right.clone(),
-        agent(3),
-        &mut split_right_allocation,
-    )
-    .unwrap();
+    let split_right_mapping =
+        BufferMappingFixture::new(301, right.clone(), agent(3), &mut split_right_allocation)
+            .unwrap();
     let split_continuation_mapping = BufferMappingFixture::new(
         401,
         whole.clone(),
