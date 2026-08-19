@@ -154,11 +154,10 @@ fn distinct_groups_are_incompatible_without_partitioning_modification_order() {
 }
 
 #[test]
-fn equal_private_group_tokens_under_distinct_hierarchies_remain_incompatible() {
-    let first_each = EachId::new(1);
-    let second_each = EachId::new(2);
-    let first_hierarchy = hierarchy(first_each, 7, &[(1, 3, 1)]);
-    let second_hierarchy = hierarchy(second_each, 7, &[(1, 3, 1)]);
+fn equal_private_group_tokens_under_distinct_same_each_hierarchies_remain_incompatible() {
+    let each = EachId::new(1);
+    let first_hierarchy = hierarchy(each, 7, &[(1, 3, 1), (2, 4, 1)]);
+    let second_hierarchy = hierarchy(each, 8, &[(1, 4, 1), (2, 3, 1)]);
     let location = AtomicLocationId::new(1);
     let release = exchange_id(location, 1);
     let acquire = exchange_id(location, 2);
@@ -172,7 +171,7 @@ fn equal_private_group_tokens_under_distinct_hierarchies_remain_incompatible() {
                 20,
                 AtomicExchangeSemantics::Release,
                 &first_hierarchy,
-                IterationId::new(first_each, 1),
+                IterationId::new(each, 1),
             ),
             group_exchange(
                 location,
@@ -180,7 +179,7 @@ fn equal_private_group_tokens_under_distinct_hierarchies_remain_incompatible() {
                 30,
                 AtomicExchangeSemantics::Acquire,
                 &second_hierarchy,
-                IterationId::new(second_each, 1),
+                IterationId::new(each, 2),
             ),
         ],
     )
