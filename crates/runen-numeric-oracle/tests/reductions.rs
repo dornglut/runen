@@ -70,10 +70,7 @@ fn exact_and_inexact_finite_sums_round_once() {
     assert_eq!(
         reduce_finite_sum(
             tiny_format(),
-            &[
-                finite(Sign::Positive, 3, -1),
-                finite(Sign::Positive, 5, -1),
-            ],
+            &[finite(Sign::Positive, 3, -1), finite(Sign::Positive, 5, -1)],
         ),
         Ok(RoundedBinaryValue::Normal {
             sign: Sign::Positive,
@@ -85,10 +82,7 @@ fn exact_and_inexact_finite_sums_round_once() {
     assert_eq!(
         reduce_finite_sum(
             tiny_format(),
-            &[
-                finite(Sign::Positive, 1, 0),
-                finite(Sign::Positive, 1, -4),
-            ],
+            &[finite(Sign::Positive, 1, 0), finite(Sign::Positive, 1, -4)],
         ),
         Ok(RoundedBinaryValue::Normal {
             sign: Sign::Positive,
@@ -103,10 +97,7 @@ fn exact_sum_overflow_uses_existing_upper_rounding_boundary() {
     assert_eq!(
         reduce_finite_sum(
             tiny_format(),
-            &[
-                finite(Sign::Positive, 15, 2),
-                finite(Sign::Positive, 4, 0),
-            ],
+            &[finite(Sign::Positive, 15, 2), finite(Sign::Positive, 4, 0)],
         ),
         Ok(RoundedBinaryValue::Infinity(Sign::Positive))
     );
@@ -135,12 +126,12 @@ fn exact_sum_differs_from_one_legal_rounded_add_tree() {
     let c = finite(Sign::Negative, 11, -1); // -5.5
 
     let left_pair = reduce_finite_sum(tiny_format(), &[a, b]).unwrap();
-    let left_tree = reduce_finite_sum(tiny_format(), &[normal_as_finite_fixture(left_pair), c])
-        .unwrap();
+    let left_tree =
+        reduce_finite_sum(tiny_format(), &[normal_as_finite_fixture(left_pair), c]).unwrap();
 
     let right_pair = reduce_finite_sum(tiny_format(), &[b, c]).unwrap();
-    let right_tree = reduce_finite_sum(tiny_format(), &[a, normal_as_finite_fixture(right_pair)])
-        .unwrap();
+    let right_tree =
+        reduce_finite_sum(tiny_format(), &[a, normal_as_finite_fixture(right_pair)]).unwrap();
 
     let exact_sum = reduce_finite_sum(tiny_format(), &[a, b, c]).unwrap();
 
