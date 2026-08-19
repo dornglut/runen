@@ -39,7 +39,7 @@ pub enum AllocationError {
 pub struct AllocationFixture {
     id: AllocationId,
     live: bool,
-    accessible_agents: BTreeSet<RealizationAgentId>,
+    accessible_agents: Vec<RealizationAgentId>,
     used_mapping_tokens: BTreeSet<u32>,
     active_mapping_tokens: BTreeSet<u32>,
 }
