@@ -147,6 +147,26 @@ Required cases:
 
 These obligations do not define allocation creation/destruction APIs, allocation-space taxonomy or accessibility derivation, execution-agent/device discovery, environment admission, CPU/GPU/host/device target classes, source target selection, allocation interoperability, raw-address/pinned/byte mappings, relocation, address stability, pointer provenance, representation validity, Buffer source API spelling, flush/invalidate semantics, atomic Buffer access, mixed atomic/non-atomic Buffer access, or a physical coherence protocol.
 
+## Cross-realization ordinary Buffer preservation witness
+
+This boundary is verification evidence only. It composes the already-defined program-behavior, correctness-refinement, realization-placement, allocation-accessibility, Buffer-coherence/mapping, and ordinary-access contracts; it owns no new Runen semantic rule.
+
+Required cases:
+
+- two independent logical executions initialized to the same Buffer identity, region, and values perform the same already-permitted, semantically ordered state change followed by the same read request;
+- one physical arrangement may service both accesses through one execution agent and one allocation, while another legal arrangement may service the same semantic accesses through distinct execution agents and distinct allocations;
+- the compared arrangements genuinely differ in physical agent, allocation, and mapping-occurrence identities; those physical identities are not required to compare equal;
+- the independent executions produce equal semantic read results and equal final `LogicalBufferState` when the accepted Buffer contract admits no semantic difference for the physical placement choices;
+- running one realization fixture does not mutate the other realization's independent logical-state fixture;
+- mapping occurrence-token choice is physical verification bookkeeping and does not affect the semantic result;
+- the ordinary conflict classification of the semantic access pair is unchanged by either physical arrangement;
+- source-unordered conflicting ordinary accesses are not legalized by same-agent physical serialization, split-agent placement, allocation choice, or mapping construction;
+- fixture call order stands only for the semantic order already assumed by the case and is not evidence that mapping begin/end, allocation identity, agent identity, host call order, or another physical relation creates Runen order.
+
+The two arrangements are generic verification choices, not CPU, GPU, host, device, worker, queue, or memory-space language classes. The witness deliberately reuses existing public oracle fixtures rather than defining a `RealizationId`, generic realization graph/plan, production backend model, or second Buffer-state semantics.
+
+These obligations do not prove the complete cross-realization memory model, atomic or mixed atomic/non-atomic interactions, structured-barrier or parallel-realization equivalence, transfer completion, cache coherence, flush/invalidate behavior, numeric equivalence, source lowering, runtime/backend conformance, progress, or full P0-B closure.
+
 ## Structured `each` normal-completion boundary
 
 These cases exercise only normal structured entry/completion. They do not define abnormal iteration completion or infer sibling order from a physical schedule.
@@ -349,6 +369,7 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 
 - Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
 - opaque physical execution-agent identity plus physical allocation identity/extent/accessibility, active typed-mapping lifetime nesting, exact agent/allocation/Buffer-region mapping binding, inaccessible-agent rejection, and mapped typed access through the one logical Buffer-state fixture;
+- independent cross-realization ordinary Buffer preservation for one already-ordered mapped change/read case across distinct legal physical agent/allocation/mapping arrangements, using separate logical-state executions and comparing only semantic state/read results;
 - ordinary read/state-change conflict classification;
 - validated atomic-exchange occurrence identity, exchange semantics and producer-derived root/group/subgroup-scope classification, exact candidate modification-order coverage across scope forms, location-local semantic-order constraints, prior-value observation, private immediate-predecessor/exact-scope evidence, focused compatible/incompatible/open scope-relation evidence, direct scope-compatible release/acquire synchronization, and final-value computation;
 - dynamic-`each`-scoped iteration identity plus the instance-local cross-phase `each` normal entry/completion ordering relation, with no sibling, intra-iteration, or cross-`each` order;
