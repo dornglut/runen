@@ -206,8 +206,8 @@ Required cases:
 - equal private group/subgroup tokens under two distinct same-`each` hierarchy identities remain distinct scoped identities;
 - groups form a disjoint and exhaustive partition of the required `each` iteration set;
 - subgroups within one group form a disjoint and exhaustive partition of that group;
-- group identity is scoped by its containing hierarchy and therefore transitively by the dynamic `each`, so equal private group tokens under distinct hierarchy IDs denote distinct group identities;
-- subgroup identity is scoped by its containing group and therefore transitively by the hierarchy and dynamic `each`, so equal private subgroup tokens under distinct groups or hierarchies denote distinct subgroup identities;
+- group identity is scoped by the containing hierarchy and therefore transitively by the dynamic `each`, so equal private group tokens under distinct hierarchy IDs denote distinct group identities;
+- subgroup identity is scoped by the containing group and therefore transitively by the hierarchy and dynamic `each`, so equal private subgroup tokens under distinct groups or hierarchies denote distinct subgroup identities;
 - same-subgroup membership implies same-group membership;
 - reordering the private finite membership storage for the same hierarchy identity does not change membership, same-group, or same-subgroup results;
 - hierarchy, group, and subgroup identities expose equality only and do not become numeric indices, coordinates, lanes, hardware cohorts, or scheduling order;
@@ -285,11 +285,11 @@ Required cases:
 - permitted physical regrouping cannot change combination outcome or observable trace because the admitted combination contract requires normal result-only behavior;
 - physical worker, lane, chunk, queue, partial-accumulator, and tree order are not semantic input;
 - reduction cohort membership and reduction admission do not order sibling iterations or legalize an overlapping ordinary sibling read/write or write/write conflict;
-- a normally completed `each` carrying a reduction exposes the one reduction result only at its normal continuation after every required `each` iteration completes normally and every semantic contribution produced by reduction participants is incorporated;
+- a normally completed `each` carrying the reduction exposes the one reduction result only at its normal continuation after every required `each` iteration completes normally and every semantic contribution produced by reduction participants is incorporated;
 - no cohort-local continuation, participant-local result, leader/lane result, or automatic result distribution is inferred from selecting a group or subgroup cohort;
 - no result or partial-result contract is inferred for iteration fault, cancellation, divergence, or other abnormal completion.
 
-`ReductionFixture`, `ReductionId`, `ContributionId`, `ReductionContribution`, `EachId`, scoped iteration identities, and finite participant/contribution collections are verification representation only. They do not define source reduction syntax, a runtime reduction object, a source-visible dynamic-`each` handle, collective result distribution, physical accumulator identity, a reduction tree, or participant enumeration order. The fixture replaces the prior free contribution-coverage helper; no compatibility reduction oracle is retained.
+`ReductionFixture`, `ReductionId`, `ReductionContribution`, `EachId`, scoped iteration identities, and finite participant/contribution collections are verification representation only. They do not define source reduction syntax, a runtime reduction object, a source-visible dynamic-`each` handle, collective result distribution, physical accumulator identity, a reduction tree, or participant enumeration order. The fixture replaces the prior free contribution-coverage helper; no compatibility reduction oracle is retained.
 
 Arithmetic used in an executable fixture is test-local evidence only. It must use values that avoid overflow or representation questions and does not define Runen integer, floating-point, or reduction-operator semantics.
 
