@@ -51,6 +51,10 @@ impl AtomicValueToken {
     pub const fn new(token: u32) -> Self {
         Self(token)
     }
+
+    pub(crate) const fn fixture_token(self) -> u32 {
+        self.0
+    }
 }
 
 /// Verification-only classification of the exchange synchronization semantics

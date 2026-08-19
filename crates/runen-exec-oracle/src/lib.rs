@@ -26,8 +26,10 @@ pub use atomic::{
 };
 pub use barrier::{BarrierError, BarrierFixture, BarrierId, BarrierPhase};
 pub use buffer::{
-    BufferId, BufferMappingError, BufferMappingFixture, BufferMappingId, BufferRegion,
-    LogicalBufferState, LogicalStateError, PositionId, ValueToken,
+    BufferAtomicExchange, BufferAtomicExchangeError, BufferAtomicExchangeFixture,
+    BufferAtomicExchangeId, BufferAtomicExchangeRealization, BufferAtomicLocation, BufferId,
+    BufferMappingError, BufferMappingFixture, BufferMappingId, BufferRegion, LogicalBufferState,
+    LogicalStateError, PositionId, ValueToken,
 };
 pub use hierarchy::{
     GroupId, HierarchyError, HierarchyFixture, HierarchyId, HierarchyMembership, SubgroupId,

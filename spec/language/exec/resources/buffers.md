@@ -51,6 +51,22 @@ Coherence is region-local. State changes and visibility obligations for one Buff
 
 Physical migration, replication, caching, or placement may occur before, during, or between accesses only when the resulting behavior is equivalent to access to the one logical Buffer state under the applicable ordering and memory rules. Replica identity, physical-copy selection, migration history, and implementation version metadata are not made program-observable by this contract.
 
+## Atomic element-location and logical-state bridge
+
+When an applicable contract admits an atomic exchange for one logical element position of a Buffer, that position is one **Buffer atomic location** governed by the atomic-exchange semantics in [Exec memory model](../memory-model.md).
+
+The semantic identity of a Buffer atomic location is exactly its Buffer identity together with its selected logical element position. The same logical position of the same Buffer denotes the same Buffer atomic location. Another logical position or a position belonging to another Buffer denotes a distinct Buffer atomic location. Atomic location identity is not physical address, allocation identity, mapping identity, execution-agent identity, cache-line identity, backend atomic identity, or another realization token.
+
+The stored value of that atomic location is exactly the value of its selected position in the one logical Buffer state. The location does not own a second atomic-only semantic value. An admitted atomic exchange observes and replaces that same logical value according to the atomic exchange and location-local modification-order contract owned by Exec memory model.
+
+Therefore, after an accepted atomic exchange changes a Buffer atomic location, the one logical Buffer state contains the resulting location value. A realization MUST NOT make an independently selectable atomic-only semantic copy, replica, cache value, or staging value observable as a second Buffer state. Physical atomic state may exist only as realization state that preserves the one logical Buffer state and every applicable memory rule.
+
+The logical footprint of one Buffer atomic location is the singleton Buffer region containing exactly its selected position. This establishes only the Buffer-owned identity and overlap fact for that location. This revision does not define mixed ordinary non-atomic/atomic access legality, race classification, synchronization, or visibility merely because an ordinary Buffer region overlaps that singleton region.
+
+This bridge is conditional on an atomic exchange already being admitted by an applicable contract. It does not declare every `Buffer<T>` element atomic-capable, define which element types or replacement values admit atomic exchange, or define source/profile/library syntax for requesting atomic access. `View` and `ViewMut` retain only the ordinary access permissions defined above; neither becomes atomic access authority through this bridge.
+
+This bridge also does not define physical servicing of an atomic exchange through a typed Buffer mapping, a raw address, a particular allocation, or a backend atomic instruction. Those realization mechanisms require their own applicable contracts.
+
 ## Address-free typed mapping
 
 A **typed Buffer mapping** is a temporary realization relation that makes exactly one selected Buffer region physically accessible to one selected physical execution agent through one live physical allocation for the duration of that mapping. Physical execution-agent identity is defined by [Exec Realization](../realization.md); physical allocation identity, extent, and execution-agent accessibility are defined by [Exec Allocations](allocations.md).
@@ -81,7 +97,7 @@ This mapping form exposes no pointer, raw or numeric address, byte sequence, bit
 
 A legal realization may maintain, migrate, replicate, stage, or replace physical backing only according to the logical coherence and typed-mapping contracts above and the applicable Exec memory rules.
 
-This revision does not yet define a Buffer version representation, transfer-completion protocol, physical ownership or dirty-state protocol, replica directory, raw-address or byte-level mapping form, relocation mechanism, atomic access to Buffer storage, or mixed atomic/non-atomic Buffer access or visibility rules. It likewise does not define which physical copy services an access except for the typed mapping's requirement that its selected live allocation and selected physical execution agent form an accessible relation that can service that mapping while preserving logical coherence.
+This revision does not yet define a Buffer version representation, transfer-completion protocol, physical ownership or dirty-state protocol, replica directory, raw-address or byte-level mapping form, relocation mechanism, physical servicing of Buffer atomic exchange through a typed mapping, atomic Buffer operations beyond the admitted exchange bridge above, or mixed atomic/non-atomic Buffer access or visibility rules. It likewise does not define which physical copy services an access except for the typed mapping's requirement that its selected live allocation and selected physical execution agent form an accessible relation that can service that mapping while preserving logical coherence.
 
 ## Address exposure
 
