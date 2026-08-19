@@ -47,6 +47,18 @@ fn buffer_atomic_location_identity_is_exact_buffer_position_identity() {
 }
 
 #[test]
+fn fixture_adapter_token_does_not_replace_buffer_atomic_location_identity() {
+    let location = BufferAtomicLocation::new(BufferId(1), PositionId(7));
+    let first_fixture = BufferAtomicExchangeFixture::new(location, 100);
+    let second_fixture = BufferAtomicExchangeFixture::new(location, 200);
+
+    assert_eq!(first_fixture.location(), location);
+    assert_eq!(second_fixture.location(), location);
+    assert_eq!(first_fixture.location(), second_fixture.location());
+    assert_ne!(first_fixture.exchange_id(1), second_fixture.exchange_id(1));
+}
+
+#[test]
 fn atomic_exchange_reads_and_replaces_the_same_logical_buffer_value() {
     let buffer = BufferId(1);
     let location = BufferAtomicLocation::new(buffer, PositionId(1));
