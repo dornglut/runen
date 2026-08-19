@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
 
+use crate::realization::RealizationAgentId;
+
 /// Verification-only identity token for one physical allocation fixture.
 ///
 /// The private numeric representation carries equality only. It is not a Buffer
 /// identity, numeric address, pointer provenance, source handle, memory-space
-/// identifier, or ordering token.
+/// identifier, execution-agent identity, or ordering token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AllocationId(u32);
 
@@ -15,10 +17,11 @@ impl AllocationId {
     }
 }
 
-/// Invalid lifetime transition for the focused physical-allocation fixture.
+/// Invalid lifetime/accessibility transition for the focused physical-allocation fixture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AllocationError {
     Ended,
+    AgentNotAccessible(RealizationAgentId),
     ActiveMappings,
     DuplicateMappingIdentity,
     UnknownMapping,
@@ -26,24 +29,31 @@ pub enum AllocationError {
 
 /// Verification-only finite evidence for one physical allocation extent.
 ///
-/// This fixture models only whether the allocation extent still exists and whether
-/// typed Buffer mappings are still nested inside it. It is not an allocator, memory
-/// space, byte store, address range, relocation model, or runtime allocation object.
-/// Its private mapping-token bookkeeping intentionally exposes no public debug or
-/// fixture-equality surface.
+/// This fixture models only whether the allocation extent still exists, which
+/// represented physical execution agents may service typed mappings through it,
+/// and whether typed Buffer mappings are still nested inside it. It is not an
+/// allocator, memory-space taxonomy, capability database, byte store, address
+/// range, relocation model, scheduler, device model, or runtime allocation object.
+/// Its private accessibility and mapping-token bookkeeping intentionally expose no
+/// public enumeration, debug, or fixture-equality surface.
 pub struct AllocationFixture {
     id: AllocationId,
     live: bool,
+    accessible_agents: Vec<RealizationAgentId>,
     used_mapping_tokens: BTreeSet<u32>,
     active_mapping_tokens: BTreeSet<u32>,
 }
 
 impl AllocationFixture {
     #[must_use]
-    pub fn new(id: AllocationId) -> Self {
+    pub fn new(
+        id: AllocationId,
+        accessible_agents: impl IntoIterator<Item = RealizationAgentId>,
+    ) -> Self {
         Self {
             id,
             live: true,
+            accessible_agents: accessible_agents.into_iter().collect(),
             used_mapping_tokens: BTreeSet::new(),
             active_mapping_tokens: BTreeSet::new(),
         }
@@ -73,9 +83,16 @@ impl AllocationFixture {
         Ok(())
     }
 
-    pub(crate) fn begin_mapping(&mut self, token: u32) -> Result<(), AllocationError> {
+    pub(crate) fn begin_mapping(
+        &mut self,
+        token: u32,
+        agent: RealizationAgentId,
+    ) -> Result<(), AllocationError> {
         if !self.live {
             return Err(AllocationError::Ended);
+        }
+        if !self.accessible_agents.contains(&agent) {
+            return Err(AllocationError::AgentNotAccessible(agent));
         }
         if !self.used_mapping_tokens.insert(token) {
             return Err(AllocationError::DuplicateMappingIdentity);

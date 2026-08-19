@@ -1,6 +1,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::allocation::{AllocationError, AllocationFixture, AllocationId};
+use crate::{
+    allocation::{AllocationError, AllocationFixture, AllocationId},
+    realization::RealizationAgentId,
+};
 
 /// Verification-only identity token for one logical Buffer fixture.
 ///
@@ -69,7 +72,7 @@ pub enum LogicalStateError {
 ///
 /// Identity is structurally scoped by the physical allocation fixture that backs the
 /// mapping. The token is not a source mapping handle, address, pointer, allocation
-/// offset, synchronization event, or ordering token.
+/// offset, execution-agent identity, synchronization event, or ordering token.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct BufferMappingId {
     allocation: AllocationId,
@@ -103,33 +106,38 @@ pub enum BufferMappingError {
 /// Verification-only finite evidence for one address-free typed Buffer mapping.
 ///
 /// The fixture binds one logical Buffer region to one live physical allocation
-/// extent. It grants no logical read/write permission and creates no synchronization
-/// or conflict exemption. Mapped operations below stand only for already-permitted
+/// extent and one exact physical execution agent admitted by that allocation. It
+/// grants no logical read/write permission and creates no synchronization or
+/// conflict exemption. Mapped operations below stand only for already-permitted
 /// typed Buffer accesses and deliberately reuse [`LogicalBufferState`] as the sole
 /// logical-state oracle.
 pub struct BufferMappingFixture {
     id: BufferMappingId,
     region: BufferRegion,
+    agent: RealizationAgentId,
     active: bool,
 }
 
 impl BufferMappingFixture {
-    /// Begins one represented mapping inside the supplied live allocation extent.
+    /// Begins one represented mapping for an admitted agent inside the supplied live
+    /// allocation extent.
     ///
     /// `token` is verification-only occurrence identity within that allocation. It
-    /// is not a source handle, address, byte offset, or mapping order.
+    /// is not a source handle, address, byte offset, agent identity, or mapping order.
     pub fn new(
         token: u32,
         region: BufferRegion,
+        agent: RealizationAgentId,
         allocation: &mut AllocationFixture,
     ) -> Result<Self, BufferMappingError> {
         allocation
-            .begin_mapping(token)
+            .begin_mapping(token, agent)
             .map_err(BufferMappingError::Allocation)?;
 
         Ok(Self {
             id: BufferMappingId::new(allocation.id(), token),
             region,
+            agent,
             active: true,
         })
     }
@@ -137,6 +145,11 @@ impl BufferMappingFixture {
     #[must_use]
     pub const fn id(&self) -> BufferMappingId {
         self.id
+    }
+
+    #[must_use]
+    pub const fn agent(&self) -> RealizationAgentId {
+        self.agent
     }
 
     #[must_use]
@@ -174,7 +187,8 @@ impl BufferMappingFixture {
     /// Reads current logical Buffer state through one active represented mapping.
     ///
     /// This method is not read authority. The caller's fixture stands for an access
-    /// already permitted by the applicable View/ownership/memory contracts.
+    /// already permitted by the applicable View/ownership/memory contracts and
+    /// physically serviced by this mapping's exact agent/allocation relation.
     pub fn mapped_read(
         &self,
         logical_state: &LogicalBufferState,
