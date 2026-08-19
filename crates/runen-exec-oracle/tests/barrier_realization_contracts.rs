@@ -2,8 +2,9 @@ use std::collections::BTreeMap;
 
 use runen_exec_oracle::{
     Access, AccessKind, AllocationFixture, AllocationId, BarrierFixture, BarrierId, BufferId,
-    BufferMappingFixture, BufferRegion, EachId, IterationId, LogicalBufferState, PositionId,
-    RealizationAgentId, ValueToken,
+    BufferMappingFixture, BufferRegion, EachId, GroupId, HierarchyFixture, HierarchyId,
+    HierarchyMembership, IterationId, LogicalBufferState, PositionId, RealizationAgentId,
+    SubgroupId, ValueToken,
 };
 
 fn agent(token: u32) -> RealizationAgentId {
@@ -33,12 +34,57 @@ fn state(buffer: u32, entries: &[(u32, u32)]) -> LogicalBufferState {
     LogicalBufferState::new(BufferId(buffer), values(entries))
 }
 
-#[test]
-fn barrier_ordered_buffer_visibility_is_preserved_across_physical_arrangements() {
-    let each = EachId::new(1);
-    let producer = IterationId::new(each, 1);
-    let consumer = IterationId::new(each, 2);
-    let barrier = BarrierFixture::root(BarrierId::new(1), each, &[producer, consumer]).unwrap();
+fn hierarchy_id(each: EachId) -> HierarchyId {
+    HierarchyId::new(each, 1)
+}
+
+fn group_id(each: EachId, token: u32) -> GroupId {
+    GroupId::new(hierarchy_id(each), token)
+}
+
+fn subgroup_id(each: EachId, group: u32, subgroup: u32) -> SubgroupId {
+    SubgroupId::new(group_id(each, group), subgroup)
+}
+
+fn membership(
+    each: EachId,
+    iteration: u32,
+    group: u32,
+    subgroup: u32,
+) -> HierarchyMembership {
+    HierarchyMembership::new(
+        IterationId::new(each, iteration),
+        subgroup_id(each, group, subgroup),
+    )
+}
+
+fn hierarchy(each: EachId) -> HierarchyFixture {
+    let required = [
+        IterationId::new(each, 1),
+        IterationId::new(each, 2),
+        IterationId::new(each, 3),
+        IterationId::new(each, 4),
+    ];
+    HierarchyFixture::new(
+        hierarchy_id(each),
+        &required,
+        vec![
+            membership(each, 1, 10, 1),
+            membership(each, 2, 10, 1),
+            membership(each, 3, 10, 2),
+            membership(each, 4, 20, 1),
+        ],
+    )
+    .unwrap()
+}
+
+fn assert_barrier_visibility_is_preserved_across_physical_arrangements(
+    barrier: &BarrierFixture,
+    producer: IterationId,
+    consumer: IterationId,
+    participants: &[IterationId],
+    nonparticipant: IterationId,
+) {
     let before = barrier.before(producer).unwrap();
     let after = barrier.after(consumer).unwrap();
     let selected = region(1, &[0]);
@@ -47,8 +93,13 @@ fn barrier_ordered_buffer_visibility_is_preserved_across_physical_arrangements()
 
     assert!(before_change.conflicts_with(&after_read));
     assert!(barrier.orders(before, after));
-    assert!(barrier.has_exact_before_completion(&[producer, consumer]));
-    assert!(barrier.has_exact_before_completion(&[consumer, producer]));
+    assert!(barrier.has_exact_before_completion(participants));
+
+    let mut reversed_participants = participants.to_vec();
+    reversed_participants.reverse();
+    assert!(barrier.has_exact_before_completion(&reversed_participants));
+    assert!(barrier.before(nonparticipant).is_none());
+    assert!(barrier.after(nonparticipant).is_none());
 
     let initial = state(1, &[(0, 10)]);
     let mut single_state = initial.clone();
@@ -108,6 +159,74 @@ fn barrier_ordered_buffer_visibility_is_preserved_across_physical_arrangements()
     assert_eq!(single_read, values(&[(0, 20)]));
     assert_eq!(split_read, single_read);
     assert_eq!(split_state, single_state);
+}
+
+#[test]
+fn barrier_ordered_buffer_visibility_is_preserved_across_physical_arrangements() {
+    let each = EachId::new(1);
+    let producer = IterationId::new(each, 1);
+    let consumer = IterationId::new(each, 2);
+    let barrier = BarrierFixture::root(BarrierId::new(1), each, &[producer, consumer]).unwrap();
+
+    assert_barrier_visibility_is_preserved_across_physical_arrangements(
+        &barrier,
+        producer,
+        consumer,
+        &[producer, consumer],
+        IterationId::new(each, 3),
+    );
+}
+
+#[test]
+fn group_barrier_visibility_is_preserved_across_physical_arrangements() {
+    let each = EachId::new(1);
+    let hierarchy = hierarchy(each);
+    let producer = IterationId::new(each, 1);
+    let consumer = IterationId::new(each, 3);
+    let nonparticipant = IterationId::new(each, 4);
+    let participants = [
+        producer,
+        IterationId::new(each, 2),
+        consumer,
+    ];
+    let barrier = BarrierFixture::group(BarrierId::new(2), &hierarchy, group_id(each, 10)).unwrap();
+
+    // The selected group is semantic hierarchy structure. The distinct physical
+    // arrangements below do not claim that this group is a hardware work-group.
+    assert_barrier_visibility_is_preserved_across_physical_arrangements(
+        &barrier,
+        producer,
+        consumer,
+        &participants,
+        nonparticipant,
+    );
+}
+
+#[test]
+fn subgroup_barrier_visibility_is_preserved_across_physical_arrangements() {
+    let each = EachId::new(1);
+    let hierarchy = hierarchy(each);
+    let producer = IterationId::new(each, 1);
+    let consumer = IterationId::new(each, 2);
+    let nonparticipant = IterationId::new(each, 3);
+    let participants = [producer, consumer];
+    let barrier = BarrierFixture::subgroup(
+        BarrierId::new(3),
+        &hierarchy,
+        subgroup_id(each, 10, 1),
+    )
+    .unwrap();
+
+    // The nonparticipant deliberately belongs to the same semantic group but a
+    // different subgroup. Narrower cohort selection, not physical placement,
+    // determines barrier participation.
+    assert_barrier_visibility_is_preserved_across_physical_arrangements(
+        &barrier,
+        producer,
+        consumer,
+        &participants,
+        nonparticipant,
+    );
 }
 
 #[test]
