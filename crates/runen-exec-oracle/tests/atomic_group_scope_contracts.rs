@@ -58,8 +58,7 @@ fn group_scope_admission_requires_validated_producer_membership() {
     assert!(AtomicGroupScope::from_hierarchy(&hierarchy, IterationId::new(each, 1)).is_some());
     assert!(AtomicGroupScope::from_hierarchy(&hierarchy, IterationId::new(each, 99)).is_none());
     assert!(
-        AtomicGroupScope::from_hierarchy(&hierarchy, IterationId::new(EachId::new(2), 1))
-            .is_none()
+        AtomicGroupScope::from_hierarchy(&hierarchy, IterationId::new(EachId::new(2), 1)).is_none()
     );
 }
 
