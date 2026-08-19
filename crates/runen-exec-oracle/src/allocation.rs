@@ -20,7 +20,7 @@ impl AllocationId {
 pub enum AllocationError {
     Ended,
     ActiveMappings,
-    MappingIdentityInUse,
+    DuplicateMappingIdentity,
     UnknownMapping,
 }
 
@@ -78,7 +78,7 @@ impl AllocationFixture {
             return Err(AllocationError::Ended);
         }
         if !self.used_mapping_tokens.insert(token) {
-            return Err(AllocationError::MappingIdentityInUse);
+            return Err(AllocationError::DuplicateMappingIdentity);
         }
 
         let inserted = self.active_mapping_tokens.insert(token);
