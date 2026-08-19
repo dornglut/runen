@@ -2,6 +2,7 @@
 members = [
     "crates/runen-core-ir",
     "crates/runen-exec-oracle",
+    "crates/runen-numeric-oracle",
     "crates/runen-reference",
     "tools/xtask",
 ]
