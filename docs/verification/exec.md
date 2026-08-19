@@ -174,7 +174,7 @@ Required cases:
 - one `RealizationAgentId` is an opaque equality-only physical execution-agent fixture identity with no CPU/GPU/host/device classification or source-visible meaning;
 - one allocation fixture has one equality-only physical allocation identity, one represented live extent, and private finite accessibility evidence for the focused mapping question;
 - one allocation may admit multiple distinct execution agents without merging those agent identities or implying semantic order, synchronization, or a common semantic state;
-- distinct allocations may differ in accessibility to the same physical execution agent without changing allocation identity;
+- distinct allocations may differ in accessibility to the same execution agent without changing allocation identity;
 - one typed mapping occurrence is structurally bound to exactly one allocation identity, one exact admitted execution agent, and one logical Buffer region;
 - equal private mapping tokens under distinct allocation identities denote distinct mapping occurrences;
 - a mapping cannot begin after its backing allocation extent has ended;
