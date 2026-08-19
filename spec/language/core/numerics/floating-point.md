@@ -32,6 +32,18 @@ A `fast` numerical relaxation does not by implication relax evaluation authority
 
 These refinement relationships compose the obligations of an already-selected numeric contract. They do not select a contract for an operation and do not authorize a realization to switch contracts; the numeric-contract authority rules above remain controlling.
 
+## Floating exception observability
+
+For floating operations governed by these numeric contracts, Runen uses non-stop result semantics with respect to physical floating exception mechanisms.
+
+Whether a physical realization would classify an operation as overflow, underflow, inexact, divide-by-zero, invalid operation, or an analogous floating exception condition does not by itself produce a Core Fault, cancellation, environment failure, or another abnormal Runen outcome. An operation's Runen result remains determined only by its applicable semantic and numeric rules.
+
+Floating exception or status flags maintained by a realization are not Runen-observable state under these contracts and are not semantic inputs to later floating operations. A realization MUST NOT let incidental hardware trap enablement, sticky status flags, host floating-environment state, or backend exception metadata change Runen-observable behavior.
+
+This rule does not itself define the result of division by zero, an invalid operation, arithmetic involving infinity, signaling or quiet NaNs, or another operation whose result semantics remain open. An independently defined operation may still have a Runen Fault or ordinary error result where its own canonical semantic owner explicitly establishes one; a physical floating exception mechanism is not authority for that outcome.
+
+A realization MAY configure physical floating exception controls, ignore non-observable status, or emulate where needed to preserve this contract. Any required hard capability remains governed by the existing numeric-contract and environment-admission rules. The `fast` contract does not make traps or floating status observable and gains no extra numerical result freedom merely from backend exception or fast-math modes.
+
 ## Binary floating finite value format
 
 For every binary floating type governed by these contracts, the applicable semantic type contract fixes three value-format parameters:
@@ -87,7 +99,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Operation-specific exact-zero sign, arithmetic involving infinity, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, floating exception/status behavior, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Operation-specific exact-zero sign, arithmetic involving infinity, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -125,7 +137,7 @@ At `|x| = H`, the infinity side is the ties-to-even choice. The maximum finite c
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` upper-bound rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. Backend finite-only, saturation, overflow-mode, or fast-math behavior supplies no such relaxation by itself.
 
-This section rounds only an otherwise-defined finite exact real result. It does not define arithmetic whose inputs or exact semantic result are already infinity, division by zero, NaN production or propagation, floating exception/status behavior, conversions, literals, or transcendental accuracy.
+This section rounds only an otherwise-defined finite exact real result. It does not define arithmetic whose inputs or exact semantic result are already infinity, division by zero, NaN production or propagation, conversions, literals, or transcendental accuracy.
 
 ## Reassociation
 
