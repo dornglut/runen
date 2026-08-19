@@ -647,3 +647,23 @@ fn mixed_group_subgroup_scope_does_not_create_sibling_order_or_legalize_conflict
     let write = Access::new(AccessKind::StateChange, region);
     assert!(read.conflicts_with(&write));
 }
+
+#[test]
+fn subgroup_scope_does_not_create_sibling_order_or_legalize_an_ordinary_conflict() {
+    let each = EachId::new(1);
+    let first = IterationId::new(each, 1);
+    let second = IterationId::new(each, 2);
+    let hierarchy = hierarchy(each, 1, &[(1, 1, 1), (2, 1, 1)]);
+
+    assert!(AtomicSubgroupScope::from_hierarchy(&hierarchy, first).is_some());
+    assert!(AtomicSubgroupScope::from_hierarchy(&hierarchy, second).is_some());
+    assert!(!each_orders(
+        EachPhase::Iteration(first),
+        EachPhase::Iteration(second)
+    ));
+
+    let region = BufferRegion::new(BufferId(1), [PositionId(1)]);
+    let read = Access::new(AccessKind::Read, region.clone());
+    let write = Access::new(AccessKind::StateChange, region);
+    assert!(read.conflicts_with(&write));
+}
