@@ -24,9 +24,9 @@ The `fast` contract authorizes only numerical relaxations that Runen explicitly 
 
 `standard` supplies the baseline floating-point numerical obligations and permissions.
 
-`reproducible` inherits every applicable `standard` rule. A `reproducible`-specific rule MAY strengthen an obligation or narrow the numerical behavior permitted by `standard`; it MUST NOT weaken an applicable `standard` requirement or admit numerical behavior that the applicable `standard` rule forbids.
+`reproducible` follows every applicable `standard` rule, except only to the extent that a `reproducible`-specific rule strengthens an obligation or narrows the numerical behavior permitted by that rule. A `reproducible`-specific rule MUST NOT weaken an applicable `standard` requirement or admit numerical behavior that the applicable `standard` rule forbids.
 
-`fast` also inherits every applicable `standard` rule. A `fast`-specific rule MAY grant an additional numerical relaxation only for the behavior that rule explicitly names. In the absence of such a `fast`-specific relaxation, the applicable `standard` rule remains controlling. Selecting `fast` is therefore not a general license to ignore unspecified baseline requirements.
+`fast` follows every applicable `standard` rule, except only to the extent that a `fast`-specific rule explicitly grants an additional numerical relaxation for behavior that rule names. In the absence of such a `fast`-specific relaxation, the applicable `standard` rule remains controlling. Selecting `fast` is therefore not a general license to ignore unspecified baseline requirements.
 
 A `fast` numerical relaxation does not by implication relax evaluation authority, effects, control flow, memory semantics, Exec ordering or synchronization, resource rules, or another non-numeric semantic contract. Any change to those semantics requires authority from their own normative owners.
 
