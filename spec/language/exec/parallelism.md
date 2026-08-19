@@ -64,11 +64,21 @@ Hierarchy membership and cohort participation consume these scoped identities. A
 
 Hierarchy membership by itself establishes no execution order, synchronization, memory visibility, progress guarantee, physical concurrency, temporal contiguity, or scheduling relationship. Sibling iterations remain source-unordered regardless of whether they share a group or subgroup.
 
-### Establishment boundary
+### Semantic establishment and binding
 
-This revision does not define how source code requests, constrains, observes, or obtains a hierarchy instance.
+A hierarchy instance is **semantically established** for a dynamic `each` execution when an applicable Runen semantic context fixes one specific hierarchy identity and its valid group/subgroup membership partition as semantic structure before a hierarchy-sensitive operation consumes that hierarchy.
 
-A future hierarchy-sensitive operation MUST define how its relevant hierarchy is established or admitted and what hierarchy variation, if any, its contract permits. A hierarchy choice that can affect program semantics MUST NOT be treated as an arbitrary hidden scheduling choice merely because several physical realizations are available.
+Establishment is a semantic binding. It is not a physical scheduling choice, worker topology, launch geometry, backend discovery result, or permission for a realization to derive hierarchy membership from incidental execution placement.
+
+Every hierarchy-sensitive operation that consumes a group or subgroup MUST be bound to the exact established hierarchy instance containing the selected cohort identity. A group or subgroup identity from another hierarchy instance MUST NOT retarget to an otherwise equal-looking cohort, including when both hierarchy instances belong to the same dynamic `each` execution and use equal implementation or debug cohort tokens.
+
+Establishment itself creates no execution order, synchronization, memory visibility, progress guarantee, physical concurrency, or scheduling relationship. Those effects exist only where another applicable semantic contract supplies them.
+
+This revision does not define whether a source construct may establish one hierarchy instance or multiple hierarchy instances for one dynamic `each` execution, and there is no implicit globally current hierarchy. If an applicable future contract permits multiple hierarchy instances for one dynamic `each`, their semantic identities remain distinct and each hierarchy-sensitive operation still binds to one exact instance.
+
+A realization MUST NOT silently choose or substitute a different hierarchy instance when that choice can affect defined program behavior. If a future source, profile, or operation contract permits hierarchy choice or variation for one semantic operation, that contract MUST explicitly define the permitted variation or behavior set. Absent such a contract, an operation bound to one established hierarchy consumes exactly that hierarchy instance.
+
+This revision does not define how source code requests, constrains, observes, constructs, names, counts, or otherwise obtains hierarchy instances, and it does not define a hierarchy-specific environment admission protocol. An implementation's inability to realize required semantic hierarchy structure is not permission to substitute a different semantics-affecting partition.
 
 This revision defines no fixed group or subgroup sizes, dimensions, coordinates, local or global indices, ordering, contiguity, uniform-size requirement, launch geometry, or hardware topology.
 
@@ -81,10 +91,10 @@ A **structured barrier** is a phase boundary belonging to one dynamic `each` exe
 The selected **barrier cohort** is exactly one of:
 
 - the complete root cohort of the enclosing `each` execution;
-- one group from an already-established hierarchy instance for that `each` execution; or
-- one subgroup from that already-established hierarchy instance.
+- one group from a semantically established hierarchy instance for that `each` execution; or
+- one subgroup from that semantically established hierarchy instance.
 
-A root-cohort barrier does not require a hierarchy instance. A group- or subgroup-cohort barrier requires the selected group or subgroup to exist in the established hierarchy instance. A group or subgroup identity from another hierarchy instance does not retarget to a cohort in this hierarchy merely because an implementation or debug token is equal. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
+A root-cohort barrier does not require a hierarchy instance. A group- or subgroup-cohort barrier is bound to the exact semantically established hierarchy instance containing the selected group or subgroup, and the selected cohort MUST exist in that hierarchy instance. A group or subgroup identity from another hierarchy instance does not retarget to a cohort in this hierarchy merely because an implementation or debug token is equal. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
 
 The participant set is exactly the selected barrier cohort and is fixed for the barrier instance. The root cohort is empty exactly when the enclosing `each` has no required iterations; such a root barrier has no participants. Group and subgroup cohorts are non-empty by the hierarchy contract above.
 
@@ -116,10 +126,10 @@ An **unordered reduction** is a structured interaction belonging to one dynamic 
 The selected **reduction cohort** is exactly one of:
 
 - the complete root cohort of the enclosing `each` execution;
-- one group from an already-established hierarchy instance for that `each` execution; or
-- one subgroup from that already-established hierarchy instance.
+- one group from a semantically established hierarchy instance for that `each` execution; or
+- one subgroup from that semantically established hierarchy instance.
 
-A root-cohort reduction does not require a hierarchy instance. A group- or subgroup-cohort reduction requires the selected group or subgroup to exist in the established hierarchy instance. A group or subgroup identity from another hierarchy instance does not retarget to a cohort in this hierarchy merely because an implementation or debug token is equal. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
+A root-cohort reduction does not require a hierarchy instance. A group- or subgroup-cohort reduction is bound to the exact semantically established hierarchy instance containing the selected group or subgroup, and the selected cohort MUST exist in that hierarchy instance. A group or subgroup identity from another hierarchy instance does not retarget to a cohort in this hierarchy merely because an implementation or debug token is equal. This revision does not define source syntax or another source-level mechanism for selecting or obtaining that hierarchy.
 
 The participant set is exactly the selected reduction cohort and is fixed for the reduction instance. The root cohort is empty exactly when the enclosing `each` has no required iterations. Group and subgroup cohorts are non-empty by the hierarchy contract above.
 
