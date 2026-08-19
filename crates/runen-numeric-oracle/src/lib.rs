@@ -4,11 +4,12 @@
 //! This crate is not Runen source syntax, compiler IR, a runtime floating-point
 //! implementation, a backend model, or a normative semantic owner. It covers
 //! exact dyadic inputs to the accepted binary floating rounding relation plus
-//! class-level scalar integer/floating conversion evidence.
+//! class-level scalar integer/floating conversion and finite sum-reduction evidence.
 //!
-//! The `i128`/`u128` carriers, `i32` exponents, and integer widths up to 128 bits
-//! are executable fixture capacity only. They do not define Runen integer widths
-//! or floating exponent limits.
+//! The `i128`/`u128` carriers, `i32` exponents, integer widths up to 128 bits,
+//! and exact finite-sum accumulator capacity are executable fixture limits only.
+//! They do not define Runen integer widths, floating exponent limits, or a
+//! physical reduction-accumulator representation.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Sign {
@@ -77,6 +78,7 @@ pub enum NumericOracleError {
     ExponentArithmeticOverflow,
     InternalRangeExceeded,
     ZeroExactInput,
+    NonFiniteReductionInput,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -289,6 +291,96 @@ pub fn convert_unsigned_integer(
     round_dyadic(format, ExactDyadic::from_unsigned_integer(value))
 }
 
+/// Verification-only oracle for the accepted finite same-format unordered
+/// floating sum reduction.
+///
+/// The exact mathematical state is represented with a bounded common dyadic
+/// scale and separate checked positive/negative u128 magnitudes. Capacity errors
+/// are fixture limitations, not Runen semantic reduction limits.
+pub fn reduce_finite_sum(
+    format: BinaryFormat,
+    contributions: &[BinaryValueFixture],
+) -> Result<RoundedBinaryValue, NumericOracleError> {
+    let mut minimum_exponent = None;
+    let mut empty = true;
+    let mut negative_zero_only = true;
+
+    for contribution in contributions {
+        match contribution {
+            BinaryValueFixture::Finite(exact) => {
+                if exact.magnitude == 0 {
+                    return Err(NumericOracleError::ZeroExactInput);
+                }
+                empty = false;
+                negative_zero_only = false;
+                minimum_exponent = Some(match minimum_exponent {
+                    Some(current) => current.min(exact.exponent),
+                    None => exact.exponent,
+                });
+            }
+            BinaryValueFixture::Zero(sign) => {
+                empty = false;
+                if *sign != Sign::Negative {
+                    negative_zero_only = false;
+                }
+            }
+            BinaryValueFixture::Infinity(_) | BinaryValueFixture::NaNClass => {
+                return Err(NumericOracleError::NonFiniteReductionInput);
+            }
+        }
+    }
+
+    let Some(scale_exponent) = minimum_exponent else {
+        return Ok(RoundedBinaryValue::Zero(if !empty && negative_zero_only {
+            Sign::Negative
+        } else {
+            Sign::Positive
+        }));
+    };
+
+    let mut positive_magnitude = 0_u128;
+    let mut negative_magnitude = 0_u128;
+
+    for contribution in contributions {
+        let BinaryValueFixture::Finite(exact) = contribution else {
+            continue;
+        };
+
+        let exponent_distance = i64::from(exact.exponent) - i64::from(scale_exponent);
+        let shift = u32::try_from(exponent_distance)
+            .map_err(|_| NumericOracleError::InternalRangeExceeded)?;
+        let scaled = checked_scale_u128(exact.magnitude, shift)?;
+
+        let accumulator = match exact.sign {
+            Sign::Positive => &mut positive_magnitude,
+            Sign::Negative => &mut negative_magnitude,
+        };
+        *accumulator = accumulator
+            .checked_add(scaled)
+            .ok_or(NumericOracleError::InternalRangeExceeded)?;
+    }
+
+    match positive_magnitude.cmp(&negative_magnitude) {
+        std::cmp::Ordering::Equal => Ok(RoundedBinaryValue::Zero(Sign::Positive)),
+        std::cmp::Ordering::Greater => round_dyadic(
+            format,
+            ExactDyadic::from_parts(
+                Sign::Positive,
+                positive_magnitude - negative_magnitude,
+                scale_exponent,
+            ),
+        ),
+        std::cmp::Ordering::Less => round_dyadic(
+            format,
+            ExactDyadic::from_parts(
+                Sign::Negative,
+                negative_magnitude - positive_magnitude,
+                scale_exponent,
+            ),
+        ),
+    }
+}
+
 pub fn convert_binary_to_binary(
     destination: BinaryFormat,
     source: BinaryValueFixture,
@@ -402,6 +494,13 @@ fn truncate_dyadic_magnitude(exact: ExactDyadic) -> Result<TruncatedMagnitude, N
     }
 
     Ok(TruncatedMagnitude::Exact(exact.magnitude >> distance))
+}
+
+fn checked_scale_u128(magnitude: u128, shift: u32) -> Result<u128, NumericOracleError> {
+    if shift >= u128::BITS || magnitude > (u128::MAX >> shift) {
+        return Err(NumericOracleError::InternalRangeExceeded);
+    }
+    Ok(magnitude << shift)
 }
 
 fn round_to_integer_grid(
