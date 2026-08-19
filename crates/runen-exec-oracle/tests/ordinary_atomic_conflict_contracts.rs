@@ -1,6 +1,7 @@
 use runen_exec_oracle::{
     Access, AccessKind, AtomicExchangeScope, AtomicExchangeSemantics, AtomicValueToken,
-    BufferAtomicExchangeFixture, BufferAtomicLocation, BufferId, BufferRegion, PositionId,
+    BufferAtomicExchangeFixture, BufferAtomicLocation, BufferId, BufferRegion, EachId, IterationId,
+    PositionId,
 };
 
 #[test]
@@ -50,24 +51,24 @@ fn equal_position_token_under_distinct_buffer_is_disjoint_from_atomic_location()
 fn mixed_conflict_depends_on_resource_overlap_not_atomic_class_or_scope() {
     let location = BufferAtomicLocation::new(BufferId(1), PositionId(7));
     let fixture = BufferAtomicExchangeFixture::new(location);
-    let base = fixture.exchange(
+    let base_unscoped = fixture.exchange(
         1,
         AtomicValueToken::new(20),
         AtomicExchangeSemantics::Base,
         AtomicExchangeScope::Unscoped,
     );
-    let release = fixture.exchange(
+    let release_root_scoped = fixture.exchange(
         2,
         AtomicValueToken::new(30),
         AtomicExchangeSemantics::Release,
-        AtomicExchangeScope::Unscoped,
+        AtomicExchangeScope::Root(IterationId::new(EachId::new(1), 1)),
     );
     let read = Access::new(AccessKind::Read, location.region());
 
-    assert_eq!(base.id().location(), location);
-    assert_eq!(release.id().location(), location);
-    assert!(read.conflicts_with_atomic_exchange_at(base.id().location()));
-    assert!(read.conflicts_with_atomic_exchange_at(release.id().location()));
+    assert_eq!(base_unscoped.id().location(), location);
+    assert_eq!(release_root_scoped.id().location(), location);
+    assert!(read.conflicts_with_atomic_exchange_at(base_unscoped.id().location()));
+    assert!(read.conflicts_with_atomic_exchange_at(release_root_scoped.id().location()));
 }
 
 #[test]
