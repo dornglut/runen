@@ -82,13 +82,9 @@ fn barrier_ordered_buffer_visibility_is_preserved_across_physical_arrangements()
         &mut split_before_allocation,
     )
     .unwrap();
-    let split_after_mapping = BufferMappingFixture::new(
-        301,
-        selected.clone(),
-        agent(3),
-        &mut split_after_allocation,
-    )
-    .unwrap();
+    let split_after_mapping =
+        BufferMappingFixture::new(301, selected.clone(), agent(3), &mut split_after_allocation)
+            .unwrap();
 
     assert_ne!(single_mapping.agent(), split_before_mapping.agent());
     assert_ne!(single_mapping.agent(), split_after_mapping.agent());
