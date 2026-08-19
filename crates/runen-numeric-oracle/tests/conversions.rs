@@ -42,9 +42,9 @@ fn binary_to_binary_preserves_signed_zero_and_infinity() {
         );
         assert_eq!(
             convert_binary_to_binary(tiny_float_format(), BinaryValueFixture::Infinity(sign)),
-            Ok(BinaryConversionResult::Value(
-                RoundedBinaryValue::Infinity(sign)
-            ))
+            Ok(BinaryConversionResult::Value(RoundedBinaryValue::Infinity(
+                sign
+            )))
         );
     }
 }
@@ -129,17 +129,11 @@ fn binary_to_integer_maps_infinity_to_destination_bounds() {
         Ok(IntegerConversionResult::Signed(-128))
     );
     assert_eq!(
-        convert_binary_to_integer(
-            unsigned_u8(),
-            BinaryValueFixture::Infinity(Sign::Positive)
-        ),
+        convert_binary_to_integer(unsigned_u8(), BinaryValueFixture::Infinity(Sign::Positive)),
         Ok(IntegerConversionResult::Unsigned(255))
     );
     assert_eq!(
-        convert_binary_to_integer(
-            unsigned_u8(),
-            BinaryValueFixture::Infinity(Sign::Negative)
-        ),
+        convert_binary_to_integer(unsigned_u8(), BinaryValueFixture::Infinity(Sign::Negative)),
         Ok(IntegerConversionResult::Unsigned(0))
     );
 }
@@ -172,16 +166,8 @@ fn integer_destination_validation_is_fixture_capacity_only() {
 
 #[test]
 fn oversized_dyadic_integer_magnitude_clamps_without_host_overflow() {
-    let huge_positive = BinaryValueFixture::Finite(ExactDyadic::from_parts(
-        Sign::Positive,
-        1,
-        200,
-    ));
-    let huge_negative = BinaryValueFixture::Finite(ExactDyadic::from_parts(
-        Sign::Negative,
-        1,
-        200,
-    ));
+    let huge_positive = BinaryValueFixture::Finite(ExactDyadic::from_parts(Sign::Positive, 1, 200));
+    let huge_negative = BinaryValueFixture::Finite(ExactDyadic::from_parts(Sign::Negative, 1, 200));
 
     assert_eq!(
         convert_binary_to_integer(signed_i8(), huge_positive),
