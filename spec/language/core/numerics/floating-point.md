@@ -77,7 +77,26 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. It does not supply a result when zero would be a bounding candidate or when the exact result lies beyond the largest finite magnitude. Operation-specific zero-sign selection, final underflow-to-zero, infinity and overflow result selection, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, floating exception/status behavior, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not supply a result when the exact result lies beyond the largest finite magnitude. Operation-specific exact-zero sign, infinity and overflow result selection, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, floating exception/status behavior, and any contract-specific flushing relaxation remain open.
+
+## Zero-boundary rounding
+
+Let `q = 2^(emin - (p - 1))`, the smallest positive subnormal magnitude of a binary floating result format.
+
+For an otherwise-defined floating arithmetic operation whose exact finite real result `x` is nonzero and satisfies `|x| < q`, `standard` extends the nearest/ties-to-even rule to the signed-zero boundary:
+
+- if `0 < x < q / 2`, the rounded result is `+0`;
+- if `q / 2 < x < q`, the rounded result is `+q`;
+- if `x = q / 2`, the rounded result is `+0`;
+- if `-q / 2 < x < 0`, the rounded result is `-0`;
+- if `-q < x < -q / 2`, the rounded result is `-q`;
+- if `x = -q / 2`, the rounded result is `-0`.
+
+At either halfway point, signed zero is the ties-to-even choice because this lower-bound lattice may equivalently index the magnitudes `0` and `q` by integers `0` and `1`; index `0` is even. This is a mathematical tie rule and does not define a physical significand encoding for zero.
+
+Therefore, when a nonzero exact finite result rounds to zero under this boundary rule, the rounded zero has the sign of the exact result. This consequence does not determine the sign of an operation whose exact mathematical result is zero.
+
+By the contract-refinement rule, `reproducible` and `fast` follow this `standard` zero-boundary rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. A backend flush-to-zero or denormal mode supplies no such relaxation by itself.
 
 ## Reassociation
 
@@ -89,4 +108,4 @@ This `fast` permission does not authorize operand permutation, omission, duplica
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-Exact operation accuracy beyond the interior finite rounding rule, contraction or FMA behavior, transcendental behavior, NaN handling, zero-boundary and operation-specific zero-sign behavior, contract-specific subnormal handling, remaining rounding and conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+Exact operation accuracy beyond the finite rounding rules above, contraction or FMA behavior, transcendental behavior, NaN handling, operation-specific exact-zero sign, contract-specific subnormal handling, remaining rounding and conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
