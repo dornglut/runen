@@ -4,7 +4,7 @@ This document owns project sequencing and specification-closure planning. It is 
 
 ## Current baseline
 
-The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety foundation is closed; P0-B is the next sequencing frontier.
+The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety and P0-B Exec resources/concurrency foundations are closed; P0-C is the next sequencing frontier.
 
 ## P0-A — Value, memory, and safety
 
@@ -30,7 +30,11 @@ A consuming phase that makes one of these rules necessary must update the approp
 
 **Depends on:** the closed P0-A represented Core safety foundation.
 
-Close Buffer mapping/coherence, cross-realization memory semantics, conflicting-access rules, atomics/order/scope, task lifetime and cancellation, structured parallelism, reductions/collectives, and hierarchical execution. If these operations first make representation validity, address stability, or additional unsafe/UB rules observable, P0-B closes those concrete rules through their canonical normative owners instead of assuming P0-A predeclared them.
+The represented Exec foundation closes the P0-B obligations required by the current gate: Buffer logical mapping/coherence and physical accessibility, ordinary conflicting-access rules, structured `each`, hierarchy and cohort barriers, identity-bearing unordered reductions, represented structured-task lifetime/detachment, normal join and cooperative cancellation observation, atomic exchange/modification order/direct release-acquire relations across the represented unscoped/root/group/subgroup scope forms where defined, and cross-realization preservation evidence for the applicable contracts.
+
+This closure applies only to the operations and relations that the accepted Exec specification currently represents. It does not define operation families or interactions that their normative owners still leave open, including additional atomic operations, release sequences, sequential consistency, fences, the remaining unscoped-to-structured atomic scope interactions or broader scopes, additional collectives or group-local storage, abnormal structured completion, source placement/target syntax, environment admission, hardware topology, or backend coherence and transfer protocols. P0-B closure is not authority for those open items.
+
+The represented P0-B mapping surface does not expose bytes or raw physical addresses, so it does not by itself trigger the deferred representation-validity, address-stability, or pinning rules identified under P0-A. Integrated cross-stratum proof that later realization and resource rules preserve Core safety remains a P0-F obligation.
 
 **Gate:** representative scalar CPU, parallel CPU, and GPU realizations can be checked against one semantic contract without violating Core safety.
 
