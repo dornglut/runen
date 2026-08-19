@@ -153,10 +153,7 @@ impl BufferMappingFixture {
     ///
     /// Ending a mapping does not mutate logical Buffer state and is not semantic
     /// synchronization or a flush event.
-    pub fn end(
-        &mut self,
-        allocation: &mut AllocationFixture,
-    ) -> Result<(), BufferMappingError> {
+    pub fn end(&mut self, allocation: &mut AllocationFixture) -> Result<(), BufferMappingError> {
         if !self.active {
             return Err(BufferMappingError::Inactive);
         }
