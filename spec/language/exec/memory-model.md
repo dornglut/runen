@@ -35,6 +35,20 @@ Therefore a realization that happens to serialize source-unordered conflicting a
 
 This is a language/profile semantic legality rule. It is not environment admission and is not an optimization preference. The source-language or compiler mechanism by which a program establishes the required interaction contract is not defined by this revision.
 
+## Mixed ordinary non-atomic and atomic-exchange conflict
+
+For an admitted atomic exchange, the canonical owner of the targeted storage or resource may define a logical access footprint for the exchange's semantic location under that resource's region and overlap relation.
+
+An ordinary non-atomic access and that atomic exchange **conflict** exactly when the ordinary access region overlaps that resource-defined atomic-location footprint. Because the atomic exchange defined by this revision is state-changing, both an overlapping ordinary read and an overlapping ordinary state-changing access conflict with the exchange. An ordinary access whose region is disjoint from the atomic-location footprint does not conflict with that exchange under this mixed relation.
+
+For source-unordered work with no separately defined synchronization or interaction mechanism, such a mixed conflicting pair is not a legal safe interaction. A realization that happens to serialize the ordinary access and atomic exchange physically does not make the source-unordered pair legal.
+
+This conflict relation does not make the ordinary access atomic and does not insert it into the atomic location's modification order. The modification order defined below still contains only atomic exchanges governed by that contract.
+
+If another semantic contract establishes order between an ordinary access and an atomic exchange, the pair is not source-unordered solely with respect to that order. This mixed-conflict rule does not thereby grant either access, define atomic capability, or by itself define the value/visibility consequence of every ordered mixed interaction. Every applicable authority, resource-state, ordering, validity, effect, and operation-specific contract still has to permit and define the interaction.
+
+The first currently defined resource footprint consumed by this relation is the singleton logical Buffer region of a Buffer atomic location defined by [Exec Buffers](resources/buffers.md). This document does not duplicate Buffer location identity, region overlap, or state semantics.
+
 ## Atomic exchange base relation
 
 An **atomic exchange** is a normally completing read-modify-write interaction with exactly one semantic location.
@@ -132,7 +146,7 @@ An acquire-capable exchange is not required to synchronize with a release-capabl
 
 This revision defines only base, release, acquire, and acquire-release exchange classes; unscoped/unscoped, root-cohort/root-cohort, group-cohort/group-cohort, subgroup-cohort/subgroup-cohort, and group-cohort/subgroup-cohort synchronization-scope relationships; and the direct release-to-acquire relation above for pairs whose scope relationship is defined.
 
-Release sequences, sequential consistency, fences, broader atomic memory scopes, the remaining mixed interoperability among unscoped/root-cohort/group-cohort/subgroup-cohort forms, mixed atomic/non-atomic access rules for the atomic location itself, the complete data-race rule involving atomics, other atomic operations, progress guarantees, and source atomic syntax or types are not defined by this revision. Their absence does not authorize behavior beyond rules already established by their canonical owners.
+Release sequences, sequential consistency, fences, broader atomic memory scopes, the remaining mixed interoperability among unscoped/root-cohort/group-cohort/subgroup-cohort forms, mixed ordinary/atomic value and visibility semantics beyond the conflict/source-unordered legality relation above, the complete data-race rule involving atomics, other atomic operations, progress guarantees, and source atomic syntax or types are not defined by this revision. Their absence does not authorize behavior beyond rules already established by their canonical owners.
 
 ## Structured barrier synchronization
 
@@ -156,4 +170,4 @@ No host, hardware, or backend memory model is normative by default.
 
 ## Open memory-model rules
 
-The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations beyond the atomic-exchange and structured-barrier relations above, atomic order semantics beyond the base/release/acquire/acquire-release exchange classes, release sequences, broader atomic scope and the remaining mixed interoperability among represented atomic scope forms, mixed atomic/non-atomic access rules, and additional synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.
+The complete cross-realization memory model, the complete data-race definition involving synchronization or atomic operations beyond the atomic-exchange, mixed ordinary/atomic conflict, and structured-barrier relations above, atomic order semantics beyond the base/release/acquire/acquire-release exchange classes, release sequences, broader atomic scope and the remaining mixed interoperability among represented atomic scope forms, mixed ordinary/atomic value and visibility semantics beyond the conflict/source-unordered legality relation above, and additional synchronization relations are not defined by this revision. Their absence does not authorize additional conflicting ordinary accesses.

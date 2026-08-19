@@ -1,4 +1,4 @@
-use crate::BufferRegion;
+use crate::{BufferAtomicLocation, BufferRegion};
 
 /// Verification-only ordinary Exec access class.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,5 +38,17 @@ impl Access {
     pub fn conflicts_with(&self, other: &Self) -> bool {
         self.region.overlaps(&other.region)
             && (self.kind == AccessKind::StateChange || other.kind == AccessKind::StateChange)
+    }
+
+    /// Evaluates only the accepted mixed ordinary/non-atomic ↔ atomic-exchange
+    /// conflict relation for the focused Buffer consumer.
+    ///
+    /// An atomic exchange is state-changing, so either ordinary access class
+    /// conflicts when its Buffer region overlaps the exact singleton footprint of
+    /// the atomic location. This relation does not admit either access, insert the
+    /// ordinary access into atomic modification order, or define mixed visibility.
+    #[must_use]
+    pub fn conflicts_with_atomic_exchange_at(&self, location: BufferAtomicLocation) -> bool {
+        self.region.overlaps(&location.region())
     }
 }

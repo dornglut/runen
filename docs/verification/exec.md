@@ -81,7 +81,7 @@ Required cases:
 
 `AtomicLocationId`, location-scoped `AtomicExchangeId`, `AtomicValueToken`, `AtomicExchangeSemantics`, `AtomicGroupScope`, `AtomicSubgroupScope`, `AtomicExchangeScope`, `AtomicScopeRelation`, `AtomicExchange`, `AtomicExchangeFixture`, and `AtomicExchangeRealization` are verification representation only. `Base`, `Release`, `Acquire`, and `AcquireRelease` are verification classifications of the normative semantic classes rather than a frozen source memory-order enumeration. `Unscoped`, `Root(IterationId)`, `Group(AtomicGroupScope)`, and `Subgroup(AtomicSubgroupScope)` are verification classifications of the currently represented synchronization-scope forms. Root scope derives root-cohort identity from the scoped exchange's verification-only producer iteration. `AtomicGroupScope` and `AtomicSubgroupScope` are constructed only from a represented exact established hierarchy fixture and retain that producer's validated full `HierarchyMembership`; neither can publicly pair a producer with an unrelated free cohort label. That retained membership is focused verification evidence for the exact group/subgroup relation, not a source hierarchy handle, hierarchy-establishment mechanism, cross-hierarchy participant set, or reusable participant-domain abstraction. These forms are not a frozen source memory-scope enumeration or backend scope lattice. `Compatible`, `Incompatible`, and `Open` are verification evidence for the currently defined-or-open pairwise scope relationship, not source values or a general scope lattice. Candidate modification-order slices are supplied as realization evidence and are not exposed by an accepted realization as semantic scheduler order. Verification-only `(before, after)` constraint pairs stand for order facts already owned elsewhere; they do not define a generic Runen execution graph. Exact immediate-predecessor and per-exchange scope metadata remain private after realization; the accepted realization exposes only the focused scope-relation and synchronization predicates required by this verification boundary.
 
-These obligations do not define atomic load/store, compare-exchange, fetch operations, release sequences, sequentially-consistent semantics, fences, broader atomic scope, the remaining mixed interoperability among unscoped/root/group/subgroup scope forms, cross-hierarchy participant inclusion, source/lowering syntax for identifying the current iteration or establishing/selecting a hierarchy, mixed atomic/non-atomic race legality for the atomic location itself, source atomic syntax/types/order/scope enums, storage layout, addresses, progress guarantees, or backend atomic instructions.
+These obligations do not define atomic load/store, compare-exchange, fetch operations, release sequences, sequentially-consistent semantics, fences, broader atomic scope, the remaining mixed interoperability among unscoped/root/group/subgroup scope forms, cross-hierarchy participant inclusion, source/lowering syntax for identifying the current iteration or establishing/selecting a hierarchy, mixed ordinary/atomic value or visibility semantics beyond the conflict/source-unordered legality boundary covered separately below, source atomic syntax/types/order/scope enums, storage layout, addresses, progress guarantees, or backend atomic instructions.
 
 ## Buffer logical-region boundary
 
@@ -115,11 +115,11 @@ Required cases:
 - selecting one physical replica rather than another is not program-observable when both realize the same required logical Buffer state;
 - replica identity, implementation version metadata, physical address, allocation identity, backend queue order, host cache behavior, and transfer implementation are not semantic oracles for ordered Buffer visibility.
 
-These obligations do not define version counters, replica ownership, transfer completion, mixed atomic/non-atomic Buffer visibility rules, physical atomic servicing, raw-address or byte-level mapping, or a coherence implementation algorithm.
+These obligations do not define version counters, replica ownership, transfer completion, mixed ordinary/atomic value or visibility semantics beyond the conflict/source-unordered legality boundary, physical atomic servicing, raw-address or byte-level mapping, or a coherence implementation algorithm.
 
 ## Buffer atomic element-location and logical-state bridge boundary
 
-These cases compose the Buffer-owned logical element identity/state contract in `spec/language/exec/resources/buffers.md` with the generic atomic-exchange contract in `spec/language/exec/memory-model.md`. They exercise only an atomic exchange that an applicable contract has already admitted. They do not define atomic access authority, source atomic capability, or mixed ordinary/atomic legality.
+These cases compose the Buffer-owned logical element identity/state contract in `spec/language/exec/resources/buffers.md` with the generic atomic-exchange contract in `spec/language/exec/memory-model.md`. They exercise only an atomic exchange that an applicable contract has already admitted. They do not define atomic access authority or source atomic capability; mixed ordinary/atomic conflict and source-unordered legality are owned separately by the memory-model boundary below.
 
 Required cases:
 
@@ -140,7 +140,26 @@ Required cases:
 
 `BufferAtomicLocation`, `BufferAtomicExchangeId`, `BufferAtomicExchange`, `BufferAtomicExchangeFixture`, `BufferAtomicExchangeRealization`, and `BufferAtomicExchangeError` are verification representation only. The fixture consumes the existing `AtomicExchangeFixture`; it does not duplicate modification-order, exchange-class, scope, or synchronization semantics. Its internally synthesized generic atomic-location token and the crate-private extraction of an `AtomicValueToken` fixture token are mechanical composition details, not Runen values, addresses, source atomic handles, or a second resource identity. Fixture `AtomicValueToken` and `ValueToken` equality used here is evidence for the same opaque test value only; it does not define representation conversion or establish that every Buffer element/value admits atomic exchange.
 
-These obligations do not define which Buffer element types or values are atomic-capable, source/profile/library atomic admission, `View` or `ViewMut` atomic permission, mixed ordinary/atomic conflict/race/visibility rules, atomic load/store/compare-exchange/fetch operations, physical atomic servicing through typed mappings or allocations, raw addresses, bytes, layout, alignment, pinning, provenance, release sequences, sequential consistency, fences, backend atomic instructions, or CPU/GPU/device atomic classes.
+These obligations do not define which Buffer element types or values are atomic-capable, source/profile/library atomic admission, `View` or `ViewMut` atomic permission, mixed ordinary/atomic value or visibility semantics beyond the memory-model conflict/source-unordered legality relation below, atomic load/store/compare-exchange/fetch operations, physical atomic servicing through typed mappings or allocations, raw addresses, bytes, layout, alignment, pinning, provenance, release sequences, sequential consistency, fences, backend atomic instructions, or CPU/GPU/device atomic classes.
+
+## Mixed ordinary non-atomic / atomic-exchange Buffer conflict boundary
+
+These cases exercise the mixed conflict and source-unordered legality relation owned by `spec/language/exec/memory-model.md` using the singleton logical footprint of a Buffer atomic location owned by `spec/language/exec/resources/buffers.md`. This section is verification evidence only; it does not redefine either owner.
+
+Required cases:
+
+- an ordinary non-atomic read whose Buffer region overlaps the exact singleton region of an admitted Buffer atomic location conflicts with the atomic exchange under the mixed relation;
+- an ordinary non-atomic state-changing access whose Buffer region overlaps that exact atomic-location region also conflicts;
+- an ordinary read or state-changing access to a disjoint logical position of the same Buffer does not conflict with that atomic location under the mixed relation;
+- an equal private `PositionId` under another `BufferId` remains disjoint from the atomic location because Buffer identity participates in the resource-owned overlap relation;
+- mixed conflict classification consumes only the ordinary Buffer region and the resource-owned atomic-location footprint; atomic exchange class, synchronization scope, modification-order position, mapping identity, allocation identity, execution-agent identity, and physical schedule are not conflict inputs;
+- the mixed relation does not change the existing ordinary/ordinary conflict predicate;
+- a source-unordered overlapping mixed pair remains conflicting even when host fixture calls are serialized; host call order is not semantic permission or synchronization;
+- the ordinary access does not enter the atomic location's modification order and does not become atomic through conflict classification.
+
+`Access::conflicts_with_atomic_exchange_at(BufferAtomicLocation)` is verification representation of only this focused Buffer-backed conflict relation. It assumes an atomic exchange has already been admitted for that location and does not itself create exchange evidence, grant ordinary or atomic access authority, select an atomic exchange class/scope, or define a synchronization edge.
+
+These obligations do not define ordered mixed ordinary/atomic value or visibility outcomes, atomic admission or permissions, `View`/`ViewMut` atomic authority, atomic operations beyond exchange, physical atomic servicing through mappings/allocations, release sequences, sequential consistency, fences, broader or remaining mixed atomic scopes, complete atomic data-race semantics, raw addresses/layout, backend atomics, or CPU/GPU/device memory models.
 
 ## Address-free typed Buffer mapping, execution-agent accessibility, and allocation-extent boundary
 
@@ -174,7 +193,7 @@ Required cases:
 
 `RealizationAgentId`, `AllocationId`, `AllocationFixture`, `AllocationError`, `BufferMappingId`, `BufferMappingFixture`, and `BufferMappingError` are verification representation only. Allocation-fixture accessibility evidence plus used/active mapping-token bookkeeping are private mechanical evidence, not a source device list, memory-space taxonomy, capability database, allocator, scheduler, or admission API. `mapped_read` and `mapped_change` stand only for typed accesses whose independent logical permission/order/legality obligations are already satisfied and which are represented as physically serviced by that mapping's exact agent/allocation relation; they do not grant access authority. The fixture stores no physical value copy, address, byte state, version, transfer state, cache-coherence state, or mapping-derived order.
 
-These obligations do not define allocation creation/destruction APIs, allocation-space taxonomy or accessibility derivation, execution-agent/device discovery, environment admission, CPU/GPU/host/device target classes, source target selection, allocation interoperability, raw-address/pinned/byte mappings, relocation, address stability, pointer provenance, representation validity, Buffer source API spelling, flush/invalidate semantics, physical atomic servicing through typed Buffer mappings, mixed atomic/non-atomic Buffer access, or a physical coherence protocol.
+These obligations do not define allocation creation/destruction APIs, allocation-space taxonomy or accessibility derivation, execution-agent/device discovery, environment admission, CPU/GPU/host/device target classes, source target selection, allocation interoperability, raw-address/pinned/byte mappings, relocation, address stability, pointer provenance, representation validity, Buffer source API spelling, flush/invalidate semantics, physical atomic servicing through typed Buffer mappings, mixed ordinary/atomic value or visibility semantics beyond the memory-model conflict/source-unordered legality relation, or a physical coherence protocol.
 
 ## Cross-realization ordinary Buffer preservation witness
 
@@ -194,7 +213,7 @@ Required cases:
 
 The two arrangements are generic verification choices, not CPU, GPU, host, device, worker, queue, or memory-space language classes. The witness deliberately reuses existing public oracle fixtures rather than defining a `RealizationId`, generic realization graph/plan, production backend model, or second Buffer-state semantics.
 
-These obligations do not prove the complete cross-realization memory model, atomic or mixed atomic/non-atomic interactions, structured-barrier or parallel-realization equivalence, transfer completion, cache coherence, flush/invalidate behavior, numeric equivalence, source lowering, runtime/backend conformance, progress, or full P0-B closure.
+These obligations do not prove the complete cross-realization memory model, atomic or mixed ordinary/atomic physical interactions, structured-barrier or parallel-realization equivalence, transfer completion, cache coherence, flush/invalidate behavior, numeric equivalence, source lowering, runtime/backend conformance, progress, or full P0-B closure.
 
 ## Cross-realization structured `each` ordinary Buffer schedule-preservation witness
 
@@ -442,6 +461,7 @@ The current `runen-exec-oracle` executable subset covers only relations already 
 
 - Buffer identity, finite logical-region overlap, and distinct-Buffer disjointness;
 - exact Buffer atomic element-location and structurally location-scoped exchange identity plus transactional composition of the generic atomic-exchange realization with the one `LogicalBufferState`, including singleton-region overlap and foreign-location rejection without state mutation;
+- Buffer-backed mixed ordinary/atomic-exchange conflict classification through the resource-owned singleton atomic-location footprint, including overlap/disjoint identity cases and invariance to exchange class/scope or host fixture serialization;
 - opaque physical execution-agent identity plus physical allocation identity/extent/accessibility, active typed-mapping lifetime nesting, exact agent/allocation/Buffer-region mapping binding, inaccessible-agent rejection, and mapped typed access through the one logical Buffer-state fixture;
 - independent cross-realization ordinary Buffer preservation for one already-ordered mapped change/read case across distinct legal physical agent/allocation/mapping arrangements, using separate logical-state executions and comparing only semantic state/read results;
 - independent cross-realization structured-`each` ordinary Buffer schedule preservation for one two-sibling disjoint mapped-change case across a single-placement serialized order and a split-placement opposite fixture order, comparing the normal-continuation read and final logical state while preserving sibling unorderedness;
