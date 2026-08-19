@@ -94,7 +94,7 @@ Required cases:
 - two regions of one Buffer whose logical element-position sets intersect overlap;
 - overlapping `View` read/read access is non-conflicting under the ordinary-access relation when every other applicable contract permits both accesses;
 - source-unordered overlapping `View` read with a state-changing `ViewMut` access conflicts when no separately defined interaction mechanism applies;
-- source-unordered overlapping state-changing `ViewMut` accesses conflicts when no separately defined interaction mechanism applies;
+- source-unordered overlapping state-changing `ViewMut` accesses conflict when no separately defined interaction mechanism applies;
 - source-unordered state-changing accesses through `ViewMut` to disjoint Buffer regions are non-conflicting under the ordinary-access relation;
 - migration, replication, or replacement of physical backing does not change the logical Buffer identity or Buffer region selected by a continuing logical view;
 - physical address, allocation identity, host slice aliasing, host borrow checking, and host scheduler behavior are not semantic oracles for Buffer identity, overlap, view permission, or conflict.
@@ -134,6 +134,7 @@ Required cases:
 - an invalid candidate modification order or order constraint is rejected without mutating Buffer state;
 - a Buffer atomic location naming another Buffer identity or an unknown position is rejected before atomic realization and leaves Buffer state unchanged;
 - the bridge creates no second atomic-only logical value, replica, staging state, or independently selectable semantic Buffer state;
+- one bridge fixture represents one independent atomic exchange set and is consumed by its realization; it does not carry or split modification-order history across multiple represented exchange sets;
 - the private `AtomicLocationId` adapter token scopes generic atomic-oracle occurrence identities only within one independent verification fixture and is not an alternative semantic identity for the `BufferAtomicLocation`; comparing adapter tokens across independent fixtures does not define Buffer atomic-location equality.
 
 `BufferAtomicLocation`, `BufferAtomicExchangeFixture`, and `BufferAtomicExchangeError` are verification representation only. The fixture consumes the existing `AtomicExchangeFixture`; it does not duplicate modification-order, exchange-class, scope, or synchronization semantics. Its private adapter location token and the crate-private extraction of an `AtomicValueToken` fixture token are mechanical composition details, not Runen values, addresses, source atomic handles, or a second resource identity. Fixture `AtomicValueToken` and `ValueToken` equality used here is evidence for the same opaque test value only; it does not define representation conversion or establish that every Buffer element/value admits atomic exchange.
