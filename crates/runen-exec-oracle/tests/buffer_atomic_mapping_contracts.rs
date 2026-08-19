@@ -89,13 +89,7 @@ fn mapping_outside_atomic_location_rejects_before_logical_state_changes() {
     let before = logical.clone();
 
     assert!(matches!(
-        mapping.mapped_atomic_exchange(
-            &mut logical,
-            fixture,
-            vec![exchange],
-            &[exchange_id],
-            &[],
-        ),
+        mapping.mapped_atomic_exchange(&mut logical, fixture, vec![exchange], &[exchange_id], &[],),
         Err(BufferMappingError::OutsideMappedRegion)
     ));
     assert_eq!(logical, before);
@@ -118,13 +112,7 @@ fn equal_position_under_distinct_buffer_is_outside_mapping() {
     let before = logical.clone();
 
     assert!(matches!(
-        mapping.mapped_atomic_exchange(
-            &mut logical,
-            fixture,
-            vec![exchange],
-            &[exchange_id],
-            &[],
-        ),
+        mapping.mapped_atomic_exchange(&mut logical, fixture, vec![exchange], &[exchange_id], &[],),
         Err(BufferMappingError::OutsideMappedRegion)
     ));
     assert_eq!(logical, before);
@@ -150,13 +138,7 @@ fn inactive_mapping_rejects_atomic_servicing_before_logical_state_changes() {
     let before = logical.clone();
 
     assert!(matches!(
-        mapping.mapped_atomic_exchange(
-            &mut logical,
-            fixture,
-            vec![exchange],
-            &[exchange_id],
-            &[],
-        ),
+        mapping.mapped_atomic_exchange(&mut logical, fixture, vec![exchange], &[exchange_id], &[],),
         Err(BufferMappingError::Inactive)
     ));
     assert_eq!(logical, before);
@@ -193,9 +175,9 @@ fn rejected_atomic_realization_through_valid_mapping_is_transactional() {
             &[second_id, first_id],
             &[(first_id, second_id)],
         ),
-        Err(BufferMappingError::Atomic(BufferAtomicExchangeError::Atomic(
-            AtomicExchangeError::OrderConstraintViolation
-        )))
+        Err(BufferMappingError::Atomic(
+            BufferAtomicExchangeError::Atomic(AtomicExchangeError::OrderConstraintViolation)
+        ))
     ));
     assert_eq!(logical, before);
 }
@@ -272,8 +254,14 @@ fn physical_mapping_choice_does_not_change_atomic_modification_order_result() {
         )
         .unwrap();
 
-    assert_eq!(first.prior_value(first_a_id), second.prior_value(second_a_id));
-    assert_eq!(first.prior_value(first_b_id), second.prior_value(second_b_id));
+    assert_eq!(
+        first.prior_value(first_a_id),
+        second.prior_value(second_a_id)
+    );
+    assert_eq!(
+        first.prior_value(first_b_id),
+        second.prior_value(second_b_id)
+    );
     assert_eq!(first.final_value(), second.final_value());
     assert_eq!(first_state, second_state);
     assert_eq!(first.final_value(), AtomicValueToken::new(30));
