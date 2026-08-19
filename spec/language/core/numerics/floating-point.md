@@ -87,7 +87,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not supply a result when the exact result lies beyond the largest finite magnitude. Operation-specific exact-zero sign, infinity production and overflow result selection, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, floating exception/status behavior, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Operation-specific exact-zero sign, arithmetic involving infinity, NaN behavior, conversions, literals, transcendental accuracy, contraction or FMA, reduced precision, floating exception/status behavior, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -108,6 +108,25 @@ Therefore, when a nonzero exact finite result rounds to zero under this boundary
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` zero-boundary rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. A backend flush-to-zero or denormal mode supplies no such relaxation by itself.
 
+## Upper-bound rounding
+
+For a binary floating result format, define:
+
+- the maximum finite magnitude `L = (2^p - 1) * 2^(emax - (p - 1))`;
+- the positive upper limit `U = 2^(emax + 1)`, the next power-of-two value in the mathematical continuation of the format spacing beyond `L`;
+- the overflow midpoint `H = (L + U) / 2 = U - 2^(emax - p)`.
+
+For an otherwise-defined floating arithmetic operation whose exact real result `x` is finite and satisfies `|x| > L`, `standard` extends nearest/ties-to-even to the upper finite boundary:
+
+- if `L < |x| < H`, the rounded result is the maximum finite value with the sign of `x`;
+- if `|x| >= H`, the rounded result is the signed infinity with the sign of `x`.
+
+At `|x| = H`, the infinity side is the ties-to-even choice. The maximum finite candidate has canonical significand integer `2^p - 1`, which is odd. The mathematical continuation at `U` has significand integer `2^(p - 1)`, which is even; selecting that continuation candidate yields signed infinity. This tie construction is semantic mathematics and does not define a physical exponent or significand encoding beyond the accepted value format.
+
+By the contract-refinement rule, `reproducible` and `fast` follow this `standard` upper-bound rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. Backend finite-only, saturation, overflow-mode, or fast-math behavior supplies no such relaxation by itself.
+
+This section rounds only an otherwise-defined finite exact real result. It does not define arithmetic whose inputs or exact semantic result are already infinity, division by zero, NaN production or propagation, floating exception/status behavior, conversions, literals, or transcendental accuracy.
+
 ## Reassociation
 
 Under `standard` and `reproducible`, semantic grouping of separately represented floating-point additions or multiplications is result-significant. A realization MUST NOT use real-number associativity to regroup those operations when doing so can change Runen-observable behavior permitted by the selected contract. A realization MAY physically restructure the computation when it proves that the resulting behavior still satisfies the selected contract.
@@ -118,4 +137,4 @@ This `fast` permission does not authorize operand permutation, omission, duplica
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-Exact operation accuracy beyond the finite rounding rules above, contraction or FMA behavior, transcendental behavior, NaN handling, operation-specific infinity behavior and overflow selection, operation-specific exact-zero sign, contract-specific subnormal handling, remaining rounding and conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+Exact operation accuracy beyond the finite rounding rules above, contraction or FMA behavior, transcendental behavior, NaN handling, operation-specific infinity behavior, operation-specific exact-zero sign, contract-specific subnormal handling, remaining conversion behavior, reduction-specific numeric equivalence, the remaining detailed `standard`/`reproducible`/`fast` result sets, source contract selection/defaulting, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
