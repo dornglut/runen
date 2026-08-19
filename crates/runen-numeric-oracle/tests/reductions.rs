@@ -1,6 +1,6 @@
 use runen_numeric_oracle::{
     BinaryFormat, BinaryValueFixture, ExactDyadic, NumericOracleError, RoundedBinaryValue, Sign,
-    reduce_finite_sum,
+    SumReductionResult, reduce_finite_sum, reduce_sum,
 };
 
 fn tiny_format() -> BinaryFormat {
@@ -156,7 +156,7 @@ fn exact_sum_differs_from_one_legal_rounded_add_tree() {
 }
 
 #[test]
-fn nonfinite_contributions_are_outside_this_oracle_slice() {
+fn nonfinite_contributions_are_outside_finite_oracle_slice() {
     for contribution in [
         BinaryValueFixture::Infinity(Sign::Positive),
         BinaryValueFixture::Infinity(Sign::Negative),
@@ -185,5 +185,125 @@ fn exact_accumulator_capacity_overflow_is_reported_not_wrapped() {
     assert_eq!(
         reduce_finite_sum(wide_format, &[large, large, large, large]),
         Err(NumericOracleError::InternalRangeExceeded)
+    );
+}
+
+#[test]
+fn single_infinity_sign_determines_sum_with_finite_and_zero_inputs() {
+    let finite_value = finite(Sign::Negative, 7, -2);
+
+    assert_eq!(
+        reduce_sum(
+            tiny_format(),
+            &[
+                BinaryValueFixture::Infinity(Sign::Positive),
+                finite_value,
+                BinaryValueFixture::Zero(Sign::Negative),
+            ],
+        ),
+        Ok(SumReductionResult::Value(RoundedBinaryValue::Infinity(
+            Sign::Positive,
+        )))
+    );
+    assert_eq!(
+        reduce_sum(
+            tiny_format(),
+            &[
+                finite_value,
+                BinaryValueFixture::Infinity(Sign::Negative),
+                BinaryValueFixture::Zero(Sign::Positive),
+            ],
+        ),
+        Ok(SumReductionResult::Value(RoundedBinaryValue::Infinity(
+            Sign::Negative,
+        )))
+    );
+}
+
+#[test]
+fn opposite_infinity_signs_produce_nan_class_independent_of_order() {
+    let first = [
+        BinaryValueFixture::Infinity(Sign::Positive),
+        finite(Sign::Positive, 3, 0),
+        BinaryValueFixture::Infinity(Sign::Negative),
+    ];
+    let second = [first[2], first[1], first[0]];
+
+    assert_eq!(
+        reduce_sum(tiny_format(), &first),
+        Ok(SumReductionResult::NaNClass)
+    );
+    assert_eq!(
+        reduce_sum(tiny_format(), &second),
+        Ok(SumReductionResult::NaNClass)
+    );
+}
+
+#[test]
+fn finite_only_broader_sum_delegates_to_accepted_finite_oracle() {
+    let contributions = [
+        finite(Sign::Positive, 7, -2),
+        finite(Sign::Negative, 3, -1),
+        BinaryValueFixture::Zero(Sign::Negative),
+    ];
+    let finite_result = reduce_finite_sum(tiny_format(), &contributions).unwrap();
+
+    assert_eq!(
+        reduce_sum(tiny_format(), &contributions),
+        Ok(SumReductionResult::Value(finite_result))
+    );
+}
+
+#[test]
+fn submitted_nan_remains_outside_broader_sum_slice() {
+    assert_eq!(
+        reduce_sum(tiny_format(), &[BinaryValueFixture::NaNClass]),
+        Err(NumericOracleError::NaNReductionInput)
+    );
+    assert_eq!(
+        reduce_sum(
+            tiny_format(),
+            &[
+                BinaryValueFixture::Infinity(Sign::Positive),
+                BinaryValueFixture::NaNClass,
+            ],
+        ),
+        Err(NumericOracleError::NaNReductionInput)
+    );
+}
+
+#[test]
+fn infinity_result_does_not_require_unneeded_finite_accumulator_capacity() {
+    let wide_format = BinaryFormat::new(127, 0, 126).expect("valid wide fixture format");
+    let large = finite(Sign::Positive, 1_u128 << 126, 0);
+
+    assert_eq!(
+        reduce_sum(
+            wide_format,
+            &[
+                large,
+                large,
+                large,
+                large,
+                BinaryValueFixture::Infinity(Sign::Positive),
+            ],
+        ),
+        Ok(SumReductionResult::Value(RoundedBinaryValue::Infinity(
+            Sign::Positive,
+        )))
+    );
+}
+
+#[test]
+fn malformed_finite_fixture_is_rejected_even_when_infinity_determines_result() {
+    assert_eq!(
+        reduce_sum(
+            tiny_format(),
+            &[
+                BinaryValueFixture::Infinity(Sign::Positive),
+                finite(Sign::Negative, 0, 0),
+            ],
+        ),
+        Err(NumericOracleError::ZeroExactInput)
     );
 }
