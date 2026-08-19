@@ -109,10 +109,7 @@ pub enum TaskCompletionEvidence {
 ///
 /// This predicate does not claim progress or define abnormal join behavior.
 #[must_use]
-pub fn task_join_can_complete_normally(
-    target: TaskId,
-    completion: TaskCompletionEvidence,
-) -> bool {
+pub fn task_join_can_complete_normally(target: TaskId, completion: TaskCompletionEvidence) -> bool {
     matches!(completion, TaskCompletionEvidence::Normal(task) if task == target)
 }
 
