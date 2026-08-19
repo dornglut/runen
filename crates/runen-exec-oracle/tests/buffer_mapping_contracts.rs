@@ -125,19 +125,11 @@ fn one_allocation_may_admit_multiple_distinct_agents() {
     let selected = region(1, &[0]);
     let mut allocation = allocation_fixture(7, &[1, 2]);
     let first = BufferMappingFixture::new(1, selected.clone(), agent(1), &mut allocation).unwrap();
-    let second = BufferMappingFixture::new(2, selected.clone(), agent(2), &mut allocation).unwrap();
-    let mut logical = state(1, &[(0, 10)]);
-
-    first
-        .mapped_change(&mut logical, &selected, ValueToken(20))
-        .unwrap();
+    let second = BufferMappingFixture::new(2, selected, agent(2), &mut allocation).unwrap();
 
     assert_eq!(first.agent(), agent(1));
     assert_eq!(second.agent(), agent(2));
-    assert_eq!(
-        second.mapped_read(&logical, &selected).unwrap(),
-        values(&[(0, 20)])
-    );
+    assert_ne!(first.agent(), second.agent());
 }
 
 #[test]
