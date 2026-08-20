@@ -51,6 +51,13 @@ name = "runen-exec-oracle"
 version = "0.0.0"
 
 [[package]]
+name = "runen-hir"
+version = "0.0.0"
+dependencies = [
+ "runen-syntax",
+]
+
+[[package]]
 name = "runen-numeric-oracle"
 version = "0.0.0"
 
