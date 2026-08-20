@@ -101,9 +101,7 @@ mod reference_support {
     };
 
     use crate::core_support::{FunctionId, ValidatedBody};
-    use ::runen_reference::{
-        Machine as ProgramMachine, VerificationEventKind as ProgramEventKind,
-    };
+    use ::runen_reference::{Machine as ProgramMachine, VerificationEventKind as ProgramEventKind};
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum VerificationEvent {
