@@ -190,7 +190,7 @@ Those features are not prerequisites to the represented activation and ownership
 
 No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner.
 
-After this semantic relation is accepted, selection of the next P0-D source milestone requires a fresh continuation audit. This document does not itself authorize a concrete grammar or frontend slice.
+After this semantic relation is accepted, selection of the next source-language milestone requires a fresh continuation audit. This document does not itself authorize a concrete grammar or frontend slice.
 
 ## Further boundaries
 
