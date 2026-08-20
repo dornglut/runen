@@ -4,6 +4,7 @@ members = [
     "crates/runen-exec-oracle",
     "crates/runen-numeric-oracle",
     "crates/runen-reference",
+    "crates/runen-syntax",
     "tools/xtask",
 ]
 resolver = "2"

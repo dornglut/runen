@@ -1,0 +1,13 @@
+[package]
+name = "runen-syntax"
+version = "0.0.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+rowan = "=0.17.0"
+unicode-ident = "=1.0.24"
+unicode-normalization = "=0.1.25"
+
+[lints]
+workspace = true

@@ -1,0 +1,206 @@
+use crate::{SyntaxError, SyntaxErrorKind, SyntaxKind, identifier_key, text_range};
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct LexToken {
+    pub(crate) kind: SyntaxKind,
+    pub(crate) start: usize,
+    pub(crate) end: usize,
+}
+
+pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
+    let mut tokens = Vec::new();
+    let mut errors = Vec::new();
+    let mut offset = 0;
+
+    if source.starts_with('\u{feff}') {
+        let end = '\u{feff}'.len_utf8();
+        tokens.push(LexToken {
+            kind: SyntaxKind::Bom,
+            start: 0,
+            end,
+        });
+        offset = end;
+    }
+
+    while offset < source.len() {
+        let rest = &source[offset..];
+
+        if rest.starts_with("//") {
+            let mut end = offset + 2;
+            while end < source.len() {
+                let character = source[end..].chars().next().expect("valid UTF-8");
+                if is_line_boundary(character) {
+                    break;
+                }
+                end += character.len_utf8();
+            }
+            tokens.push(LexToken {
+                kind: SyntaxKind::LineComment,
+                start: offset,
+                end,
+            });
+            offset = end;
+            continue;
+        }
+
+        if rest.starts_with("/*") {
+            let mut end = offset + 2;
+            let mut depth = 1_u32;
+            while end < source.len() {
+                let tail = &source[end..];
+                if tail.starts_with("/*") {
+                    depth += 1;
+                    end += 2;
+                } else if tail.starts_with("*/") {
+                    depth -= 1;
+                    end += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    end += tail.chars().next().expect("valid UTF-8").len_utf8();
+                }
+            }
+            if depth != 0 {
+                errors.push(SyntaxError::new(
+                    SyntaxErrorKind::UnterminatedBlockComment,
+                    text_range(offset, source.len()),
+                ));
+                end = source.len();
+            }
+            tokens.push(LexToken {
+                kind: SyntaxKind::BlockComment,
+                start: offset,
+                end,
+            });
+            offset = end;
+            continue;
+        }
+
+        let character = rest.chars().next().expect("non-empty source tail");
+
+        if is_pattern_whitespace(character) {
+            let mut end = offset + character.len_utf8();
+            while end < source.len() {
+                let next = source[end..].chars().next().expect("valid UTF-8");
+                if !is_pattern_whitespace(next) {
+                    break;
+                }
+                end += next.len_utf8();
+            }
+            tokens.push(LexToken {
+                kind: SyntaxKind::Whitespace,
+                start: offset,
+                end,
+            });
+            offset = end;
+            continue;
+        }
+
+        if character == '_' || unicode_ident::is_xid_start(character) {
+            let mut end = offset + character.len_utf8();
+            while end < source.len() {
+                let next = source[end..].chars().next().expect("valid UTF-8");
+                if next != '_' && !unicode_ident::is_xid_continue(next) {
+                    break;
+                }
+                end += next.len_utf8();
+            }
+            let spelling = &source[offset..end];
+            let key = identifier_key(spelling).expect("lexer established identifier form");
+            tokens.push(LexToken {
+                kind: classify_identifier_key(&key),
+                start: offset,
+                end,
+            });
+            offset = end;
+            continue;
+        }
+
+        let punctuation = if rest.starts_with("->") {
+            Some((SyntaxKind::Arrow, 2))
+        } else {
+            match character {
+                '(' => Some((SyntaxKind::LParen, 1)),
+                ')' => Some((SyntaxKind::RParen, 1)),
+                '{' => Some((SyntaxKind::LBrace, 1)),
+                '}' => Some((SyntaxKind::RBrace, 1)),
+                ':' => Some((SyntaxKind::Colon, 1)),
+                ',' => Some((SyntaxKind::Comma, 1)),
+                '=' => Some((SyntaxKind::Eq, 1)),
+                ';' => Some((SyntaxKind::Semicolon, 1)),
+                _ => None,
+            }
+        };
+
+        if let Some((kind, width)) = punctuation {
+            tokens.push(LexToken {
+                kind,
+                start: offset,
+                end: offset + width,
+            });
+            offset += width;
+            continue;
+        }
+
+        let end = offset + character.len_utf8();
+        errors.push(SyntaxError::new(
+            SyntaxErrorKind::UnrecognizedToken,
+            text_range(offset, end),
+        ));
+        tokens.push(LexToken {
+            kind: SyntaxKind::ErrorToken,
+            start: offset,
+            end,
+        });
+        offset = end;
+    }
+
+    (tokens, errors)
+}
+
+fn classify_identifier_key(key: &str) -> SyntaxKind {
+    match key {
+        "fn" => SyntaxKind::KwFn,
+        "record" => SyntaxKind::KwRecord,
+        "let" => SyntaxKind::KwLet,
+        "return" => SyntaxKind::KwReturn,
+        "Bool" => SyntaxKind::TyBool,
+        "I8" => SyntaxKind::TyI8,
+        "I16" => SyntaxKind::TyI16,
+        "I32" => SyntaxKind::TyI32,
+        "I64" => SyntaxKind::TyI64,
+        "U8" => SyntaxKind::TyU8,
+        "U16" => SyntaxKind::TyU16,
+        "U32" => SyntaxKind::TyU32,
+        "U64" => SyntaxKind::TyU64,
+        "F16" => SyntaxKind::TyF16,
+        "F32" => SyntaxKind::TyF32,
+        "F64" => SyntaxKind::TyF64,
+        _ => SyntaxKind::Ident,
+    }
+}
+
+const fn is_pattern_whitespace(character: char) -> bool {
+    matches!(
+        character,
+        '\u{0009}'
+            | '\u{000a}'
+            | '\u{000b}'
+            | '\u{000c}'
+            | '\u{000d}'
+            | '\u{0020}'
+            | '\u{0085}'
+            | '\u{200e}'
+            | '\u{200f}'
+            | '\u{2028}'
+            | '\u{2029}'
+    )
+}
+
+const fn is_line_boundary(character: char) -> bool {
+    matches!(
+        character,
+        '\u{000a}' | '\u{000b}' | '\u{000c}' | '\u{000d}' | '\u{0085}' | '\u{2028}' | '\u{2029}'
+    )
+}
