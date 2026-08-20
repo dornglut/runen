@@ -85,7 +85,6 @@ pub enum NumericOracleError {
     InternalRangeExceeded,
     ZeroExactInput,
     NonFiniteReductionInput,
-    NaNReductionInput,
     InvalidRoundedValueFixture,
 }
 
@@ -300,16 +299,18 @@ pub fn convert_unsigned_integer(
 }
 
 /// Verification-only oracle for the accepted same-format unordered floating
-/// sum reduction including its signed-infinity extension.
+/// sum reduction including its signed-infinity and submitted-NaN extensions.
 ///
-/// Submitted NaNs remain outside this slice. Finite-only inputs delegate to the
-/// accepted bounded exact finite-sum oracle below.
+/// Finite-only inputs delegate to the accepted bounded exact finite-sum oracle
+/// below. Special-value-determined results avoid unnecessary bounded finite
+/// accumulation after all fixture values have been structurally validated.
 pub fn reduce_sum(
     format: BinaryFormat,
     contributions: &[BinaryValueFixture],
 ) -> Result<SumReductionResult, NumericOracleError> {
     let mut positive_infinity = false;
     let mut negative_infinity = false;
+    let mut nan_present = false;
 
     for contribution in contributions {
         match contribution {
@@ -319,10 +320,13 @@ pub fn reduce_sum(
             BinaryValueFixture::Finite(_) | BinaryValueFixture::Zero(_) => {}
             BinaryValueFixture::Infinity(Sign::Positive) => positive_infinity = true,
             BinaryValueFixture::Infinity(Sign::Negative) => negative_infinity = true,
-            BinaryValueFixture::NaNClass => return Err(NumericOracleError::NaNReductionInput),
+            BinaryValueFixture::NaNClass => nan_present = true,
         }
     }
 
+    if nan_present {
+        return Ok(SumReductionResult::NaNClass);
+    }
     if positive_infinity && negative_infinity {
         return Ok(SumReductionResult::NaNClass);
     }
