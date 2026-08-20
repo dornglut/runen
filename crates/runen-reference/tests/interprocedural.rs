@@ -1,13 +1,11 @@
-use runen_core_ir::interprocedural::{BasicBlock, Body, Function, Program, Terminator};
-use runen_core_ir::interprocedural_validation::validate_program;
 use runen_core_ir::{
-    BasicBlockId, Fault, FunctionId, LocalDecl, LocalId, Operand, Place, ScalarType, Statement,
-    TypeDef, TypeTable, Value,
+    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
+    Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
-use runen_reference::interprocedural::{
-    Machine, TerminalStatus, VerificationEvent, VerificationEventKind,
+use runen_reference::{
+    Machine, TerminalStatus, UndefinedBehaviorKind, VerificationEvent, VerificationEventKind,
+    VerificationWriteKind,
 };
-use runen_reference::{UndefinedBehaviorKind, VerificationWriteKind};
 
 fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
     Body {

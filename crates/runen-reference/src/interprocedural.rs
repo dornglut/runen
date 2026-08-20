@@ -1,8 +1,7 @@
-use runen_core_ir::interprocedural::Terminator;
-use runen_core_ir::interprocedural_validation::ValidatedProgram;
 use runen_core_ir::{
     BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, Operand, Place, PlaceAccess, Projection,
-    ScalarType, Statement, StorageInstanceId, StorageRegion, TypeId, TypeKind, TypeTable, Value,
+    ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable,
+    ValidatedProgram, Value,
 };
 
 use crate::{RawPointerValue, UndefinedBehaviorKind, VerificationWriteKind};

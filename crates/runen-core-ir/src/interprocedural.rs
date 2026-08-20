@@ -1,8 +1,4 @@
-//! Staged program-level Core MIR used while migrating the one-body proving kernel.
-//!
-//! This module is intentionally temporary on the feature branch. Its types become
-//! the crate's canonical body/function/program representation when the legacy
-//! one-body API is removed before acceptance.
+//! Canonical program-level Core MIR for the currently represented proving subset.
 
 use crate::{
     BasicBlockId, Fault, FunctionId, LoanDecl, LocalDecl, LocalId, Operand, Place, Statement,
@@ -23,7 +19,7 @@ pub enum Terminator {
     Fault(Fault),
 }
 
-/// Basic block in staged program-level Core MIR.
+/// Basic block in program-level Core MIR.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BasicBlock {
     pub statements: Vec<Statement>,

@@ -24,7 +24,7 @@ No existing Core, Exec, reference, or backend/proving package depends on `runen-
 
 ### `crates/runen-core-ir`
 
-Owns semantic data structures for the currently implemented Core subset and MIR validation for the structural and language-validity rules expressible by that subset.
+Owns the canonical finite program/function/body semantic data model for the currently implemented Core subset and program-level MIR validation for the structural and language-validity rules expressible by that subset. There is no separate production one-body Core model or validation API.
 
 MIR validation is a language-validation concern. It is not the environment-admission phase defined by `spec/language/lifecycle.md`.
 
@@ -44,7 +44,7 @@ Future cross-stratum verification may compose independent proving packages only 
 
 ### `crates/runen-reference`
 
-Owns executable reference semantics for validated Core MIR represented by `runen-core-ir`. Invalid MIR is rejected before this boundary.
+Owns the single executable reference semantics for validated Core programs represented by `runen-core-ir`, including dynamic function activations for the currently represented direct-call relation. Invalid Core programs are rejected before this boundary; the package does not maintain an alternate Core semantic data model or validator.
 
 It may depend on `runen-core-ir`.
 

@@ -1,10 +1,7 @@
-use runen_core_ir::interprocedural::{BasicBlock, Body, Function, Program, Terminator};
-use runen_core_ir::interprocedural_validation::{
-    MirLocation, MirValidationErrorKind, validate_program,
-};
 use runen_core_ir::{
-    BasicBlockId, FunctionId, LocalDecl, LocalId, Operand, Place, ScalarType, Statement, TypeDef,
-    TypeTable, Value,
+    BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, MirLocation,
+    MirValidationErrorKind, Operand, Place, Program, ScalarType, Statement, Terminator, TypeDef,
+    TypeTable, Value, validate_program,
 };
 
 fn scalar_program_types() -> (TypeTable, runen_core_ir::TypeId) {

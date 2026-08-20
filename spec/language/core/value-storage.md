@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, assignment, destruction domains, and cleanup.
 
-The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md).
+The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md).
 
 ## Terms
 
@@ -66,7 +66,7 @@ Interior mutability is storage/type capability, not alias authority. It does not
 
 The storage extent of a place is the interval of execution during which that storage exists and may potentially hold a value.
 
-For the Core MIR defined by this revision, every dynamic local storage root exists from function-body entry through that local's termination cleanup. Structural sub-place storage exists within the storage extent of its containing local.
+For represented Core functions, each dynamic local storage root exists from creation of its containing function activation through that local's termination cleanup. Structural sub-place storage exists within the storage extent of its containing local. Activation creation itself is owned by [Core functions and direct calls](functions.md).
 
 Storage extent is independent of initialization state. Never-initialized, Live, and Dead storage all continue to exist until their storage extent ends.
 
@@ -80,7 +80,7 @@ Every dynamic local storage extent has one semantic **storage-instance identity*
 
 Distinct simultaneously existing local storage extents have distinct storage-instance identities.
 
-For the current one-body proving machine, one dynamic local storage instance is created for each local declaration when execution begins. The static `LocalId` identifies the declaration; the dynamic storage-instance identity identifies that execution's storage extent. They are different semantic concepts even when a reference implementation allocates deterministic verification tokens in local-declaration order.
+Whenever a Core function activation is created, one fresh dynamic local storage instance is created for each local declaration in that activation's body. Repeated or recursive activations of the same function therefore create new storage instances for the same static local declarations. The static `LocalId` identifies a declaration within one function body; the dynamic storage-instance identity identifies one particular activation's storage extent. They are different semantic concepts even when a reference implementation allocates deterministic verification tokens in local-declaration order.
 
 The storage-instance identity remains stable while the storage extent continues. In particular, none of the following creates a new storage instance:
 
@@ -94,7 +94,7 @@ Those operations affect stored-value lifetimes and initialization state, not sto
 
 The current reference oracle may represent storage-instance identity using an opaque deterministic integer so tests can distinguish and compare instances. That numeric representation is verification-only. It is not Runen-observable, not a physical address, not an ABI promise, and not permission to access storage.
 
-When a local's storage extent ends after cleanup, that dynamic storage instance ends. This revision does not define identity reuse by later call activations, allocations, or other future storage owners; their owning semantics must create distinct dynamic identities rather than treating `LocalId` as globally unique storage identity.
+When a local's storage extent ends after cleanup, that dynamic storage instance ends. A later function activation creates a fresh dynamic storage instance rather than reviving the ended instance, even when it executes the same static local declaration. Storage owners outside represented Core function activations must likewise define their own dynamic identities rather than treating `LocalId` as globally unique storage identity.
 
 A static place resolved during execution therefore denotes a **structural storage region** within the current dynamic local storage instance: the root storage-instance identity plus the place's structural projection path. The projection path is structural semantics, not a byte offset or layout guarantee.
 
@@ -302,7 +302,7 @@ For a cyclic execution that diverges, no termination cleanup occurs merely becau
 
 ## Determinism
 
-For a fixed typed body using only the semantics defined here, state transitions, dynamic local storage-instance creation, stored-value lifetime transitions, interior-mutability capability, destruction domains, and destruction order are deterministic.
+For a fixed validated Core program using only the semantics defined here, state transitions, dynamic local storage-instance creation, stored-value lifetime transitions, interior-mutability capability, destruction domains, and destruction order are deterministic.
 
 The actual verification token chosen to represent a storage-instance identity is not program-observable. Semantics depend on instance distinction and stability, not on a particular integer assignment.
 

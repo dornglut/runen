@@ -7,10 +7,10 @@
 mod common;
 pub use common::*;
 
-pub mod interprocedural;
+mod interprocedural;
 pub use interprocedural::{BasicBlock, Body, Function, Program, Terminator};
 
-pub mod interprocedural_validation;
+mod interprocedural_validation;
 pub use interprocedural_validation::{
     MirLocation, MirPoint, MirValidationError, MirValidationErrorKind, ValidatedProgram,
     validate_program,
