@@ -1,12 +1,17 @@
 #![forbid(unsafe_code)]
-//! Typed semantic data structures for the Runen Core proving kernel.
+//! Typed semantic data structures and validation for the Runen Core proving kernel.
 //!
-//! The accepted feature branch is migrating the former one-body model to a
-//! program-level interprocedural Core relation. `model` preserves the proven
-//! one-body implementation only while that migration remains in draft.
+//! This crate deliberately contains no interpreter, backend, platform model,
+//! or source-syntax concerns.
 
-mod model;
-pub use model::*;
+mod common;
+pub use common::*;
 
 pub mod interprocedural;
+pub use interprocedural::{BasicBlock, Body, Function, Program, Terminator};
+
 pub mod interprocedural_validation;
+pub use interprocedural_validation::{
+    MirLocation, MirPoint, MirValidationError, MirValidationErrorKind, ValidatedProgram,
+    validate_program,
+};
