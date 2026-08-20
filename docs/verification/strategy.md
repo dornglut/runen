@@ -35,7 +35,7 @@ Before acceptance, reconcile any directly affected:
 
 Do not broaden review into an unrestricted whole-specification audit merely because other documents mention the same terminology. Broaden further when the bounded review exposes a concrete dependency, ownership conflict, cross-stratum consequence, or phase-boundary question.
 
-A blocking contradiction, stale ownership statement, or stale open-item boundary is part of the current acceptance problem when leaving it unchanged would make acceptance untruthful. It must not be deferred merely to keep the original file scope unchanged.
+Semantic assurance is not established while a blocking contradiction, stale ownership statement, or stale open-item boundary that would make acceptance untruthful remains unresolved.
 
 ### Risk-scaled assurance
 
@@ -55,7 +55,7 @@ No fixed file count, document count, pull-request rate, or proof technology subs
 
 The semantic assurance verdict applies to one exact feature head.
 
-The pull-request record must identify that reviewed revision and record enough evidence to establish:
+Exact-head semantic assurance evidence should identify the reviewed revision and enough information to establish:
 
 - the owning issue;
 - acceptance-criterion completeness;
@@ -63,9 +63,9 @@ The pull-request record must identify that reviewed revision and record enough e
 - material semantic findings and their disposition; and
 - the final semantic-consistency verdict.
 
-A material change to the reviewed head makes the previous verdict stale for acceptance and requires renewed review of the corrected head.
+The verdict establishes assurance only for the reviewed revision; it does not establish assurance for a materially changed head.
 
-The pull-request record is assurance evidence, not normative authority. Do not copy exact-head review state into a second durable ledger or generated specification database.
+The review evidence is assurance evidence, not normative authority. Do not copy exact-head review state into a second durable ledger or generated specification database.
 
 ## Evidence classes
 
