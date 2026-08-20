@@ -1,15 +1,26 @@
 mod support {
     pub use ::runen_core_ir::{
-        BasicBlockId, BorrowKind, Fault, Field, FunctionId, LoanDecl, LoanId, LocalDecl, LocalId,
-        MirLocation, MirPoint, MirValidationError, MirValidationErrorKind, Operand, Place,
-        PlaceAccess, Projection, ScalarType, Statement, StorageInstanceId, StorageRegion, TypeDef,
-        TypeId, TypeKind, TypeTable, Value,
+        BasicBlockId, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
+        MirValidationErrorKind, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
+        TypeDef, TypeId, TypeTable, Value,
     };
 
     use ::runen_core_ir::{
-        BasicBlock as ProgramBlock, Body as ProgramBody, Function, Program,
-        Terminator as ProgramTerminator, ValidatedProgram, validate_program,
+        BasicBlock as ProgramBlock, Body as ProgramBody, Function, MirLocation, Program,
+        Terminator as ProgramTerminator, validate_program,
     };
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct MirPoint {
+        pub block: BasicBlockId,
+        pub statement: Option<usize>,
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub struct MirValidationError {
+        pub point: Option<MirPoint>,
+        pub kind: MirValidationErrorKind,
+    }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Terminator {
@@ -46,7 +57,6 @@ mod support {
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct ValidatedBody {
         body: Body,
-        program: ValidatedProgram,
     }
 
     impl ValidatedBody {
@@ -54,16 +64,25 @@ mod support {
         pub fn as_body(&self) -> &Body {
             &self.body
         }
-
-        #[must_use]
-        pub fn as_program(&self) -> &ValidatedProgram {
-            &self.program
-        }
     }
 
     pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
-        let program = validate_program(to_program(&body))?;
-        Ok(ValidatedBody { body, program })
+        validate_program(to_program(&body)).map_err(adapt_error)?;
+        Ok(ValidatedBody { body })
+    }
+
+    fn adapt_error(error: ::runen_core_ir::MirValidationError) -> MirValidationError {
+        let point = match error.location {
+            MirLocation::Point(point) => Some(MirPoint {
+                block: point.block,
+                statement: point.statement,
+            }),
+            MirLocation::Program | MirLocation::Function(_) => None,
+        };
+        MirValidationError {
+            point,
+            kind: error.kind,
+        }
     }
 
     fn to_program(body: &Body) -> Program {
