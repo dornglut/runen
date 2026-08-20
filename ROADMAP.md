@@ -4,7 +4,7 @@ This document owns project sequencing and specification-closure planning. It is 
 
 ## Current baseline
 
-The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety and P0-B Exec resources/concurrency foundations are closed; P0-C is the next sequencing frontier.
+The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety, P0-B Exec resources/concurrency, and P0-C numeric foundations are closed; P0-D is the next sequencing frontier.
 
 ## P0-A — Value, memory, and safety
 
@@ -43,6 +43,10 @@ The represented P0-B mapping surface does not expose bytes or raw physical addre
 **Depends on:** the realization semantics needed to state heterogeneous guarantees.
 
 Close integer overflow and the `standard`, `reproducible`, and `fast` numeric contracts, including contraction, NaNs, subnormals, transcendental guarantees, conversions, reductions, and emulation/rejection behavior.
+
+The represented numeric foundation closes the P0-C obligations required by the current gate: fixed-width integer overflow outcomes and modes; `standard`, `reproducible`, and `fast` contract authority, defaulting, refinement, and named relaxations; binary floating rounding, special values, basic arithmetic, and conversions; correctly rounded sine as the represented transcendental baseline; same-format unordered floating sums including special-value participation and bounded `fast` tree/permutation freedom; realization-neutral preservation of the selected contract through direct realization, emulation, or admission/rejection where applicable; and executable/reference evidence for rounding, conversions, reductions, and the independent sine corpus.
+
+This closure applies only to operations and relations that the accepted numeric specification currently represents. It does not define source contract-selection syntax or scoping, a concrete source floating-type inventory, broader transcendental families, sine-specific `fast` approximation latitude, NaN representation identity or canonicalization, vector forms, const evaluation, ABI/layout behavior, physical range-reduction or instruction algorithms, backend target taxonomy, or integrated CPU/GPU implementation equivalence. Source-language consumers belong to P0-D, while integrated source/lowering/backend proving remains a P0-F obligation.
 
 **Gate:** legal transformations and cross-realization results follow from source numeric contracts rather than backend defaults.
 
