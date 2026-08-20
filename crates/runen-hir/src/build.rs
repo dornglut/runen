@@ -817,16 +817,14 @@ fn validate_call(
 
     let mut arguments = Vec::with_capacity(argument_nodes.len());
     for (argument_node, parameter) in argument_nodes.into_iter().zip(&target.parameters) {
-        let Some(argument) = validate_value(
+        let argument = validate_value(
             header,
             &argument_node,
             modules,
             headers,
             bindings,
             diagnostics,
-        ) else {
-            return None;
-        };
+        )?;
         if argument.ty != parameter.ty {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::TypeMismatch {
