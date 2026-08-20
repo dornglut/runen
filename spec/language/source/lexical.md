@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the source-text and identifier lexical foundation for Runen. It does not define concrete grammar, name resolution, literal value semantics, or an implementation representation.
+This document owns the source-text, whitespace/line-boundary, identifier-form, and lexical identifier-key foundation for Runen. The represented concrete reserved keys, punctuation, ordinary comments, and grammar are owned by [Source concrete syntax](concrete-syntax.md). Name resolution, literal value semantics, and implementation representation remain outside this owner.
 
 ## Source text
 
@@ -61,22 +61,26 @@ An implementation MAY retain the original source spelling for diagnostics, forma
 
 Deriving an identifier key does not silently delete or ignore Default_Ignorable_Code_Point characters. Only the NFC normalization relation established above determines canonical equivalence in this slice.
 
-This document does not define declarations, scopes, namespaces, shadowing, modules, imports, lookup, or name resolution. Those later rules consume lexical identifier keys rather than redefining identifier equivalence.
+This document does not define declarations, scopes, namespaces, shadowing, modules, imports, lookup, or name resolution. Those rules consume lexical identifier keys rather than redefining identifier equivalence.
 
-## Keyword boundary
+## Reserved-key boundary
 
-This revision does not reserve a language-wide keyword inventory.
+This lexical foundation does not reserve a language-wide keyword inventory.
 
-The lexical foundation recognizes identifier-form tokens and their identifier keys. A later concrete grammar may assign special grammatical meaning to specified identifier keys in specified grammatical positions. Whether such a spelling is unavailable as a declaration name, contextual, or escapable is not defined by this revision.
+[Source concrete syntax](concrete-syntax.md) assigns grammatical meaning to, and reserves, the finite set of lexical identifier keys required by its represented concrete subset. That reservation consumes the lexical identifier keys defined here rather than creating a second identifier-equivalence relation.
 
-## Comment, punctuation, and literal boundary
+Identifier keys not reserved by an applicable concrete grammar remain ordinary identifier keys under this document. Whether a future grammar reserves, contextually interprets, or permits escaping another key is not determined here.
 
-This revision does not define:
+## Concrete-token and literal boundary
 
-- comment or documentation-comment delimiters;
-- punctuation or operator token spellings;
+[Source concrete syntax](concrete-syntax.md) owns the currently represented ordinary comment delimiters, punctuation tokens, reserved-key roles, and concrete grammar.
+
+This lexical foundation does not define:
+
+- documentation-comment semantics;
 - numeric, string, byte, or character literal token forms;
 - escape syntax or literal suffixes;
-- literal value semantics.
+- literal value semantics;
+- additional punctuation or operator token spellings.
 
-Those concerns require later concrete lexical or grammar rules and their applicable semantic owners.
+Those concerns require their applicable semantic and concrete-syntax owners when accepted.
