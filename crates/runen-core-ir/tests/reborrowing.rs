@@ -2,8 +2,8 @@ mod support;
 
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, Projection, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, Projection, ScalarType,
+    Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 use support::one_function_program;
 

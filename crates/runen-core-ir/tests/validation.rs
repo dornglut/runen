@@ -208,7 +208,8 @@ fn copy_of_noncopy_type_is_rejected_by_validation() {
         }],
     );
 
-    let error = validate_program(body).expect_err("non-copy Copy must be rejected by MIR validation");
+    let error =
+        validate_program(body).expect_err("non-copy Copy must be rejected by MIR validation");
     assert_eq!(error.kind, MirValidationErrorKind::CopyOfNonCopy(tracked));
 }
 
@@ -319,7 +320,8 @@ fn drop_without_live_subobject_is_rejected_by_validation() {
         }],
     );
 
-    let error = validate_program(body).expect_err("drop of never-initialized storage is invalid MIR");
+    let error =
+        validate_program(body).expect_err("drop of never-initialized storage is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::DropOfUninitialized(place)

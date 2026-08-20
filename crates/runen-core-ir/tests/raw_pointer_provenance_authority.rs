@@ -202,7 +202,8 @@ fn address_formation_through_exclusive_loan_does_not_require_live_pointee() {
         ],
     );
 
-    validate_program(body).expect("loan authority may still name Dead storage for address formation");
+    validate_program(body)
+        .expect("loan authority may still name Dead storage for address formation");
 }
 
 #[test]

@@ -246,7 +246,8 @@ fn shared_loan_can_supply_raw_move_pointer_value() {
         ],
     );
 
-    validate_program(body).expect("shared authority may obtain the stored pointer value for RawMove");
+    validate_program(body)
+        .expect("shared authority may obtain the stored pointer value for RawMove");
 }
 
 #[test]
@@ -523,7 +524,8 @@ fn raw_move_target_loan_conflict_is_not_a_validation_error() {
         ],
     );
 
-    validate_program(body).expect("raw target loan conflict is UB, not a MIR validation diagnostic");
+    validate_program(body)
+        .expect("raw target loan conflict is UB, not a MIR validation diagnostic");
 }
 
 #[test]
@@ -551,7 +553,8 @@ fn statically_evident_raw_read_ub_has_no_path_state_continuation() {
         ],
     );
 
-    validate_program(body).expect("statically evident RawRead UB has no defined path-state successor");
+    validate_program(body)
+        .expect("statically evident RawRead UB has no defined path-state successor");
 }
 
 #[test]
@@ -636,7 +639,8 @@ fn whole_aggregate_raw_move_marks_every_target_leaf_dead() {
         ],
     );
 
-    let error = validate_program(body).expect_err("whole RawMove must leave every target leaf Dead");
+    let error =
+        validate_program(body).expect_err("whole RawMove must leave every target leaf Dead");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(target.field(1))

@@ -2,8 +2,8 @@ mod support;
 
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, Projection, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, Projection, ScalarType,
+    Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 use support::one_function_program;
 
@@ -40,7 +40,10 @@ fn raw_pointer_pointee_recursion_is_not_structural_recursion() {
         )),
         node
     );
-    assert_eq!(types.push(TypeDef::raw_pointer("NodePtr", node)), node_pointer);
+    assert_eq!(
+        types.push(TypeDef::raw_pointer("NodePtr", node)),
+        node_pointer
+    );
 
     validate_program(one_block(types, Vec::new(), Vec::new(), Vec::new()))
         .expect("raw-pointer indirection may close an otherwise finite recursive shape");
@@ -160,7 +163,8 @@ fn address_of_dead_storage_is_valid_while_storage_extent_continues() {
         ],
     );
 
-    validate_program(body).expect("ending a stored-value lifetime does not end local storage extent");
+    validate_program(body)
+        .expect("ending a stored-value lifetime does not end local storage extent");
 }
 
 #[test]

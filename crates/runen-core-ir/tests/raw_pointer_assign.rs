@@ -175,7 +175,8 @@ fn exclusive_loan_over_pointer_storage_blocks_raw_assign_at_validation() {
         ],
     );
 
-    let error = validate_program(body).expect_err("exclusive pointer-storage loan blocks RawAssign");
+    let error =
+        validate_program(body).expect_err("exclusive pointer-storage loan blocks RawAssign");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::DirectAccessConflict {

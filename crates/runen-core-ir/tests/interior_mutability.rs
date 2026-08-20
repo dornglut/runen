@@ -164,7 +164,8 @@ fn shared_loan_can_interior_assign_without_gaining_exclusive_authority() {
         ],
     );
 
-    validate_program(body).expect("shared alias authority is sufficient for marked interior storage");
+    validate_program(body)
+        .expect("shared alias authority is sufficient for marked interior storage");
 }
 
 #[test]
@@ -469,5 +470,6 @@ fn disjoint_exclusive_child_does_not_block_parent_interior_assignment_on_sibling
         ],
     );
 
-    validate_program(body).expect("disjoint delegation does not constrain sibling shared authority");
+    validate_program(body)
+        .expect("disjoint delegation does not constrain sibling shared authority");
 }
