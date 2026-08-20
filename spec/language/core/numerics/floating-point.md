@@ -315,7 +315,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, literals, transcendental accuracy, reduced precision, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, literals, transcendental accuracy except where another section explicitly defines it, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -389,7 +389,30 @@ At `|x| = H`, the infinity side is the ties-to-even choice. The maximum finite c
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` upper-bound rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. Backend finite-only, saturation, overflow-mode, or fast-math behavior supplies no such relaxation by itself.
 
-This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, literals, or transcendental accuracy.
+This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, literals, or transcendental accuracy except where another section explicitly defines it.
+
+## Correctly rounded sine baseline
+
+For an already-admitted unary sine operation, suppose another applicable contract has already established the semantic floating operand value and an already-established binary floating result type `T` governed by this document. This section defines only the numerical result relation after those facts are established; it does not define operand typing, overload resolution, promotions, source spelling, or result-type selection.
+
+Under `standard`, signed-zero and special-value inputs produce:
+
+- input `+0` produces result `+0` of `T`;
+- input `-0` produces result `-0` of `T`;
+- input `+∞` or `-∞` produces a result belonging to `T`'s NaN value class;
+- any NaN input produces a result belonging to `T`'s NaN value class.
+
+For a nonzero finite input, interpret the input by the exact real value `x` supplied by its semantic floating format and define the exact real reference result `y = sin(x)`. A nonzero finite binary floating input is a nonzero dyadic rational; because the only real zeros of sine are integer multiples of irrational `π`, `y` is nonzero. Mathematical sine is finite, so the operation explicitly supplies this one nonzero exact finite real quantity `y` to the binary floating rounding relation for `T` exactly once.
+
+The accepted rounding relation therefore determines the `standard` result across interior, signed-zero, and upper-format boundaries. Although mathematical sine lies in `[-1, 1]`, this rule does not assume that every possible Runen binary floating result format can represent `+1` or `-1`; the accepted upper-bound rounding rule remains authoritative when needed.
+
+The NaN outcomes above define only result-class membership. They do not select or propagate a NaN member, assign sign, payload, quiet/signaling state, canonical identity, or representation, and they do not alter the existing open NaN member-selection obligation.
+
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` sine result unless a later sine-specific rule explicitly narrows or relaxes the named numerical behavior. This slice grants no sine-specific approximation, subnormal input or result flushing, reduced precision, range-reduction latitude, reassociation, contraction, or other fast-math permission. Existing `fast` rules for basic `+`, `-`, `*`, `/`, finite multiply-add contraction, and unordered-sum trees do not automatically apply to sine.
+
+A realization MAY use a native or library sine implementation only when it proves that the produced semantic result satisfies this contract, and MAY emulate when needed to preserve the selected contract. Backend approximate-function flags, shader accuracy latitude, host math-library behavior, target-native range reduction, or aggregate fast-math modes are not semantic authority and do not widen the permitted result.
+
+This section does not define cosine, exponential, logarithmic, power, or another transcendental operation; a sine-specific `fast` approximation contract; source function syntax or library placement; vector forms; constant evaluation; a physical range-reduction algorithm; compiler IR; backend instructions; or target taxonomy.
 
 ## Finite unordered floating sum reduction
 
@@ -517,4 +540,4 @@ This `fast` reassociation permission does not by itself authorize operand permut
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. The separate fast tree-rounded sum rule above owns the specific tree/permutation latitude it grants. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, submitted-NaN and other reduction-specific numeric behavior outside the same-format unordered sum and explicit fast tree-rounded rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior outside the correctly rounded sine baseline above, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, submitted-NaN and other reduction-specific numeric behavior outside the same-format unordered sum and explicit fast tree-rounded rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
