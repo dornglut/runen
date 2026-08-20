@@ -10,7 +10,17 @@ Owns implementation-only decoding, lexical tokenization, lossless concrete synta
 
 It consumes accepted source-text and concrete-grammar authority from `spec/language/source/` but owns no normative language semantics. In particular, it does not own module/name resolution, source type checking, callable or binding identity, ownership/availability validation, Typed HIR, Core MIR lowering, runtime behavior, or backend behavior.
 
-The crate has no dependency on another Runen package in the currently accepted architecture. Existing semantic and proving packages MUST NOT depend on `runen-syntax` merely because source text can eventually lower into their representations; that edge requires an accepted consumer boundary.
+The crate has no dependency on another Runen package in the currently accepted architecture.
+
+### `crates/runen-hir`
+
+Owns implementation-only resolved and type-checked source structure for the currently represented concrete Runen source subset.
+
+It consumes accepted source semantics from `spec/language/source/` and lossless concrete structure from `runen-syntax`, but owns no normative language semantics. It represents source-compilation module assignments, resolved record/function/binding identities, source types, callable/body structure, and the ownership/availability consequences required by the accepted subset before lower compiler forms erase source structure.
+
+It may depend on `runen-syntax`. It MUST NOT infer module identity from filesystem/package conventions or source-unit order, and it MUST NOT own Core MIR lowering, Exec/Model IR, runtime execution, realization, or backend behavior.
+
+No existing Core, Exec, reference, or backend/proving package depends on `runen-hir` in the currently accepted architecture. Such a consumer edge requires its own accepted lowering/proving boundary.
 
 ### `crates/runen-core-ir`
 
@@ -53,6 +63,9 @@ Owns repository validation tooling and orchestration. It owns no Runen language 
 
 ```text
 runen-syntax
+      │
+      ▼
+ runen-hir
 
 runen-core-ir
       │
@@ -64,4 +77,4 @@ runen-exec-oracle
 repository tooling is orthogonal
 ```
 
-`runen-syntax` and `runen-exec-oracle` have no Runen-package dependency edge in the currently accepted repository architecture.
+`runen-hir` depends only on `runen-syntax` among Runen packages in the currently accepted source-frontend architecture. `runen-exec-oracle` remains independent of the source/HIR and Core/reference dependency chains.

@@ -2,6 +2,7 @@
 members = [
     "crates/runen-core-ir",
     "crates/runen-exec-oracle",
+    "crates/runen-hir",
     "crates/runen-numeric-oracle",
     "crates/runen-reference",
     "crates/runen-syntax",
