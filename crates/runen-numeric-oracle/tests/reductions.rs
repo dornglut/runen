@@ -363,13 +363,7 @@ fn nan_result_does_not_require_unneeded_finite_accumulator_capacity() {
     assert_eq!(
         reduce_sum(
             wide_format,
-            &[
-                large,
-                large,
-                large,
-                large,
-                BinaryValueFixture::NaNClass,
-            ],
+            &[large, large, large, large, BinaryValueFixture::NaNClass,],
         ),
         Ok(SumReductionResult::NaNClass)
     );
@@ -380,10 +374,7 @@ fn malformed_finite_fixture_is_rejected_even_when_nan_determines_result() {
     assert_eq!(
         reduce_sum(
             tiny_format(),
-            &[
-                BinaryValueFixture::NaNClass,
-                finite(Sign::Negative, 0, 0),
-            ],
+            &[BinaryValueFixture::NaNClass, finite(Sign::Negative, 0, 0),],
         ),
         Err(NumericOracleError::ZeroExactInput)
     );
