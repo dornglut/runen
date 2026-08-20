@@ -6,11 +6,11 @@ This document owns the represented intrinsic scalar source type identities, repr
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), and applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md). It does not redefine those owners.
 
-This document does not define concrete source spellings, literal typing, conversions, callable signatures, member lookup, or an implementation representation. Function-local binding mutability, availability, and ordinary owned-value use are owned by [Source function-local bindings](local-bindings.md).
+The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Function-local binding mutability, availability, and ordinary owned-value use are owned by [Source function-local bindings](local-bindings.md). This document does not define literal typing, conversions, member lookup, or an implementation representation.
 
 ## Intrinsic scalar source types
 
-The following labels are specification notation for intrinsic source type identities. They do not define source spellings, keywords, or ordinary module bindings.
+The following labels identify intrinsic source type identities. [Source concrete syntax](concrete-syntax.md) uses these exact labels as the concrete spellings for its represented intrinsic type forms; the semantic type identities and value domains remain owned here.
 
 - `Bool`;
 - signed fixed-width integer types `I8`, `I16`, `I32`, and `I64`;
@@ -73,6 +73,8 @@ That binding denotes one nominal record source type. The source type identity is
 
 The binding's module-private or exported accessibility is determined only by `names-modules.md`; this document does not redefine accessibility.
 
+The represented `record` form in `concrete-syntax.md` establishes one such declaration with module-private accessibility and maps its concrete field sequence to the structure defined below. Other future declaration forms may establish the same semantic declaration category only through their accepted mapping.
+
 A record declaration contains one finite ordered sequence of fields. The sequence MAY be empty.
 
 Each field has exactly:
@@ -107,7 +109,7 @@ The rule does not prohibit a later recursive nominal type when every recursive c
 
 Every source value type represented by this revision has one source-semantic **owned-value duplicability** classification: **duplicable** or **non-duplicable**.
 
-Duplicability means only that a later source operation may, when its own semantics explicitly use this capability, produce another owned value that preserves the source semantic value under the accepted value semantics of that type without consuming the source value.
+Duplicability means only that another accepted source operation may, when its own semantics explicitly use this capability, produce another owned value that preserves the source semantic value under the accepted value semantics of that type without consuming the source value.
 
 Duplicability does not define or require a source equality or comparison relation. It does not mean bitwise copying and does not imply shared storage identity, shared stored-value lifetime, aliasing, physical representation equality, ABI passing, or a particular realization strategy.
 
@@ -115,9 +117,11 @@ The represented intrinsic scalar source types are duplicable: `Bool`, every repr
 
 For floating values, duplication preserves the source semantic floating value governed by the applicable floating contracts. It does not define floating comparison equality and does not create additional NaN representation, payload, sign, or canonicalization guarantees beyond existing authority.
 
-Each nominal record declaration has one abstract source-semantic **duplicable selection**. Concrete syntax or a future trait mechanism that establishes this selection is not defined by this revision.
+Each nominal record declaration has one abstract source-semantic **duplicable selection**. A nominal record declaration may select duplicability only when every field source type is duplicable. A record declaration that does not select duplicability is non-duplicable even when every field source type is duplicable.
 
-A nominal record declaration may select duplicability only when every field source type is duplicable. A record declaration that does not select duplicability is non-duplicable even when every field source type is duplicable.
+The concrete record form in `concrete-syntax.md` makes no positive duplicable selection. A nominal record declaration introduced by that form is therefore non-duplicable under the no-selection rule above.
+
+This revision defines no concrete positive duplicability-selection syntax or trait mechanism.
 
 Distinct nominal record declarations make the selection independently. Equal field keys, field types, or structural order do not transfer the selection between nominal types, and the selection does not alter nominal type identity or field structure.
 
@@ -169,4 +173,6 @@ Proving-kernel copyability or interior-mutability metadata is not source-languag
 
 ## Further boundaries
 
-This revision does not define concrete type/declaration/local syntax, keywords, punctuation, comments, literals, patterns, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
+The concrete intrinsic and record forms represented by `concrete-syntax.md` do not define literals, patterns, record construction, member access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
+
+Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities and relations defined here.
