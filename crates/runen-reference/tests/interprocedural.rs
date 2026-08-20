@@ -154,45 +154,49 @@ fn result_is_preserved_across_callee_cleanup_and_caller_resumes_after_cleanup() 
 fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
     let (types, tracked) = tracked_types();
 
-    let make_function = |name: &str, fixture: u64, terminator: Terminator| -> Function {
+    let calling_function = |name: &str, fixture: u64, callee: FunctionId| -> Function {
         Function {
             name: name.into(),
             parameters: Vec::new(),
             result: None,
             body: body(
                 vec![LocalDecl::new("owned", tracked, false)],
-                vec![BasicBlock::new(
-                    vec![Statement::Init {
-                        dst: Place::local(LocalId(0)),
-                        src: Operand::Constant(Value::TrackedFixture(fixture)),
-                    }],
-                    terminator,
-                )],
+                vec![
+                    BasicBlock::new(
+                        vec![Statement::Init {
+                            dst: Place::local(LocalId(0)),
+                            src: Operand::Constant(Value::TrackedFixture(fixture)),
+                        }],
+                        Terminator::Call {
+                            function: callee,
+                            arguments: Vec::new(),
+                            destination: None,
+                            target: BasicBlockId(1),
+                        },
+                    ),
+                    BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                ],
             ),
         }
     };
 
-    let outer = make_function(
-        "outer",
-        10,
-        Terminator::Call {
-            function: FunctionId(1),
-            arguments: Vec::new(),
-            destination: None,
-            target: BasicBlockId(0),
-        },
-    );
-    let middle = make_function(
-        "middle",
-        20,
-        Terminator::Call {
-            function: FunctionId(2),
-            arguments: Vec::new(),
-            destination: None,
-            target: BasicBlockId(0),
-        },
-    );
-    let inner = make_function("inner", 30, Terminator::Fault(Fault::new("boom")));
+    let outer = calling_function("outer", 10, FunctionId(1));
+    let middle = calling_function("middle", 20, FunctionId(2));
+    let inner = Function {
+        name: "inner".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("owned", tracked, false)],
+            vec![BasicBlock::new(
+                vec![Statement::Init {
+                    dst: Place::local(LocalId(0)),
+                    src: Operand::Constant(Value::TrackedFixture(30)),
+                }],
+                Terminator::Fault(Fault::new("boom")),
+            )],
+        ),
+    };
 
     let validated = validate_program(Program {
         types,
@@ -216,13 +220,80 @@ fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
         })
         .collect::<Vec<_>>();
     assert_eq!(drops, vec![(3, 30), (2, 20), (1, 10)]);
-    assert!(!report.verification_events.iter().any(|event| matches!(
-        event.kind,
-        VerificationEventKind::Write {
-            kind: VerificationWriteKind::Init,
-            ..
-        } if event.activation.0 == 1 || event.activation.0 == 2
-    )));
+}
+
+#[test]
+fn faulting_result_call_does_not_write_destination_or_follow_normal_continuation() {
+    let (types, tracked) = tracked_types();
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("result", tracked, false)],
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: Vec::new(),
+                        destination: Some(Place::local(LocalId(0))),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: Place::local(LocalId(0)).into(),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        ),
+    };
+    let callee = Function {
+        name: "faulting_result".into(),
+        parameters: Vec::new(),
+        result: Some(tracked),
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Fault(Fault::new("result-fault")),
+            )],
+        ),
+    };
+
+    let validated = validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect("result-bearing call with a faulting execution path is valid");
+    let report = Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect("defined fault is not UB");
+
+    assert_eq!(
+        report.terminal,
+        TerminalStatus::Faulted("result-fault".into())
+    );
+    assert!(!report.verification_events.iter().any(|event| {
+        event.activation.0 == 1
+            && matches!(
+                event.kind,
+                VerificationEventKind::Write {
+                    ref place,
+                    kind: VerificationWriteKind::Init,
+                } if *place == Place::local(LocalId(0))
+            )
+    }));
+    assert!(!report.verification_events.iter().any(|event| {
+        event.activation.0 == 1
+            && matches!(
+                event.kind,
+                VerificationEventKind::Read(ref place) if *place == Place::local(LocalId(0))
+            )
+    }));
 }
 
 #[test]
