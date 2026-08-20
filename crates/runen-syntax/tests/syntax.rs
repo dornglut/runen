@@ -1,6 +1,4 @@
-use runen_syntax::{
-    SourceInputError, SyntaxErrorKind, SyntaxKind, identifier_key, parse_source,
-};
+use runen_syntax::{SourceInputError, SyntaxErrorKind, SyntaxKind, identifier_key, parse_source};
 
 fn parse(text: &str) -> runen_syntax::Parse {
     parse_source(text.as_bytes()).expect("valid UTF-8 test source")
@@ -39,10 +37,12 @@ fn preserves_only_the_initial_bom_as_bom_trivia() {
     assert!(kinds.contains(&SyntaxKind::KwFn));
 
     let later_bom = parse("fn a() {}\u{feff}");
-    assert!(later_bom
-        .errors()
-        .iter()
-        .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken));
+    assert!(
+        later_bom
+            .errors()
+            .iter()
+            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
+    );
 }
 
 #[test]
@@ -76,17 +76,8 @@ fn derives_nfc_equivalent_identifier_keys() {
 #[test]
 fn pattern_whitespace_matches_the_pinned_profile() {
     for character in [
-        '\u{0009}',
-        '\u{000a}',
-        '\u{000b}',
-        '\u{000c}',
-        '\u{000d}',
-        '\u{0020}',
-        '\u{0085}',
-        '\u{200e}',
-        '\u{200f}',
-        '\u{2028}',
-        '\u{2029}',
+        '\u{0009}', '\u{000a}', '\u{000b}', '\u{000c}', '\u{000d}', '\u{0020}', '\u{0085}',
+        '\u{200e}', '\u{200f}', '\u{2028}', '\u{2029}',
     ] {
         let source = format!("fn{character}a() {{}}");
         let parsed = parse(&source);
@@ -98,10 +89,12 @@ fn pattern_whitespace_matches_the_pinned_profile() {
         let source = format!("fn{character}a() {{}}");
         let parsed = parse(&source);
         assert_eq!(parsed.text(), source);
-        assert!(parsed
-            .errors()
-            .iter()
-            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken));
+        assert!(
+            parsed
+                .errors()
+                .iter()
+                .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
+        );
     }
 }
 
@@ -110,28 +103,34 @@ fn handles_crlf_and_other_logical_line_comment_boundaries() {
     let source = "fn a() {//x\r\n//y\u{2028}return;\n}";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
-    assert!(!parsed
-        .errors()
-        .iter()
-        .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken));
+    assert!(
+        !parsed
+            .errors()
+            .iter()
+            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
+    );
 }
 
 #[test]
 fn handles_nested_and_unterminated_block_comments() {
     let nested = parse("/* outer /* inner */ done */ fn a() {}");
     assert_eq!(nested.text(), "/* outer /* inner */ done */ fn a() {}");
-    assert!(!nested
-        .errors()
-        .iter()
-        .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment));
+    assert!(
+        !nested
+            .errors()
+            .iter()
+            .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment)
+    );
 
     let source = "fn a() { /* never closes";
     let unterminated = parse(source);
     assert_eq!(unterminated.text(), source);
-    assert!(unterminated
-        .errors()
-        .iter()
-        .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment));
+    assert!(
+        unterminated
+            .errors()
+            .iter()
+            .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment)
+    );
 }
 
 #[test]
@@ -139,10 +138,12 @@ fn unsupported_concrete_text_is_retained_as_error_tokens() {
     let source = "fn a() { let x: I64 = 42; + . }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
-    assert!(parsed
-        .errors()
-        .iter()
-        .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
+    );
 }
 
 #[test]

@@ -23,8 +23,7 @@ fn parses_nested_direct_call_values_with_trailing_commas() {
 
 #[test]
 fn missing_initializer_value_preserves_the_following_statement() {
-    let source =
-        "fn broken(value: I64) { let missing: I64 = let kept: I64 = value; sink(kept); }";
+    let source = "fn broken(value: I64) { let missing: I64 = let kept: I64 = value; sink(kept); }";
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
@@ -53,12 +52,18 @@ fn bare_return_with_missing_semicolon_does_not_invent_a_required_value() {
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Semicolon)
-    }));
-    assert!(!parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Semicolon) })
+    );
+    assert!(
+        !parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value) })
+    );
 }
 
 #[test]

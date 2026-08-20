@@ -1,6 +1,8 @@
 use rowan::{GreenNode, GreenNodeBuilder};
 
-use crate::{ExpectedSyntax, SyntaxError, SyntaxErrorKind, SyntaxKind, lexer::LexToken, text_range};
+use crate::{
+    ExpectedSyntax, SyntaxError, SyntaxErrorKind, SyntaxKind, lexer::LexToken, text_range,
+};
 
 pub(crate) fn parse(source: &str, tokens: Vec<LexToken>) -> (GreenNode, Vec<SyntaxError>) {
     let mut parser = Parser {
