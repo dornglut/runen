@@ -6,7 +6,7 @@ This document owns the represented intrinsic scalar source type identities, repr
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), and applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md). It does not redefine those owners.
 
-This document does not define concrete source spellings, literal typing, conversions, callable signatures, local bindings, member lookup, or an implementation representation.
+This document does not define concrete source spellings, literal typing, conversions, callable signatures, member lookup, or an implementation representation. Function-local binding mutability, availability, and ordinary owned-value use are owned by [Source function-local bindings](local-bindings.md).
 
 ## Intrinsic scalar source types
 
@@ -127,7 +127,7 @@ The nominal selection is a conservative source ownership-policy choice. Structur
 
 **Non-duplicable** means only that the non-consuming owned-value duplication capability defined here is unavailable. It does not prohibit a future explicit cloning, copy-construction, conversion, factory, deserialization, or other operation from producing another value under that operation's independently accepted semantics.
 
-This section does not define which expression or name-use contexts request duplication, when a binding is consumed, reinitialization after consumption, partial moves, parameter passing, result transfer, calls, or any explicit cloning/copy-construction operation.
+Ordinary whole-binding owned use of this capability, including when a local use duplicates or consumes its binding, is owned by `local-bindings.md`. This section does not define other expression contexts, partial field moves, member access, parameter passing, result transfer, calls, or any explicit cloning/copy-construction operation.
 
 Duplicability is source semantics independent of any future `Copy`-like trait spelling. A later trait or generic mechanism may expose, derive, or constrain this capability only if its canonical semantics preserve the classification defined here; this revision introduces no trait membership.
 
@@ -153,14 +153,14 @@ This document does not define constants, statics, variables, type aliases, opaqu
 
 Those declarations require independently owned source semantics rather than being inferred from the current proving MIR.
 
-## Mutability and member boundary
+## Local-binding, mutability, and member boundary
+
+Function-local binding identity, assignment mutability, availability, lexical lookup, and ordinary whole-binding duplicate-or-consume behavior are owned by `local-bindings.md`; they are not source type properties.
 
 The represented source type identity, record shape, and owned-value duplicability classification do not determine:
 
-- when an expression duplicates or consumes an owned value;
-- move-only binding-use semantics;
-- assignment mutability;
 - interior mutability;
+- partial field move/member availability;
 - field accessibility or access syntax;
 - method, member, associated-item, trait, extension, or overload lookup;
 - custom destruction or destructor bodies.
@@ -169,4 +169,4 @@ Proving-kernel copyability or interior-mutability metadata is not source-languag
 
 ## Further boundaries
 
-This revision does not define concrete type/declaration syntax, keywords, punctuation, comments, literals, local bindings or scopes, patterns, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
+This revision does not define concrete type/declaration/local syntax, keywords, punctuation, comments, literals, patterns, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.

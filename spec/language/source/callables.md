@@ -6,7 +6,7 @@ This document owns the represented source function entity identity, callable-sig
 
 It consumes module binding identity and accessibility from [Source names and modules](names-modules.md) and represented source value type identity and equality from [Source type foundation](types.md). It does not redefine those owners.
 
-This document does not define concrete function syntax, function execution, calls, local parameter bindings, faults, effects, generics, ABI, or an implementation representation.
+This document does not define concrete function syntax, function execution, calls, faults, effects, generics, ABI, or an implementation representation. Function-local parameter binding identity, scope, mutability, availability, and ordinary owned use are owned by [Source function-local bindings](local-bindings.md).
 
 ## Source function entities
 
@@ -31,7 +31,7 @@ Every represented source function entity has exactly one **callable signature** 
 
 Each parameter slot contains exactly one represented source value type from `types.md`. The parameter sequence may be empty.
 
-Parameter slots have no lexical identifier key or source binding name under this signature contract. Parameter names, parameter bindings, and their local scope belong to a later function-definition/body owner.
+Parameter slots have no lexical identifier key or source binding name under this signature contract. When another accepted source rule establishes a function body, `local-bindings.md` owns the corresponding parameter binding keys, identities, scope, mutability, and availability. Those body-local facts do not become callable-signature dimensions.
 
 The ordered parameter sequence is semantic structure for later positional call validation. It does not define argument evaluation order, ownership transfer, register or stack order, ABI passing, storage layout, or another physical calling mechanism.
 
@@ -87,11 +87,11 @@ Their absence from this signature does not imply that future function bodies are
 
 This revision defines no function execution. In particular, it defines no:
 
-- function body;
+- function body execution;
 - call expression or call statement;
 - argument expressions or evaluation order;
-- parameter storage or local parameter bindings;
-- ownership transfer, copy, move, borrow, or pass-mode rule at calls;
+- call-time parameter value transfer;
+- ownership transfer, borrow, or pass-mode rule at calls;
 - result production or return control flow;
 - recursion or call-graph policy;
 - fault or panic propagation, catch, unwind, payload, or activation cleanup.
@@ -104,8 +104,8 @@ Before a complete source function-body/call execution relation is accepted, faul
 
 This revision does not add or require a parser, lossless-syntax representation, HIR, Core MIR production representation, runtime representation, or backend representation.
 
-Without accepted concrete function grammar, parameter bindings, expressions, bodies, and calls, such an implementation surface would still force unowned syntax, recovery, and execution decisions.
+Without accepted concrete function grammar, expressions, body execution, and calls, such an implementation surface would still force unowned syntax, recovery, and execution decisions.
 
 ## Further boundaries
 
-This revision does not define concrete function/parameter/result/call syntax, keywords, punctuation, comments, literals, local scopes, patterns, closures/captures, argument ownership/pass mode, source references/lifetimes, generics, traits/coherence, methods, overload sets, effect-system completion, async/tasks, ABI/calling conventions/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR lowering, or backend behavior.
+This revision does not define concrete function/parameter/result/call syntax, keywords, punctuation, comments, literals, patterns, closures/captures, call-time argument ownership/pass mode, source references/lifetimes, generics, traits/coherence, methods, overload sets, effect-system completion, async/tasks, ABI/calling conventions/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR lowering, or backend behavior.
