@@ -23,4 +23,4 @@ Run `cargo validate`, review the exact patch against its owning issue, and requi
 
 Normative semantic changes additionally require exact-head semantic assurance under [Verification Strategy](docs/verification/strategy.md). Before acceptance, that assurance must account for every owning-issue acceptance criterion, identify exact verification evidence where a criterion requires it, and establish that the changed semantics remain consistent with the accepted normative rules and ownership boundaries they directly affect.
 
-A material change to the semantically reviewed head makes that verdict stale and requires renewed exact-head semantic assurance before acceptance.
+The pull request must record the reviewed head and semantic-assurance verdict. A material change to the semantically reviewed head makes that verdict stale and requires renewed exact-head semantic assurance before acceptance.
