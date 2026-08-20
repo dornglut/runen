@@ -4,6 +4,14 @@ This document owns the structure and dependency boundaries of the Runen reposito
 
 ## Packages
 
+### `crates/runen-syntax`
+
+Owns implementation-only decoding, lexical tokenization, lossless concrete syntax trees, syntax diagnostics/recovery, and source ranges for the currently represented Runen source subset.
+
+It consumes accepted source-text and concrete-grammar authority from `spec/language/source/` but owns no normative language semantics. In particular, it does not own module/name resolution, source type checking, callable or binding identity, ownership/availability validation, Typed HIR, Core MIR lowering, runtime behavior, or backend behavior.
+
+The crate has no dependency on another Runen package in the currently accepted architecture. Existing semantic and proving packages MUST NOT depend on `runen-syntax` merely because source text can eventually lower into their representations; that edge requires an accepted consumer boundary.
+
 ### `crates/runen-core-ir`
 
 Owns semantic data structures for the currently implemented Core subset and MIR validation for the structural and language-validity rules expressible by that subset.
@@ -44,6 +52,8 @@ Owns repository validation tooling and orchestration. It owns no Runen language 
 ## Dependency direction
 
 ```text
+runen-syntax
+
 runen-core-ir
       │
       ▼
@@ -54,4 +64,4 @@ runen-exec-oracle
 repository tooling is orthogonal
 ```
 
-`runen-exec-oracle` has no package dependency edge in the currently accepted repository architecture.
+`runen-syntax` and `runen-exec-oracle` have no Runen-package dependency edge in the currently accepted repository architecture.
