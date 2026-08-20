@@ -287,7 +287,7 @@ Without contraction, evaluation remains the already-defined basic-operation sema
 
 Under `fast`, a realization MAY instead contract an eligible occurrence. Contracted evaluation computes the exact real quantity `(x * y) + z` as if with unbounded intermediate range and precision. No Runen rounding, overflow-result selection, underflow-result selection, or finite-format truncation occurs between multiplication and addition. The one exact result is then explicitly supplied as a nonzero exact finite real quantity to the binary floating rounding relation below for the established addition result type exactly once.
 
-Therefore an eligible `fast` occurrence explicitly permits either the ordinary uncontracted result or the contracted one-round result. Choosing whether to contract is permitted numerical variation under the `fast` contract`; backend behavior is not additional semantic input.
+Therefore an eligible `fast` occurrence explicitly permits either the ordinary uncontracted result or the contracted one-round result. Choosing whether to contract is permitted numerical variation under the `fast` contract; backend behavior is not additional semantic input.
 
 Eligibility and permission are occurrence-local. A realization that performs contraction before the operand values of affected dynamic evaluations are known MUST establish that every affected occurrence satisfies these eligibility conditions, or otherwise prove that the transformed realization preserves the applicable Runen semantics for ineligible occurrences. This rule does not make an ineligible occurrence eligible merely because it shares source, IR, or physical instruction structure with an eligible one.
 
