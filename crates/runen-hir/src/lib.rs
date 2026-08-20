@@ -18,11 +18,6 @@ impl ModuleId {
     pub const fn new(raw: u32) -> Self {
         Self(raw)
     }
-
-    #[must_use]
-    pub const fn raw(self) -> u32 {
-        self.0
-    }
 }
 
 /// One directly supplied syntax unit and its explicit module assignment.
