@@ -1,9 +1,8 @@
 mod core_support {
     pub use ::runen_core_ir::{
         BasicBlockId, BorrowKind, Fault, Field, FunctionId, LoanDecl, LoanId, LocalDecl, LocalId,
-        MirLocation, MirPoint, MirValidationError, MirValidationErrorKind, Operand, Place,
-        PlaceAccess, Projection, ScalarType, Statement, StorageInstanceId, StorageRegion, TypeDef,
-        TypeId, TypeKind, TypeTable, Value,
+        MirValidationError, MirValidationErrorKind, Operand, Place, PlaceAccess, Projection,
+        ScalarType, Statement, TypeDef, TypeId, TypeTable, Value,
     };
 
     use ::runen_core_ir::{
@@ -13,7 +12,6 @@ mod core_support {
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub enum Terminator {
-        Goto(BasicBlockId),
         Return,
         Fault(Fault),
     }
@@ -45,16 +43,10 @@ mod core_support {
 
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct ValidatedBody {
-        body: Body,
         program: ValidatedProgram,
     }
 
     impl ValidatedBody {
-        #[must_use]
-        pub fn as_body(&self) -> &Body {
-            &self.body
-        }
-
         #[must_use]
         pub fn into_program(self) -> ValidatedProgram {
             self.program
@@ -63,7 +55,7 @@ mod core_support {
 
     pub fn validate_body(body: Body) -> Result<ValidatedBody, MirValidationError> {
         let program = validate_program(to_program(&body))?;
-        Ok(ValidatedBody { body, program })
+        Ok(ValidatedBody { program })
     }
 
     fn to_program(body: &Body) -> Program {
@@ -83,7 +75,6 @@ mod core_support {
                         .map(|block| ProgramBlock {
                             statements: block.statements.clone(),
                             terminator: match &block.terminator {
-                                Terminator::Goto(target) => ProgramTerminator::Goto(*target),
                                 Terminator::Return => ProgramTerminator::Return(None),
                                 Terminator::Fault(fault) => ProgramTerminator::Fault(fault.clone()),
                             },
