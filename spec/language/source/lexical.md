@@ -6,6 +6,8 @@ This document owns the source-text and identifier lexical foundation for Runen. 
 
 ## Source text
 
+A **source unit** is one byte sequence presented for independent lexical processing. This term does not imply a file, module, package, or other source-organization relationship.
+
 A Runen source unit MUST be valid UTF-8. A byte sequence that is not valid UTF-8 is invalid Runen source; an implementation MUST NOT make it valid by implicitly inserting replacement characters.
 
 One U+FEFF BYTE ORDER MARK MAY occur at the beginning of a source unit. When present there, it is ignored before lexical processing. U+FEFF at any other position has no special byte-order-mark status under this rule.
@@ -43,7 +45,7 @@ An **identifier-form token** is a non-empty sequence of Unicode scalar values sa
 - its first scalar has the Unicode 17.0.0 `XID_Start` property or is U+005F LOW LINE (`_`);
 - every remaining scalar has the Unicode 17.0.0 `XID_Continue` property or is U+005F LOW LINE (`_`).
 
-Identifier-form tokens are case-sensitive. Differences in case are ordinary identifier differences unless the Unicode NFC relation below makes the complete spellings canonically equivalent.
+Identifier-form tokens are case-sensitive. Identifier keys are compared without case folding.
 
 Case alone does not imply visibility, declaration category, namespace, type/value status, or another semantic classification.
 
@@ -65,7 +67,7 @@ This document does not define declarations, scopes, namespaces, shadowing, modul
 
 This revision does not reserve a language-wide keyword inventory.
 
-The lexical foundation recognizes identifier-form tokens and their identifier keys. A later concrete grammar MAY assign special grammatical meaning to specified identifier keys in specified grammatical positions. Whether such a spelling is unavailable as a declaration name, contextual, or escapable is not defined by this revision.
+The lexical foundation recognizes identifier-form tokens and their identifier keys. A later concrete grammar may assign special grammatical meaning to specified identifier keys in specified grammatical positions. Whether such a spelling is unavailable as a declaration name, contextual, or escapable is not defined by this revision.
 
 ## Comment, punctuation, and literal boundary
 
