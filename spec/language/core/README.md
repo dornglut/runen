@@ -1,6 +1,7 @@
 # Core Semantics
 
 - [Value and storage](value-storage.md)
+- [Functions and direct calls](functions.md)
 - [Borrowing](borrowing.md)
 - [Pointers and provenance](pointers.md)
 - [Unsafe semantics](unsafe.md)
