@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented intrinsic scalar source type identities, represented source type equality, nominal record declaration/type identity, record field structure, and direct record-containment rule.
+This document owns the represented intrinsic scalar source type identities, represented source type equality, nominal record declaration/type identity, record field structure, direct record-containment rule, and represented owned-value duplicability classification.
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), and applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md). It does not redefine those owners.
 
@@ -103,6 +103,38 @@ This requirement applies because every represented field type in this revision i
 
 The rule does not prohibit a later recursive nominal type when every recursive cycle passes through an accepted source type whose canonical semantics establish indirection rather than direct structural containment. That later owner must define the applicable well-formedness relation explicitly.
 
+## Owned-value duplicability
+
+Every source value type represented by this revision has one source-semantic **owned-value duplicability** classification: **duplicable** or **non-duplicable**.
+
+Duplicability means only that a later source operation may, when its own semantics explicitly use this capability, produce another owned value that preserves the source semantic value under the accepted value semantics of that type without consuming the source value.
+
+Duplicability does not define or require a source equality or comparison relation. It does not mean bitwise copying and does not imply shared storage identity, shared stored-value lifetime, aliasing, physical representation equality, ABI passing, or a particular realization strategy.
+
+The represented intrinsic scalar source types are duplicable: `Bool`, every represented signed and unsigned fixed-width integer type, and `F16`, `F32`, and `F64`.
+
+For floating values, duplication preserves the source semantic floating value governed by the applicable floating contracts. It does not define floating comparison equality and does not create additional NaN representation, payload, sign, or canonicalization guarantees beyond existing authority.
+
+Each nominal record declaration has one abstract source-semantic **duplicable selection**. Concrete syntax or a future trait mechanism that establishes this selection is not defined by this revision.
+
+A nominal record declaration may select duplicability only when every field source type is duplicable. A record declaration that does not select duplicability is non-duplicable even when every field source type is duplicable.
+
+Distinct nominal record declarations make the selection independently. Equal field keys, field types, or structural order do not transfer the selection between nominal types, and the selection does not alter nominal type identity or field structure.
+
+Duplicating a value of a duplicable nominal record type produces another owned record value by preserving each field's source semantic value through that field type's accepted duplicability capability. The original record value is not consumed.
+
+The nominal selection is a conservative source ownership-policy choice. Structural field shape alone does not silently grant non-consuming duplication to a nominal type. This revision does not claim that represented records already model unique resources, capabilities, handles, or custom destruction.
+
+**Non-duplicable** means only that the non-consuming owned-value duplication capability defined here is unavailable. It does not prohibit a future explicit cloning, copy-construction, conversion, factory, deserialization, or other operation from producing another value under that operation's independently accepted semantics.
+
+This section does not define which expression or name-use contexts request duplication, when a binding is consumed, reinitialization after consumption, partial moves, parameter passing, result transfer, calls, or any explicit cloning/copy-construction operation.
+
+Duplicability is source semantics independent of any future `Copy`-like trait spelling. A later trait or generic mechanism may expose, derive, or constrain this capability only if its canonical semantics preserve the classification defined here; this revision introduces no trait membership.
+
+No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability rather than silently changing this property.
+
+This capability consumes the conceptual distinction between consuming ownership transfer and non-consuming duplication already present in Core semantics, but the current proving-MIR copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
+
 ## Literal and conversion boundary
 
 This document defines no source literal form or literal type.
@@ -115,18 +147,18 @@ Those omissions do not prohibit a later accepted source operation from defining 
 
 ## Callable and declaration boundary
 
-This revision introduces exactly one concrete module-binding entity category: a record-type binding.
+This document defines the represented nominal record-type declaration and binding only. Represented source function entities and callable signatures are owned by [Source callables](callables.md); they are not redefined here.
 
-It does not define function or callable declarations, parameter/result types, function values, calls, unit/no-result typing, constants, statics, variables, type aliases, opaque types, traits, or another module-level declaration category.
+This document does not define constants, statics, variables, type aliases, opaque types, traits, or another module-level declaration category beyond its record-type concern.
 
 Those declarations require independently owned source semantics rather than being inferred from the current proving MIR.
 
-## Copyability, mutability, and member boundary
+## Mutability and member boundary
 
-The represented source type identity and record shape do not determine:
+The represented source type identity, record shape, and owned-value duplicability classification do not determine:
 
-- source copyability or a `Copy`-like contract;
-- move-only classification;
+- when an expression duplicates or consumes an owned value;
+- move-only binding-use semantics;
 - assignment mutability;
 - interior mutability;
 - field accessibility or access syntax;
