@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, return, cleanup, divergence, fault, and straight-line execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, return, cleanup, divergence, fault, and straight-line execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -16,13 +16,9 @@ Pattern whitespace from `lexical.md` and ordinary comments defined below are **t
 
 The original spelling or extent of trivia MAY be preserved by source tooling. Such preservation does not make trivia program state or semantic identity.
 
-## Concrete token extent
+Identifier-form token extent is determined only by `lexical.md`. Reserved-key classification under this document occurs after the complete maximal identifier-form token and its lexical identifier key have been determined. A longer identifier-form token is never split merely because an initial substring would be a reserved key.
 
-When concrete tokenization begins an identifier-form token under `lexical.md`, that token consumes the **maximal contiguous sequence** of Unicode scalar values that satisfies the identifier-form-token rule from that starting position.
-
-Reserved-key classification is applied only after that complete identifier-form token and its lexical identifier key have been determined. Tokenization MUST NOT split a longer identifier-form token merely to produce a reserved key. For example, an otherwise valid identifier whose spelling begins with `fn` is not tokenized as the reserved key `fn` followed by another identifier.
-
-Outside trivia, every source scalar participating in this represented grammar MUST belong to either one maximal identifier-form token or one represented punctuation token below. The `//`, `/*`, and `*/` sequences participate only in the ordinary-comment rules below. Other non-trivia material is malformed source under this concrete subset.
+Outside trivia, every source scalar participating in this represented grammar MUST belong to either one identifier-form token under `lexical.md` or one represented punctuation token below. The `//`, `/*`, and `*/` sequences participate only in the ordinary-comment rules below. Other non-trivia material is malformed source under this concrete subset.
 
 ## Reserved identifier keys
 
