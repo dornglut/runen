@@ -12,9 +12,13 @@ pub use validation::{
     MirPoint, MirValidationError, MirValidationErrorKind, ValidatedBody, validate_body,
 };
 
-/// Stable-in-one-body identifier for a type definition.
+/// Stable-in-one-program identifier for a type definition.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypeId(pub u32);
+
+/// Stable-in-one-program identifier for a Core function entity.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FunctionId(pub u32);
 
 /// Stable-in-one-body identifier for a local storage declaration.
 ///
@@ -52,7 +56,17 @@ pub struct BasicBlockId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ScalarType {
     Bool,
+    I8,
+    I16,
+    I32,
     I64,
+    U8,
+    U16,
+    U32,
+    U64,
+    F16,
+    F32,
+    F64,
     /// Capability-neutral raw pointer to a pointee type.
     ///
     /// The current Core slice defines formation, ordinary value transport, one
@@ -135,7 +149,7 @@ pub enum TypeKind {
     Struct(Vec<Field>),
 }
 
-/// Type definitions referenced by a body.
+/// Type definitions shared by a represented Core program.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TypeTable {
     defs: Vec<TypeDef>,
@@ -181,10 +195,37 @@ impl TypeTable {
     pub fn is_copy(&self, ty: TypeId) -> bool {
         match self.get(ty).map(|def| &def.kind) {
             Some(TypeKind::Scalar(
-                ScalarType::Bool | ScalarType::I64 | ScalarType::RawPointer(_),
+                ScalarType::Bool
+                | ScalarType::I8
+                | ScalarType::I16
+                | ScalarType::I32
+                | ScalarType::I64
+                | ScalarType::U8
+                | ScalarType::U16
+                | ScalarType::U32
+                | ScalarType::U64
+                | ScalarType::F16
+                | ScalarType::F32
+                | ScalarType::F64
+                | ScalarType::RawPointer(_),
             )) => true,
             Some(TypeKind::Scalar(ScalarType::TrackedFixture)) | None => false,
             Some(TypeKind::Struct(fields)) => fields.iter().all(|field| self.is_copy(field.ty)),
+        }
+    }
+
+    /// Whether an owned value of this type may cross a represented function call.
+    ///
+    /// The first interprocedural Core relation excludes every value shape that
+    /// contains a raw-pointer leaf. This is independent of ordinary Core copyability.
+    #[must_use]
+    pub fn is_call_transfer_safe(&self, ty: TypeId) -> bool {
+        match self.get(ty).map(|def| &def.kind) {
+            Some(TypeKind::Scalar(ScalarType::RawPointer(_))) | None => false,
+            Some(TypeKind::Scalar(_)) => true,
+            Some(TypeKind::Struct(fields)) => fields
+                .iter()
+                .all(|field| self.is_call_transfer_safe(field.ty)),
         }
     }
 
@@ -506,6 +547,9 @@ impl BasicBlock {
 }
 
 /// One raw Core body before MIR validation.
+///
+/// `types` remains body-owned only during the feature branch's staged migration to
+/// the program-level validator. It is removed by the final clean cutover.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Body {
     pub types: TypeTable,
@@ -529,5 +573,35 @@ impl Body {
     #[must_use]
     pub fn block(&self, id: BasicBlockId) -> Option<&BasicBlock> {
         self.blocks.get(id.0 as usize)
+    }
+}
+
+/// One represented Core function entity.
+///
+/// Parameter-slot types are derived from the designated body locals in order; no
+/// second stored parameter-type vector exists.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Function {
+    pub name: String,
+    pub parameters: Vec<LocalId>,
+    pub result: Option<TypeId>,
+    pub body: Body,
+}
+
+/// One finite represented Core program.
+///
+/// During the staged branch migration, `types` is the target program-wide type
+/// authority while legacy bodies still carry their previous table. The final cutover
+/// removes those body copies before acceptance.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Program {
+    pub types: TypeTable,
+    pub functions: Vec<Function>,
+}
+
+impl Program {
+    #[must_use]
+    pub fn function(&self, id: FunctionId) -> Option<&Function> {
+        self.functions.get(id.0 as usize)
     }
 }
