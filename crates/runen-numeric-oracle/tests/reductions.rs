@@ -293,10 +293,23 @@ fn finite_only_broader_sum_delegates_to_accepted_finite_oracle() {
 }
 
 #[test]
-fn submitted_nan_remains_outside_broader_sum_slice() {
+fn submitted_nan_produces_nan_class_with_every_other_admitted_value_class() {
+    let finite_value = finite(Sign::Positive, 5, -2);
+
     assert_eq!(
         reduce_sum(tiny_format(), &[BinaryValueFixture::NaNClass]),
-        Err(NumericOracleError::NaNReductionInput)
+        Ok(SumReductionResult::NaNClass)
+    );
+    assert_eq!(
+        reduce_sum(
+            tiny_format(),
+            &[
+                BinaryValueFixture::NaNClass,
+                finite_value,
+                BinaryValueFixture::Zero(Sign::Negative),
+            ],
+        ),
+        Ok(SumReductionResult::NaNClass)
     );
     assert_eq!(
         reduce_sum(
@@ -306,7 +319,64 @@ fn submitted_nan_remains_outside_broader_sum_slice() {
                 BinaryValueFixture::NaNClass,
             ],
         ),
-        Err(NumericOracleError::NaNReductionInput)
+        Ok(SumReductionResult::NaNClass)
+    );
+    assert_eq!(
+        reduce_sum(
+            tiny_format(),
+            &[
+                BinaryValueFixture::Infinity(Sign::Positive),
+                BinaryValueFixture::NaNClass,
+                BinaryValueFixture::Infinity(Sign::Negative),
+            ],
+        ),
+        Ok(SumReductionResult::NaNClass)
+    );
+}
+
+#[test]
+fn submitted_nan_sum_is_permutation_invariant_at_class_level() {
+    let first = [
+        BinaryValueFixture::NaNClass,
+        finite(Sign::Negative, 7, -2),
+        BinaryValueFixture::Infinity(Sign::Positive),
+        BinaryValueFixture::Zero(Sign::Negative),
+        BinaryValueFixture::Infinity(Sign::Negative),
+    ];
+    let second = [first[4], first[2], first[1], first[0], first[3]];
+
+    assert_eq!(
+        reduce_sum(tiny_format(), &first),
+        Ok(SumReductionResult::NaNClass)
+    );
+    assert_eq!(
+        reduce_sum(tiny_format(), &second),
+        Ok(SumReductionResult::NaNClass)
+    );
+}
+
+#[test]
+fn nan_result_does_not_require_unneeded_finite_accumulator_capacity() {
+    let wide_format = BinaryFormat::new(127, 0, 126).expect("valid wide fixture format");
+    let large = finite(Sign::Positive, 1_u128 << 126, 0);
+
+    assert_eq!(
+        reduce_sum(
+            wide_format,
+            &[large, large, large, large, BinaryValueFixture::NaNClass,],
+        ),
+        Ok(SumReductionResult::NaNClass)
+    );
+}
+
+#[test]
+fn malformed_finite_fixture_is_rejected_even_when_nan_determines_result() {
+    assert_eq!(
+        reduce_sum(
+            tiny_format(),
+            &[BinaryValueFixture::NaNClass, finite(Sign::Negative, 0, 0),],
+        ),
+        Err(NumericOracleError::ZeroExactInput)
     );
 }
 
@@ -410,6 +480,22 @@ fn opposite_overflowed_tree_branches_produce_nan_class() {
         exact,
         SumReductionResult::Value(RoundedBinaryValue::Zero(Sign::Positive))
     );
+}
+
+#[test]
+fn submitted_nan_leaf_remains_nan_class_through_tree_ancestors() {
+    let format = tiny_format();
+    let nan = sum_leaf(format, BinaryValueFixture::NaNClass);
+    let finite_value = sum_leaf(format, finite(Sign::Positive, 5, -2));
+    let positive_infinity = sum_leaf(format, BinaryValueFixture::Infinity(Sign::Positive));
+
+    assert_eq!(nan, SumReductionResult::NaNClass);
+
+    let first_parent = add_standard_tree_node(format, nan, finite_value).unwrap();
+    let root = add_standard_tree_node(format, first_parent, positive_infinity).unwrap();
+
+    assert_eq!(first_parent, SumReductionResult::NaNClass);
+    assert_eq!(root, SumReductionResult::NaNClass);
 }
 
 #[test]
