@@ -2,17 +2,19 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, dynamic direct-call activations, direct-call argument and result ownership transfer, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, straight-line body execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
 
-It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), and parameter/local binding identity, scope, availability, and ordinary whole-binding owned use from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
+It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), and parameter/local binding identity, scope, lookup, availability, and ordinary whole-binding owned use from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-This document does not define concrete function/body/call/return syntax, a universal expression taxonomy, literals, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
+The represented concrete function/body/value/call/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). This document owns their execution consequences where that grammar maps to the semantic operations defined here; it does not own concrete spelling or parser representation.
+
+This document does not define a universal expression taxonomy, literals, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
 
 ## Source function bodies
 
 A represented source function entity MAY have one represented source body. It MUST NOT have more than one represented source body.
 
-Attaching a represented source body to a function entity is a source-semantic fact. This revision does not define concrete declaration or definition grammar and does not require a declaration and body to be written in one source construct.
+Attaching a represented source body to a function entity is a source-semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
 
 In the represented direct-call subset, a direct source call targets exactly one resolved source function entity that has a represented source body.
 
@@ -51,7 +53,7 @@ The represented owned value producers sufficient for this revision are:
 - ordinary whole-binding owned-value use from `local-bindings.md`; and
 - a successful result-bearing direct call under this document.
 
-Future literal, operator, record-construction, conversion, member-access, or other expression owners MAY introduce additional owned value producers without redefining the execution relation in this document.
+`concrete-syntax.md` exposes exactly those two producer forms in its current `Value` grammar. Future literal, operator, record-construction, conversion, member-access, or other expression owners MAY introduce additional owned value producers without redefining the execution relation in this document.
 
 Unless another accepted source owner defines a distinct rule for its producer, a producer used where this document requires a value MUST finish evaluation before that value is transferred to the receiving binding or transient ownership position.
 
@@ -96,6 +98,36 @@ After the transfer completes, the local binding becomes available under `local-b
 
 If initializer evaluation yields a defined fault or diverges, that local binding never becomes available. Ownership and availability transitions already performed by earlier evaluated operations remain effective.
 
+## Straight-line body execution
+
+For the root function-body form represented by `concrete-syntax.md`, body statements execute strictly in concrete source order.
+
+Execution begins with the first body statement after successful parameter transfer. A later body statement begins only after the preceding statement completes normally.
+
+For a represented ordinary local declaration statement:
+
+1. evaluate its initializer under the local-initialization and owned-value rules above;
+2. transfer the produced value into the new local binding and make that binding available; and
+3. only after that transfer completes normally may the next body statement begin.
+
+For a represented no-result direct-call statement:
+
+1. evaluate the direct call under the call rules in this document;
+2. require the called function's signature to specify no result value as mapped by `concrete-syntax.md`; and
+3. only after the call completes normally may the next body statement begin.
+
+A valid no-result call statement has no produced source value and therefore performs no arbitrary result discard.
+
+If execution of a body statement yields a defined fault, later body statements do not execute and the fault cleanup/propagation rules below apply to the active function activation.
+
+If execution of a body statement diverges, later body statements do not execute and no termination cleanup occurs merely because execution continues indefinitely.
+
+When the concrete body has a terminal return statement, that return begins only after every preceding body statement has completed normally and then follows the normal-return rules below.
+
+When a represented no-result concrete body reaches its closing body boundary without a terminal return, it performs the accepted normal no-result completion described below.
+
+This straight-line relation introduces no nested block, branch, loop, early/nonterminal return, unreachable-statement, short-circuit, catch, defer, or other control-flow semantics.
+
 ## Source cleanup
 
 For the represented operations in this document, **cleaning an owned source value** ends the source execution's ownership of that value exactly once.
@@ -138,7 +170,7 @@ For a source function whose callable signature specifies no result value, a repr
 
 Reaching the normal end of a represented no-result function body is equivalent to normal no-result completion.
 
-A result-bearing represented function body MUST NOT have a reachable normal end that produces no result. A later body/control-flow owner MUST validate that condition for the concrete constructs it introduces.
+A result-bearing represented function body MUST NOT have a reachable normal end that produces no result. The current concrete body grammar enforces that requirement by requiring a terminal value return for a result-bearing concrete function. A later body/control-flow owner MUST preserve the requirement for any constructs it adds.
 
 No Unit, Void, or equivalent source value is introduced by no-result completion.
 
@@ -178,20 +210,18 @@ Active caller and callee ownership state, together with any transient values ret
 
 ## Effects boundary
 
-Left-to-right argument evaluation fixes relative source ordering for any effects that applicable future expression owners make observable.
+Left-to-right argument evaluation and concrete straight-line body execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
 
 This revision does not define a source effect system, purity, effect inference, speculation legality, or general transformation rules.
 
-## Grammar and implementation boundary
+## Concrete grammar and implementation boundary
 
-General literals, arithmetic or comparison operators, assignment, branches, loops, record construction, member access, and concrete function/body/call/return grammar are not defined here.
+`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/call/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules.
 
-Those features are not prerequisites to the represented activation and ownership relation because ordinary whole-binding owned use and nested result-bearing direct calls already supply represented owned values.
+General literals, arithmetic or comparison operators, assignment, branches, loops, record construction, member access, nested blocks, and other concrete source forms remain outside the represented execution relation.
 
 No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner.
 
-After this semantic relation is accepted, selection of the next source-language milestone requires a fresh continuation audit. This document does not itself authorize a concrete grammar or frontend slice.
-
 ## Further boundaries
 
-This revision does not define concrete function/parameter/local/body/call/return syntax, punctuation, keywords, parser recovery, literal spellings or default literal typing, arithmetic/comparison/operator forms, branch/loop/pattern control flow, assignment/replacement expressions, field/member access, record construction, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
+This revision does not define literal typing, arithmetic/comparison/operator forms, branch/loop/pattern control flow, assignment/replacement expressions, field/member access, record construction, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
