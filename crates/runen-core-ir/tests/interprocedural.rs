@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, MirLocation,
-    MirValidationErrorKind, Operand, Place, Program, ScalarType, Statement, Terminator, TypeDef,
-    TypeTable, Value, validate_program,
+    BasicBlock, BasicBlockId, Body, BorrowKind, Function, FunctionId, LoanDecl, LoanId, LocalDecl,
+    LocalId, MirLocation, MirValidationErrorKind, Operand, Place, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 
 fn scalar_program_types() -> (TypeTable, runen_core_ir::TypeId) {
@@ -122,6 +122,97 @@ fn result_call_initializes_destination_on_normal_successor() {
 }
 
 #[test]
+fn call_arguments_reject_exact_arity_and_type_mismatches() {
+    let (types, i64_ty) = scalar_program_types();
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            Vec::new(),
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: Vec::new(),
+                        destination: None,
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        ),
+    };
+    let callee = Function {
+        name: "take_one".into(),
+        parameters: vec![LocalId(0)],
+        result: None,
+        body: body(
+            vec![LocalDecl::new("parameter", i64_ty, false)],
+            vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+        ),
+    };
+    let error = validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect_err("call arity must match exactly");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::ArgumentCount {
+            expected: 1,
+            found: 0,
+        }
+    );
+
+    let mut types = TypeTable::new();
+    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("argument", bool_ty, false)],
+            vec![
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: Place::local(LocalId(0)),
+                        src: Operand::Constant(Value::Bool(true)),
+                    }],
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: vec![Operand::Copy(Place::local(LocalId(0)).into())],
+                        destination: None,
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        ),
+    };
+    let callee = Function {
+        name: "take_i64".into(),
+        parameters: vec![LocalId(0)],
+        result: None,
+        body: body(
+            vec![LocalDecl::new("parameter", i64_ty, false)],
+            vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+        ),
+    };
+    let error = validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect_err("call argument types must match exactly");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::TypeMismatch { expected: i64_ty }
+    );
+}
+
+#[test]
 fn call_arguments_apply_move_effects_left_to_right() {
     let (types, i64_ty) = scalar_program_types();
     let caller = Function {
@@ -176,6 +267,55 @@ fn call_arguments_apply_move_effects_left_to_right() {
 }
 
 #[test]
+fn call_arguments_apply_copy_then_move_effects_left_to_right() {
+    let (types, i64_ty) = scalar_program_types();
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("value", i64_ty, false)],
+            vec![
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: Place::local(LocalId(0)),
+                        src: Operand::Constant(Value::I64(1)),
+                    }],
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: vec![
+                            Operand::Copy(Place::local(LocalId(0)).into()),
+                            Operand::Move(Place::local(LocalId(0)).into()),
+                        ],
+                        destination: None,
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        ),
+    };
+    let callee = Function {
+        name: "take_two".into(),
+        parameters: vec![LocalId(0), LocalId(1)],
+        result: None,
+        body: body(
+            vec![
+                LocalDecl::new("left", i64_ty, false),
+                LocalDecl::new("right", i64_ty, false),
+            ],
+            vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+        ),
+    };
+
+    validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect("copy leaves the source live for the following move");
+}
+
+#[test]
 fn result_destination_must_still_be_never_initialized() {
     let (types, i64_ty) = scalar_program_types();
     let caller = Function {
@@ -227,6 +367,69 @@ fn result_destination_must_still_be_never_initialized() {
 }
 
 #[test]
+fn result_destination_requires_init_like_exclusive_authority() {
+    let (types, i64_ty) = scalar_program_types();
+    let result = Place::local(LocalId(0));
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: Body {
+            locals: vec![LocalDecl::new("result", i64_ty, false)],
+            loans: vec![LoanDecl::new("shared", i64_ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: result.clone(),
+                            src: Operand::Constant(Value::I64(5)),
+                        },
+                        Statement::Borrow {
+                            loan: LoanId(0),
+                            kind: BorrowKind::Shared,
+                            src: result.clone().into(),
+                        },
+                    ],
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: Vec::new(),
+                        destination: Some(result.clone()),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        },
+    };
+    let callee = Function {
+        name: "produce".into(),
+        parameters: Vec::new(),
+        result: Some(i64_ty),
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Constant(Value::I64(8)))),
+            )],
+        ),
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect_err("call result initialization requires exclusive direct authority");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::DirectAccessConflict {
+            place: result,
+            loan: LoanId(0),
+        }
+    );
+}
+
+#[test]
 fn raw_pointer_containing_signatures_are_rejected() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
@@ -246,6 +449,33 @@ fn raw_pointer_containing_signatures_are_rejected() {
         functions: vec![function],
     })
     .expect_err("raw-pointer values do not cross activations in this slice");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::CallTransferUnsafe(pointer_ty)
+    );
+    assert_eq!(error.location, MirLocation::Function(FunctionId(0)));
+}
+
+#[test]
+fn raw_pointer_containing_results_are_rejected() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("Ptr", i64_ty));
+    let function = Function {
+        name: "pointer_result".into(),
+        parameters: Vec::new(),
+        result: Some(pointer_ty),
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+        ),
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect_err("raw-pointer results do not cross activations in this slice");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::CallTransferUnsafe(pointer_ty)
@@ -323,6 +553,30 @@ fn result_return_requires_an_owned_value() {
     })
     .expect_err("result-bearing function must return a value");
     assert_eq!(error.kind, MirValidationErrorKind::MissingReturnValue);
+}
+
+#[test]
+fn no_result_return_rejects_an_owned_value() {
+    let (types, _) = scalar_program_types();
+    let function = Function {
+        name: "bad_return".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Constant(Value::I64(1)))),
+            )],
+        ),
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect_err("no-result function must not return a value");
+    assert_eq!(error.kind, MirValidationErrorKind::UnexpectedReturnValue);
 }
 
 #[test]
