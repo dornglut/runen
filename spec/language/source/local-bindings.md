@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for function-local binding identity, abstract lexical scopes and local lookup, binding assignment mutability, binding availability, and ordinary whole-binding owned-value use.
+This document owns the represented source semantics for function-local binding identity, abstract lexical scopes and function-local lookup precedence, binding assignment mutability, binding availability, and ordinary whole-binding owned-value use.
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
 
-Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer execution interaction, lexical-scope and activation cleanup, direct return, recursion, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md).
+Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer execution interaction, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define concrete body/local syntax, general expression evaluation, references, patterns, traits, ABI, or an implementation representation.
+This document does not define general expression evaluation, references, patterns, traits, ABI, or an implementation representation.
 
 ## Function-local binding identity
 
@@ -29,6 +29,8 @@ Parameter bindings and ordinary function-local bindings occupy one **function-lo
 
 Every represented parameter/local binding identity is independent of original identifier spelling, token or source offset, physical storage address, compiler collection index, HIR or MIR identifier choice, and runtime storage identity.
 
+For the function form represented by `concrete-syntax.md`, concrete parameter source order maps to callable parameter-slot order and each concrete parameter identifier supplies the lexical key for the corresponding parameter binding. Every such concrete parameter binding is immutable for assignment purposes.
+
 ## Represented ordinary local declarations
 
 A represented ordinary local declaration:
@@ -43,13 +45,17 @@ Uninitialized ordinary local declarations are not represented by this revision.
 
 The initializer is resolved and typed in the lexical environment that exists before the new binding is introduced. The new binding enters scope only after the declaration's initialization boundary. Therefore the new binding is not available for self-reference from its own initializer.
 
-This revision does not define type inference, concrete local-declaration syntax, or concrete mutability spelling/defaulting. `function-execution.md` owns represented initializer value production, transfer, and abnormal-completion interaction for the currently accepted owned value producers.
+The concrete `let` form in `concrete-syntax.md` supplies an explicit source type and initializer and establishes an immutable ordinary local declaration under these rules.
+
+This revision does not define type inference or a mutable/uninitialized local form. `function-execution.md` owns represented initializer value production, transfer, and abnormal-completion interaction for the currently accepted owned value producers.
 
 ## Abstract lexical scopes
 
 A represented function body has one root lexical scope. Later body constructs may establish nested child lexical scopes. The resulting lexical scopes form a finite rooted tree.
 
-The semantic scope tree does not prescribe braces, indentation, parser nodes, lossless-syntax nodes, source-range representation, or recovery behavior.
+The root braces in the concrete body form owned by `concrete-syntax.md` delimit that already-defined root lexical scope. The current concrete subset establishes no nested lexical-scope form.
+
+The semantic scope tree does not prescribe parser nodes, lossless-syntax nodes, source-range representation, or recovery behavior.
 
 A parameter binding belongs to the function root scope and is in scope throughout the represented function body, including descendant lexical scopes.
 
@@ -70,9 +76,21 @@ Consequently:
 
 This prohibition applies only inside the function-local value-binding domain.
 
-A function-local binding key MAY equal a module-level declaration key. For an ordinary unqualified local value lookup, active function-local bindings are consulted first. Only when no active local binding resolves the key does lookup fall through to the accepted same-module lookup relation in `names-modules.md`.
+A function-local binding key MAY equal a module-level declaration key.
 
-Source-unit module aliases remain a distinct qualified-lookup mechanism owned by `names-modules.md`. They are not searched by ordinary unqualified local value lookup.
+## Function-local lookup precedence
+
+Within a represented function body, an **unqualified function-body identifier lookup** that participates in the function-local value-binding domain consults active parameter/local bindings first.
+
+If exactly one active parameter/local binding has the requested lexical identifier key, lookup resolves to that binding. The consuming source form then determines whether that selected binding is a valid entity category for the use.
+
+Only when no active parameter/local binding resolves the key does lookup fall through to the accepted same-module lookup relation in `names-modules.md`.
+
+Lookup MUST NOT skip an active function-local binding merely because the consuming context would prefer a module-level entity of another category.
+
+The concrete whole-binding value uses and direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, a direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding.
+
+Source-unit module aliases remain a distinct qualified-lookup mechanism owned by `names-modules.md`. They are not searched by unqualified function-body identifier lookup.
 
 This revision does not define qualified path syntax, fields, members, labels, pattern bindings, generic parameters, lifetime names, methods, associated items, or another future name domain.
 
@@ -87,7 +105,9 @@ Assignment mutability is a binding property independent of source type identity,
 
 Consuming an owned value from an immutable binding is permitted when the applicable owned-use rule permits the consumption. Immutability restricts later assignment or reinitialization; it does not require the binding to retain ownership forever.
 
-This revision defines the mutability classification only. It does not define assignment syntax, replacement expression evaluation, or an operation that mutates an available binding.
+The concrete parameter and `let` forms in `concrete-syntax.md` establish immutable bindings only. The abstract mutable classification remains represented here for later accepted assignment/reinitialization consumers; no concrete mutable-binding spelling exists in the current subset.
+
+This revision defines the mutability classification only. It does not define replacement expression evaluation or an operation that mutates an available binding.
 
 ## Source binding availability
 
@@ -116,6 +136,8 @@ When ordinary owned-value use selects an available binding whose source type is 
 
 Ordinary owned-value use of an unavailable or not-definitely-available binding is language-invalid. It is not a defined runtime `Fault`.
 
+The concrete `IdentifierUse` value form in `concrete-syntax.md` maps to this ordinary whole-binding use after lookup selects a parameter/local binding.
+
 This implicit duplicate-or-consume relation applies only to ordinary owned-value contexts. A later borrow/reference, explicit consume/move, explicit clone/copy-construction, pattern/destructuring, field/member, or other context may define distinct behavior without redefining this ordinary owned-use relation.
 
 Partial field moves and member-level availability are not represented by this revision.
@@ -142,7 +164,7 @@ This revision introduces no source `drop` ability, must-consume type class, cust
 
 ## Function, call, and fault boundary
 
-This document defines body-local binding facts only. It does not redefine the direct execution relation owned by `function-execution.md`, including:
+This document defines body-local binding facts and function-local lookup only. It does not redefine the direct execution relation owned by `function-execution.md`, including:
 
 - function body execution;
 - direct-call argument evaluation and parameter ownership transfer;
@@ -157,8 +179,8 @@ Indirect calls, function values, closures, references/pass modes, broader panic/
 
 This revision does not add or require a parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime representation, or backend representation.
 
-The represented binding and direct-function execution semantics remove source-validation and execution ambiguities, but concrete body/local/call/return grammar, general expression syntax, literal value origins, and parser recovery remain absent. An implementation surface for those constructs therefore requires a separately accepted concrete grammar/frontend slice rather than inventing those rules here.
+`concrete-syntax.md` provides one bounded concrete parameter/local/value/call subset. That syntax does not alter binding identity, scope, lookup, mutability, availability, or owned-use authority defined here.
 
 ## Further boundaries
 
-This revision does not define concrete function/parameter/local/body syntax, keywords, punctuation, block grammar, literals, precedence, parser recovery, type inference, general expression typing, assignment/replacement expressions, partial field moves, member access, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment/replacement operations, nested-block forms, literals, precedence, parser recovery, general expression typing, partial field moves, member access, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
