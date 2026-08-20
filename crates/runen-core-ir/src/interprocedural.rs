@@ -5,7 +5,7 @@
 //! one-body API is removed before acceptance.
 
 use crate::{
-    BasicBlockId, Fault, FunctionId, LocalDecl, LocalId, LoanDecl, Operand, Place, Statement,
+    BasicBlockId, Fault, FunctionId, LoanDecl, LocalDecl, LocalId, Operand, Place, Statement,
     TypeId, TypeTable,
 };
 
