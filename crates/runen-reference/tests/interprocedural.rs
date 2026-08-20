@@ -154,10 +154,7 @@ fn result_is_preserved_across_callee_cleanup_and_caller_resumes_after_cleanup() 
 fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
     let (types, tracked) = tracked_types();
 
-    let make_function = |name: &str,
-                         fixture: u64,
-                         terminator: Terminator|
-     -> Function {
+    let make_function = |name: &str, fixture: u64, terminator: Terminator| -> Function {
         Function {
             name: name.into(),
             parameters: Vec::new(),
@@ -195,11 +192,7 @@ fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
             target: BasicBlockId(0),
         },
     );
-    let inner = make_function(
-        "inner",
-        30,
-        Terminator::Fault(Fault::new("boom")),
-    );
+    let inner = make_function("inner", 30, Terminator::Fault(Fault::new("boom")));
 
     let validated = validate_program(Program {
         types,
@@ -218,9 +211,7 @@ fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
         .verification_events
         .iter()
         .filter_map(|event| match event.kind {
-            VerificationEventKind::DropTrackedFixture { id, .. } => {
-                Some((event.activation.0, id))
-            }
+            VerificationEventKind::DropTrackedFixture { id, .. } => Some((event.activation.0, id)),
             _ => None,
         })
         .collect::<Vec<_>>();
