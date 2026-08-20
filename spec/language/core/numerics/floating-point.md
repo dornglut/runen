@@ -95,7 +95,11 @@ A NaN value does not denote an exact real-number value or real magnitude for the
 
 NaN membership is a semantic type fact. A realization MUST NOT remove the NaN value class or assume that NaN values are absent merely because a backend or target can operate under a no-NaN assumption. The `fast` contract gains no implicit no-NaN relaxation from backend `nnan` or aggregate fast-math behavior.
 
-This revision does not determine whether a type's NaN set contains one or multiple semantic values. It does not assign semantic sign, payload, quiet or signaling state, canonical or preferred identity, ordering, or representation to NaN values. Basic arithmetic class-outcome rules below may require a result to belong to this NaN class, but equality, comparison, hashing, NaN member selection, propagation beyond class membership, and representation remain owned by later applicable rules.
+This revision does not determine whether a type's NaN set contains one or multiple semantic values. It does not assign semantic sign, payload, quiet or signaling state, canonical or preferred identity, ordering, or representation to NaN values.
+
+Whenever a numerical result rule in this document requires a result to belong to the result type's NaN value class and does not state a stronger member-selection rule, **any** NaN member of that result type is a permitted result. No relation to an input NaN member is required: preservation, propagation, canonicalization, sign, payload, and quiet/signaling identity are not implied. Member choice under such a class-only result rule is explicit permitted variation, not an open semantic gap, and backend or host NaN behavior is not an additional semantic input.
+
+For purposes of the `standard`, `reproducible`, and `fast` numeric result contracts defined by this document, any two NaN values of the same semantic floating type are **numerically equivalent** unless a later operation-specific numeric rule explicitly defines a stronger member-sensitive relation. This numeric equivalence does not define language equality, comparison, hashing, total ordering, representation identity, bit equality, serialization equality, or observational equivalence under a future representation-sensitive operation.
 
 A later representation or ABI contract may refine how physical NaN encodings map to semantic NaN values while preserving every accepted semantic rule. This section requires neither an injective nor a canonical mapping and does not define source NaN literals, bitcasts, bytes, ABI layout, or serialization.
 
@@ -120,7 +124,7 @@ These exact-zero rules do not apply when a nonzero exact mathematical result mer
 
 By the contract-refinement rules, `reproducible` and `fast` follow these basic-operation rules unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. The existing `fast` reassociation permission may change grouping only where that permission applies; it does not by itself alter the numerical relation or signed-zero result rule of an individual basic operation. Backend `nsz`, target latitude around signed zero, or aggregate fast-math behavior supplies no implicit Runen relaxation.
 
-Additional determinate infinity and zero-divisor cases are defined separately below. NaN-class outcomes for basic arithmetic are also defined separately below. This section does not define NaN member selection, unary negation, remainder, fused operations, source operator spellings, comparison or hashing behavior, sign-inspection APIs, or physical instructions.
+Additional determinate infinity and zero-divisor cases are defined separately below. NaN-class outcomes for basic arithmetic are also defined separately below. This section does not define unary negation, remainder, fused operations, source operator spellings, comparison or hashing behavior, sign-inspection APIs, or physical instructions.
 
 ## Determinate special-value basic arithmetic
 
@@ -153,7 +157,7 @@ Under `standard`, cases already covered by finite basic arithmetic and its round
 
 By the contract-refinement rules, `reproducible` and `fast` follow these determinate special-value rules unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, `ninf`, `nsz`, aggregate fast-math behavior, physical floating exception behavior, or target latitude supplies no implicit Runen relaxation.
 
-The remaining basic-operation forms whose result belongs to the NaN class are defined separately below. This section does not define NaN member selection, equality, comparison, hashing, total ordering, sign-observation APIs, unary negation, remainder, fused operations, source operator spellings, or physical instructions.
+The remaining basic-operation forms whose result belongs to the NaN class are defined separately below. This section does not define equality, comparison, hashing, total ordering, sign-observation APIs, unary negation, remainder, fused operations, source operator spellings, or physical instructions.
 
 ## NaN-class basic arithmetic outcomes
 
@@ -167,11 +171,9 @@ When both operands are non-NaN, `standard` likewise requires a NaN-class result 
 - division of signed infinity by signed infinity;
 - division of signed zero by signed zero.
 
-These requirements define only the **value class** of the result. This revision does not define which NaN member of the result type is selected for any such operation occurrence, whether two occurrences select the same semantic NaN, whether an input NaN is propagated or otherwise related to the selected result, or any sign, payload, quiet/signaling, preferred, canonical, equality, ordering, hashing, or representation property of that result.
+These requirements define the result's **value class**. By the NaN class rule above, any NaN member of the result type is permitted for each such occurrence and no relation to an input NaN member is required. The choice does not assign or preserve sign, payload, quiet/signaling state, preferred or canonical identity, equality, ordering, hashing, or representation properties.
 
-The unresolved NaN member-selection rule is an open semantic obligation, not implementation freedom. In particular, this section does not state that every member of the result type's NaN class is a permitted `standard` result and a realization MUST NOT derive NaN member identity, propagation, payload, or signaling behavior merely from its backend or physical target.
-
-By the contract-refinement rules, `reproducible` and `fast` inherit the NaN-class outcome requirement unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, canonicalization, payload propagation, aggregate fast-math behavior, or physical signaling behavior supplies no implicit Runen relaxation.
+By the contract-refinement rules, `reproducible` and `fast` inherit the NaN-class outcome and its same-type numeric-equivalence relation unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, canonicalization, payload propagation, aggregate fast-math behavior, or physical signaling behavior supplies no additional Runen rule.
 
 ## Fixed-width integer to binary floating conversion
 
@@ -197,13 +199,13 @@ The remaining source value classes convert as follows:
 - source `-∞` produces destination `-∞`;
 - a source NaN value produces a value belonging to the destination type's NaN value class.
 
-The NaN rule above defines only destination class membership. It does not define which destination NaN member is selected, whether the source NaN member is propagated or otherwise related to the result, or any sign, payload, quiet/signaling, preferred, canonical, equality, ordering, hashing, or representation property of the result. NaN member selection remains an open semantic obligation and MUST NOT be derived merely from backend or physical target behavior.
+For a NaN source, any NaN member of the destination type is permitted by the NaN class rule above; no propagation, preservation, canonicalization, sign, payload, or quiet/signaling relation to the source member is required. Backend or physical target behavior supplies no additional member-selection rule.
 
 By the contract-refinement rules, `reproducible` and `fast` follow this `standard` conversion unless a later conversion-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not by themselves flush a subnormal source value or subnormal destination result of this conversion.
 
-A same-format conversion follows these same semantic value rules. For a nonzero finite source, the destination has the same exact real value because that value is exactly representable in the same format; signed zeros and signed infinities retain their sign. No physical bit-identity rule follows for NaN values while NaN member selection remains open.
+A same-format conversion follows these same semantic value rules. For a nonzero finite source, the destination has the same exact real value because that value is exactly representable in the same format; signed zeros and signed infinities retain their sign. No physical bit-identity rule follows for NaN values merely because source and destination semantic formats are the same.
 
-This conversion does not define source cast syntax, implicit conversion or promotion, conversion insertion, concrete binary floating source type spellings, vector conversion, NaN member selection or propagation beyond destination class membership, literals, constant-evaluation diagnostics, physical representation, bitcasts, ABI, backend instructions, or target behavior.
+This conversion does not define source cast syntax, implicit conversion or promotion, conversion insertion, concrete binary floating source type spellings, vector conversion, literals, constant-evaluation diagnostics, physical representation, bitcasts, ABI, backend instructions, or target behavior.
 
 ## Finite in-range binary floating to fixed-width integer conversion
 
@@ -270,7 +272,7 @@ By the contract-refinement rules, `reproducible` and `fast` follow this `standar
 
 Together with the finite and non-NaN clamping rules above, this defines the numerical result of the already-admitted binary-floating-to-fixed-width-integer conversion for every source floating value class.
 
-This rule selects only an integer conversion result. It does not define NaN member selection or propagation for floating-result arithmetic or floating-to-floating conversion, any NaN sign/payload/quiet/signaling/canonicalization semantics, source conversion syntax or policy, explicit checked/trapping/saturating conversion forms, vector conversion, literals, constant-evaluation diagnostics, physical representation, ABI, backend instructions, target taxonomy, compiler IR, or executable oracle representation.
+This rule selects only an integer conversion result. It does not define NaN equality/comparison/hash/order, NaN representation or payload semantics, source conversion syntax or policy, explicit checked/trapping/saturating conversion forms, vector conversion, literals, constant-evaluation diagnostics, physical representation, ABI, backend instructions, target taxonomy, compiler IR, or executable oracle representation.
 
 ## Finite multiply-add contraction
 
@@ -295,7 +297,7 @@ The multiplication result value may occupy either operand position of the additi
 
 Backend fused instructions, LLVM-style contraction flags, WGSL fusion latitude, or another physical realization mechanism do not widen the eligible set and are not semantic input.
 
-This section does not define an exact-zero contracted result, contraction involving signed-zero, signed-infinity, or NaN operand values, NaN member selection or propagation, multiply-subtract or negated fused variants, a standalone fused operation, source syntax, compiler IR, physical instructions, or environment capability requirements.
+This section does not define an exact-zero contracted result, contraction involving signed-zero, signed-infinity, or NaN operand values, including which result class such a contraction would have, multiply-subtract or negated fused variants, a standalone fused operation, source syntax, compiler IR, physical instructions, or environment capability requirements.
 
 The **binary floating rounding relation** is the result relation supplied collectively by the interior finite, zero-boundary, and upper-bound rounding sections below. An applicable operation consumes this relation only when its own canonical semantics explicitly supplies a nonzero exact finite real quantity `x` and an already-established binary floating result type to it. Merely having a real-valued mathematical interpretation does not make another operation consume this relation.
 
@@ -315,7 +317,7 @@ For every positive nonzero finite representable value, its **canonical format si
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` rounding rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior.
 
-This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, NaN member selection, contraction outside the finite multiply-add case above, literals, transcendental accuracy except where another section explicitly defines it, reduced precision, and any contract-specific flushing relaxation remain open.
+This section includes rounding between adjacent normal values, between adjacent subnormal values, and across the nonzero subnormal/normal boundary. The interior rule does not itself supply a result when zero is a bounding candidate; that lower boundary is defined separately below. It also does not itself supply a result beyond the largest finite magnitude; that upper boundary is defined separately below. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined above. Exact-zero sign outside the basic operations defined above, contraction outside the finite multiply-add case above, literals, transcendental accuracy except where another section explicitly defines it, reduced precision, and any contract-specific flushing relaxation remain open.
 
 ## Zero-boundary rounding
 
@@ -389,7 +391,7 @@ At `|x| = H`, the infinity side is the ties-to-even choice. The maximum finite c
 
 By the contract-refinement rule, `reproducible` and `fast` follow this `standard` upper-bound rule unless a later contract-specific rule explicitly narrows or relaxes this exact numerical behavior. Backend finite-only, saturation, overflow-mode, or fast-math behavior supplies no such relaxation by itself.
 
-This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define NaN member selection, literals, or transcendental accuracy except where another section explicitly defines it.
+This section rounds only a nonzero exact finite real quantity explicitly supplied to the binary floating rounding relation. Determinate basic infinity and zero-divisor results and NaN-class basic outcomes are defined separately above. This section does not define literals or transcendental accuracy except where another section explicitly defines it.
 
 ## Correctly rounded sine baseline
 
@@ -406,7 +408,7 @@ For a nonzero finite input, interpret the input by the exact real value `x` supp
 
 The accepted rounding relation therefore determines the `standard` result across interior, signed-zero, and upper-format boundaries. Although mathematical sine lies in `[-1, 1]`, this rule does not assume that every possible Runen binary floating result format can represent `+1` or `-1`; the accepted upper-bound rounding rule remains authoritative when needed.
 
-The NaN outcomes above define only result-class membership. They do not select or propagate a NaN member, assign sign, payload, quiet/signaling state, canonical identity, or representation, and they do not alter the existing open NaN member-selection obligation.
+For either NaN-class sine outcome, any NaN member of `T` is permitted by the NaN class rule above. No propagation or relationship to an input NaN member is required, and no sign, payload, quiet/signaling, canonical-identity, or representation property is implied.
 
 By the contract-refinement rules, `reproducible` and `fast` follow this `standard` sine result unless a later sine-specific rule explicitly narrows or relaxes the named numerical behavior. This slice grants no sine-specific approximation, subnormal input or result flushing, reduced precision, range-reduction latitude, reassociation, contraction, or other fast-math permission. Existing `fast` rules for basic `+`, `-`, `*`, `/`, finite multiply-add contraction, and unordered-sum trees do not automatically apply to sine.
 
@@ -458,7 +460,7 @@ By the contract-refinement rules, `reproducible` and `fast` follow this `standar
 
 Physical tree shape, contribution permutation, lane or worker identity, queue or chunk order, native reduction instructions, host floating addition, and backend aggregate fast-math behavior are not semantic input. A realization MAY use an exact, binned, superaccumulator, or another implementation technique when it proves that technique preserves the result permitted here; absence of a direct native exact-sum primitive is not permission to substitute a result-changing ordinary floating-addition tree.
 
-This section does not define submitted NaN or signed-infinity behavior, NaN member selection or propagation, mixed floating formats or promotions, products, dot products, min/max, scans, ordered reductions, generic user-defined floating combination operators, a source-visible exact accumulator type, physical accumulator width or layout, a required summation algorithm, a `fast` reduction-specific tree/approximation/flushing relaxation, source reduction syntax or placement, hierarchy selection syntax, numeric-contract selection syntax, or abnormal reduction completion.
+This section does not define submitted NaN or signed-infinity behavior, mixed floating formats or promotions, products, dot products, min/max, scans, ordered reductions, generic user-defined floating combination operators, a source-visible exact accumulator type, physical accumulator width or layout, a required summation algorithm, a `fast` reduction-specific tree/approximation/flushing relaxation, source reduction syntax or placement, hierarchy selection syntax, numeric-contract selection syntax, or abnormal reduction completion.
 
 ## Signed-infinity extension for unordered floating sum reduction
 
@@ -490,7 +492,7 @@ After exact-once contribution coverage, finalization is:
 - `i = both` produces a value belonging to `T`'s NaN value class;
 - `i = none` uses the accepted finite-state finalization unchanged.
 
-The `both` result defines only NaN class membership. It does not select a NaN member, propagate an input NaN, assign sign/payload/quiet-signaling state, or define representation. NaN member selection remains an open semantic obligation.
+When `i = both`, any NaN member of `T` is permitted by the NaN class rule above. No input NaN exists in this slice, and no sign, payload, quiet/signaling, canonical-identity, or representation property is implied by the selected member.
 
 Finite contributions do not change a result determined by one submitted infinity sign. A finite exact sum that later rounds to signed infinity when `i = none` remains a finite-state finalization result; it does not become an infinity-presence contribution and does not interact with the presence component retroactively.
 
@@ -498,7 +500,7 @@ By the contract-refinement rules, `reproducible` and `fast` follow this `standar
 
 Physical reduction tree or permutation, native infinity handling, lane or worker order, backend fast-math flags, and target conventions are not semantic input.
 
-A submitted NaN value remains outside the same-format unordered sum semantics defined so far. Its future reduction behavior is an open semantic obligation, not implementation freedom. In particular, this section does not decide whether a reduction preserves an input NaN member, selects among input members, constructs another member, canonicalizes, or exposes payload/signaling relationships.
+A submitted NaN value remains outside the same-format unordered sum semantics defined so far. Whether such a contribution makes the reduction result NaN-class or has another operation-specific effect is an open semantic obligation, not implementation freedom. If a future reduction rule requires a NaN-class result, the general NaN member-variation rule above applies unless that future rule explicitly strengthens member selection.
 
 This section also does not define mixed floating formats or promotions, other reduction operations, a source-visible accumulator type, physical accumulator representation, a `fast` reduction-specific native-tree/FTZ/approximation relaxation, source reduction syntax or placement, hierarchy selection syntax, numeric-contract selection syntax, or abnormal completion.
 
@@ -514,7 +516,7 @@ For a non-empty reduction occurrence, a tree-rounded candidate is constructed as
 4. evaluate each internal node from its two child outcomes using the baseline `standard` basic floating **addition** result relation already defined for `T`, rather than any `fast` basic-operation relaxation;
 5. the root outcome is one tree-rounded candidate.
 
-If an internal addition is a NaN-class case, that node has a NaN-class outcome. Every ancestor is then also a NaN-class outcome because baseline addition with a NaN operand has a NaN-class result. This construction defines only NaN class membership; it does not select or propagate a NaN member.
+If an internal addition is a NaN-class case, that node may select any NaN member of `T` under the general NaN class rule. Every ancestor is then also a NaN-class outcome because baseline addition with a NaN operand has a NaN-class result; each such class-only node independently has the same permitted member variation unless a stronger rule is later defined.
 
 For an empty reduction there is no tree-rounded alternative and the inherited exact-state result `+0` remains controlling. For a singleton reduction, the one leaf value is its tree-rounded candidate.
 
@@ -540,4 +542,4 @@ This `fast` reassociation permission does not by itself authorize operand permut
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. The separate fast tree-rounded sum rule above owns the specific tree/permutation latitude it grants. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN member selection and propagation beyond basic-operation class membership, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior outside the correctly rounded sine baseline above, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, submitted-NaN and other reduction-specific numeric behavior outside the same-format unordered sum and explicit fast tree-rounded rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN equality/comparison/hash/order and representation-sensitive identity, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior outside the correctly rounded sine baseline above, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, submitted-NaN and other reduction-specific numeric behavior outside the same-format unordered sum and explicit fast tree-rounded rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
