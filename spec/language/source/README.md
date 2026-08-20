@@ -4,3 +4,4 @@
 - [Names and modules](names-modules.md)
 - [Type foundation](types.md)
 - [Callable signatures](callables.md)
+- [Function-local bindings](local-bindings.md)
