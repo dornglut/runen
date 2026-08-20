@@ -209,11 +209,7 @@ fn tiny_finite_domain() -> Vec<ExactDyadic> {
     domain
 }
 
-fn exact_value_of_encoded(
-    precision: u32,
-    emin: i32,
-    value: RoundedBinaryValue,
-) -> ExactDyadic {
+fn exact_value_of_encoded(precision: u32, emin: i32, value: RoundedBinaryValue) -> ExactDyadic {
     let precision_tail = i32::try_from(precision - 1).expect("fixture precision fits i32");
     match value {
         RoundedBinaryValue::Subnormal { sign, significand } => {
@@ -282,9 +278,9 @@ enum SpecialSineReference {
 
 fn special_sine_reference(input: BinaryValueFixture) -> Option<SpecialSineReference> {
     match input {
-        BinaryValueFixture::Zero(sign) => Some(SpecialSineReference::Value(
-            RoundedBinaryValue::Zero(sign),
-        )),
+        BinaryValueFixture::Zero(sign) => {
+            Some(SpecialSineReference::Value(RoundedBinaryValue::Zero(sign)))
+        }
         BinaryValueFixture::Infinity(_) | BinaryValueFixture::NaNClass => {
             Some(SpecialSineReference::NaNClass)
         }
