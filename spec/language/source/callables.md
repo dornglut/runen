@@ -6,9 +6,9 @@ This document owns the represented source function entity identity, callable-sig
 
 It consumes module binding identity and accessibility from [Source names and modules](names-modules.md) and represented source value type identity and equality from [Source type foundation](types.md). It does not redefine those owners.
 
-Represented source function body attachment, dynamic activations, direct calls, owned argument/result transfer, recursion, cleanup, return, divergence, and defined-fault propagation through direct calls are owned by [Source function execution](function-execution.md). Function-local parameter binding identity, scope, mutability, availability, and ordinary owned use are owned by [Source function-local bindings](local-bindings.md).
+Represented source function body attachment, dynamic activations, direct calls, owned argument/result transfer, recursion, cleanup, return, divergence, and defined-fault propagation through direct calls are owned by [Source function execution](function-execution.md). Function-local parameter binding identity, scope, mutability, availability, and ordinary owned use are owned by [Source function-local bindings](local-bindings.md). The represented concrete function-definition, parameter, and result spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define concrete function syntax, indirect calls or function values, effects, generics, ABI, or an implementation representation.
+This document does not define indirect calls or function values, effects, generics, ABI, or an implementation representation.
 
 ## Source function entities
 
@@ -22,7 +22,9 @@ The binding's module-private or exported accessibility is determined only by `na
 
 Different callable signatures do not make duplicate module binding keys legal. This revision defines no function overloading or overload set.
 
-This revision does not define concrete function-declaration or function-definition syntax. `function-execution.md` owns whether a represented source function entity has a represented source body and the execution relation attached to that body; those facts do not redefine function entity identity or callable-signature structure.
+The represented `fn` definition in `concrete-syntax.md` establishes one function declaration/entity with module-private accessibility, one callable signature as mapped below, and one represented source body attached under `function-execution.md`. Concrete spelling does not redefine function identity or callable-signature structure.
+
+A future concrete declaration-only or alternate definition form, if accepted, must map to these semantic entities without creating a competing identity relation.
 
 ## Callable signatures
 
@@ -33,7 +35,7 @@ Every represented source function entity has exactly one **callable signature** 
 
 Each parameter slot contains exactly one represented source value type from `types.md`. The parameter sequence may be empty.
 
-Parameter slots have no lexical identifier key or source binding name under this signature contract. When a represented function body exists under `function-execution.md`, `local-bindings.md` owns the corresponding parameter binding keys, identities, scope, mutability, and availability. Those body-local facts do not become callable-signature dimensions.
+Parameter slots have no lexical identifier key or source binding name under this signature contract. For a concrete function definition under `concrete-syntax.md`, concrete parameter order maps directly to parameter-slot order; `local-bindings.md` owns the corresponding parameter binding keys, identities, scope, mutability, and availability. Those body-local facts do not become callable-signature dimensions.
 
 The ordered parameter sequence is semantic signature structure. Positional direct-call validation, argument evaluation order, and owned-value transfer are owned by `function-execution.md`; physical register, stack, ABI, storage-layout, or other calling mechanisms remain outside this owner.
 
@@ -41,6 +43,8 @@ The result specification is exactly one of:
 
 - **no result value**; or
 - **one result value** of exactly one represented source value type from `types.md`.
+
+Under `concrete-syntax.md`, omission of a result clause maps to `no result value`, while an explicit result type maps to one result value of that type.
 
 `no result value` is callable-signature structure. It does not introduce an intrinsic Unit, Void, or equivalent source value type.
 
@@ -70,6 +74,8 @@ This rule checks only source types directly present in the callable signature. I
 
 This accessibility rule concerns source name/type accessibility only. It does not define ABI symbol export, linkage, calling convention, interface serialization, physical visibility, or binary compatibility.
 
+The current concrete function form is module-private under `concrete-syntax.md`, so it does not itself exercise the exported-signature rule. The abstract exported-function contract remains available to later accepted concrete declaration forms.
+
 ## Explicitly absent callable dimensions
 
 This revision does not define callable-signature dimensions for:
@@ -90,6 +96,7 @@ Their absence from this signature does not imply that represented function bodie
 `function-execution.md` is the sole source owner for the represented direct-function execution relation built on these function entities and signatures. This callable owner therefore does not duplicate:
 
 - represented source body attachment;
+- straight-line body execution order;
 - dynamic activation identity or state;
 - direct-call target validity;
 - argument evaluation order or argument/result ownership transfer;
@@ -106,8 +113,8 @@ Indirect calls, function values, closures, overload dispatch, methods, external/
 
 This revision does not add or require a parser, lossless-syntax representation, HIR, Core MIR production representation, runtime representation, or backend representation.
 
-The accepted function-execution relation does not by itself define concrete function, parameter, body, call, or return grammar, general expression syntax, literal syntax, or parser recovery. Those concerns require their own accepted owner before a frontend implementation may rely on them.
+`concrete-syntax.md` now defines one bounded concrete function/parameter/result/body/call/return subset. General expression syntax, literals, parser recovery, and broader callable forms remain outside this owner and cannot be inferred from the represented callable semantics.
 
 ## Further boundaries
 
-This revision does not define concrete function/parameter/result syntax, keywords, punctuation, comments, literals, patterns, closures/captures, reference/borrow/pass-mode signature dimensions, source references/lifetimes, generics, traits/coherence, methods, overload sets, effect-system completion, async/tasks, ABI/calling conventions/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR lowering, or backend behavior.
+Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define comments, literals, patterns, closures/captures, reference/borrow/pass-mode signature dimensions, source references/lifetimes, generics, traits/coherence, methods, overload sets, effect-system completion, async/tasks, ABI/calling conventions/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR lowering, or backend behavior.
