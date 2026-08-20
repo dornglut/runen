@@ -511,13 +511,7 @@ const fn is_pattern_whitespace(character: char) -> bool {
 const fn is_line_boundary(character: char) -> bool {
     matches!(
         character,
-        '\u{000a}'
-            | '\u{000b}'
-            | '\u{000c}'
-            | '\u{000d}'
-            | '\u{0085}'
-            | '\u{2028}'
-            | '\u{2029}'
+        '\u{000a}' | '\u{000b}' | '\u{000c}' | '\u{000d}' | '\u{0085}' | '\u{2028}' | '\u{2029}'
     )
 }
 
@@ -565,8 +559,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_record_definition(&mut self) {
-        self.builder
-            .start_node(SyntaxKind::RecordDefinition.into());
+        self.builder.start_node(SyntaxKind::RecordDefinition.into());
         self.expect(SyntaxKind::KwRecord, ExpectedSyntax::Item);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
 
@@ -584,9 +577,7 @@ impl<'a> Parser<'a> {
                     continue;
                 }
                 if !self.at(SyntaxKind::RBrace) {
-                    self.error_here(SyntaxErrorKind::Expected(
-                        ExpectedSyntax::CommaOrRightBrace,
-                    ));
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightBrace));
                     self.recover_until(&[SyntaxKind::Comma, SyntaxKind::RBrace]);
                     self.eat(SyntaxKind::Comma);
                 }
@@ -648,9 +639,7 @@ impl<'a> Parser<'a> {
                     continue;
                 }
                 if !self.at(SyntaxKind::RParen) {
-                    self.error_here(SyntaxErrorKind::Expected(
-                        ExpectedSyntax::CommaOrRightParen,
-                    ));
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightParen));
                     self.recover_until(&[SyntaxKind::Comma, SyntaxKind::RParen]);
                     self.eat(SyntaxKind::Comma);
                 }
@@ -707,8 +696,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_local_declaration(&mut self) {
-        self.builder
-            .start_node(SyntaxKind::LocalDeclaration.into());
+        self.builder.start_node(SyntaxKind::LocalDeclaration.into());
         self.expect(SyntaxKind::KwLet, ExpectedSyntax::Item);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
@@ -727,8 +715,7 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_return_statement(&mut self) {
-        self.builder
-            .start_node(SyntaxKind::ReturnStatement.into());
+        self.builder.start_node(SyntaxKind::ReturnStatement.into());
         self.expect(SyntaxKind::KwReturn, ExpectedSyntax::Item);
         if !self.at(SyntaxKind::Semicolon) {
             self.parse_value();
@@ -790,9 +777,7 @@ impl<'a> Parser<'a> {
                 continue;
             }
             if !self.at(SyntaxKind::RParen) {
-                self.error_here(SyntaxErrorKind::Expected(
-                    ExpectedSyntax::CommaOrRightParen,
-                ));
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightParen));
                 self.recover_until(&[SyntaxKind::Comma, SyntaxKind::RParen]);
                 self.eat(SyntaxKind::Comma);
             }
@@ -966,28 +951,34 @@ mod tests {
         let source = "fn\u{200e}a() {//x\r\n//y\u{2028}return;\n}";
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed
-            .errors()
-            .iter()
-            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken));
+        assert!(
+            !parsed
+                .errors()
+                .iter()
+                .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
+        );
     }
 
     #[test]
     fn handles_nested_and_unterminated_block_comments() {
         let nested = parse("/* outer /* inner */ done */ fn a() {}");
         assert_eq!(nested.text(), "/* outer /* inner */ done */ fn a() {}");
-        assert!(!nested
-            .errors()
-            .iter()
-            .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment));
+        assert!(
+            !nested
+                .errors()
+                .iter()
+                .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment)
+        );
 
         let source = "fn a() { /* never closes";
         let unterminated = parse(source);
         assert_eq!(unterminated.text(), source);
-        assert!(unterminated
-            .errors()
-            .iter()
-            .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment));
+        assert!(
+            unterminated
+                .errors()
+                .iter()
+                .any(|error| error.kind() == SyntaxErrorKind::UnterminatedBlockComment)
+        );
     }
 
     #[test]
@@ -995,10 +986,12 @@ mod tests {
         let source = "fn a() { let x: I64 = 42; + . }";
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(parsed
-            .errors()
-            .iter()
-            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken));
+        assert!(
+            parsed
+                .errors()
+                .iter()
+                .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
+        );
     }
 
     #[test]
@@ -1032,13 +1025,16 @@ fn consume(value: Ticket,) {}
 
     #[test]
     fn malformed_input_recovers_without_losing_text() {
-        let source = "record A { x I64, y: I64 } fn broken( { let x: I64 = ; return; trailing } fn ok() {}";
+        let source =
+            "record A { x I64, y: I64 } fn broken( { let x: I64 = ; return; trailing } fn ok() {}";
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
         assert!(parsed.errors().len() >= 3);
-        assert!(parsed
-            .syntax()
-            .descendants()
-            .any(|node| node.kind() == SyntaxKind::FunctionDefinition));
+        assert!(
+            parsed
+                .syntax()
+                .descendants()
+                .any(|node| node.kind() == SyntaxKind::FunctionDefinition)
+        );
     }
 }
