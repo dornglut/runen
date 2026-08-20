@@ -1,22 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
-    TypeDef, TypeId, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 #[test]
@@ -44,7 +49,7 @@ fn raw_move_requires_raw_pointer_operand() {
         ],
     );
 
-    let error = validate_body(body).expect_err("RawMove requires a stored raw-pointer value");
+    let error = validate_program(body).expect_err("RawMove requires a stored raw-pointer value");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::RawMoveRequiresPointer(value_ty)
@@ -81,7 +86,7 @@ fn raw_move_result_type_must_match_enclosing_destination() {
         ],
     );
 
-    let error = validate_body(body).expect_err("RawMove produces its raw pointer pointee type");
+    let error = validate_program(body).expect_err("RawMove produces its raw pointer pointee type");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::TypeMismatch { expected: bool_ty }
@@ -107,7 +112,7 @@ fn raw_move_requires_live_pointer_value() {
         }],
     );
 
-    let error = validate_body(body).expect_err("uninitialized pointer value is invalid MIR");
+    let error = validate_program(body).expect_err("uninitialized pointer value is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(pointer)
@@ -149,7 +154,7 @@ fn raw_move_rejects_moved_pointer_value() {
         ],
     );
 
-    let error = validate_body(body).expect_err("moved pointer value is invalid MIR");
+    let error = validate_program(body).expect_err("moved pointer value is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(pointer)
@@ -191,7 +196,7 @@ fn exclusive_loan_over_pointer_storage_blocks_raw_move_at_validation() {
         ],
     );
 
-    let error = validate_body(body).expect_err("exclusive pointer-storage loan blocks RawMove");
+    let error = validate_program(body).expect_err("exclusive pointer-storage loan blocks RawMove");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::DirectAccessConflict {
@@ -241,7 +246,7 @@ fn shared_loan_can_supply_raw_move_pointer_value() {
         ],
     );
 
-    validate_body(body).expect("shared authority may obtain the stored pointer value for RawMove");
+    validate_program(body).expect("shared authority may obtain the stored pointer value for RawMove");
 }
 
 #[test]
@@ -277,7 +282,7 @@ fn defined_raw_move_leaves_exact_target_dead() {
         ],
     );
 
-    let error = validate_body(body).expect_err("defined RawMove must leave its target Dead");
+    let error = validate_program(body).expect_err("defined RawMove must leave its target Dead");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(target)
@@ -324,7 +329,7 @@ fn raw_move_of_field_leaves_disjoint_sibling_live() {
         ],
     );
 
-    let error = validate_body(body)
+    let error = validate_program(body)
         .expect_err("RawMove of one field must leave only the complete aggregate partial");
     assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(pair));
 }
@@ -369,7 +374,7 @@ fn raw_move_transports_raw_pointer_target_metadata() {
         ],
     );
 
-    validate_body(body).expect("RawMove must transport exact pointer target metadata");
+    validate_program(body).expect("RawMove must transport exact pointer target metadata");
 }
 
 #[test]
@@ -406,7 +411,7 @@ fn self_targeting_raw_move_snapshots_pointer_before_moving_same_storage() {
         ],
     );
 
-    validate_body(body).expect("RawMove snapshots a self-targeting pointer before moving it");
+    validate_program(body).expect("RawMove snapshots a self-targeting pointer before moving it");
 }
 
 #[test]
@@ -438,7 +443,7 @@ fn statically_evident_raw_move_ub_has_no_path_state_continuation() {
         ],
     );
 
-    validate_body(body).expect("unsafe target failure is not a MIR-validation diagnostic");
+    validate_program(body).expect("unsafe target failure is not a MIR-validation diagnostic");
 }
 
 #[test]
@@ -473,7 +478,7 @@ fn static_validation_still_checks_statements_after_statically_evident_raw_ub() {
     );
 
     let error =
-        validate_body(body).expect_err("whole-body static type validation remains mandatory");
+        validate_program(body).expect_err("whole-body static type validation remains mandatory");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::TypeMismatch { expected: bool_ty }
@@ -518,7 +523,7 @@ fn raw_move_target_loan_conflict_is_not_a_validation_error() {
         ],
     );
 
-    validate_body(body).expect("raw target loan conflict is UB, not a MIR validation diagnostic");
+    validate_program(body).expect("raw target loan conflict is UB, not a MIR validation diagnostic");
 }
 
 #[test]
@@ -546,7 +551,7 @@ fn statically_evident_raw_read_ub_has_no_path_state_continuation() {
         ],
     );
 
-    validate_body(body).expect("statically evident RawRead UB has no defined path-state successor");
+    validate_program(body).expect("statically evident RawRead UB has no defined path-state successor");
 }
 
 #[test]
@@ -586,7 +591,7 @@ fn statically_evident_raw_assign_ub_has_no_path_state_continuation() {
         ],
     );
 
-    validate_body(body)
+    validate_program(body)
         .expect("statically evident RawAssign UB has no defined path-state successor");
 }
 
@@ -631,7 +636,7 @@ fn whole_aggregate_raw_move_marks_every_target_leaf_dead() {
         ],
     );
 
-    let error = validate_body(body).expect_err("whole RawMove must leave every target leaf Dead");
+    let error = validate_program(body).expect_err("whole RawMove must leave every target leaf Dead");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(target.field(1))
@@ -674,7 +679,7 @@ fn raw_assign_snapshots_target_before_raw_move_source_consumes_pointer_operand()
         ],
     );
 
-    validate_body(body).expect(
+    validate_program(body).expect(
         "RawAssign target must be snapshotted before RawMove consumes its pointer operand storage",
     );
 }

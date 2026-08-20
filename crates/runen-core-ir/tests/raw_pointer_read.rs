@@ -1,22 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
-    TypeDef, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 #[test]
@@ -48,7 +53,7 @@ fn live_raw_pointer_value_is_valid_for_raw_read() {
         ],
     );
 
-    validate_body(body).expect("live raw-pointer value is valid MIR for RawRead");
+    validate_program(body).expect("live raw-pointer value is valid MIR for RawRead");
 }
 
 #[test]
@@ -85,7 +90,7 @@ fn shared_loan_can_supply_raw_read_pointer_value() {
         ],
     );
 
-    validate_body(body).expect("shared loan retains authority to read the stored pointer value");
+    validate_program(body).expect("shared loan retains authority to read the stored pointer value");
 }
 
 #[test]
@@ -108,7 +113,7 @@ fn raw_read_requires_raw_pointer_type() {
         ],
     );
 
-    let error = validate_body(body).expect_err("RawRead of non-pointer MIR must be rejected");
+    let error = validate_program(body).expect_err("RawRead of non-pointer MIR must be rejected");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::RawReadRequiresPointer(value_ty)
@@ -130,7 +135,7 @@ fn raw_read_requires_live_pointer_value() {
         }],
     );
 
-    let error = validate_body(body).expect_err("uninitialized pointer value is invalid MIR");
+    let error = validate_program(body).expect_err("uninitialized pointer value is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(pointer)
@@ -167,7 +172,7 @@ fn raw_read_rejects_moved_pointer_value() {
         ],
     );
 
-    let error = validate_body(body).expect_err("moved pointer value is invalid MIR");
+    let error = validate_program(body).expect_err("moved pointer value is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(pointer)
@@ -203,7 +208,7 @@ fn exclusive_loan_over_pointer_storage_blocks_raw_read_at_validation() {
         ],
     );
 
-    let error = validate_body(body).expect_err("exclusive pointer-storage loan blocks RawRead");
+    let error = validate_program(body).expect_err("exclusive pointer-storage loan blocks RawRead");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::DirectAccessConflict {

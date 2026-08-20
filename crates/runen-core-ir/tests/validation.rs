@@ -1,16 +1,22 @@
-use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Field, LocalDecl, LocalId, MirValidationErrorKind, Operand,
-    Place, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_body,
-};
+mod support;
 
-fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
-    Body {
+use runen_core_ir::{
+    BasicBlock, BasicBlockId, Body, Field, FunctionId, LocalDecl, LocalId, MirValidationErrorKind,
+    Operand, Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value,
+    validate_program,
+};
+use support::one_function_program;
+
+fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 #[test]
@@ -26,21 +32,31 @@ fn valid_body_is_validated() {
         }],
     );
 
-    let validated = validate_body(body).expect("valid body must pass validation");
-    assert_eq!(validated.as_body().entry, BasicBlockId(0));
+    let validated = validate_program(body).expect("valid body must pass validation");
+    assert_eq!(
+        validated
+            .as_program()
+            .function(FunctionId(0))
+            .expect("one-function fixture")
+            .body
+            .entry,
+        BasicBlockId(0)
+    );
 }
 
 #[test]
 fn invalid_entry_block_is_rejected() {
-    let body = Body {
-        types: TypeTable::new(),
-        locals: Vec::new(),
-        loans: Vec::new(),
-        entry: BasicBlockId(1),
-        blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return)],
-    };
+    let body = one_function_program(
+        TypeTable::new(),
+        Body {
+            locals: Vec::new(),
+            loans: Vec::new(),
+            entry: BasicBlockId(1),
+            blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+        },
+    );
 
-    let error = validate_body(body).expect_err("entry outside the body must be rejected");
+    let error = validate_program(body).expect_err("entry outside the body must be rejected");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::InvalidEntryBlock(BasicBlockId(1))
@@ -49,18 +65,20 @@ fn invalid_entry_block_is_rejected() {
 
 #[test]
 fn invalid_goto_target_is_rejected() {
-    let body = Body {
-        types: TypeTable::new(),
-        locals: Vec::new(),
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            Vec::new(),
-            Terminator::Goto(BasicBlockId(7)),
-        )],
-    };
+    let body = one_function_program(
+        TypeTable::new(),
+        Body {
+            locals: Vec::new(),
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Goto(BasicBlockId(7)),
+            )],
+        },
+    );
 
-    let error = validate_body(body).expect_err("unknown target must be rejected");
+    let error = validate_program(body).expect_err("unknown target must be rejected");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::InvalidTargetBlock(BasicBlockId(7))
@@ -75,7 +93,7 @@ fn unknown_local_type_is_rejected() {
         Vec::new(),
     );
 
-    let error = validate_body(body).expect_err("unknown local type must be rejected");
+    let error = validate_program(body).expect_err("unknown local type must be rejected");
     assert_eq!(error.kind, MirValidationErrorKind::UnknownType(TypeId(9)));
 }
 
@@ -91,7 +109,7 @@ fn statement_referencing_unknown_local_is_rejected() {
         }],
     );
 
-    let error = validate_body(body).expect_err("unknown local reference must be rejected");
+    let error = validate_program(body).expect_err("unknown local reference must be rejected");
     assert_eq!(error.kind, MirValidationErrorKind::InvalidLocal(LocalId(8)));
 }
 
@@ -108,7 +126,7 @@ fn struct_field_referencing_unknown_type_is_rejected() {
         Vec::new(),
     );
 
-    let error = validate_body(body).expect_err("unknown field type must be rejected");
+    let error = validate_program(body).expect_err("unknown field type must be rejected");
     assert_eq!(error.kind, MirValidationErrorKind::UnknownType(TypeId(9)));
 }
 
@@ -130,7 +148,7 @@ fn recursive_by_value_type_is_rejected() {
         Vec::new(),
     );
 
-    let error = validate_body(body).expect_err("recursive value type must be rejected");
+    let error = validate_program(body).expect_err("recursive value type must be rejected");
     assert_eq!(error.kind, MirValidationErrorKind::RecursiveType(recursive));
 }
 
@@ -147,7 +165,7 @@ fn invalid_projection_is_rejected() {
         }],
     );
 
-    let error = validate_body(body).expect_err("field projection from scalar must be rejected");
+    let error = validate_program(body).expect_err("field projection from scalar must be rejected");
     assert_eq!(error.kind, MirValidationErrorKind::InvalidProjection(place));
 }
 
@@ -164,7 +182,7 @@ fn operand_type_mismatch_is_rejected() {
         }],
     );
 
-    let error = validate_body(body).expect_err("typed MIR mismatch must be rejected");
+    let error = validate_program(body).expect_err("typed MIR mismatch must be rejected");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::TypeMismatch { expected: bool_ty }
@@ -190,7 +208,7 @@ fn copy_of_noncopy_type_is_rejected_by_validation() {
         }],
     );
 
-    let error = validate_body(body).expect_err("non-copy Copy must be rejected by MIR validation");
+    let error = validate_program(body).expect_err("non-copy Copy must be rejected by MIR validation");
     assert_eq!(error.kind, MirValidationErrorKind::CopyOfNonCopy(tracked));
 }
 
@@ -207,8 +225,8 @@ fn assignment_through_immutable_local_is_rejected_by_validation() {
         }],
     );
 
-    let error =
-        validate_body(body).expect_err("immutable assignment must be rejected by MIR validation");
+    let error = validate_program(body)
+        .expect_err("immutable assignment must be rejected by MIR validation");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::AssignToImmutable(LocalId(0))
@@ -244,7 +262,7 @@ fn read_after_move_is_rejected_by_validation() {
         ],
     );
 
-    let error = validate_body(body).expect_err("read after move must be invalid MIR");
+    let error = validate_program(body).expect_err("read after move must be invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(source)
@@ -281,7 +299,7 @@ fn init_after_move_is_rejected_by_validation() {
         ],
     );
 
-    let error = validate_body(body).expect_err("Init cannot reinitialize dead storage");
+    let error = validate_program(body).expect_err("Init cannot reinitialize dead storage");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::InitRequiresNeverInitialized(source)
@@ -301,7 +319,7 @@ fn drop_without_live_subobject_is_rejected_by_validation() {
         }],
     );
 
-    let error = validate_body(body).expect_err("drop of never-initialized storage is invalid MIR");
+    let error = validate_program(body).expect_err("drop of never-initialized storage is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::DropOfUninitialized(place)
@@ -313,21 +331,23 @@ fn validation_checks_repeated_loop_state_transitions() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let place = Place::local(LocalId(0));
-    let body = Body {
+    let body = one_function_program(
         types,
-        locals: vec![LocalDecl::new("value", i64_ty, false)],
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![Statement::Init {
-                dst: place.clone(),
-                src: Operand::Constant(Value::I64(1)),
-            }],
-            Terminator::Goto(BasicBlockId(0)),
-        )],
-    };
+        Body {
+            locals: vec![LocalDecl::new("value", i64_ty, false)],
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![Statement::Init {
+                    dst: place.clone(),
+                    src: Operand::Constant(Value::I64(1)),
+                }],
+                Terminator::Goto(BasicBlockId(0)),
+            )],
+        },
+    );
 
-    let error = validate_body(body).expect_err("second loop iteration makes Init invalid");
+    let error = validate_program(body).expect_err("second loop iteration makes Init invalid");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::InitRequiresNeverInitialized(place)
@@ -339,19 +359,21 @@ fn stable_valid_loop_state_is_accepted_as_possible_divergence() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let place = Place::local(LocalId(0));
-    let body = Body {
+    let body = one_function_program(
         types,
-        locals: vec![LocalDecl::new("value", i64_ty, true)],
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![Statement::Assign {
-                dst: place.into(),
-                src: Operand::Constant(Value::I64(1)),
-            }],
-            Terminator::Goto(BasicBlockId(0)),
-        )],
-    };
+        Body {
+            locals: vec![LocalDecl::new("value", i64_ty, true)],
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![Statement::Assign {
+                    dst: place.into(),
+                    src: Operand::Constant(Value::I64(1)),
+                }],
+                Terminator::Goto(BasicBlockId(0)),
+            )],
+        },
+    );
 
-    validate_body(body).expect("stable mutable assignment loop is valid MIR");
+    validate_program(body).expect("stable mutable assignment loop is valid MIR");
 }

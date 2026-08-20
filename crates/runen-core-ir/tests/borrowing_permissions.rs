@@ -1,22 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
-    TypeDef, TypeId, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 fn i64_type() -> (TypeTable, TypeId) {
@@ -25,8 +30,8 @@ fn i64_type() -> (TypeTable, TypeId) {
     (types, ty)
 }
 
-fn error_kind(body: Body) -> MirValidationErrorKind {
-    validate_body(body).expect_err("invalid MIR").kind
+fn error_kind(program: Program) -> MirValidationErrorKind {
+    validate_program(program).expect_err("invalid MIR").kind
 }
 
 #[test]
@@ -129,7 +134,7 @@ fn shared_loan_allows_read_and_copy() {
         ],
     );
 
-    validate_body(body).expect("shared loan permits read and copy");
+    validate_program(body).expect("shared loan permits read and copy");
 }
 
 #[test]
@@ -228,7 +233,7 @@ fn exclusive_loan_allows_read_copy_and_drop() {
         ],
     );
 
-    validate_body(body).expect("exclusive loan permits read, copy, and drop");
+    validate_program(body).expect("exclusive loan permits read, copy, and drop");
 }
 
 #[test]

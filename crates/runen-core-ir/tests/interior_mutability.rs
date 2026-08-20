@@ -1,22 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
-    TypeDef, TypeId, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 fn marked_i64() -> (TypeTable, TypeId) {
@@ -31,8 +36,8 @@ fn plain_i64() -> (TypeTable, TypeId) {
     (types, ty)
 }
 
-fn error_kind(body: Body) -> MirValidationErrorKind {
-    validate_body(body).expect_err("invalid MIR").kind
+fn error_kind(program: Program) -> MirValidationErrorKind {
+    validate_program(program).expect_err("invalid MIR").kind
 }
 
 #[test]
@@ -56,7 +61,7 @@ fn interior_assignment_is_independent_of_local_assignment_mutability() {
         ],
     );
 
-    validate_body(body).expect("interior assignment does not require mutable-local permission");
+    validate_program(body).expect("interior assignment does not require mutable-local permission");
 }
 
 #[test]
@@ -159,7 +164,7 @@ fn shared_loan_can_interior_assign_without_gaining_exclusive_authority() {
         ],
     );
 
-    validate_body(body).expect("shared alias authority is sufficient for marked interior storage");
+    validate_program(body).expect("shared alias authority is sufficient for marked interior storage");
 }
 
 #[test]
@@ -222,7 +227,7 @@ fn direct_interior_assignment_can_coexist_with_shared_root_loan() {
         ],
     );
 
-    validate_body(body).expect("shared aliases do not block marked direct interior replacement");
+    validate_program(body).expect("shared aliases do not block marked direct interior replacement");
 }
 
 #[test]
@@ -288,7 +293,7 @@ fn marked_ancestor_grants_interior_mutability_to_structural_descendants() {
         ],
     );
 
-    validate_body(body).expect("a marked structural ancestor owns its descendant region");
+    validate_program(body).expect("a marked structural ancestor owns its descendant region");
 }
 
 #[test]
@@ -346,7 +351,7 @@ fn marked_descendant_itself_is_interior_mutable_inside_unmarked_aggregate() {
         ],
     );
 
-    validate_body(body).expect("only the marked descendant region gains the capability");
+    validate_program(body).expect("only the marked descendant region gains the capability");
 }
 
 #[test]
@@ -381,7 +386,7 @@ fn shared_child_preserves_parent_shared_authority_for_interior_assignment() {
         ],
     );
 
-    validate_body(body).expect("shared child leaves the parent's shared authority intact");
+    validate_program(body).expect("shared child leaves the parent's shared authority intact");
 }
 
 #[test]
@@ -464,5 +469,5 @@ fn disjoint_exclusive_child_does_not_block_parent_interior_assignment_on_sibling
         ],
     );
 
-    validate_body(body).expect("disjoint delegation does not constrain sibling shared authority");
+    validate_program(body).expect("disjoint delegation does not constrain sibling shared authority");
 }

@@ -1,26 +1,31 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, Projection, ScalarType, Statement,
+    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
-fn error_kind(body: Body) -> MirValidationErrorKind {
-    validate_body(body).expect_err("invalid MIR").kind
+fn error_kind(program: Program) -> MirValidationErrorKind {
+    validate_program(program).expect_err("invalid MIR").kind
 }
 
 #[test]
@@ -35,12 +40,9 @@ fn raw_pointer_pointee_recursion_is_not_structural_recursion() {
         )),
         node
     );
-    assert_eq!(
-        types.push(TypeDef::raw_pointer("NodePtr", node)),
-        node_pointer
-    );
+    assert_eq!(types.push(TypeDef::raw_pointer("NodePtr", node)), node_pointer);
 
-    validate_body(one_block(types, Vec::new(), Vec::new(), Vec::new()))
+    validate_program(one_block(types, Vec::new(), Vec::new(), Vec::new()))
         .expect("raw-pointer indirection may close an otherwise finite recursive shape");
 }
 
@@ -123,7 +125,7 @@ fn address_of_does_not_require_initialized_pointee_storage() {
         }],
     );
 
-    validate_body(body).expect("address formation names storage rather than reading its value");
+    validate_program(body).expect("address formation names storage rather than reading its value");
 }
 
 #[test]
@@ -158,7 +160,7 @@ fn address_of_dead_storage_is_valid_while_storage_extent_continues() {
         ],
     );
 
-    validate_body(body).expect("ending a stored-value lifetime does not end local storage extent");
+    validate_program(body).expect("ending a stored-value lifetime does not end local storage extent");
 }
 
 #[test]
@@ -193,7 +195,7 @@ fn direct_address_of_can_coexist_with_shared_loan() {
         ],
     );
 
-    validate_body(body).expect("address formation has only a shared alias requirement");
+    validate_program(body).expect("address formation has only a shared alias requirement");
 }
 
 #[test]
@@ -269,7 +271,7 @@ fn address_of_through_shared_or_exclusive_loan_uses_shared_authority() {
             ],
         );
 
-        validate_body(body).expect("both loan kinds include shared address-formation authority");
+        validate_program(body).expect("both loan kinds include shared address-formation authority");
     }
 }
 
@@ -301,7 +303,7 @@ fn raw_pointer_values_are_copyable() {
         ],
     );
 
-    validate_body(body).expect("raw-pointer values are ordinary copyable owned values");
+    validate_program(body).expect("raw-pointer values are ordinary copyable owned values");
 }
 
 #[test]
