@@ -7,3 +7,5 @@
 
 mod legacy;
 pub use legacy::*;
+
+pub mod interprocedural;
