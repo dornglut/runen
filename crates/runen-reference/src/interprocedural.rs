@@ -113,12 +113,9 @@ impl RuntimeValue {
             Self::Bool(value) => Value::Bool(value),
             Self::I64(value) => Value::I64(value),
             Self::TrackedFixture(value) => Value::TrackedFixture(value),
-            Self::Struct(values) => Value::Struct(
-                values
-                    .into_iter()
-                    .map(Self::into_public_value)
-                    .collect(),
-            ),
+            Self::Struct(values) => {
+                Value::Struct(values.into_iter().map(Self::into_public_value).collect())
+            }
             Self::RawPointer(_) => {
                 unreachable!("validated entry result is call-transfer-safe and pointer-free")
             }
@@ -452,9 +449,7 @@ impl Machine {
                 Ok(())
             }
             Statement::RawRead { pointer } => self.raw_read(frame_index, pointer),
-            Statement::RawAssign { pointer, src } => {
-                self.raw_assign(frame_index, pointer, src)
-            }
+            Statement::RawAssign { pointer, src } => self.raw_assign(frame_index, pointer, src),
             Statement::Assign { dst, src } => {
                 self.replace(frame_index, dst, src, VerificationWriteKind::Assign)
             }
@@ -664,11 +659,7 @@ impl Machine {
                 let value = {
                     let types = &self.program.as_program().types;
                     let frame = &mut self.frames[frame_index];
-                    take_value(
-                        types,
-                        src_ty,
-                        place_state_mut(&mut frame.locals, &src),
-                    )
+                    take_value(types, src_ty, place_state_mut(&mut frame.locals, &src))
                 };
                 self.record(frame_index, VerificationEventKind::Move(src.clone()));
                 if let RuntimeValue::RawPointer(pointer) = &value {
