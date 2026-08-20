@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source module identity, module binding, module alias, visibility, and qualified cross-module lookup relations. It consumes lexical identifier keys from [Source lexical foundation](lexical.md) and does not redefine identifier formation or equivalence.
 
-Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). This document does not define concrete declaration or import syntax, member lookup, overload resolution, package discovery, or an implementation representation.
+Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). The represented concrete module-private record/function forms are owned by [Source concrete syntax](concrete-syntax.md). This document does not define member lookup, overload resolution, package discovery, or an implementation representation.
 
 ## Source modules
 
@@ -24,7 +24,9 @@ This document does not define how a build system discovers source units, maps fi
 
 Every source module has one **module declaration namespace** keyed by lexical identifier keys.
 
-When a later source-language rule establishes that a declaration introduces a module-level name, that declaration contributes one binding with its lexical identifier key to this namespace unless the declaration's canonical owner explicitly places that name only in a member-specific or otherwise distinct lookup domain.
+When an accepted source-language rule establishes that a declaration introduces a module-level name, that declaration contributes one binding with its lexical identifier key to this namespace unless the declaration's canonical owner explicitly places that name only in a member-specific or otherwise distinct lookup domain.
+
+The represented record and function definitions in `concrete-syntax.md` each establish their accepted record/function declaration and therefore contribute one module binding through this relation.
 
 Two distinct module-level bindings in the same source module MUST NOT have the same lexical identifier key.
 
@@ -32,7 +34,7 @@ Module-level bindings are available to module-level name resolution independentl
 
 A module-level binding is identified by its source module and binding identity, not by the original source spelling of its identifier. The namespace key is the lexical identifier key defined by `lexical.md`.
 
-For this foundation, name resolution first identifies one binding/entity. A later source-language rule then determines whether that resolved entity category is valid for the applicable type, value, declaration, or other semantic context. This document does not define separate module-level type and value namespaces or context-dependent searches across such namespaces.
+For this foundation, name resolution first identifies one binding/entity. A consuming source-language rule then determines whether that resolved entity category is valid for the applicable type, value, declaration, call, or other semantic context. This document does not define separate module-level type and value namespaces or context-dependent searches across such namespaces.
 
 Function-local parameter/local bindings are owned by `local-bindings.md` and do not become members of this module declaration namespace. This section also does not define fields, methods, associated items, generic parameters, pattern bindings, lifetime names, labels, macros, or overload sets. A later rule that permits one source name to denote an overload set or another multi-entity binding MUST define that binding relation explicitly; duplicate module-level binding keys do not become an overload set merely because the declarations have different signatures or categories.
 
@@ -43,7 +45,9 @@ Each module-level binding represented by this document has one of two accessibil
 - **module-private** — usable by same-module lookup but not by cross-module lookup;
 - **exported** — usable by same-module lookup and eligible for cross-module lookup from another module.
 
-Accessibility is a source semantic fact. It is not inferred from identifier case, original spelling, physical symbol visibility, linkage, ABI export status, file placement, or build-system metadata unless a later source-language rule explicitly establishes such a source relation.
+Accessibility is a source semantic fact. It is not inferred from identifier case, original spelling, physical symbol visibility, linkage, ABI export status, file placement, or build-system metadata unless a source-language rule explicitly establishes such a source relation.
+
+The record and function definitions represented by `concrete-syntax.md` establish module-private bindings. That concrete grammar currently has no exported-binding syntax. The abstract exported accessibility class defined here remains available to later accepted declaration forms.
 
 This revision does not define package-scoped, friend, subtree-restricted, protected, FFI-linkage, or other accessibility classes.
 
@@ -55,7 +59,7 @@ If that namespace contains the binding keyed by `k`, module-scope lookup resolve
 
 If the namespace contains no binding keyed by `k`, this module-scope lookup does not resolve a binding. This rule does not cause imported modules, future preludes, member scopes, or another namespace to be searched implicitly.
 
-Within represented function bodies, `local-bindings.md` defines when function-local lookup is attempted before this same-module relation. This document does not redefine that local precedence or its local shadowing rules.
+Within represented function bodies, `local-bindings.md` owns when active function-local bindings are consulted before this same-module relation. The consuming source form validates the category of the selected entity; same-module lookup does not skip bindings based on the category desired by that context.
 
 ## Source-unit module aliases
 
@@ -79,7 +83,9 @@ Different source units assigned to one source module MAY use different alias key
 
 A module alias is available only within the source unit whose module import relation introduces it. Another source unit in the same source module does not acquire that alias merely because the target module or alias exists elsewhere in the module.
 
-This document does not define concrete import syntax, alias syntax, target-locator spelling, import placement, unused-import diagnostics, or a module object's source-level value representation.
+The current concrete grammar defines no import or module-alias syntax. This abstract relation therefore has no represented concrete source form under `concrete-syntax.md`.
+
+This document does not define target-locator spelling, unused-import diagnostics, or a module object's source-level value representation.
 
 ## Qualified cross-module lookup
 
@@ -102,7 +108,7 @@ When those conditions hold, the qualified lookup resolves to that target binding
 
 An unqualified lookup MUST NOT search imported modules merely because they are aliased in the source unit. This revision defines no selective direct imports, wildcard or glob imports, dot imports, re-exports, implicit preludes, transitive import visibility, or imported-member precedence rules.
 
-Concrete grammar may later choose a path separator or other spelling that lowers to this relation. That spelling does not alter the binding relation defined here.
+A later concrete grammar may choose a path separator or other spelling that maps to this relation. That spelling must not alter the binding relation defined here.
 
 Module aliases themselves are not exported module-level bindings under this revision and therefore do not re-export their target modules or target bindings.
 
@@ -116,14 +122,16 @@ This permission concerns source name resolution only. A later const/static initi
 
 ## Deliberate boundaries
 
-This revision defines only module declaration namespaces and source-unit module-alias scopes. Represented function-local value-binding scopes and lookup are owned by `local-bindings.md`. This document does not define:
+This revision defines module declaration namespaces, binding accessibility, same-module lookup, source-unit module-alias scopes, and qualified cross-module lookup. Represented function-local value-binding scopes and precedence are owned by `local-bindings.md`. The current concrete record/function declaration forms are owned by `concrete-syntax.md`.
+
+This document does not define:
 
 - additional local binding classes such as pattern bindings, closure captures, generic parameters, lifetime names, or labels;
 - nested or parent/child module hierarchy, module path segments, `self`/`super`-like relations, or a source-visible canonical module name;
 - fields, methods, associated items, extension lookup, trait lookup, overload resolution, argument-dependent lookup, or member precedence;
 - implicit/predeclared names or a standard-library prelude;
-- concrete declarations or their grammar;
-- module/import keywords, path punctuation, comments, or literals;
+- concrete import, export, re-export, or qualified-path grammar;
+- module/import keywords beyond forms accepted by another concrete owner;
 - package management, dependency solving, filesystem layout, source discovery, or interface serialization;
 - const/static initialization order or runtime module initialization;
 - ABI, linkage, FFI export/import, or physical symbol visibility;
