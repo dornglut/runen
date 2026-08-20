@@ -60,19 +60,14 @@ struct BindingState {
     available: bool,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum CallUse {
-    Value,
-    Statement,
-}
-
 pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Diagnostic>> {
     let mut diagnostics = syntax_admission_diagnostics(units);
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
 
-    let (mut modules, record_syntax, function_syntax) = collect_declarations(units, &mut diagnostics);
+    let (mut modules, record_syntax, function_syntax) =
+        collect_declarations(units, &mut diagnostics);
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
@@ -171,12 +166,7 @@ fn collect_declarations(
                     let name_token = direct_token(&item, SyntaxKind::Ident);
                     let name = key(&name_token);
                     let location = location(unit_index, &item);
-                    if insert_entity(
-                        &mut modules,
-                        unit.module,
-                        &name,
-                        EntityId::Record(id),
-                    ) {
+                    if insert_entity(&mut modules, unit.module, &name, EntityId::Record(id)) {
                         modules
                             .get_mut(&unit.module)
                             .expect("module inserted")
@@ -202,12 +192,7 @@ fn collect_declarations(
                     let name_token = direct_token(&item, SyntaxKind::Ident);
                     let name = key(&name_token);
                     let location = location(unit_index, &item);
-                    if insert_entity(
-                        &mut modules,
-                        unit.module,
-                        &name,
-                        EntityId::Function(id),
-                    ) {
+                    if insert_entity(&mut modules, unit.module, &name, EntityId::Function(id)) {
                         modules
                             .get_mut(&unit.module)
                             .expect("module inserted")
@@ -275,13 +260,9 @@ fn resolve_records(
                 });
             }
             let type_node = direct_child(&field_node, SyntaxKind::TypeRef);
-            if let Some(ty) = resolve_type(
-                record.module,
-                record.unit,
-                &type_node,
-                modules,
-                diagnostics,
-            ) {
+            if let Some(ty) =
+                resolve_type(record.module, record.unit, &type_node, modules, diagnostics)
+            {
                 fields.push(Field {
                     name,
                     ty,
@@ -535,11 +516,23 @@ fn validate_body(
             kind: DiagnosticKind::MissingResultReturn,
             location: header.location,
         }),
-        (Some(_), Some(Return { value: None, location })) => diagnostics.push(Diagnostic {
+        (
+            Some(_),
+            Some(Return {
+                value: None,
+                location,
+            }),
+        ) => diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ExpectedResultValue,
             location: *location,
         }),
-        (None, Some(Return { value: Some(_), location })) => diagnostics.push(Diagnostic {
+        (
+            None,
+            Some(Return {
+                value: Some(_),
+                location,
+            }),
+        ) => diagnostics.push(Diagnostic {
             kind: DiagnosticKind::UnexpectedResultValue,
             location: *location,
         }),
@@ -565,22 +558,9 @@ fn validate_local(
     let name = key(&name_token);
     let local_location = location(header.unit, node);
     let type_node = direct_child(node, SyntaxKind::TypeRef);
-    let declared = resolve_type(
-        header.module,
-        header.unit,
-        &type_node,
-        modules,
-        diagnostics,
-    );
+    let declared = resolve_type(header.module, header.unit, &type_node, modules, diagnostics);
     let value_node = value_child(node);
-    let initializer = validate_value(
-        header,
-        &value_node,
-        modules,
-        headers,
-        bindings,
-        diagnostics,
-    );
+    let initializer = validate_value(header, &value_node, modules, headers, bindings, diagnostics);
 
     let shadows = bindings.contains_key(&name);
     if shadows {
@@ -638,14 +618,8 @@ fn validate_call_statement(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let call = direct_child(node, SyntaxKind::DirectCall);
-    let (function, arguments, result) = validate_call(
-        header,
-        &call,
-        modules,
-        headers,
-        bindings,
-        diagnostics,
-    )?;
+    let (function, arguments, result) =
+        validate_call(header, &call, modules, headers, bindings, diagnostics)?;
     if result.is_some() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ResultCallUsedAsStatement,
@@ -670,17 +644,13 @@ fn validate_return(
 ) -> Return {
     let return_location = location(header.unit, node);
     let value = node.children().find(|child| {
-        matches!(child.kind(), SyntaxKind::IdentifierUse | SyntaxKind::DirectCall)
+        matches!(
+            child.kind(),
+            SyntaxKind::IdentifierUse | SyntaxKind::DirectCall
+        )
     });
     let value = value.and_then(|value_node| {
-        validate_value(
-            header,
-            &value_node,
-            modules,
-            headers,
-            bindings,
-            diagnostics,
-        )
+        validate_value(header, &value_node, modules, headers, bindings, diagnostics)
     });
 
     if let (Some(expected), Some(value)) = (header.result, value.as_ref())
@@ -756,14 +726,8 @@ fn validate_value(
         }
         SyntaxKind::DirectCall => {
             let call_location = location(header.unit, node);
-            let (function, arguments, result) = validate_call(
-                header,
-                node,
-                modules,
-                headers,
-                bindings,
-                diagnostics,
-            )?;
+            let (function, arguments, result) =
+                validate_call(header, node, modules, headers, bindings, diagnostics)?;
             let Some(ty) = result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
@@ -833,7 +797,10 @@ fn validate_call(
     let argument_nodes = argument_list
         .children()
         .filter(|child| {
-            matches!(child.kind(), SyntaxKind::IdentifierUse | SyntaxKind::DirectCall)
+            matches!(
+                child.kind(),
+                SyntaxKind::IdentifierUse | SyntaxKind::DirectCall
+            )
         })
         .collect::<Vec<_>>();
 
@@ -892,7 +859,10 @@ fn direct_token(node: &SyntaxNode, kind: SyntaxKind) -> SyntaxToken {
 fn value_child(node: &SyntaxNode) -> SyntaxNode {
     node.children()
         .find(|child| {
-            matches!(child.kind(), SyntaxKind::IdentifierUse | SyntaxKind::DirectCall)
+            matches!(
+                child.kind(),
+                SyntaxKind::IdentifierUse | SyntaxKind::DirectCall
+            )
         })
         .expect("syntax-clean value-producing construct contains a value")
 }

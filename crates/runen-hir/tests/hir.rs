@@ -7,7 +7,10 @@ fn parse(source: &str) -> Parse {
     parse_source(source.as_bytes()).expect("valid UTF-8 test source")
 }
 
-fn has_diagnostic(errors: &[runen_hir::Diagnostic], predicate: impl Fn(DiagnosticKind) -> bool) -> bool {
+fn has_diagnostic(
+    errors: &[runen_hir::Diagnostic],
+    predicate: impl Fn(DiagnosticKind) -> bool,
+) -> bool {
     errors.iter().any(|error| predicate(error.kind))
 }
 
@@ -17,7 +20,10 @@ fn rejects_syntax_dirty_units_before_semantic_hir() {
     assert!(!source.errors().is_empty());
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &source)])
         .expect_err("syntax-dirty unit must not produce HIR");
-    assert!(has_diagnostic(&errors, |kind| matches!(kind, DiagnosticKind::SyntaxError(_))));
+    assert!(has_diagnostic(&errors, |kind| matches!(
+        kind,
+        DiagnosticKind::SyntaxError(_)
+    )));
 }
 
 #[test]
@@ -41,8 +47,14 @@ fn same_module_units_support_order_independent_forward_lookup() {
     assert_eq!(first.functions.len(), 1);
     assert_eq!(second.records.len(), 1);
     assert_eq!(second.functions.len(), 1);
-    assert_eq!(first.functions[0].parameters[0].ty, Type::Record(first.records[0].id));
-    assert_eq!(second.functions[0].parameters[0].ty, Type::Record(second.records[0].id));
+    assert_eq!(
+        first.functions[0].parameters[0].ty,
+        Type::Record(first.records[0].id)
+    );
+    assert_eq!(
+        second.functions[0].parameters[0].ty,
+        Type::Record(second.records[0].id)
+    );
 }
 
 #[test]
@@ -62,17 +74,20 @@ fn rejects_duplicate_module_bindings_across_categories() {
     let source = parse("record Clash {} fn Clash() {}");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &source)])
         .expect_err("one module namespace forbids duplicate lexical keys");
-    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::DuplicateModuleBinding));
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::DuplicateModuleBinding));
 }
 
 #[test]
 fn nominal_records_do_not_type_match_by_structure() {
-    let source = parse(
-        "record A {} record B {} fn take(value: A) {} fn test(value: B) { take(value); }",
-    );
+    let source =
+        parse("record A {} record B {} fn take(value: A) {} fn test(value: B) { take(value); }");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &source)])
         .expect_err("distinct nominal records must remain distinct types");
-    assert!(has_diagnostic(&errors, |kind| matches!(kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(has_diagnostic(&errors, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
 }
 
 #[test]
@@ -80,17 +95,20 @@ fn rejects_duplicate_record_fields_and_containment_cycles() {
     let duplicate = parse("record A { x: I64, x: I64 }");
     let duplicate_errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &duplicate)])
         .expect_err("duplicate field keys are invalid");
-    assert!(has_diagnostic(&duplicate_errors, |kind| kind == DiagnosticKind::DuplicateRecordField));
+    assert!(has_diagnostic(&duplicate_errors, |kind| kind
+        == DiagnosticKind::DuplicateRecordField));
 
     let direct = parse("record A { a: A }");
     let direct_errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &direct)])
         .expect_err("direct record containment cycle is invalid");
-    assert!(has_diagnostic(&direct_errors, |kind| kind == DiagnosticKind::RecordContainmentCycle));
+    assert!(has_diagnostic(&direct_errors, |kind| kind
+        == DiagnosticKind::RecordContainmentCycle));
 
     let mutual = parse("record A { b: B } record B { a: A }");
     let mutual_errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &mutual)])
         .expect_err("mutual direct record containment cycle is invalid");
-    assert!(has_diagnostic(&mutual_errors, |kind| kind == DiagnosticKind::RecordContainmentCycle));
+    assert!(has_diagnostic(&mutual_errors, |kind| kind
+        == DiagnosticKind::RecordContainmentCycle));
 }
 
 #[test]
@@ -99,7 +117,10 @@ fn resolves_signatures_and_rejects_duplicate_parameters() {
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &valid)])
         .expect("signature types must resolve");
     assert_eq!(hir.functions[0].parameters.len(), 2);
-    assert_eq!(hir.functions[0].result, Some(Type::Record(hir.records[0].id)));
+    assert_eq!(
+        hir.functions[0].result,
+        Some(Type::Record(hir.records[0].id))
+    );
 
     let duplicate = parse("fn f(a: I64, a: I64) {}");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &duplicate)])
@@ -142,7 +163,11 @@ fn intrinsic_uses_duplicate_but_nominal_record_uses_consume() {
     let intrinsic = parse("fn sink(v: I64) {} fn f(x: I64) -> I64 { sink(x); return x; }");
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &intrinsic)])
         .expect("duplicable intrinsic may be used repeatedly");
-    let f = hir.functions.iter().find(|function| function.name == "f").unwrap();
+    let f = hir
+        .functions
+        .iter()
+        .find(|function| function.name == "f")
+        .unwrap();
     let Statement::Call { arguments, .. } = &f.body.statements[0] else {
         panic!("expected call statement");
     };
@@ -174,12 +199,21 @@ fn direct_calls_require_exact_arity_and_type_without_conversion() {
     let arity = parse("fn target(x: I64) {} fn f(x: I64) { target(); }");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &arity)])
         .expect_err("argument count must match exactly");
-    assert!(has_diagnostic(&errors, |kind| matches!(kind, DiagnosticKind::ArgumentCount { expected: 1, found: 0 })));
+    assert!(has_diagnostic(&errors, |kind| matches!(
+        kind,
+        DiagnosticKind::ArgumentCount {
+            expected: 1,
+            found: 0
+        }
+    )));
 
     let ty = parse("fn target(x: I64) {} fn f(x: I32) { target(x); }");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &ty)])
         .expect_err("I32 must not implicitly convert to I64");
-    assert!(has_diagnostic(&errors, |kind| matches!(kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(has_diagnostic(&errors, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
 }
 
 #[test]
@@ -189,8 +223,10 @@ fn call_use_category_matches_result_structure() {
     );
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &source)])
         .expect_err("result call cannot be statement and no-result call cannot be value");
-    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::ResultCallUsedAsStatement));
-    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::NoResultCallUsedAsValue));
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::ResultCallUsedAsStatement));
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::NoResultCallUsedAsValue));
 }
 
 #[test]
@@ -198,12 +234,18 @@ fn local_initializer_and_return_types_must_match_exactly() {
     let local = parse("fn f(x: I32) { let y: I64 = x; }");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &local)])
         .expect_err("initializer type must equal local type");
-    assert!(has_diagnostic(&errors, |kind| matches!(kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(has_diagnostic(&errors, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
 
     let returned = parse("fn f(x: I32) -> I64 { return x; }");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &returned)])
         .expect_err("return type must match exactly");
-    assert!(has_diagnostic(&errors, |kind| matches!(kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(has_diagnostic(&errors, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
 }
 
 #[test]
@@ -221,7 +263,8 @@ fn return_and_fallthrough_match_result_structure() {
     let unexpected = parse("fn f(x: I64) { return x; }");
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &unexpected)])
         .expect_err("no-result function cannot return value");
-    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::UnexpectedResultValue));
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::UnexpectedResultValue));
 
     let fallthrough = parse("fn f() {}");
     build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &fallthrough)])
@@ -234,21 +277,15 @@ fn direct_and_mutual_recursion_are_source_valid() {
     build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &direct)])
         .expect("direct recursion is source-valid");
 
-    let mutual = parse(
-        "fn a(x: I64) -> I64 { return b(x); } fn b(x: I64) -> I64 { return a(x); }",
-    );
+    let mutual = parse("fn a(x: I64) -> I64 { return b(x); } fn b(x: I64) -> I64 { return a(x); }");
     build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &mutual)])
         .expect("mutual recursion is source-valid");
 }
 
 #[test]
 fn declaration_reordering_does_not_change_resolution_validity() {
-    let first = parse(
-        "record Ticket {} fn sink(v: Ticket) {} fn test(v: Ticket) { sink(v); }",
-    );
-    let second = parse(
-        "fn test(v: Ticket) { sink(v); } fn sink(v: Ticket) {} record Ticket {}",
-    );
+    let first = parse("record Ticket {} fn sink(v: Ticket) {} fn test(v: Ticket) { sink(v); }");
+    let second = parse("fn test(v: Ticket) { sink(v); } fn sink(v: Ticket) {} record Ticket {}");
     build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &first)])
         .expect("first declaration order must validate");
     build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &second)])
