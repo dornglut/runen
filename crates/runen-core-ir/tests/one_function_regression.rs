@@ -1,6 +1,6 @@
 mod support {
     pub use ::runen_core_ir::{
-        BasicBlockId, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
+        BasicBlockId, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
         MirValidationErrorKind, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
         TypeDef, TypeId, TypeTable, Value,
     };
@@ -26,7 +26,6 @@ mod support {
     pub enum Terminator {
         Goto(BasicBlockId),
         Return,
-        Fault(Fault),
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
@@ -104,7 +103,6 @@ mod support {
                             terminator: match &block.terminator {
                                 Terminator::Goto(target) => ProgramTerminator::Goto(*target),
                                 Terminator::Return => ProgramTerminator::Return(None),
-                                Terminator::Fault(fault) => ProgramTerminator::Fault(fault.clone()),
                             },
                         })
                         .collect(),
