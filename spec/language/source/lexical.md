@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the source-text, whitespace/line-boundary, identifier-form, and lexical identifier-key foundation for Runen. The represented concrete reserved keys, punctuation, ordinary comments, and grammar are owned by [Source concrete syntax](concrete-syntax.md). Name resolution, literal value semantics, and implementation representation remain outside this owner.
+This document owns the source-text, whitespace/line-boundary, identifier-form, identifier-token extent, and lexical identifier-key foundation for Runen. The represented concrete reserved keys, punctuation, ordinary comments, and grammar are owned by [Source concrete syntax](concrete-syntax.md). Name resolution, literal value semantics, and implementation representation remain outside this owner.
 
 ## Source text
 
@@ -44,6 +44,8 @@ An **identifier-form token** is a non-empty sequence of Unicode scalar values sa
 
 - its first scalar has the Unicode 17.0.0 `XID_Start` property or is U+005F LOW LINE (`_`);
 - every remaining scalar has the Unicode 17.0.0 `XID_Continue` property or is U+005F LOW LINE (`_`).
+
+When lexical processing begins an identifier-form token at a source position, the token consumes the **maximal contiguous sequence** of Unicode scalar values that satisfies the rule above from that starting position. A later grammar MUST NOT split that maximal identifier-form token into shorter identifier-form tokens merely to obtain a keyword, type spelling, declaration name, or other grammatical interpretation.
 
 Identifier-form tokens are case-sensitive. Identifier keys are compared without case folding.
 
