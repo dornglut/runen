@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, Operand, Place, PlaceAccess, Projection,
-    ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable,
-    ValidatedProgram, Value,
+    ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind,
+    TypeTable, ValidatedProgram, Value,
 };
 
 use crate::{RawPointerValue, UndefinedBehaviorKind, VerificationWriteKind};
