@@ -165,7 +165,9 @@ fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
                             stack.push((child, 0));
                         }
                         1 => {
-                            return Err(program_error(MirValidationErrorKind::RecursiveType(child)));
+                            return Err(program_error(MirValidationErrorKind::RecursiveType(
+                                child,
+                            )));
                         }
                         2 => {}
                         _ => unreachable!("type-validation mark outside declared state space"),
@@ -214,7 +216,10 @@ fn validate_function_declarations(
             ));
         }
         let local = function.body.local(*parameter).ok_or_else(|| {
-            function_error(function_id, MirValidationErrorKind::InvalidLocal(*parameter))
+            function_error(
+                function_id,
+                MirValidationErrorKind::InvalidLocal(*parameter),
+            )
         })?;
         require_known_call_type(types, function_id, local.ty)?;
     }
@@ -578,9 +583,8 @@ fn loan_decl<'a>(
     loan: LoanId,
     point: &MirPoint,
 ) -> Result<&'a LoanDecl, MirValidationError> {
-    body.loan(loan).ok_or_else(|| {
-        point_error(point, MirValidationErrorKind::InvalidLoan(loan))
-    })
+    body.loan(loan)
+        .ok_or_else(|| point_error(point, MirValidationErrorKind::InvalidLoan(loan)))
 }
 
 fn place_type(
@@ -589,9 +593,9 @@ fn place_type(
     place: &Place,
     point: &MirPoint,
 ) -> Result<TypeId, MirValidationError> {
-    let local = body.local(place.local).ok_or_else(|| {
-        point_error(point, MirValidationErrorKind::InvalidLocal(place.local))
-    })?;
+    let local = body
+        .local(place.local)
+        .ok_or_else(|| point_error(point, MirValidationErrorKind::InvalidLocal(place.local)))?;
 
     types
         .project_type(local.ty, &place.projections)
@@ -743,7 +747,12 @@ fn validate_path_state(
             .expect("declaration validation establishes parameter local")
             .ty;
         let value = unknown_validation_value(types, ty);
-        write_validation_value(types, ty, place_state_mut(&mut locals, &Place::local(*parameter)), value);
+        write_validation_value(
+            types,
+            ty,
+            place_state_mut(&mut locals, &Place::local(*parameter)),
+            value,
+        );
     }
 
     let mut active_loans = vec![None; body.loans.len()];
@@ -766,7 +775,14 @@ fn validate_path_state(
                 statement: Some(statement_index),
             };
             if matches!(
-                validate_state_statement(types, body, &mut locals, &mut active_loans, statement, &point)?,
+                validate_state_statement(
+                    types,
+                    body,
+                    &mut locals,
+                    &mut active_loans,
+                    statement,
+                    &point,
+                )?,
                 DefinedStep::NoDefinedContinuation
             ) {
                 return Ok(());
@@ -784,7 +800,14 @@ fn validate_path_state(
             Terminator::Return(value) => {
                 if let Some(value) = value
                     && matches!(
-                        validate_operand_state(types, body, &mut locals, &active_loans, value, &point)?,
+                        validate_operand_state(
+                            types,
+                            body,
+                            &mut locals,
+                            &active_loans,
+                            value,
+                            &point,
+                        )?,
                         DefinedStep::NoDefinedContinuation
                     )
                 {
@@ -1033,7 +1056,9 @@ fn validate_operand_state(
     point: &MirPoint,
 ) -> Result<DefinedStep<ValidationValue>, MirValidationError> {
     match operand {
-        Operand::Constant(value) => Ok(DefinedStep::Continue(validation_value_from_constant(value))),
+        Operand::Constant(value) => {
+            Ok(DefinedStep::Continue(validation_value_from_constant(value)))
+        }
         Operand::Move(src) => {
             let place =
                 resolve_authorized_access(active_loans, src, AccessRequirement::Exclusive, point)?;
@@ -1098,11 +1123,7 @@ fn validation_value_from_constant(value: &Value) -> ValidationValue {
 }
 
 fn unknown_validation_value(types: &TypeTable, ty: TypeId) -> ValidationValue {
-    match &types
-        .get(ty)
-        .expect("validated type identity exists")
-        .kind
-    {
+    match &types.get(ty).expect("validated type identity exists").kind {
         TypeKind::Scalar(ScalarType::RawPointer(_)) => {
             unreachable!("call-transfer validation excludes raw-pointer values")
         }
