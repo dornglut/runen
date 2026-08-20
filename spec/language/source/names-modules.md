@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source module identity, module binding, module alias, visibility, and qualified cross-module lookup relations. It consumes lexical identifier keys from [Source lexical foundation](lexical.md) and does not redefine identifier formation or equivalence.
 
-It does not define concrete declaration or import syntax, local lexical scopes, member lookup, overload resolution, package discovery, or an implementation representation.
+Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). This document does not define concrete declaration or import syntax, member lookup, overload resolution, package discovery, or an implementation representation.
 
 ## Source modules
 
@@ -34,7 +34,7 @@ A module-level binding is identified by its source module and binding identity, 
 
 For this foundation, name resolution first identifies one binding/entity. A later source-language rule then determines whether that resolved entity category is valid for the applicable type, value, declaration, or other semantic context. This document does not define separate module-level type and value namespaces or context-dependent searches across such namespaces.
 
-This section does not define fields, methods, associated items, local bindings, parameters, generic parameters, pattern bindings, lifetime names, labels, macros, or overload sets. A later rule that permits one source name to denote an overload set or another multi-entity binding MUST define that binding relation explicitly; duplicate module-level binding keys do not become an overload set merely because the declarations have different signatures or categories.
+Function-local parameter/local bindings are owned by `local-bindings.md` and do not become members of this module declaration namespace. This section also does not define fields, methods, associated items, generic parameters, pattern bindings, lifetime names, labels, macros, or overload sets. A later rule that permits one source name to denote an overload set or another multi-entity binding MUST define that binding relation explicitly; duplicate module-level binding keys do not become an overload set merely because the declarations have different signatures or categories.
 
 ## Module binding accessibility
 
@@ -53,9 +53,9 @@ For a source unit assigned to source module `M`, **module-scope lookup** of lexi
 
 If that namespace contains the binding keyed by `k`, module-scope lookup resolves to that binding regardless of whether the binding is module-private or exported.
 
-If the namespace contains no binding keyed by `k`, this module-scope lookup does not resolve a binding. This rule does not cause imported modules, future preludes, enclosing local scopes, member scopes, or another namespace to be searched implicitly.
+If the namespace contains no binding keyed by `k`, this module-scope lookup does not resolve a binding. This rule does not cause imported modules, future preludes, member scopes, or another namespace to be searched implicitly.
 
-A later source construct with a more-local binding model may define when its own lookup is attempted before module-scope lookup. This document does not define a universal nested-scope or shadowing order.
+Within represented function bodies, `local-bindings.md` defines when function-local lookup is attempted before this same-module relation. This document does not redefine that local precedence or its local shadowing rules.
 
 ## Source-unit module aliases
 
@@ -116,9 +116,9 @@ This permission concerns source name resolution only. A later const/static initi
 
 ## Deliberate boundaries
 
-This revision defines only module declaration namespaces and source-unit module-alias scopes. It does not define:
+This revision defines only module declaration namespaces and source-unit module-alias scopes. Represented function-local value-binding scopes and lookup are owned by `local-bindings.md`. This document does not define:
 
-- local or block scopes, local shadowing, parameters, generic parameters, pattern bindings, closure captures, lifetime names, or labels;
+- additional local binding classes such as pattern bindings, closure captures, generic parameters, lifetime names, or labels;
 - nested or parent/child module hierarchy, module path segments, `self`/`super`-like relations, or a source-visible canonical module name;
 - fields, methods, associated items, extension lookup, trait lookup, overload resolution, argument-dependent lookup, or member precedence;
 - implicit/predeclared names or a standard-library prelude;
