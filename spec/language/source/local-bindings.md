@@ -6,11 +6,13 @@ This document owns the represented source semantics for function-local binding i
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
 
-This document does not define concrete body/local syntax, expression evaluation, calls, returns, references, patterns, traits, ABI, or an implementation representation.
+Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer execution interaction, lexical-scope and activation cleanup, direct return, recursion, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md).
+
+This document does not define concrete body/local syntax, general expression evaluation, references, patterns, traits, ABI, or an implementation representation.
 
 ## Function-local binding identity
 
-When another accepted source rule establishes that a represented source function entity has a body, that body has exactly one **parameter binding** corresponding to each callable-signature parameter slot.
+When a represented source function entity has a body under `function-execution.md`, that body has exactly one **parameter binding** corresponding to each callable-signature parameter slot.
 
 Each parameter binding has:
 
@@ -41,7 +43,7 @@ Uninitialized ordinary local declarations are not represented by this revision.
 
 The initializer is resolved and typed in the lexical environment that exists before the new binding is introduced. The new binding enters scope only after the declaration's initialization boundary. Therefore the new binding is not available for self-reference from its own initializer.
 
-This revision does not define type inference, initializer expression evaluation, concrete local-declaration syntax, or concrete mutability spelling/defaulting.
+This revision does not define type inference, concrete local-declaration syntax, or concrete mutability spelling/defaulting. `function-execution.md` owns represented initializer value production, transfer, and abnormal-completion interaction for the currently accepted owned value producers.
 
 ## Abstract lexical scopes
 
@@ -96,9 +98,9 @@ At a source program point where a represented parameter/local binding is in scop
 
 Availability is a source-validation fact. It is not Core `Live`, `Dead`, or Never-initialized state; not a storage extent; not a runtime moved-value flag; and not a requirement to materialize a physical local slot.
 
-A parameter binding is available at represented function-body entry. A later call/activation owner must define how argument transfer establishes that value; this document does not define the transfer.
+A parameter binding is available at represented function-body entry. `function-execution.md` owns how successful direct-call argument transfer establishes each parameter value before body entry.
 
-A represented ordinary local binding becomes available after its initializer establishes its initial source value.
+A represented ordinary local binding becomes available after its initializer establishes its initial source value. `function-execution.md` owns the currently represented initializer evaluation/transfer relation; future expression owners may add additional value producers without redefining availability.
 
 A source operation that requires an owned value from a binding is valid only when that binding is **definitely available** at the operation's source program point.
 
@@ -136,28 +138,27 @@ A binding that remains available when its lexical scope or function activation t
 
 This revision introduces no source `drop` ability, must-consume type class, custom destructor, or unused-value prohibition. A later source capability may define independently justified restrictions for its represented types without redefining owned-value duplicability.
 
-Applicable Core termination cleanup remains the execution-semantic foundation when a later source-to-Core lowering and function-execution relation are accepted. This document does not duplicate Core destruction domains, cleanup order, or stored-value lifetime rules.
+`function-execution.md` owns which still-available source bindings are selected for normal-return or defined-fault cleanup and their source ordering. Applicable [Core value and storage semantics](../core/value-storage.md) remains authoritative for structural destruction domains, stored-value lifetime endings, and Core storage cleanup. This document does not duplicate either owner's cleanup relation.
 
 ## Function, call, and fault boundary
 
-This revision defines body-local binding facts only. It does not define:
+This document defines body-local binding facts only. It does not redefine the direct execution relation owned by `function-execution.md`, including:
 
 - function body execution;
-- call expressions or argument evaluation;
-- parameter ownership transfer at call boundaries;
-- result production or return transfer;
-- activation identity or recursion;
-- caller/callee cleanup sequencing; or
-- fault/panic propagation across activations.
+- direct-call argument evaluation and parameter ownership transfer;
+- result production and return transfer;
+- dynamic activation identity or recursion;
+- lexical-scope, caller, or callee cleanup sequencing; or
+- defined-fault propagation across source activations.
 
-Core's accepted cleanup rules for one activation on `Return` and defined `Fault` remain unchanged. A later executable-function/call owner must consume those rules rather than recreate them.
+Indirect calls, function values, closures, references/pass modes, broader panic/catch forms, and other future execution relations remain outside this owner.
 
 ## Implementation boundary
 
 This revision does not add or require a parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime representation, or backend representation.
 
-The represented local semantics remove a source-validation ambiguity, but concrete body/expression/call semantics and concrete grammar are still absent. An implementation surface for those constructs would therefore still force unowned syntax or execution decisions.
+The represented binding and direct-function execution semantics remove source-validation and execution ambiguities, but concrete body/local/call/return grammar, general expression syntax, literal value origins, and parser recovery remain absent. An implementation surface for those constructs therefore requires a separately accepted concrete grammar/frontend slice rather than inventing those rules here.
 
 ## Further boundaries
 
-This revision does not define concrete function/parameter/local/body syntax, keywords, punctuation, block grammar, literals, precedence, parser recovery, type inference, general expression typing, calls, returns, activation execution, recursion, fault propagation, partial field moves, member access, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+This revision does not define concrete function/parameter/local/body syntax, keywords, punctuation, block grammar, literals, precedence, parser recovery, type inference, general expression typing, assignment/replacement expressions, partial field moves, member access, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
