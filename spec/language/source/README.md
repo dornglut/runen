@@ -1,6 +1,7 @@
 # Source Language
 
 - [Lexical foundation](lexical.md)
+- [Concrete syntax](concrete-syntax.md)
 - [Names and modules](names-modules.md)
 - [Type foundation](types.md)
 - [Callable signatures](callables.md)
