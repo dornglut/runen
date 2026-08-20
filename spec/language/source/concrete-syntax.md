@@ -12,9 +12,17 @@ The grammar in this document is normative independently of any parser, syntax-tr
 
 Lexical processing begins only after the valid-UTF-8 and optional initial byte-order-mark handling defined by `lexical.md`.
 
-Pattern whitespace from `lexical.md` and ordinary comments defined below are **trivia**. Trivia is semantically inert and MAY occur between grammar tokens wherever doing so does not split one token. Trivia separates otherwise adjacent lexical material.
+Pattern whitespace from `lexical.md` and ordinary comments defined below are **trivia**. Trivia is semantically inert and MAY occur before the first grammar token, between grammar tokens wherever doing so does not split one token, and after the final grammar token. A represented source unit MAY contain only trivia. Trivia separates otherwise adjacent lexical material.
 
 The original spelling or extent of trivia MAY be preserved by source tooling. Such preservation does not make trivia program state or semantic identity.
+
+## Concrete token extent
+
+When concrete tokenization begins an identifier-form token under `lexical.md`, that token consumes the **maximal contiguous sequence** of Unicode scalar values that satisfies the identifier-form-token rule from that starting position.
+
+Reserved-key classification is applied only after that complete identifier-form token and its lexical identifier key have been determined. Tokenization MUST NOT split a longer identifier-form token merely to produce a reserved key. For example, an otherwise valid identifier whose spelling begins with `fn` is not tokenized as the reserved key `fn` followed by another identifier.
+
+Outside trivia, every source scalar participating in this represented grammar MUST belong to either one maximal identifier-form token or one represented punctuation token below. The `//`, `/*`, and `*/` sequences participate only in the ordinary-comment rules below. Other non-trivia material is malformed source under this concrete subset.
 
 ## Reserved identifier keys
 
@@ -61,7 +69,7 @@ This revision defines no documentation-comment category or documentation semanti
 
 The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above.
 
-Trivia MAY occur between the tokens shown by these productions. Line boundaries have no statement-termination role; represented statements use mandatory semicolons.
+Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role; represented statements use mandatory semicolons.
 
 ## Source units and items
 
@@ -71,6 +79,8 @@ A represented source unit has this grammar:
 SourceUnit = Item*
 Item       = RecordDefinition | FunctionDefinition
 ```
+
+A well-formed source unit under this concrete subset is fully consumed by `SourceUnit` plus permitted trivia. No unmatched non-trivia material may remain before, between, or after represented items.
 
 The textual order of module-level items does not change the order-independent module binding and lookup relations owned by `names-modules.md`.
 
