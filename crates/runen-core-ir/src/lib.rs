@@ -9,3 +9,4 @@ mod model;
 pub use model::*;
 
 pub mod interprocedural;
+pub mod interprocedural_validation;
