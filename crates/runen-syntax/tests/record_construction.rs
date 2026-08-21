@@ -35,7 +35,7 @@ fn build() -> Pair {
         root.descendants()
             .filter(|node| node.kind() == SyntaxKind::RecordInitializer)
             .count(),
-        20
+        16
     );
 }
 
