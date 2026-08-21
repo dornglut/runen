@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, straight-line body execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, straight-line body execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
 
-It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), and parameter/local binding identity, scope, lookup, availability, and ordinary whole-binding owned use from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
+It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), and parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-The represented concrete function/body/value/call/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). This document owns their execution consequences where that grammar maps to the semantic operations defined here; it does not own concrete spelling or parser representation.
+The represented concrete function/body/value/call/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). This document owns their execution consequences where that grammar maps to the semantic operations defined here; it does not own concrete spelling or parser representation.
 
 This document does not define a universal expression taxonomy, literals, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
 
@@ -14,7 +14,7 @@ This document does not define a universal expression taxonomy, literals, operato
 
 A represented source function entity MAY have one represented source body. It MUST NOT have more than one represented source body.
 
-Attaching a represented source body to a function entity is a source-semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
+Attaching a represented source body to the function entity is a source-semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
 
 In the represented direct-call subset, a direct source call targets exactly one resolved source function entity that has a represented source body.
 
@@ -98,6 +98,37 @@ After the transfer completes, the local binding becomes available under `local-b
 
 If initializer evaluation yields a defined fault or diverges, that local binding never becomes available. Ownership and availability transitions already performed by earlier evaluated operations remain effective.
 
+## Whole-binding assignment and replacement
+
+A represented whole-binding assignment consumes the assignment target legality, mutability, declared type, and pre/post-assignment availability relation defined by `local-bindings.md`.
+
+For a source-valid assignment, execution is **source-first** with respect to replacement:
+
+1. evaluate the assignment RHS completely as one owned value producer;
+2. require the produced value's source type to be exactly equal under `types.md` to the target binding's declared source type;
+3. preserve every ownership and availability transition caused while evaluating that RHS;
+4. only after successful RHS value production, observe whether the target binding is then available;
+5. if the target is then available, clean its old owned value exactly once;
+6. if the target is then unavailable, there is no old target-owned value to clean;
+7. transfer the produced RHS value into the target binding without duplication; and
+8. make the target binding available as required by `local-bindings.md`.
+
+The assignment target remains in scope during RHS evaluation. Consequently, ordinary RHS use of the target follows the existing whole-binding owned-use relation rather than a special self-assignment rule.
+
+For a duplicable mutable target `x`, `x = x` duplicates the old value during RHS evaluation and leaves `x` available; replacement then cleans that old target-owned value and transfers the duplicate into `x`.
+
+For a non-duplicable mutable target `x`, `x = x` consumes the old value during RHS evaluation and leaves `x` unavailable; replacement therefore has no old target-owned value to clean and transfers the produced owned value back into `x`.
+
+The same ordering applies when RHS direct-call argument evaluation consumes the assignment target before that call successfully produces the replacement value.
+
+If RHS evaluation yields a defined fault, assignment performs no replacement cleanup and no replacement transfer. Ownership and availability transitions already caused during RHS evaluation remain effective, and the same fault then follows the activation cleanup and propagation rules below.
+
+If RHS evaluation diverges, assignment performs no replacement cleanup or replacement transfer. The enclosing function activation remains suspended in the RHS evaluation, and no cleanup occurs merely because execution has continued indefinitely.
+
+Cleaning an old target-owned value under this relation uses the source cleanup rule below. Applicable structural destruction domains, stored-value lifetime endings, storage state, storage extent, and storage-instance identity remain owned by [Core value and storage semantics](../core/value-storage.md). This source relation selects source ownership and ordering; it does not reproduce Core storage state or destruction mechanics.
+
+This revision defines no field/member/place assignment, compound assignment, assignment expression value, borrow/reference assignment, source interior mutability, raw-pointer assignment, or destructuring assignment.
+
 ## Straight-line body execution
 
 For the root function-body form represented by `concrete-syntax.md`, body statements execute strictly in concrete source order.
@@ -109,6 +140,11 @@ For a represented ordinary local declaration statement:
 1. evaluate its initializer under the local-initialization and owned-value rules above;
 2. transfer the produced value into the new local binding and make that binding available; and
 3. only after that transfer completes normally may the next body statement begin.
+
+For a represented whole-binding assignment statement:
+
+1. evaluate and complete the assignment under the whole-binding assignment/replacement rules above; and
+2. only after the replacement value has been transferred and the target is available may the next body statement begin.
 
 For a represented no-result direct-call statement:
 
@@ -134,7 +170,7 @@ For the represented operations in this document, **cleaning an owned source valu
 
 When such a source value is realized in Core storage, applicable destruction-domain, stored-value-lifetime, and cleanup semantics remain owned by `core/value-storage.md`; this document determines only the source-owned value or binding selected for cleanup and the source order in which those selections occur.
 
-A source value that has already been transferred or consumed is not cleaned again by its former owner.
+A source value that has already been transferred or consumed is not cleaned again by its former owner. This applies equally to lexical-scope/activation cleanup and to old target-owned values selected for assignment replacement.
 
 This revision introduces no custom source destructor body, source `drop` ability, or general temporary-lifetime extension rule.
 
@@ -184,7 +220,7 @@ When an applicable accepted source or Core operation yields a defined fault `F` 
 2. clean still-available parameter bindings in reverse parameter-slot order; and
 3. terminate that activation with the same defined fault `F`.
 
-If the defined fault arises from a directly called callee, the caller's direct-call evaluation yields `F`. Because no represented catch boundary exists, the caller then performs its own fault cleanup and propagates `F` outward. This continues until the outermost applicable source execution denotes the defined-fault outcome under `behavior.md`.
+If the defined fault arises from a directly called callee, the caller's direct-call evaluation therefore yields `F`. Because no represented catch boundary exists, the caller then performs its own fault cleanup and propagates `F` outward. This continues until the outermost applicable source execution denotes the defined-fault outcome under `behavior.md`.
 
 “Same defined fault” preserves the semantic defined-fault outcome selected by the initiating operation. This revision does not define fault payload representation, strings or messages, numeric fault codes, physical exception objects, backtraces, panic syntax, or catch syntax.
 
@@ -200,28 +236,30 @@ Transient argument values already produced when a later argument yields a define
 
 An owned transient return result is not part of callee activation-local cleanup after successful result evaluation because ownership has already been separated for transfer to the caller.
 
-This revision does not define general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented direct-call argument and return transfer are owned here.
+A successfully produced assignment RHS value is transferred into the assignment target and therefore is not an independently remaining transient after successful assignment completion. If RHS production faults before successful value production, existing producer-specific transient cleanup rules remain controlling.
+
+This revision does not define general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented direct-call argument, return, and assignment transfer are owned here.
 
 ## Divergence
 
 If a directly called callee diverges, the caller remains suspended at that direct call and does not perform return or fault cleanup merely because execution continues indefinitely.
 
-Active caller and callee ownership state, together with any transient values retained by the suspended evaluation, persists subject to operations already performed. There is no implicit source execution-step budget.
+Active caller and callee ownership state, together with any transient values retained by the suspended evaluation, persists subject to operations already performed. The same applies when the diverging call is the RHS of a represented assignment. There is no implicit source execution-step budget.
 
 ## Effects boundary
 
-Left-to-right argument evaluation and concrete straight-line body execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
+Left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
 
 This revision does not define a source effect system, purity, effect inference, speculation legality, or general transformation rules.
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/call/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules.
+`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/call/assignment/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules.
 
-General literals, arithmetic or comparison operators, assignment, branches, loops, record construction, member access, nested blocks, and other concrete source forms remain outside the represented execution relation.
+General literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, record construction, member access, nested blocks, and other concrete source forms remain outside the represented execution relation.
 
 No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner.
 
 ## Further boundaries
 
-This revision does not define literal typing, arithmetic/comparison/operator forms, branch/loop/pattern control flow, assignment/replacement expressions, field/member access, record construction, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
+This revision does not define literal typing, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, field/member assignment, record construction, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
