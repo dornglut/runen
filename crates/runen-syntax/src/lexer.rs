@@ -1,4 +1,6 @@
-use crate::{SyntaxError, SyntaxErrorKind, SyntaxKind, identifier_key, text_range};
+use crate::{
+    SyntaxError, SyntaxErrorKind, SyntaxKind, identifier_key, reserved_identifier_kind, text_range,
+};
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct LexToken {
@@ -109,7 +111,7 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
             let spelling = &source[offset..end];
             let key = identifier_key(spelling).expect("lexer established identifier form");
             tokens.push(LexToken {
-                kind: classify_identifier_key(&key),
+                kind: reserved_identifier_kind(&key).unwrap_or(SyntaxKind::Ident),
                 start: offset,
                 end,
             });
@@ -119,6 +121,8 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
 
         let punctuation = if rest.starts_with("->") {
             Some((SyntaxKind::Arrow, 2))
+        } else if rest.starts_with("::") {
+            Some((SyntaxKind::ColonColon, 2))
         } else {
             match character {
                 '(' => Some((SyntaxKind::LParen, 1)),
@@ -157,28 +161,6 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
     }
 
     (tokens, errors)
-}
-
-fn classify_identifier_key(key: &str) -> SyntaxKind {
-    match key {
-        "fn" => SyntaxKind::KwFn,
-        "record" => SyntaxKind::KwRecord,
-        "let" => SyntaxKind::KwLet,
-        "return" => SyntaxKind::KwReturn,
-        "Bool" => SyntaxKind::TyBool,
-        "I8" => SyntaxKind::TyI8,
-        "I16" => SyntaxKind::TyI16,
-        "I32" => SyntaxKind::TyI32,
-        "I64" => SyntaxKind::TyI64,
-        "U8" => SyntaxKind::TyU8,
-        "U16" => SyntaxKind::TyU16,
-        "U32" => SyntaxKind::TyU32,
-        "U64" => SyntaxKind::TyU64,
-        "F16" => SyntaxKind::TyF16,
-        "F32" => SyntaxKind::TyF32,
-        "F64" => SyntaxKind::TyF64,
-        _ => SyntaxKind::Ident,
-    }
 }
 
 const fn is_pattern_whitespace(character: char) -> bool {

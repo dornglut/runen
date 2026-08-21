@@ -7,7 +7,7 @@
 
 mod build;
 
-use runen_syntax::{Parse, SyntaxErrorKind, TextRange};
+use runen_syntax::{Parse, SyntaxErrorKind, TextRange, user_identifier_key};
 
 /// Caller-supplied opaque source-module identity for one compilation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -20,17 +20,48 @@ impl ModuleId {
     }
 }
 
-/// One directly supplied syntax unit and its explicit module assignment.
+/// One normalized source-unit import-target binding supplied by compilation input.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImportTarget {
+    alias: String,
+    pub module: ModuleId,
+}
+
+impl ImportTarget {
+    /// Construct one import target from a concrete `UserIdentifier` spelling.
+    ///
+    /// Returns `None` when `alias` is not an accepted concrete user identifier.
+    #[must_use]
+    pub fn new(alias: &str, module: ModuleId) -> Option<Self> {
+        Some(Self {
+            alias: user_identifier_key(alias)?,
+            module,
+        })
+    }
+
+    #[must_use]
+    pub fn alias(&self) -> &str {
+        &self.alias
+    }
+}
+
+/// One directly supplied syntax unit, its explicit module assignment, and its
+/// source-unit-local external import-target bindings.
 #[derive(Debug, Clone, Copy)]
 pub struct SourceUnit<'a> {
     pub module: ModuleId,
     pub parse: &'a Parse,
+    pub imports: &'a [ImportTarget],
 }
 
 impl<'a> SourceUnit<'a> {
     #[must_use]
-    pub const fn new(module: ModuleId, parse: &'a Parse) -> Self {
-        Self { module, parse }
+    pub const fn new(module: ModuleId, parse: &'a Parse, imports: &'a [ImportTarget]) -> Self {
+        Self {
+            module,
+            parse,
+            imports,
+        }
     }
 }
 
@@ -45,6 +76,13 @@ pub struct FunctionId(pub(crate) usize);
 /// Opaque per-compilation parameter/local binding handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BindingId(pub(crate) usize);
+
+/// Source-module accessibility retained through typed source resolution.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Accessibility {
+    ModulePrivate,
+    Exported,
+}
 
 /// Intrinsic source type identities represented by the current source subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -104,6 +142,7 @@ pub struct Record {
     pub id: RecordId,
     pub module: ModuleId,
     pub name: String,
+    pub accessibility: Accessibility,
     pub fields: Vec<Field>,
     pub location: SourceLocation,
 }
@@ -175,6 +214,7 @@ pub struct Function {
     pub id: FunctionId,
     pub module: ModuleId,
     pub name: String,
+    pub accessibility: Accessibility,
     pub parameters: Vec<Parameter>,
     pub result: Option<Type>,
     pub body: Body,
@@ -214,8 +254,15 @@ impl TypedCompilation {
 pub enum DiagnosticKind {
     SyntaxError(SyntaxErrorKind),
     DuplicateModuleBinding,
+    DuplicateImportAlias,
+    MissingImportTarget,
+    DuplicateImportTarget,
+    SelfImport,
+    ImportDeclarationConflict,
     UnresolvedName,
+    InaccessibleBinding,
     ExpectedRecordType,
+    PrivateTypeInExportedSignature,
     DuplicateRecordField,
     RecordContainmentCycle,
     DuplicateParameter,

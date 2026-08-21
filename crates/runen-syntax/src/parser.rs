@@ -4,6 +4,13 @@ use crate::{
     ExpectedSyntax, SyntaxError, SyntaxErrorKind, SyntaxKind, lexer::LexToken, text_range,
 };
 
+const TOP_LEVEL_STARTERS: &[SyntaxKind] = &[
+    SyntaxKind::KwImport,
+    SyntaxKind::KwExport,
+    SyntaxKind::KwFn,
+    SyntaxKind::KwRecord,
+];
+
 pub(crate) fn parse(source: &str, tokens: Vec<LexToken>) -> (GreenNode, Vec<SyntaxError>) {
     let mut parser = Parser {
         source,
@@ -30,8 +37,17 @@ impl Parser<'_> {
         self.bump_trivia();
         while self.position < self.tokens.len() {
             match self.current() {
-                Some(SyntaxKind::KwRecord) => self.parse_record_definition(),
-                Some(SyntaxKind::KwFn) => self.parse_function_definition(),
+                Some(SyntaxKind::KwImport) => self.parse_import_declaration(),
+                Some(SyntaxKind::KwExport) => match self.peek_nontrivia(1) {
+                    Some(SyntaxKind::KwRecord) => self.parse_record_definition(true),
+                    Some(SyntaxKind::KwFn) => self.parse_function_definition(true),
+                    _ => {
+                        self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Item));
+                        self.recover_one();
+                    }
+                },
+                Some(SyntaxKind::KwRecord) => self.parse_record_definition(false),
+                Some(SyntaxKind::KwFn) => self.parse_function_definition(false),
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Item));
                     self.recover_one();
@@ -43,8 +59,20 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_record_definition(&mut self) {
+    fn parse_import_declaration(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::ImportDeclaration.into());
+        self.expect(SyntaxKind::KwImport, ExpectedSyntax::Item);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_record_definition(&mut self, exported: bool) {
         self.builder.start_node(SyntaxKind::RecordDefinition.into());
+        if exported {
+            self.expect(SyntaxKind::KwExport, ExpectedSyntax::Item);
+        }
         self.expect(SyntaxKind::KwRecord, ExpectedSyntax::Item);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
 
@@ -56,7 +84,7 @@ impl Parser<'_> {
         self.bump_trivia();
         let mut missing_close = false;
         while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
-            if self.at_any(&[SyntaxKind::KwFn, SyntaxKind::KwRecord]) {
+            if self.at_any(TOP_LEVEL_STARTERS) {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
                 missing_close = true;
                 break;
@@ -73,6 +101,8 @@ impl Parser<'_> {
                     self.recover_until(&[
                         SyntaxKind::Comma,
                         SyntaxKind::RBrace,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
                         SyntaxKind::KwFn,
                         SyntaxKind::KwRecord,
                     ]);
@@ -99,9 +129,12 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_function_definition(&mut self) {
+    fn parse_function_definition(&mut self, exported: bool) {
         self.builder
             .start_node(SyntaxKind::FunctionDefinition.into());
+        if exported {
+            self.expect(SyntaxKind::KwExport, ExpectedSyntax::Item);
+        }
         self.expect(SyntaxKind::KwFn, ExpectedSyntax::Item);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.parse_parameter_list();
@@ -127,12 +160,10 @@ impl Parser<'_> {
         self.bump_trivia();
         let mut missing_close = false;
         while !self.at(SyntaxKind::RParen) && self.current().is_some() {
-            if self.at_any(&[
-                SyntaxKind::Arrow,
-                SyntaxKind::LBrace,
-                SyntaxKind::KwFn,
-                SyntaxKind::KwRecord,
-            ]) {
+            if self.at(SyntaxKind::Arrow)
+                || self.at(SyntaxKind::LBrace)
+                || self.at_any(TOP_LEVEL_STARTERS)
+            {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightParen));
                 missing_close = true;
                 break;
@@ -156,6 +187,8 @@ impl Parser<'_> {
                         SyntaxKind::RParen,
                         SyntaxKind::Arrow,
                         SyntaxKind::LBrace,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
                         SyntaxKind::KwFn,
                         SyntaxKind::KwRecord,
                     ]);
@@ -185,7 +218,7 @@ impl Parser<'_> {
         let mut returned = false;
         let mut missing_close = false;
         while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
-            if self.at_any(&[SyntaxKind::KwFn, SyntaxKind::KwRecord]) {
+            if self.at_any(TOP_LEVEL_STARTERS) {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
                 missing_close = true;
                 break;
@@ -195,14 +228,14 @@ impl Parser<'_> {
                 self.error_here(SyntaxErrorKind::UnexpectedAfterReturn);
                 self.builder.start_node(SyntaxKind::ErrorNode.into());
                 while !self.at(SyntaxKind::RBrace)
-                    && !self.at_any(&[SyntaxKind::KwFn, SyntaxKind::KwRecord])
+                    && !self.at_any(TOP_LEVEL_STARTERS)
                     && self.current().is_some()
                 {
                     self.bump();
                     self.bump_trivia();
                 }
                 self.builder.finish_node();
-                if self.at_any(&[SyntaxKind::KwFn, SyntaxKind::KwRecord]) {
+                if self.at_any(TOP_LEVEL_STARTERS) {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
                     missing_close = true;
                 }
@@ -262,7 +295,9 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) {
         self.builder.start_node(SyntaxKind::TypeRef.into());
-        if self.current().is_some_and(SyntaxKind::is_type_start) {
+        if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
+            self.parse_qualified_module_member();
+        } else if self.current().is_some_and(SyntaxKind::is_type_start) {
             self.bump();
         } else {
             self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Type));
@@ -281,6 +316,8 @@ impl Parser<'_> {
                     SyntaxKind::RBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwReturn,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
                     SyntaxKind::KwFn,
                     SyntaxKind::KwRecord,
                 ])
@@ -290,7 +327,10 @@ impl Parser<'_> {
             return;
         }
 
-        if self.peek_nontrivia(1) == Some(SyntaxKind::LParen) {
+        if matches!(
+            self.peek_nontrivia(1),
+            Some(SyntaxKind::LParen | SyntaxKind::ColonColon)
+        ) {
             self.parse_direct_call();
         } else {
             self.builder.start_node(SyntaxKind::IdentifierUse.into());
@@ -301,7 +341,11 @@ impl Parser<'_> {
 
     fn parse_direct_call(&mut self) {
         self.builder.start_node(SyntaxKind::DirectCall.into());
-        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
+            self.parse_qualified_module_member();
+        } else {
+            self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        }
 
         self.builder.start_node(SyntaxKind::ArgumentList.into());
         if !self.expect(SyntaxKind::LParen, ExpectedSyntax::LeftParen) {
@@ -313,14 +357,12 @@ impl Parser<'_> {
         self.bump_trivia();
         let mut missing_close = false;
         while !self.at(SyntaxKind::RParen) && self.current().is_some() {
-            if self.at_any(&[
-                SyntaxKind::Semicolon,
-                SyntaxKind::RBrace,
-                SyntaxKind::KwLet,
-                SyntaxKind::KwReturn,
-                SyntaxKind::KwFn,
-                SyntaxKind::KwRecord,
-            ]) {
+            if self.at(SyntaxKind::Semicolon)
+                || self.at(SyntaxKind::RBrace)
+                || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwReturn)
+                || self.at_any(TOP_LEVEL_STARTERS)
+            {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightParen));
                 missing_close = true;
                 break;
@@ -341,6 +383,8 @@ impl Parser<'_> {
                     SyntaxKind::RBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwReturn,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
                     SyntaxKind::KwFn,
                     SyntaxKind::KwRecord,
                 ]);
@@ -353,6 +397,15 @@ impl Parser<'_> {
             self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
         }
         self.builder.finish_node();
+        self.builder.finish_node();
+    }
+
+    fn parse_qualified_module_member(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::QualifiedModuleMember.into());
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::ColonColon, ExpectedSyntax::DoubleColon);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.builder.finish_node();
     }
 

@@ -69,6 +69,11 @@ pub enum SyntaxKind {
     IdentifierUse,
     ReturnStatement,
     ErrorNode,
+    KwImport,
+    KwExport,
+    ColonColon,
+    ImportDeclaration,
+    QualifiedModuleMember,
 }
 
 impl SyntaxKind {
@@ -159,6 +164,11 @@ impl Language for RunenLanguage {
             44 => SyntaxKind::IdentifierUse,
             45 => SyntaxKind::ReturnStatement,
             46 => SyntaxKind::ErrorNode,
+            47 => SyntaxKind::KwImport,
+            48 => SyntaxKind::KwExport,
+            49 => SyntaxKind::ColonColon,
+            50 => SyntaxKind::ImportDeclaration,
+            51 => SyntaxKind::QualifiedModuleMember,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -223,6 +233,7 @@ pub enum ExpectedSyntax {
     LeftBrace,
     RightBrace,
     Colon,
+    DoubleColon,
     CommaOrRightParen,
     CommaOrRightBrace,
     Equals,
@@ -313,6 +324,44 @@ pub fn identifier_key(text: &str) -> Option<String> {
         return None;
     }
     Some(text.nfc().collect())
+}
+
+/// Derive the lexical key for one concrete `UserIdentifier` spelling.
+///
+/// Reserved concrete keys are rejected after the complete identifier key has
+/// been formed, matching lexer classification.
+#[must_use]
+pub fn user_identifier_key(text: &str) -> Option<String> {
+    let key = identifier_key(text)?;
+    if reserved_identifier_kind(&key).is_some() {
+        None
+    } else {
+        Some(key)
+    }
+}
+
+pub(crate) fn reserved_identifier_kind(key: &str) -> Option<SyntaxKind> {
+    match key {
+        "fn" => Some(SyntaxKind::KwFn),
+        "record" => Some(SyntaxKind::KwRecord),
+        "let" => Some(SyntaxKind::KwLet),
+        "return" => Some(SyntaxKind::KwReturn),
+        "import" => Some(SyntaxKind::KwImport),
+        "export" => Some(SyntaxKind::KwExport),
+        "Bool" => Some(SyntaxKind::TyBool),
+        "I8" => Some(SyntaxKind::TyI8),
+        "I16" => Some(SyntaxKind::TyI16),
+        "I32" => Some(SyntaxKind::TyI32),
+        "I64" => Some(SyntaxKind::TyI64),
+        "U8" => Some(SyntaxKind::TyU8),
+        "U16" => Some(SyntaxKind::TyU16),
+        "U32" => Some(SyntaxKind::TyU32),
+        "U64" => Some(SyntaxKind::TyU64),
+        "F16" => Some(SyntaxKind::TyF16),
+        "F32" => Some(SyntaxKind::TyF32),
+        "F64" => Some(SyntaxKind::TyF64),
+        _ => None,
+    }
 }
 
 pub(crate) fn text_range(start: usize, end: usize) -> TextRange {

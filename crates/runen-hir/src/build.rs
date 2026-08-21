@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
-    BindingId, Body, Diagnostic, DiagnosticKind, Field, Function, FunctionId, IntrinsicType,
-    Module, ModuleId, OwnedUse, Parameter, Record, RecordId, Return, SourceLocation, SourceUnit,
-    Statement, Type, TypedCompilation, Value, ValueKind,
+    Accessibility, BindingId, Body, Diagnostic, DiagnosticKind, Field, Function, FunctionId,
+    IntrinsicType, Module, ModuleId, OwnedUse, Parameter, Record, RecordId, Return, SourceLocation,
+    SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -14,9 +14,15 @@ enum EntityId {
     Function(FunctionId),
 }
 
+#[derive(Debug, Clone, Copy)]
+struct ModuleEntity {
+    entity: EntityId,
+    accessibility: Accessibility,
+}
+
 #[derive(Debug, Default)]
 struct ModuleBuild {
-    namespace: BTreeMap<String, EntityId>,
+    namespace: BTreeMap<String, ModuleEntity>,
     records: Vec<RecordId>,
     functions: Vec<FunctionId>,
 }
@@ -27,6 +33,7 @@ struct RecordSyntax {
     module: ModuleId,
     unit: usize,
     name: String,
+    accessibility: Accessibility,
     node: SyntaxNode,
     location: SourceLocation,
 }
@@ -37,6 +44,7 @@ struct FunctionSyntax {
     module: ModuleId,
     unit: usize,
     name: String,
+    accessibility: Accessibility,
     node: SyntaxNode,
     location: SourceLocation,
 }
@@ -47,6 +55,7 @@ struct FunctionHeader {
     module: ModuleId,
     unit: usize,
     name: String,
+    accessibility: Accessibility,
     parameters: Vec<Parameter>,
     result: Option<Type>,
     body: SyntaxNode,
@@ -58,6 +67,14 @@ struct BindingState {
     id: BindingId,
     ty: Type,
     available: bool,
+}
+
+type UnitImports = BTreeMap<String, ModuleId>;
+
+struct BodyResolutionContext<'a> {
+    modules: &'a BTreeMap<ModuleId, ModuleBuild>,
+    imports: &'a [UnitImports],
+    headers: &'a [FunctionHeader],
 }
 
 pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Diagnostic>> {
@@ -72,11 +89,18 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         return Err(diagnostics);
     }
 
-    let records = resolve_records(&record_syntax, &modules, &mut diagnostics);
+    let imports = collect_imports(units, &modules, &mut diagnostics);
+    if !diagnostics.is_empty() {
+        return Err(diagnostics);
+    }
+
+    let records = resolve_records(&record_syntax, &modules, &imports, &mut diagnostics);
     let mut next_binding = 0_usize;
     let headers = resolve_function_headers(
         &function_syntax,
         &modules,
+        &imports,
+        &records,
         &mut next_binding,
         &mut diagnostics,
     );
@@ -94,6 +118,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         let body = validate_body(
             header,
             &modules,
+            &imports,
             &headers,
             &mut next_binding,
             &mut diagnostics,
@@ -102,6 +127,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             id: header.id,
             module: header.module,
             name: header.name.clone(),
+            accessibility: header.accessibility,
             parameters: header.parameters.clone(),
             result: header.result,
             body,
@@ -161,12 +187,20 @@ fn collect_declarations(
         let root = unit.parse.syntax();
         for item in root.children() {
             match item.kind() {
+                SyntaxKind::ImportDeclaration => {}
                 SyntaxKind::RecordDefinition => {
                     let id = RecordId(records.len());
                     let name_token = direct_token(&item, SyntaxKind::Ident);
                     let name = key(&name_token);
+                    let accessibility = declaration_accessibility(&item);
                     let location = location(unit_index, &item);
-                    if insert_entity(&mut modules, unit.module, &name, EntityId::Record(id)) {
+                    if insert_entity(
+                        &mut modules,
+                        unit.module,
+                        &name,
+                        EntityId::Record(id),
+                        accessibility,
+                    ) {
                         modules
                             .get_mut(&unit.module)
                             .expect("module inserted")
@@ -183,6 +217,7 @@ fn collect_declarations(
                         module: unit.module,
                         unit: unit_index,
                         name,
+                        accessibility,
                         node: item,
                         location,
                     });
@@ -191,8 +226,15 @@ fn collect_declarations(
                     let id = FunctionId(functions.len());
                     let name_token = direct_token(&item, SyntaxKind::Ident);
                     let name = key(&name_token);
+                    let accessibility = declaration_accessibility(&item);
                     let location = location(unit_index, &item);
-                    if insert_entity(&mut modules, unit.module, &name, EntityId::Function(id)) {
+                    if insert_entity(
+                        &mut modules,
+                        unit.module,
+                        &name,
+                        EntityId::Function(id),
+                        accessibility,
+                    ) {
                         modules
                             .get_mut(&unit.module)
                             .expect("module inserted")
@@ -209,11 +251,14 @@ fn collect_declarations(
                         module: unit.module,
                         unit: unit_index,
                         name,
+                        accessibility,
                         node: item,
                         location,
                     });
                 }
-                _ => unreachable!("syntax-clean source unit contains only represented items"),
+                _ => unreachable!(
+                    "syntax-clean source unit contains only imports and represented items"
+                ),
             }
         }
     }
@@ -226,19 +271,101 @@ fn insert_entity(
     module: ModuleId,
     name: &str,
     entity: EntityId,
+    accessibility: Accessibility,
 ) -> bool {
     let namespace = &mut modules.entry(module).or_default().namespace;
     if namespace.contains_key(name) {
         false
     } else {
-        namespace.insert(name.to_owned(), entity);
+        namespace.insert(
+            name.to_owned(),
+            ModuleEntity {
+                entity,
+                accessibility,
+            },
+        );
         true
     }
+}
+
+fn collect_imports(
+    units: &[SourceUnit<'_>],
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Vec<UnitImports> {
+    let mut result = Vec::with_capacity(units.len());
+
+    for (unit_index, unit) in units.iter().enumerate() {
+        let mut seen_aliases = BTreeSet::<String>::new();
+        let mut aliases = BTreeMap::<String, ModuleId>::new();
+        let root = unit.parse.syntax();
+        for import in root
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::ImportDeclaration)
+        {
+            let alias_token = direct_token(&import, SyntaxKind::Ident);
+            let alias = key(&alias_token);
+            let import_location = location(unit_index, &import);
+            let mut valid = true;
+
+            if !seen_aliases.insert(alias.clone()) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::DuplicateImportAlias,
+                    location: import_location,
+                });
+                valid = false;
+            }
+
+            if modules
+                .get(&unit.module)
+                .is_some_and(|module| module.namespace.contains_key(&alias))
+            {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ImportDeclarationConflict,
+                    location: import_location,
+                });
+                valid = false;
+            }
+
+            let mut targets = unit.imports.iter().filter(|target| target.alias() == alias);
+            let target = targets.next();
+            match (target, targets.next()) {
+                (None, _) => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::MissingImportTarget,
+                        location: import_location,
+                    });
+                }
+                (Some(_), Some(_)) => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::DuplicateImportTarget,
+                        location: import_location,
+                    });
+                }
+                (Some(target), None) => {
+                    if target.module == unit.module {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::SelfImport,
+                            location: import_location,
+                        });
+                        valid = false;
+                    }
+                    if valid {
+                        aliases.insert(alias, target.module);
+                    }
+                }
+            }
+        }
+        result.push(aliases);
+    }
+
+    result
 }
 
 fn resolve_records(
     syntax: &[RecordSyntax],
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Vec<Record> {
     let mut records = Vec::with_capacity(syntax.len());
@@ -260,9 +387,14 @@ fn resolve_records(
                 });
             }
             let type_node = direct_child(&field_node, SyntaxKind::TypeRef);
-            if let Some(ty) =
-                resolve_type(record.module, record.unit, &type_node, modules, diagnostics)
-            {
+            if let Some(ty) = resolve_type(
+                record.module,
+                record.unit,
+                &type_node,
+                modules,
+                imports,
+                diagnostics,
+            ) {
                 fields.push(Field {
                     name,
                     ty,
@@ -274,6 +406,7 @@ fn resolve_records(
             id: record.id,
             module: record.module,
             name: record.name.clone(),
+            accessibility: record.accessibility,
             fields,
             location: record.location,
         });
@@ -284,6 +417,8 @@ fn resolve_records(
 fn resolve_function_headers(
     syntax: &[FunctionSyntax],
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    records: &[Record],
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Vec<FunctionHeader> {
@@ -311,8 +446,17 @@ fn resolve_function_headers(
                 function.unit,
                 &type_node,
                 modules,
+                imports,
                 diagnostics,
             ) {
+                validate_exported_signature_type(
+                    function.accessibility,
+                    ty,
+                    records,
+                    function.unit,
+                    &type_node,
+                    diagnostics,
+                );
                 let binding = BindingId(*next_binding);
                 *next_binding += 1;
                 parameters.push(Parameter {
@@ -330,13 +474,25 @@ fn resolve_function_headers(
             .find(|node| node.kind() == SyntaxKind::ResultClause)
             .and_then(|result_clause| {
                 let type_node = direct_child(&result_clause, SyntaxKind::TypeRef);
-                resolve_type(
+                let ty = resolve_type(
                     function.module,
                     function.unit,
                     &type_node,
                     modules,
+                    imports,
                     diagnostics,
-                )
+                );
+                if let Some(ty) = ty {
+                    validate_exported_signature_type(
+                        function.accessibility,
+                        ty,
+                        records,
+                        function.unit,
+                        &type_node,
+                        diagnostics,
+                    );
+                }
+                ty
             });
         let body = direct_child(&function.node, SyntaxKind::Body);
         headers.push(FunctionHeader {
@@ -344,6 +500,7 @@ fn resolve_function_headers(
             module: function.module,
             unit: function.unit,
             name: function.name.clone(),
+            accessibility: function.accessibility,
             parameters,
             result,
             body,
@@ -353,13 +510,52 @@ fn resolve_function_headers(
     headers
 }
 
+fn validate_exported_signature_type(
+    accessibility: Accessibility,
+    ty: Type,
+    records: &[Record],
+    unit: usize,
+    type_node: &SyntaxNode,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if accessibility != Accessibility::Exported {
+        return;
+    }
+    let Type::Record(record) = ty else {
+        return;
+    };
+    if records[record.0].accessibility == Accessibility::ModulePrivate {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::PrivateTypeInExportedSignature,
+            location: location(unit, type_node),
+        });
+    }
+}
+
 fn resolve_type(
     module: ModuleId,
     unit: usize,
     node: &SyntaxNode,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
+    if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        return match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
+            EntityId::Record(id) => Some(Type::Record(id)),
+            EntityId::Function(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRecordType,
+                    location: location(unit, &qualified),
+                });
+                None
+            }
+        };
+    }
+
     let token = node
         .children_with_tokens()
         .filter_map(|element| element.into_token())
@@ -394,6 +590,7 @@ fn resolve_type(
         .get(&module)
         .and_then(|module| module.namespace.get(&name))
         .copied()
+        .map(|entity| entity.entity)
     {
         Some(EntityId::Record(id)) => Some(Type::Record(id)),
         Some(EntityId::Function(_)) => {
@@ -411,6 +608,64 @@ fn resolve_type(
             None
         }
     }
+}
+
+fn resolve_qualified_entity(
+    unit: usize,
+    node: &SyntaxNode,
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<EntityId> {
+    let identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let [alias_token, member_token] = identifiers.as_slice() else {
+        unreachable!("syntax-clean qualified module member has two identifiers");
+    };
+    let alias = key(alias_token);
+    let member = key(member_token);
+
+    let Some(target_module) = imports[unit].get(&alias).copied() else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnresolvedName,
+            location: SourceLocation {
+                unit,
+                range: alias_token.text_range(),
+            },
+        });
+        return None;
+    };
+
+    let Some(target) = modules
+        .get(&target_module)
+        .and_then(|module| module.namespace.get(&member))
+        .copied()
+    else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnresolvedName,
+            location: SourceLocation {
+                unit,
+                range: member_token.text_range(),
+            },
+        });
+        return None;
+    };
+
+    if target.accessibility != Accessibility::Exported {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::InaccessibleBinding,
+            location: SourceLocation {
+                unit,
+                range: member_token.text_range(),
+            },
+        });
+        return None;
+    }
+
+    Some(target.entity)
 }
 
 fn validate_record_acyclicity(records: &[Record], diagnostics: &mut Vec<Diagnostic>) {
@@ -452,6 +707,7 @@ fn visit_record(
 fn validate_body(
     header: &FunctionHeader,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
     headers: &[FunctionHeader],
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -468,6 +724,11 @@ fn validate_body(
         );
     }
 
+    let context = BodyResolutionContext {
+        modules,
+        imports,
+        headers,
+    };
     let mut statements = Vec::new();
     let mut terminal_return = None;
     for node in header.body.children() {
@@ -476,8 +737,7 @@ fn validate_body(
                 if let Some(statement) = validate_local(
                     header,
                     &node,
-                    modules,
-                    headers,
+                    &context,
                     &mut bindings,
                     next_binding,
                     diagnostics,
@@ -490,6 +750,7 @@ fn validate_body(
                     header,
                     &node,
                     modules,
+                    imports,
                     headers,
                     &mut bindings,
                     diagnostics,
@@ -502,6 +763,7 @@ fn validate_body(
                     header,
                     &node,
                     modules,
+                    imports,
                     headers,
                     &mut bindings,
                     diagnostics,
@@ -548,8 +810,7 @@ fn validate_body(
 fn validate_local(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -558,9 +819,24 @@ fn validate_local(
     let name = key(&name_token);
     let local_location = location(header.unit, node);
     let type_node = direct_child(node, SyntaxKind::TypeRef);
-    let declared = resolve_type(header.module, header.unit, &type_node, modules, diagnostics);
+    let declared = resolve_type(
+        header.module,
+        header.unit,
+        &type_node,
+        context.modules,
+        context.imports,
+        diagnostics,
+    );
     let value_node = value_child(node);
-    let initializer = validate_value(header, &value_node, modules, headers, bindings, diagnostics);
+    let initializer = validate_value(
+        header,
+        &value_node,
+        context.modules,
+        context.imports,
+        context.headers,
+        bindings,
+        diagnostics,
+    );
 
     let shadows = bindings.contains_key(&name);
     if shadows {
@@ -613,13 +889,21 @@ fn validate_call_statement(
     header: &FunctionHeader,
     node: &SyntaxNode,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
     headers: &[FunctionHeader],
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let call = direct_child(node, SyntaxKind::DirectCall);
-    let (function, arguments, result) =
-        validate_call(header, &call, modules, headers, bindings, diagnostics)?;
+    let (function, arguments, result) = validate_call(
+        header,
+        &call,
+        modules,
+        imports,
+        headers,
+        bindings,
+        diagnostics,
+    )?;
     if result.is_some() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ResultCallUsedAsStatement,
@@ -638,6 +922,7 @@ fn validate_return(
     header: &FunctionHeader,
     node: &SyntaxNode,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
     headers: &[FunctionHeader],
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
@@ -650,7 +935,15 @@ fn validate_return(
         )
     });
     let value = value.and_then(|value_node| {
-        validate_value(header, &value_node, modules, headers, bindings, diagnostics)
+        validate_value(
+            header,
+            &value_node,
+            modules,
+            imports,
+            headers,
+            bindings,
+            diagnostics,
+        )
     });
 
     if let (Some(expected), Some(value)) = (header.result, value.as_ref())
@@ -675,6 +968,7 @@ fn validate_value(
     header: &FunctionHeader,
     node: &SyntaxNode,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
     headers: &[FunctionHeader],
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
@@ -726,8 +1020,15 @@ fn validate_value(
         }
         SyntaxKind::DirectCall => {
             let call_location = location(header.unit, node);
-            let (function, arguments, result) =
-                validate_call(header, node, modules, headers, bindings, diagnostics)?;
+            let (function, arguments, result) = validate_call(
+                header,
+                node,
+                modules,
+                imports,
+                headers,
+                bindings,
+                diagnostics,
+            )?;
             let Some(ty) = result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
@@ -752,46 +1053,65 @@ fn validate_call(
     header: &FunctionHeader,
     node: &SyntaxNode,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
     headers: &[FunctionHeader],
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<(FunctionId, Vec<Value>, Option<Type>)> {
-    let name_token = direct_token(node, SyntaxKind::Ident);
-    let name = key(&name_token);
-    let name_location = SourceLocation {
-        unit: header.unit,
-        range: name_token.text_range(),
-    };
-
-    if bindings.contains_key(&name) {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::ExpectedFunction,
-            location: name_location,
-        });
-        return None;
-    }
-
-    let function = match modules
-        .get(&header.module)
-        .and_then(|module| module.namespace.get(&name))
-        .copied()
+    let function = if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        Some(EntityId::Function(id)) => id,
-        Some(EntityId::Record(_)) => {
+        match resolve_qualified_entity(header.unit, &qualified, modules, imports, diagnostics)? {
+            EntityId::Function(id) => id,
+            EntityId::Record(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedFunction,
+                    location: location(header.unit, &qualified),
+                });
+                return None;
+            }
+        }
+    } else {
+        let name_token = direct_token(node, SyntaxKind::Ident);
+        let name = key(&name_token);
+        let name_location = SourceLocation {
+            unit: header.unit,
+            range: name_token.text_range(),
+        };
+
+        if bindings.contains_key(&name) {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedFunction,
                 location: name_location,
             });
             return None;
         }
-        None => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::UnresolvedName,
-                location: name_location,
-            });
-            return None;
+
+        match modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name))
+            .copied()
+            .map(|entity| entity.entity)
+        {
+            Some(EntityId::Function(id)) => id,
+            Some(EntityId::Record(_)) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedFunction,
+                    location: name_location,
+                });
+                return None;
+            }
+            None => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnresolvedName,
+                    location: name_location,
+                });
+                return None;
+            }
         }
     };
+
     let target = &headers[function.0];
     let argument_list = direct_child(node, SyntaxKind::ArgumentList);
     let argument_nodes = argument_list
@@ -821,6 +1141,7 @@ fn validate_call(
             header,
             &argument_node,
             modules,
+            imports,
             headers,
             bindings,
             diagnostics,
@@ -839,6 +1160,18 @@ fn validate_call(
     }
 
     Some((function, arguments, target.result))
+}
+
+fn declaration_accessibility(node: &SyntaxNode) -> Accessibility {
+    if node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::KwExport)
+    {
+        Accessibility::Exported
+    } else {
+        Accessibility::ModulePrivate
+    }
 }
 
 fn direct_child(node: &SyntaxNode, kind: SyntaxKind) -> SyntaxNode {
