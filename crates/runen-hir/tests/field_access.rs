@@ -206,10 +206,7 @@ fn repeated_consumption_and_ancestor_whole_use_are_rejected() {
          fn sink(value: Inner) {} \
          fn f(root: Outer) { sink(root.inner); sink(root.inner); }",
     );
-    assert!(has_kind(
-        &repeated,
-        DiagnosticKind::UnavailableFieldValue
-    ));
+    assert!(has_kind(&repeated, DiagnosticKind::UnavailableFieldValue));
 
     let ancestor = errors(
         "record Inner {} record Outer { inner: Inner } \
@@ -329,6 +326,48 @@ fn mutable_partial_root_whole_replacement_restores_full_availability() {
 }
 
 #[test]
+fn assignment_rhs_can_consume_target_field_before_successful_whole_reset() {
+    let hir = build(
+        "record Token {} record Holder { token: Token, count: I8 } \
+         fn sink(value: Holder) {} \
+         fn f() { \
+             let mut holder: Holder = Holder { token: Token {}, count: 1 }; \
+             holder = Holder { token: holder.token, count: 2 }; \
+             sink(holder); \
+         }",
+    );
+    let f = function(&hir, "f");
+    let Statement::Local { binding, .. } = &f.body.statements[0] else {
+        panic!("expected mutable holder local");
+    };
+    let Statement::Assignment { target, value, .. } = &f.body.statements[1] else {
+        panic!("expected whole-binding assignment");
+    };
+    assert_eq!(*target, *binding);
+    let ValueKind::RecordConstruction { fields, .. } = &value.kind else {
+        panic!("assignment RHS must remain a record construction");
+    };
+    assert!(matches!(
+        fields[0].value.kind,
+        ValueKind::FieldValueUse {
+            binding: consumed,
+            ownership: OwnedUse::Consume,
+            ..
+        } if consumed == *binding
+    ));
+    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+        panic!("expected post-assignment call");
+    };
+    assert!(matches!(
+        arguments[0].kind,
+        ValueKind::BindingUse {
+            binding: restored,
+            ownership: OwnedUse::Consume,
+        } if restored == *binding
+    ));
+}
+
+#[test]
 fn call_and_constructor_producers_observe_left_to_right_consumption() {
     let diagnostics = errors(
         "record Token {} record Pair { left: Token, right: Token } \
@@ -351,9 +390,11 @@ fn rejected_required_type_does_not_apply_consumption_transition() {
         "record Ticket {} fn needs_i8(value: I8) {} fn take(value: Ticket) {} \
          fn f(ticket: Ticket) { needs_i8(ticket); take(ticket); }",
     );
-    assert!(whole
-        .iter()
-        .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(
+        whole
+            .iter()
+            .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
     assert!(!has_kind(&whole, DiagnosticKind::UnavailableBinding));
 
     let field = errors(
@@ -361,13 +402,12 @@ fn rejected_required_type_does_not_apply_consumption_transition() {
          fn needs_i8(value: I8) {} fn take(value: Inner) {} \
          fn f(root: Outer) { needs_i8(root.inner); take(root.inner); }",
     );
-    assert!(field
-        .iter()
-        .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. })));
-    assert!(!has_kind(
-        &field,
-        DiagnosticKind::UnavailableFieldValue
-    ));
+    assert!(
+        field
+            .iter()
+            .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
+    assert!(!has_kind(&field, DiagnosticKind::UnavailableFieldValue));
 }
 
 #[test]
