@@ -1,12 +1,13 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
-    validate_body,
 };
 use runen_reference::{
-    ExecutionReport, Machine, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
-    VerificationEvent,
+    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind, VerificationEventKind,
 };
+use support::{event_kinds, machine, one_function_program};
 
 fn execute(
     types: TypeTable,
@@ -15,14 +16,16 @@ fn execute(
     statements: Vec<Statement>,
     terminator: Terminator,
 ) -> Result<ExecutionReport, UndefinedBehavior> {
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, terminator)],
-    };
-    Machine::new(validate_body(body).expect("language-valid raw-read fixture")).execute()
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, terminator)],
+        },
+    );
+    machine(program).execute()
 }
 
 #[test]
@@ -54,20 +57,20 @@ fn raw_read_of_live_target_is_defined_and_non_consuming() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("live target satisfies RawRead preconditions");
 
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert!(report.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&report.verification_events);
+    assert!(events.iter().any(|event| matches!(
         event,
-        VerificationEvent::RawRead { target: read, .. } if read == &target
+        VerificationEventKind::RawRead { target: read, .. } if read == &target
     )));
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 7, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 7, .. }))
             .count(),
         1,
         "RawRead must not consume or duplicate the non-copy pointee",
@@ -95,7 +98,7 @@ fn raw_read_of_never_initialized_target_is_undefined_behavior() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("RawRead requires a fully-live target");
 
@@ -136,7 +139,7 @@ fn raw_read_of_dead_target_is_undefined_behavior() {
                 pointer: Place::local(LocalId(2)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("moved-out target is Dead");
 
@@ -175,7 +178,7 @@ fn raw_read_of_explicitly_dropped_target_is_undefined_behavior() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("explicit destruction leaves a Dead raw target");
 
@@ -220,27 +223,22 @@ fn reinitialization_makes_existing_pointer_readable_again() {
                 pointer: Place::local(LocalId(2)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("replacement in continuing storage restores a live target");
 
-    let formed = report
-        .verification_events
-        .iter()
-        .find_map(|event| match event {
-            VerificationEvent::AddressOf { pointer, .. } => Some(pointer.clone()),
-            _ => None,
-        });
-    let read = report
-        .verification_events
-        .iter()
-        .find_map(|event| match event {
-            VerificationEvent::RawRead {
-                pointer,
-                target: read,
-            } if read == &target => Some(pointer.clone()),
-            _ => None,
-        });
+    let events = event_kinds(&report.verification_events);
+    let formed = events.iter().find_map(|event| match event {
+        VerificationEventKind::AddressOf { pointer, .. } => Some(pointer.clone()),
+        _ => None,
+    });
+    let read = events.iter().find_map(|event| match event {
+        VerificationEventKind::RawRead {
+            pointer,
+            target: read,
+        } if read == &target => Some(pointer.clone()),
+        _ => None,
+    });
     assert_eq!(read, formed);
 }
 
@@ -275,13 +273,14 @@ fn interior_replacement_preserves_existing_raw_read_target() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("interior replacement keeps the target storage region live");
 
-    assert!(report.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&report.verification_events);
+    assert!(events.iter().any(|event| matches!(
         event,
-        VerificationEvent::RawRead { target: read, .. } if read == &target
+        VerificationEventKind::RawRead { target: read, .. } if read == &target
     )));
 }
 
@@ -316,7 +315,7 @@ fn shared_target_loan_is_compatible_with_raw_read() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("shared target loans are compatible with the raw shared read");
 }
@@ -352,7 +351,7 @@ fn exclusive_target_loan_makes_raw_read_undefined_behavior() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("exclusive target loan violates RawRead compatibility");
 
@@ -397,7 +396,7 @@ fn source_loan_end_does_not_revoke_later_raw_read() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("ending formation loan does not erase pointer target metadata");
 }
@@ -432,7 +431,7 @@ fn partially_initialized_aggregate_target_is_not_raw_readable_as_a_whole() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("whole aggregate RawRead requires every leaf to be Live");
 
@@ -515,10 +514,9 @@ fn detected_undefined_behavior_does_not_run_defined_cleanup() {
     )
     .expect_err("dead target enters UB before defined Fault");
 
-    assert!(
-        !error
-            .verification_events
-            .iter()
-            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
-    );
+    let events = event_kinds(&error.verification_events);
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        VerificationEventKind::DropTrackedFixture { .. }
+    )));
 }

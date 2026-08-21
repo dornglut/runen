@@ -1,12 +1,14 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
-    validate_body,
 };
 use runen_reference::{
-    ExecutionReport, Machine, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
-    VerificationEvent, VerificationWriteKind,
+    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind, VerificationEventKind,
+    VerificationWriteKind,
 };
+use support::{event_kinds, machine, one_function_program};
 
 fn execute(
     types: TypeTable,
@@ -15,14 +17,16 @@ fn execute(
     statements: Vec<Statement>,
     terminator: Terminator,
 ) -> Result<ExecutionReport, UndefinedBehavior> {
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, terminator)],
-    };
-    Machine::new(validate_body(body).expect("language-valid RawAssign fixture")).execute()
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, terminator)],
+        },
+    );
+    machine(program).execute()
 }
 
 #[test]
@@ -55,48 +59,44 @@ fn raw_assign_replaces_live_target_with_existing_replacement_lifecycle() {
                 src: Operand::Constant(Value::TrackedFixture(2)),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("RawAssign has no overlapping target loan");
 
-    let old_drop = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let old_drop = events
         .iter()
-        .position(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 1, .. }))
+        .position(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
         .expect("old value is destroyed during replacement");
-    let write = report
-        .verification_events
+    let write = events
         .iter()
         .position(|event| {
             matches!(
                 event,
-                VerificationEvent::Write {
+                VerificationEventKind::Write {
                     place,
                     kind: VerificationWriteKind::RawAssign,
                 } if place == &target
             )
         })
         .expect("RawAssign write is instrumented");
-    let new_drop = report
-        .verification_events
+    let new_drop = events
         .iter()
-        .position(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 2, .. }))
+        .position(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 2, .. }))
         .expect("replacement value is destroyed during normal cleanup");
 
     assert!(old_drop < write && write < new_drop);
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
             .count(),
         1
     );
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 2, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 2, .. }))
             .count(),
         1
     );
@@ -128,13 +128,14 @@ fn raw_assign_initializes_never_initialized_target() {
                 src: target.clone().into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("Never-initialized storage is a legal RawAssign replacement target");
 
-    assert!(report.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&report.verification_events);
+    assert!(events.iter().any(|event| matches!(
         event,
-        VerificationEvent::Write {
+        VerificationEventKind::Write {
             place,
             kind: VerificationWriteKind::RawAssign,
         } if place == &target
@@ -174,7 +175,7 @@ fn raw_assign_reinitializes_dead_target() {
             },
             Statement::Read { src: target.into() },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("Dead continuing storage is a legal RawAssign replacement target");
 }
@@ -220,26 +221,25 @@ fn raw_assign_replaces_partial_aggregate_and_drops_only_live_old_fields() {
             },
             Statement::Read { src: pair.into() },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("partial target replacement is defined without overlapping loans");
 
+    let events = event_kinds(&report.verification_events);
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 10, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 10, .. }))
             .count(),
         1,
         "only the old live left field is destroyed during replacement"
     );
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
             .filter(|event| matches!(
                 event,
-                VerificationEvent::DropTrackedFixture { id: 20 | 30, .. }
+                VerificationEventKind::DropTrackedFixture { id: 20 | 30, .. }
             ))
             .count(),
         2,
@@ -277,22 +277,21 @@ fn raw_assign_snapshots_target_before_source_move_and_evaluates_source_first() {
                 src: Operand::Move(target.clone().into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("moving the target value out before writing it back is defined");
 
-    let move_index = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let move_index = events
         .iter()
-        .position(|event| matches!(event, VerificationEvent::Move(place) if place == &target))
+        .position(|event| matches!(event, VerificationEventKind::Move(place) if place == &target))
         .expect("source Move is recorded");
-    let write_index = report
-        .verification_events
+    let write_index = events
         .iter()
         .position(|event| {
             matches!(
                 event,
-                VerificationEvent::Write {
+                VerificationEventKind::Write {
                     place,
                     kind: VerificationWriteKind::RawAssign,
                 } if place == &target
@@ -301,10 +300,9 @@ fn raw_assign_snapshots_target_before_source_move_and_evaluates_source_first() {
         .expect("RawAssign writes the snapshotted target");
     assert!(move_index < write_index);
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 40, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 40, .. }))
             .count(),
         1,
         "source-first Move prevents a spurious replacement drop; cleanup drops once"
@@ -343,7 +341,7 @@ fn overlapping_shared_target_loan_makes_raw_assign_undefined_behavior() {
                 src: Operand::Constant(Value::I64(2)),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("raw target writes require exclusive compatibility");
 
@@ -388,7 +386,7 @@ fn overlapping_exclusive_target_loan_makes_raw_assign_undefined_behavior() {
                 src: Operand::Constant(Value::I64(2)),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("any overlapping active target loan blocks RawAssign");
 
@@ -440,7 +438,7 @@ fn disjoint_exclusive_loan_does_not_block_raw_assign() {
             },
             Statement::Read { src: left.into() },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("disjoint active loans do not constrain RawAssign target access");
 }
@@ -476,7 +474,7 @@ fn shared_loan_can_supply_pointer_value_for_raw_assign_execution() {
             Statement::EndBorrow { loan: LoanId(0) },
             Statement::Read { src: target.into() },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("pointer-value shared loan is independent of disjoint raw target access");
 }
@@ -514,7 +512,7 @@ fn ending_pointer_formation_loan_does_not_revoke_raw_assign() {
                 src: Operand::Constant(Value::I64(5)),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("formation-loan end neither grants nor revokes later RawAssign");
 }
@@ -541,7 +539,7 @@ fn raw_assign_does_not_require_ordinary_mutability_or_interior_marker() {
                 src: Operand::Constant(Value::I64(6)),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("RawAssign has its own unsafe target-write gate");
 }
@@ -572,23 +570,22 @@ fn successful_raw_assign_preserves_pointer_target_metadata() {
                 pointer: Place::local(LocalId(1)).into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("successful RawAssign leaves the pointer value unchanged");
 
-    let formed = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let formed = events
         .iter()
         .find_map(|event| match event {
-            VerificationEvent::AddressOf { pointer, .. } => Some(pointer.clone()),
+            VerificationEventKind::AddressOf { pointer, .. } => Some(pointer.clone()),
             _ => None,
         })
         .expect("pointer formation is instrumented");
-    let read = report
-        .verification_events
+    let read = events
         .iter()
         .find_map(|event| match event {
-            VerificationEvent::RawRead { pointer, .. } => Some(pointer.clone()),
+            VerificationEventKind::RawRead { pointer, .. } => Some(pointer.clone()),
             _ => None,
         })
         .expect("later RawRead observes the continuing pointer value");
@@ -628,12 +625,11 @@ fn successful_raw_assign_can_be_followed_by_defined_fault_cleanup() {
         report.terminal,
         TerminalStatus::Faulted("expected".to_owned())
     );
-    assert!(
-        report
-            .verification_events
-            .iter()
-            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 80, .. }))
-    );
+    let events = event_kinds(&report.verification_events);
+    assert!(events.iter().any(|event| matches!(
+        event,
+        VerificationEventKind::DropTrackedFixture { id: 80, .. }
+    )));
 }
 
 #[test]
@@ -679,10 +675,9 @@ fn raw_assign_undefined_behavior_does_not_run_defined_cleanup() {
         error.kind,
         UndefinedBehaviorKind::RawAssignConflictsWithLoan { .. }
     ));
-    assert!(
-        !error
-            .verification_events
-            .iter()
-            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
-    );
+    let events = event_kinds(&error.verification_events);
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        VerificationEventKind::DropTrackedFixture { .. }
+    )));
 }

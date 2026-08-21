@@ -1,12 +1,15 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable,
-    Value, validate_body,
+    Value,
 };
 use runen_reference::{
-    ExecutionReport, Machine, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
-    VerificationEvent, VerificationWriteKind,
+    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind, VerificationEventKind,
+    VerificationWriteKind,
 };
+use support::{event_kinds, machine, one_function_program};
 
 fn execute(
     types: TypeTable,
@@ -15,14 +18,16 @@ fn execute(
     statements: Vec<Statement>,
     terminator: Terminator,
 ) -> Result<ExecutionReport, UndefinedBehavior> {
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, terminator)],
-    };
-    Machine::new(validate_body(body).expect("language-valid RawMove fixture")).execute()
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, terminator)],
+        },
+    );
+    machine(program).execute()
 }
 
 #[test]
@@ -57,40 +62,37 @@ fn raw_move_transfers_tracked_value_without_source_destruction() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("live unaliased target is a defined RawMove");
 
-    let raw_move = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let raw_move = events
         .iter()
-        .position(|event| matches!(event, VerificationEvent::RawMove { target: place, .. } if place == &target))
+        .position(|event| matches!(event, VerificationEventKind::RawMove { target: place, .. } if place == &target))
         .expect("raw ownership transfer is instrumented");
-    let write = report
-        .verification_events
+    let write = events
         .iter()
         .position(|event| {
             matches!(
                 event,
-                VerificationEvent::Write {
+                VerificationEventKind::Write {
                     place,
                     kind: VerificationWriteKind::Init,
                 } if place == &destination
             )
         })
         .expect("enclosing Init writes the moved value");
-    let drop = report
-        .verification_events
+    let drop = events
         .iter()
-        .position(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 1, .. }))
+        .position(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
         .expect("moved value is eventually destroyed at its destination");
 
     assert!(raw_move < write && write < drop);
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
             .count(),
         1,
         "RawMove does not destroy at the source and cleanup destroys the destination once"
@@ -124,7 +126,7 @@ fn raw_move_of_never_initialized_target_is_undefined_behavior_without_enclosing_
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("RawMove requires a fully Live target");
 
@@ -132,16 +134,15 @@ fn raw_move_of_never_initialized_target_is_undefined_behavior_without_enclosing_
         error.kind,
         UndefinedBehaviorKind::RawMoveTargetNotLive { .. }
     ));
-    assert!(!error.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&error.verification_events);
+    assert!(!events.iter().any(|event| matches!(
         event,
-        VerificationEvent::Write { place, .. } if place == &destination
+        VerificationEventKind::Write { place, .. } if place == &destination
     )));
-    assert!(
-        !error
-            .verification_events
-            .iter()
-            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
-    );
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        VerificationEventKind::DropTrackedFixture { .. }
+    )));
 }
 
 #[test]
@@ -177,7 +178,7 @@ fn raw_move_of_dead_target_is_undefined_behavior() {
                 src: Operand::RawMove(Place::local(LocalId(2)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("Dead target cannot be RawMove'd");
 
@@ -219,7 +220,7 @@ fn raw_move_of_partial_aggregate_is_undefined_behavior() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("whole-target RawMove requires every target leaf Live");
 
@@ -262,7 +263,7 @@ fn overlapping_shared_target_loan_makes_raw_move_undefined_behavior() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("raw ownership transfer requires exclusive target compatibility");
 
@@ -308,7 +309,7 @@ fn overlapping_exclusive_target_loan_makes_raw_move_undefined_behavior() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("any overlapping active target loan blocks RawMove");
 
@@ -360,7 +361,7 @@ fn disjoint_exclusive_loan_does_not_block_raw_move() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("disjoint active loans do not constrain RawMove target access");
 }
@@ -399,7 +400,7 @@ fn shared_loan_can_supply_pointer_value_for_raw_move_execution() {
                 src: Operand::RawMove(PlaceAccess::loan(LoanId(0))),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("pointer-value shared loan is independent of raw target access");
 }
@@ -438,7 +439,7 @@ fn ending_pointer_formation_loan_does_not_revoke_raw_move() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("formation-loan end neither grants nor revokes later RawMove");
 }
@@ -473,22 +474,21 @@ fn assign_with_raw_move_from_same_target_is_source_first_without_double_drop() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("source RawMove leaves target Dead before ordinary replacement lifecycle");
 
-    let raw_move = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let raw_move = events
         .iter()
-        .position(|event| matches!(event, VerificationEvent::RawMove { target: place, .. } if place == &target))
+        .position(|event| matches!(event, VerificationEventKind::RawMove { target: place, .. } if place == &target))
         .expect("source RawMove occurs");
-    let write = report
-        .verification_events
+    let write = events
         .iter()
         .position(|event| {
             matches!(
                 event,
-                VerificationEvent::Write {
+                VerificationEventKind::Write {
                     place,
                     kind: VerificationWriteKind::Assign,
                 } if place == &target
@@ -497,10 +497,9 @@ fn assign_with_raw_move_from_same_target_is_source_first_without_double_drop() {
         .expect("outer Assign writes the moved value back");
     assert!(raw_move < write);
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 40, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 40, .. }))
             .count(),
         1,
         "replacement skips the already-moved source and cleanup destroys it once"
@@ -539,7 +538,7 @@ fn raw_move_ub_prevents_enclosing_interior_assign_destruction_and_write() {
                 src: Operand::RawMove(pointer.into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("RawMove source UB must stop InteriorAssign before destination replacement");
 
@@ -547,13 +546,14 @@ fn raw_move_ub_prevents_enclosing_interior_assign_destruction_and_write() {
         error.kind,
         UndefinedBehaviorKind::RawMoveTargetNotLive { .. }
     ));
-    assert!(!error.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&error.verification_events);
+    assert!(!events.iter().any(|event| matches!(
         event,
-        VerificationEvent::DropTrackedFixture { place, id: 50 } if place == &destination
+        VerificationEventKind::DropTrackedFixture { place, id: 50 } if place == &destination
     )));
-    assert!(!error.verification_events.iter().any(|event| matches!(
+    assert!(!events.iter().any(|event| matches!(
         event,
-        VerificationEvent::Write {
+        VerificationEventKind::Write {
             place,
             kind: VerificationWriteKind::InteriorAssign,
         } if place == &destination
@@ -596,13 +596,14 @@ fn raw_move_transports_raw_pointer_metadata_at_runtime() {
             },
             Statement::Read { src: value.into() },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("RawMove preserves a pointer-valued pointee's symbolic target");
 
-    assert!(report.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&report.verification_events);
+    assert!(events.iter().any(|event| matches!(
         event,
-        VerificationEvent::RawPointerMove { place, .. } if place == &Place::local(LocalId(1))
+        VerificationEventKind::RawPointerMove { place, .. } if place == &Place::local(LocalId(1))
     )));
 }
 
@@ -638,7 +639,7 @@ fn self_targeting_raw_move_snapshots_pointer_before_moving_same_storage() {
                 pointer: pointer.into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("self-targeting RawMove snapshots the pointer before consuming its storage");
 }
@@ -677,7 +678,7 @@ fn raw_move_source_ub_prevents_enclosing_raw_assign_write() {
                 src: Operand::RawMove(Place::local(LocalId(3)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect_err("NeverInitialized RawMove source enters UB before outer RawAssign");
 
@@ -685,9 +686,10 @@ fn raw_move_source_ub_prevents_enclosing_raw_assign_write() {
         error.kind,
         UndefinedBehaviorKind::RawMoveTargetNotLive { .. }
     ));
-    assert!(!error.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&error.verification_events);
+    assert!(!events.iter().any(|event| matches!(
         event,
-        VerificationEvent::Write {
+        VerificationEventKind::Write {
             kind: VerificationWriteKind::RawAssign,
             ..
         }
@@ -732,11 +734,11 @@ fn successful_raw_move_can_be_followed_by_defined_fault_cleanup() {
         report.terminal,
         TerminalStatus::Faulted("expected".to_owned())
     );
+    let events = event_kinds(&report.verification_events);
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 80, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 80, .. }))
             .count(),
         1
     );
@@ -786,12 +788,11 @@ fn raw_move_undefined_behavior_does_not_run_defined_cleanup() {
         error.kind,
         UndefinedBehaviorKind::RawMoveConflictsWithLoan { .. }
     ));
-    assert!(
-        !error
-            .verification_events
-            .iter()
-            .any(|event| matches!(event, VerificationEvent::DropTrackedFixture { .. }))
-    );
+    let events = event_kinds(&error.verification_events);
+    assert!(!events.iter().any(|event| matches!(
+        event,
+        VerificationEventKind::DropTrackedFixture { .. }
+    )));
 }
 
 #[test]
@@ -836,22 +837,22 @@ fn raw_move_transfers_complete_aggregate_without_source_destruction() {
                 src: Operand::RawMove(Place::local(LocalId(1)).into()),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("whole aggregate RawMove is defined when every target leaf is Live");
 
-    assert!(!report.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&report.verification_events);
+    assert!(!events.iter().any(|event| matches!(
         event,
-        VerificationEvent::DropTrackedFixture { place, .. } if place.local == target.local
+        VerificationEventKind::DropTrackedFixture { place, .. } if place.local == target.local
     )));
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
             .filter(|event| {
                 matches!(
                     event,
-                    VerificationEvent::DropTrackedFixture { id: 101 | 102, .. }
+                    VerificationEventKind::DropTrackedFixture { id: 101 | 102, .. }
                 )
             })
             .count(),
@@ -894,22 +895,21 @@ fn raw_assign_snapshots_target_before_raw_move_source_consumes_pointer_operand_a
                 pointer: target.clone().into(),
             },
         ],
-        Terminator::Return,
+        Terminator::Return(None),
     )
     .expect("outer RawAssign uses its pre-source target snapshot");
 
-    let raw_move_index = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let raw_move_index = events
         .iter()
-        .position(|event| matches!(event, VerificationEvent::RawMove { target: place, .. } if place == &outer))
+        .position(|event| matches!(event, VerificationEventKind::RawMove { target: place, .. } if place == &outer))
         .expect("source RawMove consumes the outer pointer storage");
-    let raw_assign_index = report
-        .verification_events
+    let raw_assign_index = events
         .iter()
         .position(|event| {
             matches!(
                 event,
-                VerificationEvent::Write {
+                VerificationEventKind::Write {
                     place,
                     kind: VerificationWriteKind::RawAssign,
                 } if place == &target

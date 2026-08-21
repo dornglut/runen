@@ -1,34 +1,39 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
     Operand, Place, PlaceAccess, Projection, ScalarType, Statement, Terminator, TypeDef, TypeTable,
-    Value, validate_body,
+    Value,
 };
-use runen_reference::{Machine, RawPointerValue, VerificationEvent};
+use runen_reference::{RawPointerValue, VerificationEventKind};
+use support::{event_kinds, machine, one_function_program};
 
 fn execute(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Vec<VerificationEvent> {
-    let body = Body {
+) -> Vec<VerificationEventKind> {
+    let program = one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    };
-    Machine::new(validate_body(body).expect("valid pointer-provenance fixture"))
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    );
+    let report = machine(program)
         .execute()
-        .expect("pointer-provenance fixture must have defined execution")
-        .verification_events
+        .expect("pointer-provenance fixture must have defined execution");
+    event_kinds(&report.verification_events)
 }
 
-fn formed(events: &[VerificationEvent]) -> Vec<RawPointerValue> {
+fn formed(events: &[VerificationEventKind]) -> Vec<RawPointerValue> {
     events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::AddressOf { pointer, .. } => Some(pointer.clone()),
+            VerificationEventKind::AddressOf { pointer, .. } => Some(pointer.clone()),
             _ => None,
         })
         .collect()
@@ -300,11 +305,11 @@ fn pointer_copy_and_move_preserve_defined_pointer_metadata() {
 
     let formed = formed(&events);
     let copied = events.iter().find_map(|event| match event {
-        VerificationEvent::RawPointerCopy { pointer, .. } => Some(pointer.clone()),
+        VerificationEventKind::RawPointerCopy { pointer, .. } => Some(pointer.clone()),
         _ => None,
     });
     let moved = events.iter().find_map(|event| match event {
-        VerificationEvent::RawPointerMove { pointer, .. } => Some(pointer.clone()),
+        VerificationEventKind::RawPointerMove { pointer, .. } => Some(pointer.clone()),
         _ => None,
     });
 
@@ -351,7 +356,7 @@ fn ending_source_loan_does_not_mutate_previously_formed_pointer() {
 
     let formed = formed(&events);
     let copied = events.iter().find_map(|event| match event {
-        VerificationEvent::RawPointerCopy { pointer, .. } => Some(pointer.clone()),
+        VerificationEventKind::RawPointerCopy { pointer, .. } => Some(pointer.clone()),
         _ => None,
     });
 
@@ -360,6 +365,6 @@ fn ending_source_loan_does_not_mutate_previously_formed_pointer() {
     assert!(
         events
             .iter()
-            .any(|event| { matches!(event, VerificationEvent::BorrowEnd(LoanId(0))) })
+            .any(|event| { matches!(event, VerificationEventKind::BorrowEnd(LoanId(0))) })
     );
 }

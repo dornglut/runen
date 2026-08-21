@@ -1,8 +1,11 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId, Operand,
-    Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
+    Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
 };
-use runen_reference::{Machine, TerminalStatus, VerificationEvent};
+use runen_reference::{TerminalStatus, VerificationEventKind};
+use support::{event_kinds, machine, one_function_program};
 
 #[test]
 fn defined_return_ends_active_borrow_before_cleanup() {
@@ -12,50 +15,44 @@ fn defined_return_ends_active_borrow_before_cleanup() {
         ScalarType::TrackedFixture,
     ));
     let value = Place::local(LocalId(0));
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals: vec![LocalDecl::new("value", tracked, false)],
-        loans: vec![LoanDecl::new("shared", tracked)],
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![
-                Statement::Init {
-                    dst: value.clone(),
-                    src: Operand::Constant(Value::TrackedFixture(9)),
-                },
-                Statement::Borrow {
-                    loan: LoanId(0),
-                    kind: BorrowKind::Shared,
-                    src: value.clone().into(),
-                },
-            ],
-            Terminator::Return,
-        )],
-    };
+        Body {
+            locals: vec![LocalDecl::new("value", tracked, false)],
+            loans: vec![LoanDecl::new("shared", tracked)],
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::TrackedFixture(9)),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(0),
+                        kind: BorrowKind::Shared,
+                        src: value.clone().into(),
+                    },
+                ],
+                Terminator::Return(None),
+            )],
+        },
+    );
 
-    let report = Machine::new(validate_body(body).expect("return borrow MIR must validate"))
+    let report = machine(program)
         .execute()
         .expect("defined return fixture must not enter undefined behavior");
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::BorrowStart {
-                loan: LoanId(0),
-                kind: BorrowKind::Shared,
-                place: value,
-            })
-    );
-    assert!(
-        !report
-            .verification_events
-            .contains(&VerificationEvent::BorrowEnd(LoanId(0)))
-    );
+    let events = event_kinds(&report.verification_events);
+    assert!(events.contains(&VerificationEventKind::BorrowStart {
+        loan: LoanId(0),
+        kind: BorrowKind::Shared,
+        place: value,
+    }));
+    assert!(!events.contains(&VerificationEventKind::BorrowEnd(LoanId(0))));
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 9, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 9, .. }))
             .count(),
         1
     );

@@ -3,18 +3,9 @@ name = "runen-reference"
 version = "0.0.0"
 edition.workspace = true
 publish = false
-autotests = false
 
 [dependencies]
 runen-core-ir = { path = "../runen-core-ir" }
-
-[[test]]
-name = "interprocedural"
-path = "tests/interprocedural.rs"
-
-[[test]]
-name = "one_function_regression"
-path = "tests/one_function_regression.rs"
 
 [lints]
 workspace = true

@@ -1,18 +1,17 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Fault, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
-    validate_body,
+    Operand, Place, PlaceAccess, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable,
+    Value,
 };
 use runen_reference::{
-    ExecutionReport, Machine, TerminalStatus, VerificationEvent, VerificationWriteKind,
+    ExecutionReport, TerminalStatus, VerificationEventKind, VerificationWriteKind,
 };
+use support::{event_kinds, machine, one_function_program};
 
-fn machine(body: Body) -> Machine {
-    Machine::new(validate_body(body).expect("reborrow test MIR must validate"))
-}
-
-fn defined_report(body: Body) -> ExecutionReport {
-    machine(body)
+fn defined_report(program: Program) -> ExecutionReport {
+    machine(program)
         .execute()
         .expect("reborrow fixture must have defined execution")
 }
@@ -27,60 +26,55 @@ fn child_borrow_source_resolves_to_concrete_subplace() {
     ));
     let root = Place::local(LocalId(0));
     let left = root.clone().field(0);
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals: vec![LocalDecl::new("pair", pair, true)],
-        loans: vec![
-            LoanDecl::new("parent", pair),
-            LoanDecl::new("child", scalar),
-        ],
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![
-                Statement::Init {
-                    dst: root.clone(),
-                    src: Operand::Constant(Value::Struct(vec![Value::I64(1), Value::I64(2)])),
-                },
-                Statement::Borrow {
-                    loan: LoanId(0),
-                    kind: BorrowKind::Exclusive,
-                    src: root.into(),
-                },
-                Statement::Borrow {
-                    loan: LoanId(1),
-                    kind: BorrowKind::Exclusive,
-                    src: PlaceAccess::loan(LoanId(0)).field(0),
-                },
-                Statement::Assign {
-                    dst: PlaceAccess::loan(LoanId(1)),
-                    src: Operand::Constant(Value::I64(3)),
-                },
-                Statement::EndBorrow { loan: LoanId(1) },
-                Statement::EndBorrow { loan: LoanId(0) },
+        Body {
+            locals: vec![LocalDecl::new("pair", pair, true)],
+            loans: vec![
+                LoanDecl::new("parent", pair),
+                LoanDecl::new("child", scalar),
             ],
-            Terminator::Return,
-        )],
-    };
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: root.clone(),
+                        src: Operand::Constant(Value::Struct(vec![Value::I64(1), Value::I64(2)])),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(0),
+                        kind: BorrowKind::Exclusive,
+                        src: root.into(),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(1),
+                        kind: BorrowKind::Exclusive,
+                        src: PlaceAccess::loan(LoanId(0)).field(0),
+                    },
+                    Statement::Assign {
+                        dst: PlaceAccess::loan(LoanId(1)),
+                        src: Operand::Constant(Value::I64(3)),
+                    },
+                    Statement::EndBorrow { loan: LoanId(1) },
+                    Statement::EndBorrow { loan: LoanId(0) },
+                ],
+                Terminator::Return(None),
+            )],
+        },
+    );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::BorrowStart {
-                loan: LoanId(1),
-                kind: BorrowKind::Exclusive,
-                place: left.clone(),
-            })
-    );
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::Write {
-                place: left,
-                kind: VerificationWriteKind::Assign,
-            })
-    );
+    let events = event_kinds(&report.verification_events);
+    assert!(events.contains(&VerificationEventKind::BorrowStart {
+        loan: LoanId(1),
+        kind: BorrowKind::Exclusive,
+        place: left.clone(),
+    }));
+    assert!(events.contains(&VerificationEventKind::Write {
+        place: left,
+        kind: VerificationWriteKind::Assign,
+    }));
 }
 
 #[test]
@@ -92,70 +86,72 @@ fn exclusive_child_controls_storage_across_move_and_replacement() {
     ));
     let value = Place::local(LocalId(0));
     let taken = Place::local(LocalId(1));
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals: vec![
-            LocalDecl::new("value", tracked, true),
-            LocalDecl::new("taken", tracked, false),
-        ],
-        loans: vec![
-            LoanDecl::new("parent", tracked),
-            LoanDecl::new("child", tracked),
-        ],
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![
-                Statement::Init {
-                    dst: value.clone(),
-                    src: Operand::Constant(Value::TrackedFixture(1)),
-                },
-                Statement::Borrow {
-                    loan: LoanId(0),
-                    kind: BorrowKind::Exclusive,
-                    src: value.clone().into(),
-                },
-                Statement::Borrow {
-                    loan: LoanId(1),
-                    kind: BorrowKind::Exclusive,
-                    src: PlaceAccess::loan(LoanId(0)),
-                },
-                Statement::Init {
-                    dst: taken.clone(),
-                    src: Operand::Move(PlaceAccess::loan(LoanId(1))),
-                },
-                Statement::Assign {
-                    dst: PlaceAccess::loan(LoanId(1)),
-                    src: Operand::Constant(Value::TrackedFixture(2)),
-                },
-                Statement::EndBorrow { loan: LoanId(1) },
-                Statement::EndBorrow { loan: LoanId(0) },
+        Body {
+            locals: vec![
+                LocalDecl::new("value", tracked, true),
+                LocalDecl::new("taken", tracked, false),
             ],
-            Terminator::Return,
-        )],
-    };
+            loans: vec![
+                LoanDecl::new("parent", tracked),
+                LoanDecl::new("child", tracked),
+            ],
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::TrackedFixture(1)),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(0),
+                        kind: BorrowKind::Exclusive,
+                        src: value.clone().into(),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(1),
+                        kind: BorrowKind::Exclusive,
+                        src: PlaceAccess::loan(LoanId(0)),
+                    },
+                    Statement::Init {
+                        dst: taken.clone(),
+                        src: Operand::Move(PlaceAccess::loan(LoanId(1))),
+                    },
+                    Statement::Assign {
+                        dst: PlaceAccess::loan(LoanId(1)),
+                        src: Operand::Constant(Value::TrackedFixture(2)),
+                    },
+                    Statement::EndBorrow { loan: LoanId(1) },
+                    Statement::EndBorrow { loan: LoanId(0) },
+                ],
+                Terminator::Return(None),
+            )],
+        },
+    );
 
-    let report = defined_report(body);
-    let events = &report.verification_events;
-    assert!(events.contains(&VerificationEvent::Move(value.clone())));
-    assert!(events.contains(&VerificationEvent::Write {
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
+    assert!(events.contains(&VerificationEventKind::Move(value.clone())));
+    assert!(events.contains(&VerificationEventKind::Write {
         place: value.clone(),
         kind: VerificationWriteKind::Assign,
     }));
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
             .count(),
         1
     );
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 2, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 2, .. }))
             .count(),
         1
     );
-    assert!(events.contains(&VerificationEvent::DropTrackedFixture {
+    assert!(events.contains(&VerificationEventKind::DropTrackedFixture {
         place: taken,
         id: 1
     }));
@@ -166,50 +162,52 @@ fn explicit_nested_borrow_end_is_leaf_to_root() {
     let mut types = TypeTable::new();
     let scalar = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let value = Place::local(LocalId(0));
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals: vec![LocalDecl::new("value", scalar, false)],
-        loans: vec![
-            LoanDecl::new("root", scalar),
-            LoanDecl::new("child", scalar),
-            LoanDecl::new("grandchild", scalar),
-        ],
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![
-                Statement::Init {
-                    dst: value.clone(),
-                    src: Operand::Constant(Value::I64(1)),
-                },
-                Statement::Borrow {
-                    loan: LoanId(0),
-                    kind: BorrowKind::Exclusive,
-                    src: value.clone().into(),
-                },
-                Statement::Borrow {
-                    loan: LoanId(1),
-                    kind: BorrowKind::Exclusive,
-                    src: PlaceAccess::loan(LoanId(0)),
-                },
-                Statement::Borrow {
-                    loan: LoanId(2),
-                    kind: BorrowKind::Shared,
-                    src: PlaceAccess::loan(LoanId(1)),
-                },
-                Statement::EndBorrow { loan: LoanId(2) },
-                Statement::EndBorrow { loan: LoanId(1) },
-                Statement::EndBorrow { loan: LoanId(0) },
+        Body {
+            locals: vec![LocalDecl::new("value", scalar, false)],
+            loans: vec![
+                LoanDecl::new("root", scalar),
+                LoanDecl::new("child", scalar),
+                LoanDecl::new("grandchild", scalar),
             ],
-            Terminator::Return,
-        )],
-    };
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::I64(1)),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(0),
+                        kind: BorrowKind::Exclusive,
+                        src: value.clone().into(),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(1),
+                        kind: BorrowKind::Exclusive,
+                        src: PlaceAccess::loan(LoanId(0)),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(2),
+                        kind: BorrowKind::Shared,
+                        src: PlaceAccess::loan(LoanId(1)),
+                    },
+                    Statement::EndBorrow { loan: LoanId(2) },
+                    Statement::EndBorrow { loan: LoanId(1) },
+                    Statement::EndBorrow { loan: LoanId(0) },
+                ],
+                Terminator::Return(None),
+            )],
+        },
+    );
 
-    let report = defined_report(body);
-    let ends = report
-        .verification_events
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
+    let ends = events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::BorrowEnd(loan) => Some(*loan),
+            VerificationEventKind::BorrowEnd(loan) => Some(*loan),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -224,51 +222,52 @@ fn defined_fault_terminates_nested_forest_before_cleanup() {
         ScalarType::TrackedFixture,
     ));
     let value = Place::local(LocalId(0));
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals: vec![LocalDecl::new("value", tracked, false)],
-        loans: vec![
-            LoanDecl::new("parent", tracked),
-            LoanDecl::new("child", tracked),
-        ],
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![
-                Statement::Init {
-                    dst: value.clone(),
-                    src: Operand::Constant(Value::TrackedFixture(7)),
-                },
-                Statement::Borrow {
-                    loan: LoanId(0),
-                    kind: BorrowKind::Shared,
-                    src: value.clone().into(),
-                },
-                Statement::Borrow {
-                    loan: LoanId(1),
-                    kind: BorrowKind::Shared,
-                    src: PlaceAccess::loan(LoanId(0)),
-                },
+        Body {
+            locals: vec![LocalDecl::new("value", tracked, false)],
+            loans: vec![
+                LoanDecl::new("parent", tracked),
+                LoanDecl::new("child", tracked),
             ],
-            Terminator::Fault(Fault::new("NESTED_BORROW_FAULT")),
-        )],
-    };
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::TrackedFixture(7)),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(0),
+                        kind: BorrowKind::Shared,
+                        src: value.clone().into(),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(1),
+                        kind: BorrowKind::Shared,
+                        src: PlaceAccess::loan(LoanId(0)),
+                    },
+                ],
+                Terminator::Fault(Fault::new("NESTED_BORROW_FAULT")),
+            )],
+        },
+    );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("NESTED_BORROW_FAULT".into())
     );
+    let events = event_kinds(&report.verification_events);
     assert!(
-        !report
-            .verification_events
+        !events
             .iter()
-            .any(|event| matches!(event, VerificationEvent::BorrowEnd(_)))
+            .any(|event| matches!(event, VerificationEventKind::BorrowEnd(_)))
     );
     assert_eq!(
-        report
-            .verification_events
+        events
             .iter()
-            .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 7, .. }))
+            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 7, .. }))
             .count(),
         1
     );

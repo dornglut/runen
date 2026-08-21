@@ -1,25 +1,26 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Field, LocalDecl, LocalId, MirValidationErrorKind, Operand,
-    Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
+    Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
-use runen_reference::{Machine, VerificationEvent, VerificationWriteKind};
+use runen_reference::{ExecutionReport, VerificationEventKind, VerificationWriteKind};
+use support::{event_kinds, machine, one_function_program};
 
-fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
-    Body {
+fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
-fn machine(body: Body) -> Machine {
-    Machine::new(validate_body(body).expect("A0 test MIR must pass validation"))
-}
-
-fn defined_report(body: Body) -> runen_reference::ExecutionReport {
-    machine(body)
+fn defined_report(program: Program) -> ExecutionReport {
+    machine(program)
         .execute()
         .expect("A0 state-transition fixture must have defined execution")
 }
@@ -37,7 +38,7 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
     ));
     let root = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![
             LocalDecl::new("pair", pair, false),
@@ -61,7 +62,7 @@ fn partial_move_makes_whole_aggregate_unreadable_until_reinitialized() {
         ],
     );
 
-    let error = validate_body(body)
+    let error = validate_program(program)
         .expect_err("a partially moved aggregate must be rejected before execution");
     assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(root));
 }
@@ -75,7 +76,7 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
     ));
     let value = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![
             LocalDecl::new("value", tracked, true),
@@ -100,21 +101,17 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
         ],
     );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
 
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::Write {
-                place: value,
-                kind: VerificationWriteKind::Assign,
-            })
-    );
-    let dropped_ids = report
-        .verification_events
+    assert!(events.contains(&VerificationEventKind::Write {
+        place: value,
+        kind: VerificationWriteKind::Assign,
+    }));
+    let dropped_ids = events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
+            VerificationEventKind::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -130,7 +127,7 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
     ));
     let value = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![
             LocalDecl::new("value", tracked, true),
@@ -152,8 +149,8 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
         ],
     );
 
-    let error =
-        validate_body(body).expect_err("dead storage must be reinitialized with Assign, not Init");
+    let error = validate_program(program)
+        .expect_err("dead storage must be reinitialized with Assign, not Init");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::InitRequiresNeverInitialized(value)
@@ -166,7 +163,7 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let value = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("value", i64_ty, true)],
         vec![
@@ -180,15 +177,11 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
         ],
     );
 
-    let report = defined_report(body);
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::Write {
-                place: value,
-                kind: VerificationWriteKind::Assign,
-            })
-    );
+    let report = defined_report(program);
+    assert!(event_kinds(&report.verification_events).contains(&VerificationEventKind::Write {
+        place: value,
+        kind: VerificationWriteKind::Assign,
+    }));
 }
 
 #[test]
@@ -204,7 +197,7 @@ fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts
     ));
     let root = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("pair", pair, true)],
         vec![
@@ -225,25 +218,21 @@ fn assign_replaces_partially_initialized_aggregate_and_drops_only_live_old_parts
         ],
     );
 
-    let report = defined_report(body);
-    let dropped_ids = report
-        .verification_events
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
+    let dropped_ids = events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
+            VerificationEventKind::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect::<Vec<_>>();
 
     assert_eq!(dropped_ids, vec![1, 3, 2]);
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::Write {
-                place: root,
-                kind: VerificationWriteKind::Assign,
-            })
-    );
+    assert!(events.contains(&VerificationEventKind::Write {
+        place: root,
+        kind: VerificationWriteKind::Assign,
+    }));
 }
 
 #[test]
@@ -260,7 +249,7 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
     let root = Place::local(LocalId(0));
     let left = root.clone().field(0);
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("pair", pair, false)],
         vec![
@@ -274,12 +263,11 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
         ],
     );
 
-    let report = defined_report(body);
-    let drops = report
-        .verification_events
+    let report = defined_report(program);
+    let drops = event_kinds(&report.verification_events)
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
+            VerificationEventKind::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -296,7 +284,7 @@ fn init_cannot_start_a_second_stored_value_lifetime_after_drop() {
     ));
     let value = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("value", tracked, false)],
         vec![
@@ -314,7 +302,7 @@ fn init_cannot_start_a_second_stored_value_lifetime_after_drop() {
         ],
     );
 
-    let error = validate_body(body).expect_err("Drop leaves Dead storage, not fresh storage");
+    let error = validate_program(program).expect_err("Drop leaves Dead storage, not fresh storage");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::InitRequiresNeverInitialized(value)
@@ -330,7 +318,7 @@ fn assign_starts_a_new_stored_value_lifetime_after_drop() {
     ));
     let value = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("value", tracked, true)],
         vec![
@@ -351,24 +339,24 @@ fn assign_starts_a_new_stored_value_lifetime_after_drop() {
         ],
     );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
     assert_eq!(
-        report.verification_events,
+        event_kinds(&report.verification_events),
         vec![
-            VerificationEvent::Write {
+            VerificationEventKind::Write {
                 place: value.clone(),
                 kind: VerificationWriteKind::Init,
             },
-            VerificationEvent::DropTrackedFixture {
+            VerificationEventKind::DropTrackedFixture {
                 place: value.clone(),
                 id: 1,
             },
-            VerificationEvent::Write {
+            VerificationEventKind::Write {
                 place: value.clone(),
                 kind: VerificationWriteKind::Assign,
             },
-            VerificationEvent::Read(value.clone()),
-            VerificationEvent::DropTrackedFixture {
+            VerificationEventKind::Read(value.clone()),
+            VerificationEventKind::DropTrackedFixture {
                 place: value,
                 id: 2,
             },
@@ -385,7 +373,7 @@ fn self_move_assignment_uses_the_post_source_destruction_domain() {
     ));
     let value = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("value", tracked, true)],
         vec![
@@ -400,20 +388,20 @@ fn self_move_assignment_uses_the_post_source_destruction_domain() {
         ],
     );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
     assert_eq!(
-        report.verification_events,
+        event_kinds(&report.verification_events),
         vec![
-            VerificationEvent::Write {
+            VerificationEventKind::Write {
                 place: value.clone(),
                 kind: VerificationWriteKind::Init,
             },
-            VerificationEvent::Move(value.clone()),
-            VerificationEvent::Write {
+            VerificationEventKind::Move(value.clone()),
+            VerificationEventKind::Write {
                 place: value.clone(),
                 kind: VerificationWriteKind::Assign,
             },
-            VerificationEvent::DropTrackedFixture {
+            VerificationEventKind::DropTrackedFixture {
                 place: value,
                 id: 1,
             },
