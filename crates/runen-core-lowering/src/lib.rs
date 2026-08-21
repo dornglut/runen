@@ -142,6 +142,18 @@ impl TypeMap {
             ))
     }
 
+    fn project_type(
+        &self,
+        root: core::TypeId,
+        projections: &[core::Projection],
+    ) -> Result<core::TypeId, LoweringError> {
+        self.types
+            .project_type(root, projections)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "HIR structural path does not match lowered Core type shape",
+            ))
+    }
+
     fn has_scalar_leaf(&self, ty: core::TypeId) -> Result<bool, LoweringError> {
         let definition = self
             .types
@@ -339,18 +351,19 @@ impl<'a> FunctionLowerer<'a> {
                 }
                 hir::Statement::Block(block) => {
                     self.lower_statements(&block.statements)?;
-                    for binding in &block.normal_cleanup {
-                        let local = self.binding(*binding)?;
-                        let ty = self
+                    for cleanup in &block.normal_cleanup {
+                        let place = self.binding_place(cleanup.binding, &cleanup.fields)?;
+                        let root_ty = self
                             .locals
-                            .get(local.0 as usize)
+                            .get(place.local.0 as usize)
                             .ok_or(LoweringError::InvalidHirInvariant(
                                 "bound Core local is absent from local declarations",
                             ))?
                             .ty;
+                        let ty = self.types.project_type(root_ty, &place.projections)?;
                         if self.types.has_scalar_leaf(ty)? {
                             self.push_statement(core::Statement::Drop {
-                                place: core::Place::local(local).into(),
+                                place: place.into(),
                             });
                         }
                     }
@@ -426,21 +439,25 @@ impl<'a> FunctionLowerer<'a> {
                 }
                 Ok(result)
             }
-            hir::ValueKind::FieldValueUse { binding, fields } => {
+            hir::ValueKind::FieldValueUse {
+                binding,
+                fields,
+                ownership,
+            } => {
                 if fields.is_empty() {
                     return Err(LoweringError::InvalidHirInvariant(
                         "field-value use has empty field path",
                     ));
                 }
-                let source = self.binding(*binding)?;
-                let mut place = core::Place::local(source);
-                for field in fields {
-                    place = place.field(index_u32(*field, "Core field projection")?);
-                }
+                let place = self.binding_place(*binding, fields)?;
                 let temporary = self.push_temporary(value.ty)?;
+                let operand = match ownership {
+                    hir::OwnedUse::Duplicate => core::Operand::Copy(place.into()),
+                    hir::OwnedUse::Consume => core::Operand::Move(place.into()),
+                };
                 self.push_statement(core::Statement::Init {
                     dst: core::Place::local(temporary),
-                    src: core::Operand::Copy(place.into()),
+                    src: operand,
                 });
                 Ok(temporary)
             }
@@ -533,6 +550,19 @@ impl<'a> FunctionLowerer<'a> {
             .ok_or(LoweringError::InvalidHirInvariant(
                 "HIR binding use is absent from local map",
             ))
+    }
+
+    fn binding_place(
+        &self,
+        binding: hir::BindingId,
+        fields: &[usize],
+    ) -> Result<core::Place, LoweringError> {
+        let local = self.binding(binding)?;
+        let mut place = core::Place::local(local);
+        for field in fields {
+            place = place.field(index_u32(*field, "Core field projection")?);
+        }
+        Ok(place)
     }
 
     fn push_statement(&mut self, statement: core::Statement) {
