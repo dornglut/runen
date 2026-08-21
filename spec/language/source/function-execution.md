@@ -14,7 +14,7 @@ This document does not define a universal expression taxonomy, operators, genera
 
 A represented source function entity MAY have one represented source body. It MUST NOT have more than one represented source body.
 
-Attaching a represented source body to the function entity is a source semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
+Attaching a represented source body to a function entity is a source-semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
 
 In the represented direct-call subset, a direct source call targets exactly one resolved source function entity that has a represented source body.
 
@@ -125,7 +125,7 @@ If evaluation of argument `i` yields a defined fault before callee activation:
 3. binding availability changes already caused while evaluating earlier arguments remain in effect; and
 4. the same defined fault continues in the caller activation under the fault-propagation rules below.
 
-If evaluation of an argument diverges, no callee activation is created and the caller remains suspended in that argument evaluation. Earlier transient argument values remain owned by that suspended computation; passage of time alone does not trigger cleanup.
+If evaluation of an argument diverges, no callee activation is created and the caller remains suspended in that argument evaluation. Earlier transient argument values remain owned by the suspended computation; passage of time alone does not trigger cleanup.
 
 After all arguments evaluate successfully:
 
