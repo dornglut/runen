@@ -4,13 +4,13 @@ use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, LocalDecl, LocalId, Operand, Place, ScalarType, Statement,
     Terminator, TypeDef, TypeTable, Value,
 };
-use runen_reference::{RawPointerValue, VerificationEvent, VerificationEventKind};
-use support::{machine, one_function_program};
+use runen_reference::{RawPointerValue, VerificationEventKind};
+use support::{event_kinds, machine, one_function_program};
 
-fn formed(events: &[VerificationEvent]) -> Vec<RawPointerValue> {
+fn formed(events: &[VerificationEventKind]) -> Vec<RawPointerValue> {
     events
         .iter()
-        .filter_map(|event| match &event.kind {
+        .filter_map(|event| match event {
             VerificationEventKind::AddressOf { pointer, .. } => Some(pointer.clone()),
             _ => None,
         })
@@ -57,7 +57,7 @@ fn first_initialization_begins_value_lifetime_without_replacing_storage_instance
         .execute()
         .expect("storage-identity fixture has defined execution")
         .verification_events;
-    let pointers = formed(&events);
+    let pointers = formed(&event_kinds(&events));
 
     assert_eq!(pointers.len(), 2);
     assert_eq!(pointers[0], pointers[1]);
