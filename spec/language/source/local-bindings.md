@@ -71,7 +71,7 @@ Consequently:
 
 - a local cannot shadow a parameter;
 - a nested local cannot shadow an enclosing local;
-- two sequential locals in the same continuing lexical scope cannot reuse a key; and
+- two sequential locals in the same continuing lexical scope cannot reuse one key; and
 - disjoint sibling lexical scopes MAY independently introduce the same key because their binding scopes do not overlap.
 
 This prohibition applies only inside the function-local value-binding domain.
