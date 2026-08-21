@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, and final-field value production from [Source field-value access](field-access.md); and direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability, structural availability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, final-path availability, and final-field value production from [Source field-value access](field-access.md); and direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -137,7 +137,7 @@ The field sequence MAY be empty. A trailing comma is permitted.
 
 The concrete record form makes no positive owned-value duplicability selection. Its duplicability classification therefore follows the no-selection case defined by `types.md`.
 
-The represented record definition does not itself construct or access a value. Record construction and binding-rooted field-value access are represented separately below. Field assignment, consuming/partial field operations, destructuring, methods, and duplicability-selection syntax are not represented.
+The represented record definition does not itself construct or access a value. Record construction and binding-rooted field-value access are represented separately below. Field assignment, partial-field reinitialization, destructuring, methods, and duplicability-selection syntax are not represented.
 
 ## Type forms
 
@@ -208,7 +208,7 @@ The concrete form maps to one ordinary local declaration under `local-bindings.m
 
 Without `MutableModifier`, the declaration establishes an immutable binding. With `MutableModifier`, it establishes a mutable binding under the assignment-mutability classification owned by `local-bindings.md`. `mut` does not create a second declaration category, a reference/memory value, or a distinct storage identity.
 
-Initializer lookup, owned-value production, transfer, availability, and the point at which the new local enters scope are determined by `local-bindings.md` and `function-execution.md`.
+Initializer lookup, owned-value production, transfer, structural availability, and the point at which the new local enters scope are determined by `local-bindings.md` and `function-execution.md`.
 
 This subset has no uninitialized local, inferred local type, pattern binding, destructuring local, or mutable-parameter spelling.
 
@@ -218,11 +218,11 @@ This subset has no uninitialized local, inferred local type, pattern binding, de
 AssignmentStatement = UserIdentifier "=" Value ";"
 ```
 
-The target identifier is resolved using the unqualified function-body lookup precedence from `local-bindings.md`. The concrete form maps that selected target and RHS `Value` to the whole-binding assignment relation owned there. A source-valid assignment therefore requires the selected entity, assignment mutability, availability transition, and target/RHS source types to satisfy `local-bindings.md`; concrete syntax does not redefine those requirements.
+The target identifier is resolved using the unqualified function-body lookup precedence from `local-bindings.md`. The concrete form maps that selected target and RHS `Value` to the whole-binding assignment relation owned there. A source-valid assignment therefore requires the selected entity, assignment mutability, structural-availability transition, and target/RHS source types to satisfy `local-bindings.md`; concrete syntax does not redefine those requirements.
 
 Assignment is a statement and produces no source value. It does not introduce Unit/Void or participate in `Value` grammar.
 
-RHS evaluation, source-first old-value replacement cleanup, value transfer, successful target availability, straight-line sequencing, and fault/divergence consequences are owned by `function-execution.md`.
+RHS evaluation, source-first old-value replacement cleanup, value transfer, successful target structural availability, straight-line sequencing, and fault/divergence consequences are owned by `function-execution.md`.
 
 This form targets only the complete selected binding. There is no field/member assignment, destructuring assignment, compound assignment, qualified assignment target, pointer/reference assignment, or general place/lvalue grammar in this subset.
 
@@ -278,7 +278,7 @@ The resulting record value has exactly the declaration-defined field/value shape
 
 Because each initializer contains a `Value`, record construction composes recursively with another record construction as well as the other represented value producers.
 
-This form defines no inferred or anonymous constructor target, positional field list, field-init shorthand, default field value, update/spread/base syntax, field-value access itself, field assignment, partial-field operation, destructuring, constructor/method body, or positive duplicability selection.
+This form defines no inferred or anonymous constructor target, positional field list, field-init shorthand, default field value, update/spread/base syntax, field-value access itself, field assignment, partial-field reinitialization, destructuring, constructor/method body, or positive duplicability selection.
 
 ## Binding-rooted field-value access
 
@@ -295,7 +295,9 @@ At least one selector is required, so a bare `UserIdentifier` remains `Identifie
 
 `FieldValueUse` is binding-rooted. This grammar does not admit a record construction, direct call, parenthesized value, qualified module member, or another arbitrary value as its receiver.
 
-The exact field-path selection, same-module direct field accessibility, final-field duplicability requirement, resulting source type, ownership consequence, and unchanged root-binding availability are owned by `field-access.md`. This grammar does not duplicate those relations.
+The exact field-path selection, same-module direct field accessibility, final-path structural-availability requirement, final-field duplicate-or-consume ownership consequence, and resulting source type are owned by `field-access.md` and `local-bindings.md`. This grammar does not duplicate those relations.
+
+The same concrete path form represents both cases: a source-valid duplicable final field is duplicated without consumption, while a source-valid non-duplicable final field is transferred/consumed. No second move/extract token is introduced by this revision.
 
 The `.` token in this production has no decimal-literal, method, assignment, reference, place/lvalue, or general-member meaning.
 
@@ -313,7 +315,7 @@ The represented literal forms map to `literals.md`. `true` and `false` denote th
 
 The optional `-` in `DecimalIntegerLiteral` is part of this literal grammar only. It does not establish a unary-negation expression or subtraction operator. Because it and `DecimalMagnitude` are distinct grammar tokens, ordinary trivia may occur between them under the general trivia rule above without changing the denoted signed decimal literal form.
 
-An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-bindings.md`. Its identifier is resolved using the function-local lookup precedence owned there. In this subset, the selected entity MUST be an available parameter or ordinary local binding; another selected entity category does not become a value merely because the context requires one.
+An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-bindings.md`. Its identifier is resolved using the function-local lookup precedence owned there. In this subset, the selected entity MUST be a parameter or ordinary local binding whose complete value is fully available under the structural availability relation; another selected entity category does not become a value merely because the context requires one.
 
 A `DirectCall` may be used as a `Value` only when its callable signature specifies one result value. The successful call result is the owned value produced by `function-execution.md`.
 
@@ -370,12 +372,12 @@ This revision does not define:
 - floating, string, byte, character, or other literal syntax beyond the represented boolean and signed decimal integer forms, nor any literal suffix, digit separator, alternate-radix form, or decimal-point form;
 - arithmetic, comparison, logical, compound-assignment, general unary-negation, subtraction, or other operator forms;
 - grouping or general expression grammar;
-- assignment expressions, assignment-as-value, field assignment, or general place/lvalue syntax beyond the represented whole-binding statement;
+- assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, or general place/lvalue syntax beyond the represented whole-binding statement;
 - uninitialized locals, type inference, or mutable parameters;
 - branches, loops, patterns, or other multiple-path/control-transfer forms;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction;
-- consuming/non-duplicable field access, partial-field availability, arbitrary-receiver member access, cross-module field access, field visibility modifiers, methods, or associated-item lookup;
+- arbitrary-receiver member access, cross-module field access, field visibility modifiers, methods, or associated-item lookup;
 - destructuring;
 - positive record duplicability-selection syntax;
 - references, borrow syntax, source interior mutability, raw-pointer assignment, or lifetime syntax;
