@@ -4,13 +4,15 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source module identity, module binding, module alias, visibility, and qualified cross-module lookup relations. It consumes lexical identifier keys from [Source lexical foundation](lexical.md) and does not redefine identifier formation or equivalence.
 
-Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). The represented concrete module-private record/function forms are owned by [Source concrete syntax](concrete-syntax.md). This document does not define member lookup, overload resolution, package discovery, or an implementation representation.
+Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). The represented concrete record/function accessibility, module-import alias, and two-part qualified module-member forms are owned by [Source concrete syntax](concrete-syntax.md). This document does not define member lookup, overload resolution, package discovery, or an implementation representation.
 
 ## Source modules
 
 A **source module** is an opaque source-language organization identity established as part of the source compilation context.
 
-The source compilation context is an input to source-language validation. For the rules in this document it supplies the source-module identities that participate in the compilation, the assignment of directly supplied source units to those module identities, and the target module identity named by any represented module-import relation. It is not Runen program state.
+The source compilation context is an input to source-language validation. For the rules in this document it supplies the source-module identities that participate in the compilation, the assignment of directly supplied source units to those module identities, and the target module identity named by each represented module-import relation. It is not Runen program state.
+
+For the concrete `import A;` form in `concrete-syntax.md`, the compilation context supplies exactly one target source-module identity associated with lexical alias key `A` for that source unit. The alias key selects that context entry; it does not identify or derive the target module identity.
 
 Source-module identity is not derived from source-unit bytes, a lexical identifier spelling, a filesystem path or file name, a directory, a package coordinate, source-unit presentation order, or another physical storage convention.
 
@@ -47,7 +49,7 @@ Each module-level binding represented by this document has one of two accessibil
 
 Accessibility is a source semantic fact. It is not inferred from identifier case, original spelling, physical symbol visibility, linkage, ABI export status, file placement, or build-system metadata unless a source-language rule explicitly establishes such a source relation.
 
-The record and function definitions represented by `concrete-syntax.md` establish module-private bindings. That concrete grammar currently has no exported-binding syntax. The abstract exported accessibility class defined here remains available to later accepted declaration forms.
+For the represented record and function definitions in `concrete-syntax.md`, absence of the concrete `export` modifier establishes module-private accessibility and presence of that modifier establishes exported accessibility. The concrete modifier changes only this source accessibility fact; it does not establish ABI export, linkage, FFI visibility, runtime publication, or realization behavior.
 
 This revision does not define package-scoped, friend, subtree-restricted, protected, FFI-linkage, or other accessibility classes.
 
@@ -83,7 +85,9 @@ Different source units assigned to one source module MAY use different alias key
 
 A module alias is available only within the source unit whose module import relation introduces it. Another source unit in the same source module does not acquire that alias merely because the target module or alias exists elsewhere in the module.
 
-The current concrete grammar defines no import or module-alias syntax. This abstract relation therefore has no represented concrete source form under `concrete-syntax.md`.
+The concrete `import A;` form in `concrete-syntax.md` introduces one represented module import relation whose module-alias key is the lexical identifier key of `A`. The source compilation context MUST supply exactly one target source-module identity for that alias key in that source unit. If it does not, that import relation is invalid for the supplied source compilation context.
+
+The concrete import spelling contains no source module name or target locator. An alias spelling therefore cannot be used to infer the target module identity. Additional host or build-system mappings for alias keys not declared by that source unit do not create source module aliases and have no source lookup effect under this document.
 
 This document does not define target-locator spelling, unused-import diagnostics, or a module object's source-level value representation.
 
@@ -108,7 +112,7 @@ When those conditions hold, the qualified lookup resolves to that target binding
 
 An unqualified lookup MUST NOT search imported modules merely because they are aliased in the source unit. This revision defines no selective direct imports, wildcard or glob imports, dot imports, re-exports, implicit preludes, transitive import visibility, or imported-member precedence rules.
 
-A later concrete grammar may choose a path separator or other spelling that maps to this relation. That spelling must not alter the binding relation defined here.
+The concrete `a::m` form in `concrete-syntax.md` maps exactly to this lookup relation. `::` does not by itself define arbitrary member access, nested module paths, associated-item lookup, or another name-resolution domain. The consuming concrete type or direct-call context validates the category of the resolved binding after this lookup; qualified lookup does not skip an inaccessible or wrong-category binding.
 
 Module aliases themselves are not exported module-level bindings under this revision and therefore do not re-export their target modules or target bindings.
 
@@ -122,16 +126,15 @@ This permission concerns source name resolution only. A later const/static initi
 
 ## Deliberate boundaries
 
-This revision defines module declaration namespaces, binding accessibility, same-module lookup, source-unit module-alias scopes, and qualified cross-module lookup. Represented function-local value-binding scopes and precedence are owned by `local-bindings.md`. The current concrete record/function declaration forms are owned by `concrete-syntax.md`.
+This revision defines module declaration namespaces, binding accessibility, same-module lookup, source-unit module-alias scopes, and qualified cross-module lookup. Represented function-local value-binding scopes and precedence are owned by `local-bindings.md`. The current concrete record/function/import/export/qualification forms are owned by `concrete-syntax.md`.
 
 This document does not define:
 
 - additional local binding classes such as pattern bindings, closure captures, generic parameters, lifetime names, or labels;
-- nested or parent/child module hierarchy, module path segments, `self`/`super`-like relations, or a source-visible canonical module name;
+- nested or parent/child module hierarchy, module path segments beyond the represented alias/member pair, `self`/`super`-like relations, or a source-visible canonical module name;
 - fields, methods, associated items, extension lookup, trait lookup, overload resolution, argument-dependent lookup, or member precedence;
 - implicit/predeclared names or a standard-library prelude;
-- concrete import, export, re-export, or qualified-path grammar;
-- module/import keywords beyond forms accepted by another concrete owner;
+- dependency-locator syntax, selective direct imports, wildcard/glob imports, dot imports, re-exports, or transitive import visibility;
 - package management, dependency solving, filesystem layout, source discovery, or interface serialization;
 - const/static initialization order or runtime module initialization;
 - ABI, linkage, FFI export/import, or physical symbol visibility;
