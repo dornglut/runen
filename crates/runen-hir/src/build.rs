@@ -71,6 +71,12 @@ struct BindingState {
 
 type UnitImports = BTreeMap<String, ModuleId>;
 
+struct BodyResolutionContext<'a> {
+    modules: &'a BTreeMap<ModuleId, ModuleBuild>,
+    imports: &'a [UnitImports],
+    headers: &'a [FunctionHeader],
+}
+
 pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Diagnostic>> {
     let mut diagnostics = syntax_admission_diagnostics(units);
     if !diagnostics.is_empty() {
@@ -329,14 +335,12 @@ fn collect_imports(
                         kind: DiagnosticKind::MissingImportTarget,
                         location: import_location,
                     });
-                    valid = false;
                 }
                 (Some(_), Some(_)) => {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::DuplicateImportTarget,
                         location: import_location,
                     });
-                    valid = false;
                 }
                 (Some(target), None) => {
                     if target.module == unit.module {
@@ -720,6 +724,11 @@ fn validate_body(
         );
     }
 
+    let context = BodyResolutionContext {
+        modules,
+        imports,
+        headers,
+    };
     let mut statements = Vec::new();
     let mut terminal_return = None;
     for node in header.body.children() {
@@ -728,9 +737,7 @@ fn validate_body(
                 if let Some(statement) = validate_local(
                     header,
                     &node,
-                    modules,
-                    imports,
-                    headers,
+                    &context,
                     &mut bindings,
                     next_binding,
                     diagnostics,
@@ -803,9 +810,7 @@ fn validate_body(
 fn validate_local(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -818,17 +823,17 @@ fn validate_local(
         header.module,
         header.unit,
         &type_node,
-        modules,
-        imports,
+        context.modules,
+        context.imports,
         diagnostics,
     );
     let value_node = value_child(node);
     let initializer = validate_value(
         header,
         &value_node,
-        modules,
-        imports,
-        headers,
+        context.modules,
+        context.imports,
+        context.headers,
         bindings,
         diagnostics,
     );
