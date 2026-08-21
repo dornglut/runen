@@ -178,7 +178,12 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
     let events = event_kinds(&report.verification_events);
     let drops = events
         .iter()
-        .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 99, .. }))
+        .filter(|event| {
+            matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 99, .. }
+            )
+        })
         .count();
     assert_eq!(drops, 1);
 }
@@ -391,6 +396,7 @@ fn copy_of_noncopy_value_is_rejected_before_execution() {
         ],
     );
 
-    let error = validate_program(program).expect_err("TrackedFixture values are not copyable in A0");
+    let error =
+        validate_program(program).expect_err("TrackedFixture values are not copyable in A0");
     assert_eq!(error.kind, MirValidationErrorKind::CopyOfNonCopy(tracked));
 }

@@ -14,7 +14,8 @@ pub fn one_function_program(types: TypeTable, body: Body) -> Program {
 }
 
 pub fn machine(program: Program) -> Machine {
-    let validated = validate_program(program).expect("historical one-function fixture must validate");
+    let validated =
+        validate_program(program).expect("historical one-function fixture must validate");
     Machine::new(validated, FunctionId(0)).expect("one-function fixture has zero parameters")
 }
 

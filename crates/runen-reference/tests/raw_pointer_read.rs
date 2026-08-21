@@ -5,7 +5,8 @@ use runen_core_ir::{
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
 };
 use runen_reference::{
-    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind, VerificationEventKind,
+    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
+    VerificationEventKind,
 };
 use support::{event_kinds, machine, one_function_program};
 
@@ -70,7 +71,10 @@ fn raw_read_of_live_target_is_defined_and_non_consuming() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 7, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 7, .. }
+            ))
             .count(),
         1,
         "RawRead must not consume or duplicate the non-copy pointee",
@@ -515,8 +519,9 @@ fn detected_undefined_behavior_does_not_run_defined_cleanup() {
     .expect_err("dead target enters UB before defined Fault");
 
     let events = event_kinds(&error.verification_events);
-    assert!(!events.iter().any(|event| matches!(
-        event,
-        VerificationEventKind::DropTrackedFixture { .. }
-    )));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, VerificationEventKind::DropTrackedFixture { .. }))
+    );
 }

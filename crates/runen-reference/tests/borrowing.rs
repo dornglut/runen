@@ -197,7 +197,10 @@ fn defined_fault_ends_active_borrow_before_cleanup() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 7, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 7, .. }
+            ))
             .count(),
         1
     );

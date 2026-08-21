@@ -52,7 +52,10 @@ fn defined_return_ends_active_borrow_before_cleanup() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 9, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 9, .. }
+            ))
             .count(),
         1
     );

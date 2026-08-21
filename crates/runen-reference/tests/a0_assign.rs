@@ -45,14 +45,20 @@ fn assignment_drops_live_old_value_then_writes_replacement() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 1, .. }
+            ))
             .count(),
         1
     );
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 2, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 2, .. }
+            ))
             .count(),
         1
     );

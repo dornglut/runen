@@ -6,8 +6,8 @@ use runen_core_ir::{
     Value,
 };
 use runen_reference::{
-    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind, VerificationEventKind,
-    VerificationWriteKind,
+    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
+    VerificationEventKind, VerificationWriteKind,
 };
 use support::{event_kinds, machine, one_function_program};
 
@@ -85,14 +85,22 @@ fn raw_move_transfers_tracked_value_without_source_destruction() {
         .expect("enclosing Init writes the moved value");
     let drop = events
         .iter()
-        .position(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
+        .position(|event| {
+            matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 1, .. }
+            )
+        })
         .expect("moved value is eventually destroyed at its destination");
 
     assert!(raw_move < write && write < drop);
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 1, .. }
+            ))
             .count(),
         1,
         "RawMove does not destroy at the source and cleanup destroys the destination once"
@@ -139,10 +147,11 @@ fn raw_move_of_never_initialized_target_is_undefined_behavior_without_enclosing_
         event,
         VerificationEventKind::Write { place, .. } if place == &destination
     )));
-    assert!(!events.iter().any(|event| matches!(
-        event,
-        VerificationEventKind::DropTrackedFixture { .. }
-    )));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, VerificationEventKind::DropTrackedFixture { .. }))
+    );
 }
 
 #[test]
@@ -499,7 +508,10 @@ fn assign_with_raw_move_from_same_target_is_source_first_without_double_drop() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 40, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 40, .. }
+            ))
             .count(),
         1,
         "replacement skips the already-moved source and cleanup destroys it once"
@@ -738,7 +750,10 @@ fn successful_raw_move_can_be_followed_by_defined_fault_cleanup() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 80, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 80, .. }
+            ))
             .count(),
         1
     );
@@ -789,10 +804,11 @@ fn raw_move_undefined_behavior_does_not_run_defined_cleanup() {
         UndefinedBehaviorKind::RawMoveConflictsWithLoan { .. }
     ));
     let events = event_kinds(&error.verification_events);
-    assert!(!events.iter().any(|event| matches!(
-        event,
-        VerificationEventKind::DropTrackedFixture { .. }
-    )));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, VerificationEventKind::DropTrackedFixture { .. }))
+    );
 }
 
 #[test]

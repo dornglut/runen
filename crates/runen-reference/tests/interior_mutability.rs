@@ -237,7 +237,10 @@ fn marked_aggregate_interior_assignment_drops_only_then_live_contents() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 1, .. }
+            ))
             .count(),
         1,
         "the moved value is destroyed exactly once in its destination local"
@@ -287,14 +290,20 @@ fn interior_replacement_under_shared_borrow_is_cleaned_once_on_fault() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 1, .. }
+            ))
             .count(),
         1
     );
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 2, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 2, .. }
+            ))
             .count(),
         1
     );

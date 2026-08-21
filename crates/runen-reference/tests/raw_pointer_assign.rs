@@ -5,8 +5,8 @@ use runen_core_ir::{
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
 };
 use runen_reference::{
-    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind, VerificationEventKind,
-    VerificationWriteKind,
+    ExecutionReport, TerminalStatus, UndefinedBehavior, UndefinedBehaviorKind,
+    VerificationEventKind, VerificationWriteKind,
 };
 use support::{event_kinds, machine, one_function_program};
 
@@ -66,7 +66,12 @@ fn raw_assign_replaces_live_target_with_existing_replacement_lifecycle() {
     let events = event_kinds(&report.verification_events);
     let old_drop = events
         .iter()
-        .position(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
+        .position(|event| {
+            matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 1, .. }
+            )
+        })
         .expect("old value is destroyed during replacement");
     let write = events
         .iter()
@@ -82,21 +87,32 @@ fn raw_assign_replaces_live_target_with_existing_replacement_lifecycle() {
         .expect("RawAssign write is instrumented");
     let new_drop = events
         .iter()
-        .position(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 2, .. }))
+        .position(|event| {
+            matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 2, .. }
+            )
+        })
         .expect("replacement value is destroyed during normal cleanup");
 
     assert!(old_drop < write && write < new_drop);
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 1, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 1, .. }
+            ))
             .count(),
         1
     );
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 2, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 2, .. }
+            ))
             .count(),
         1
     );
@@ -229,7 +245,10 @@ fn raw_assign_replaces_partial_aggregate_and_drops_only_live_old_fields() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 10, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 10, .. }
+            ))
             .count(),
         1,
         "only the old live left field is destroyed during replacement"
@@ -302,7 +321,10 @@ fn raw_assign_snapshots_target_before_source_move_and_evaluates_source_first() {
     assert_eq!(
         events
             .iter()
-            .filter(|event| matches!(event, VerificationEventKind::DropTrackedFixture { id: 40, .. }))
+            .filter(|event| matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 40, .. }
+            ))
             .count(),
         1,
         "source-first Move prevents a spurious replacement drop; cleanup drops once"
@@ -676,8 +698,9 @@ fn raw_assign_undefined_behavior_does_not_run_defined_cleanup() {
         UndefinedBehaviorKind::RawAssignConflictsWithLoan { .. }
     ));
     let events = event_kinds(&error.verification_events);
-    assert!(!events.iter().any(|event| matches!(
-        event,
-        VerificationEventKind::DropTrackedFixture { .. }
-    )));
+    assert!(
+        !events
+            .iter()
+            .any(|event| matches!(event, VerificationEventKind::DropTrackedFixture { .. }))
+    );
 }

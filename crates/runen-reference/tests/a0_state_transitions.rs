@@ -178,10 +178,12 @@ fn assign_can_initialize_never_initialized_mutable_storage() {
     );
 
     let report = defined_report(program);
-    assert!(event_kinds(&report.verification_events).contains(&VerificationEventKind::Write {
-        place: value,
-        kind: VerificationWriteKind::Assign,
-    }));
+    assert!(
+        event_kinds(&report.verification_events).contains(&VerificationEventKind::Write {
+            place: value,
+            kind: VerificationWriteKind::Assign,
+        })
+    );
 }
 
 #[test]
