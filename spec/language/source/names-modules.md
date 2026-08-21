@@ -81,7 +81,7 @@ Within one source unit:
 
 Consequently, a module alias does not hide or replace a same-module declaration.
 
-Different source units assigned to one source module MAY use different alias keys for the same target module. One source unit MAY also use multiple distinct alias keys for the same target module.
+Different source units assigned to one source module MAY use different alias keys for the same target module. One source unit MAY also use multiple distinct alias keys for the same target module. Because module aliases are source-unit-local relations, the same alias key in two distinct source units MAY designate different target source modules.
 
 A module alias is available only within the source unit whose module import relation introduces it. Another source unit in the same source module does not acquire that alias merely because the target module or alias exists elsewhere in the module.
 
