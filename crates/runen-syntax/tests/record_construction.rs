@@ -13,7 +13,7 @@ record Pair { left: I8, right: I8, nested: Inner }
 fn sink(value: Pair) {}
 fn build() -> Pair {
     let empty: Empty = Empty {};
-    let mut value: Pair = Pair { right: 2, left: 1, nested: Inner { value: 3, }, };
+    let mut value: Pair = Pair { right: 2, /* keep field trivia */ left: 1, nested: Inner { value: 3, }, };
     value = Pair { left: 4, right: 5, nested: Inner { value: 6 } };
     sink(Pair { left: 7, right: 8, nested: Inner { value: 9 } });
     return Pair { left: 10, right: 11, nested: Inner { value: 12 } };
@@ -64,15 +64,17 @@ fn reordered_initializers_retain_source_order_as_explicit_nodes() {
 
 #[test]
 fn qualified_and_standalone_construction_are_not_silently_accepted() {
-    let qualified = parse(
-        "record Pair { left: I8 } fn f() -> Pair { return other::Pair { left: 1 }; }",
-    );
+    let qualified =
+        parse("record Pair { left: I8 } fn f() -> Pair { return other::Pair { left: 1 }; }");
     assert!(!qualified.errors().is_empty());
 
     let standalone = parse("record Pair {} fn f() { Pair {} }");
-    assert!(standalone.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Statement)
-    }));
+    assert!(
+        standalone
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Statement) })
+    );
 }
 
 #[test]
@@ -99,14 +101,16 @@ fn malformed_initializers_preserve_following_initializer_boundaries() {
 
 #[test]
 fn missing_constructor_close_preserves_later_body_and_top_level_constructs() {
-    let source =
-        "record Pair { left: I8 } fn f() { let value: Pair = Pair { left: 1; let later: I8 = 2; } record Next {}";
+    let source = "record Pair { left: I8 } fn f() { let value: Pair = Pair { left: 1; let later: I8 = 2; } record Next {}";
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
+    );
 
     let root = parsed.syntax();
     assert!(root.descendants().any(|node| {
