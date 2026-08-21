@@ -113,7 +113,7 @@ Indirect calls, function values, closures, overload dispatch, methods, external/
 
 This revision does not add or require a parser, lossless-syntax representation, HIR, Core MIR production representation, runtime representation, or backend representation.
 
-`concrete-syntax.md` now defines one bounded concrete function/parameter/result/body/call/return subset, including explicitly qualified module call targets. General expression syntax, literals, parser recovery, and broader callable forms remain outside this owner and cannot be inferred from the represented callable semantics.
+`concrete-syntax.md` now defines one bounded concrete function/parameter/result/body/call/return subset. General expression syntax, literals, parser recovery, and broader callable forms remain outside this owner and cannot be inferred from the represented callable semantics.
 
 ## Further boundaries
 
