@@ -133,10 +133,7 @@ fn producer_construction_keeps_source_locals_before_temporaries_and_drops_comple
             .collect::<Vec<_>>(),
         ["r", "l", "$tmp0", "$tmp1", "$tmp2"]
     );
-    assert_eq!(
-        drops(f),
-        vec![direct(Place::local(LocalId(4)))]
-    );
+    assert_eq!(drops(f), vec![direct(Place::local(LocalId(4)))]);
     assert!(f.body.blocks[0].statements.iter().any(|statement| matches!(
         statement,
         CoreStatement::Init {
@@ -401,10 +398,8 @@ fn lowering_rejects_pattern_record_root_identity_mismatch() {
 
 #[test]
 fn lowering_rejects_producer_record_identity_mismatch() {
-    let mut compilation = hir(
-        "record A { value: I8 } record B { value: I8 } \
-         fn f() { let A { value: extracted } = A { value: 1 }; }",
-    );
+    let mut compilation = hir("record A { value: I8 } record B { value: I8 } \
+         fn f() { let A { value: extracted } = A { value: 1 }; }");
     let other = compilation.records[1].id;
     let Statement::RecordDestructure { record, .. } =
         &mut compilation.functions[0].body.statements[0]
@@ -465,10 +460,8 @@ fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicabil
 
 #[test]
 fn lowering_uses_retained_transient_cleanup_without_rederiving_source_frontier() {
-    let mut compilation = hir(
-        "record Pair { left: I8, right: U8 } \
-         fn f() { let Pair { left: a, right: b } = Pair { left: 1, right: 2 }; }",
-    );
+    let mut compilation = hir("record Pair { left: I8, right: U8 } \
+         fn f() { let Pair { left: a, right: b } = Pair { left: 1, right: 2 }; }");
     let Statement::RecordDestructure { scrutinee, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
@@ -493,10 +486,8 @@ fn lowering_uses_retained_transient_cleanup_without_rederiving_source_frontier()
 
 #[test]
 fn lowering_rejects_duplicate_retained_transient_cleanup_field() {
-    let mut compilation = hir(
-        "record Pair { left: I8, right: U8 } \
-         fn f() { let Pair { left: a, right: b } = Pair { left: 1, right: 2 }; }",
-    );
+    let mut compilation = hir("record Pair { left: I8, right: U8 } \
+         fn f() { let Pair { left: a, right: b } = Pair { left: 1, right: 2 }; }");
     let Statement::RecordDestructure { scrutinee, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
