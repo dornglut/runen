@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, return, cleanup, divergence, fault, and straight-line execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, return, cleanup, divergence, fault, and straight-line execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -18,7 +18,7 @@ The original spelling or extent of trivia MAY be preserved by source tooling. Su
 
 Identifier-form token extent is determined only by `lexical.md`. Reserved-key classification under this document occurs after the complete maximal identifier-form token and its lexical identifier key have been determined. A longer identifier-form token is never split merely because an initial substring would be a reserved key.
 
-Outside trivia, every source scalar participating in this represented grammar MUST belong to either one identifier-form token under `lexical.md` or one represented punctuation token below. The `//`, `/*`, and `*/` sequences participate only in the ordinary-comment rules below. Other non-trivia material is malformed source under this concrete subset.
+Outside trivia, every source scalar participating in this represented grammar MUST belong to one identifier-form token under `lexical.md`, one decimal-magnitude token defined below, or one represented punctuation token below. The `//`, `/*`, and `*/` sequences participate only in the ordinary-comment rules below. Other non-trivia material is malformed source under this concrete subset.
 
 ## Reserved identifier keys
 
@@ -31,6 +31,8 @@ The represented concrete subset reserves exactly these lexical identifier keys:
 - `return`;
 - `import`;
 - `export`;
+- `true`;
+- `false`;
 - `Bool`;
 - `I8`, `I16`, `I32`, `I64`;
 - `U8`, `U16`, `U32`, `U64`;
@@ -40,17 +42,29 @@ A **user identifier** is an identifier-form token under `lexical.md` whose lexic
 
 A reserved key is not legal where the grammar requires a user identifier. This revision reserves no other identifier key and defines no escaping mechanism for a reserved key.
 
-Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality. In particular, a longer identifier-form token such as `mutable` is one complete identifier token and is not split because it begins with the reserved key `mut`.
+Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality. In particular, longer identifier-form tokens such as `mutable`, `trueish`, and `falsehood` are each one complete identifier token and are not split because they begin with a reserved key.
 
 ## Punctuation tokens
 
 The represented punctuation tokens are exactly:
 
 ```text
-( ) { } : :: , -> = ;
+( ) { } : :: , -> - = ;
 ```
 
-`->` and `::` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens. This revision defines no standalone `-` or `>` token and no other punctuation or operator token.
+`->` and `::` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens and `->` is never tokenized as `-` followed by unrepresented `>` material.
+
+The standalone `-` punctuation token participates only in the represented negative decimal integer literal production below. It does not by itself define unary negation, subtraction, or another operator. This revision defines no standalone `>` token and no other punctuation or operator token.
+
+## Decimal magnitude tokens
+
+A **decimal magnitude token** is one non-empty maximal contiguous sequence of ASCII decimal digits `0` through `9`.
+
+When token processing begins at an ASCII decimal digit outside trivia or a comment, the token consumes every immediately following ASCII decimal digit and stops before the first other source scalar or the end of the source unit.
+
+Only ASCII decimal digits participate in this token form. Leading zeroes are preserved as concrete spelling and have no radix significance. This token form has no suffix, digit separator, binary/octal/hexadecimal prefix, sign, exponent, or decimal point.
+
+The token establishes only concrete decimal spelling. Its mathematical integer meaning, required-type materialization, and representability rules are owned by `literals.md`.
 
 ## Ordinary comments
 
@@ -60,13 +74,13 @@ A **block comment** begins with `/*` outside a line comment and ends at its matc
 
 An unterminated block comment is malformed source.
 
-Comment contents do not form identifiers, reserved keys, punctuation tokens, or grammar items. Comments have no Runen program semantics.
+Comment contents do not form identifiers, reserved keys, decimal magnitude tokens, punctuation tokens, or grammar items. Comments have no Runen program semantics.
 
 This revision defines no documentation-comment category or documentation semantics. Spellings such as `///`, `//!`, or `/**` are ordinary comments when they satisfy the rules above.
 
 ## Grammar notation
 
-The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above.
+The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above. `DecimalMagnitude` denotes one decimal magnitude token as defined above.
 
 Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role; represented statements use mandatory semicolons.
 
@@ -237,9 +251,16 @@ A valid no-result call statement produces no source value to discard.
 ## Value forms
 
 ```text
-Value = IdentifierUse | DirectCall
-IdentifierUse = UserIdentifier
+Value                 = Literal | IdentifierUse | DirectCall
+Literal               = BooleanLiteral | DecimalIntegerLiteral
+BooleanLiteral        = "true" | "false"
+DecimalIntegerLiteral = "-"? DecimalMagnitude
+IdentifierUse         = UserIdentifier
 ```
+
+The represented literal forms map to `literals.md`. `true` and `false` denote the boolean literal forms owned there. A `DecimalIntegerLiteral` supplies its concrete sign and decimal magnitude to the exact mathematical-integer and required-type materialization relation owned there. This grammar does not assign an integer default type, abstract literal type, conversion, or arithmetic semantics.
+
+The optional `-` in `DecimalIntegerLiteral` is part of this literal grammar only. It does not establish a unary-negation expression or subtraction operator. Because it and `DecimalMagnitude` are distinct grammar tokens, ordinary trivia may occur between them under the general trivia rule above without changing the denoted signed decimal literal form.
 
 An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-bindings.md`. Its identifier is resolved using the function-local lookup precedence owned there. In this subset, the selected entity MUST be an available parameter or ordinary local binding; another selected entity category does not become a value merely because the context requires one.
 
@@ -247,7 +268,7 @@ A `DirectCall` may be used as a `Value` only when its callable signature specifi
 
 A qualified module member without a direct-call argument list is not an `IdentifierUse` value under this subset. Module aliases and module-level declarations do not become source values.
 
-This subset has no literal, grouping expression, unary or binary operator, conversion, record construction, member access, assignment expression, block expression, closure, or other value form.
+This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; record construction; member access; assignment expression; block expression; closure; or other value form.
 
 ## Returns and normal completion
 
@@ -289,8 +310,8 @@ The two-part qualification syntax does not create general member access, nested 
 
 This revision does not define:
 
-- numeric, boolean, string, byte, or character literal syntax or literal typing;
-- arithmetic, comparison, logical, compound-assignment, or other operator forms;
+- floating, string, byte, character, or other literal syntax beyond the represented boolean and signed decimal integer forms, nor any literal suffix, digit separator, or alternate-radix form;
+- arithmetic, comparison, logical, compound-assignment, general unary-negation, subtraction, or other operator forms;
 - grouping or general expression grammar;
 - assignment expressions, assignment-as-value, or general place/lvalue syntax beyond the represented whole-binding statement;
 - uninitialized locals, type inference, or mutable parameters;
@@ -301,7 +322,7 @@ This revision does not define:
 - references, borrow syntax, source interior mutability, raw-pointer assignment, or lifetime syntax;
 - indirect calls, function values, or closures;
 - generics, traits, or coherence;
-- const/static forms;
+- const/static forms or a general constant-expression category;
 - panic payload or catch forms;
 - ABI, layout, FFI, or linkage forms;
 - Exec or Model source forms;
