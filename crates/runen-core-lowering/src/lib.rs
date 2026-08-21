@@ -308,6 +308,14 @@ impl<'a> FunctionLowerer<'a> {
 
     fn lower_value(&mut self, value: &hir::Value) -> Result<core::LocalId, LoweringError> {
         match &value.kind {
+            hir::ValueKind::Literal(literal) => {
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::Constant(lower_literal(*literal)),
+                });
+                Ok(temporary)
+            }
             hir::ValueKind::BindingUse { binding, ownership } => {
                 let source = self.binding(*binding)?;
                 let temporary = self.push_temporary(value.ty)?;
@@ -443,6 +451,20 @@ impl<'a> FunctionLowerer<'a> {
             ));
         }
         Ok(())
+    }
+}
+
+fn lower_literal(value: hir::LiteralValue) -> core::Value {
+    match value {
+        hir::LiteralValue::Bool(value) => core::Value::Bool(value),
+        hir::LiteralValue::I8(value) => core::Value::I8(value),
+        hir::LiteralValue::I16(value) => core::Value::I16(value),
+        hir::LiteralValue::I32(value) => core::Value::I32(value),
+        hir::LiteralValue::I64(value) => core::Value::I64(value),
+        hir::LiteralValue::U8(value) => core::Value::U8(value),
+        hir::LiteralValue::U16(value) => core::Value::U16(value),
+        hir::LiteralValue::U32(value) => core::Value::U32(value),
+        hir::LiteralValue::U64(value) => core::Value::U64(value),
     }
 }
 
