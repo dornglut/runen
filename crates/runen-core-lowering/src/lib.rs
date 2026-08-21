@@ -154,16 +154,6 @@ impl TypeMap {
             ))
     }
 
-    fn is_scalar(&self, ty: core::TypeId) -> Result<bool, LoweringError> {
-        let definition = self
-            .types
-            .get(ty)
-            .ok_or(LoweringError::InvalidHirInvariant(
-                "lowered Core type is absent from the type table",
-            ))?;
-        Ok(matches!(definition.kind, core::TypeKind::Scalar(_)))
-    }
-
     fn has_scalar_leaf(&self, ty: core::TypeId) -> Result<bool, LoweringError> {
         let definition = self
             .types
@@ -433,15 +423,9 @@ impl<'a> FunctionLowerer<'a> {
                 ));
             }
 
-            let scalar = self.types.is_scalar(projected_ty)?;
-            let operand = match (binding.ownership, scalar) {
-                (hir::OwnedUse::Duplicate, true) => core::Operand::Copy(source.into()),
-                (hir::OwnedUse::Consume, false) => core::Operand::Move(source.into()),
-                _ => {
-                    return Err(LoweringError::InvalidHirInvariant(
-                        "record destructuring ownership does not match retained field type",
-                    ));
-                }
+            let operand = match binding.ownership {
+                hir::OwnedUse::Duplicate => core::Operand::Copy(source.into()),
+                hir::OwnedUse::Consume => core::Operand::Move(source.into()),
             };
             self.push_statement(core::Statement::Init {
                 dst: core::Place::local(destination),
