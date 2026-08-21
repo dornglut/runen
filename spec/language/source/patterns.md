@@ -68,25 +68,28 @@ An exported record type may therefore be nameable in another source module while
 
 Pattern accessibility does not define ABI visibility, linkage, physical layout, serialization, reflection, confidentiality, or a new field-level visibility modifier.
 
-## Complete pattern structure validation
+## Complete pattern validation before ownership transition
 
-Before the declaration may apply any ownership transition or establish any new binding, source validation resolves and validates the **complete** pattern structure.
+Before the declaration may apply any ownership transition or establish any new binding, source validation resolves and validates the **complete** pattern.
 
-Let the selected nominal record have declaration fields `F`. Let the pattern entries, in concrete source order, select field keys and introduce binding keys.
+Let the selected nominal record have declaration fields `F`. Let the pattern entries, in concrete source order, select field keys and introduce binding keys. For each resolved direct field identity `f`, let `[f]` be its one-field structural source path rooted at the selected scrutinee binding.
 
-The declaration is structurally valid only when all of the following hold:
+The declaration is source-valid only when all of the following hold before any pattern ownership transition:
 
 1. every pattern field key resolves to exactly one field identity in `F`;
 2. no record field identity occurs more than once in the pattern;
 3. every field identity in `F` occurs exactly once in the pattern;
 4. no introduced binding lexical key occurs more than once in the pattern;
 5. no introduced binding key would violate the overlapping function-local shadowing prohibition in `local-bindings.md` at the declaration point;
-6. the root binding and exact root type requirements above hold; and
-7. every selected field is directly accessible as required above.
+6. the root binding and exact root type requirements above hold;
+7. every selected field is directly accessible as required above; and
+8. every selected one-field path `[f]` is **fully available** under `local-bindings.md` in the root's pre-pattern structural-availability state.
 
-An unknown field key, duplicate field, missing field, duplicate introduced binding key, overlapping-shadow conflict, wrong pattern-head category, wrong root category, wrong nominal root type, or inaccessible field makes the declaration source-invalid.
+The selected top-level field paths are pairwise structurally disjoint because the pattern is exhaustive and each record field identity appears exactly once. Therefore validating all of their availability against the one pre-pattern state is equivalent, for every source-valid declaration, to requiring each path to remain fully available before its later source-ordered ownership production. This prevalidation avoids giving a rejected pattern any partial ownership consequence.
 
-A declaration rejected by this complete structural validation:
+An unknown field key, duplicate field, missing field, duplicate introduced binding key, overlapping-shadow conflict, wrong pattern-head category, wrong root category, wrong nominal root type, inaccessible field, unavailable selected field path, or partially available selected field path makes the declaration source-invalid.
+
+A declaration rejected by this complete validation:
 
 - establishes no pattern-introduced binding;
 - applies no duplicate or consume operation to any root field path; and
@@ -114,11 +117,11 @@ This source declaration order does not alter the nominal record's structural fie
 
 ## Pattern structural ownership
 
-After the complete pattern has passed all non-ownership structural/type/accessibility/name checks above, process its pattern entries strictly in pattern source order.
+After the complete pattern, including every selected field's structural availability, has passed validation above, process its pattern entries strictly in pattern source order.
 
 For an entry selecting direct record field identity `f`, let `p = [f]` be the corresponding one-field structural source path rooted at the scrutinee binding, and let `T` be `f`'s declared source type.
 
-The entry is source-valid only when `p` is **fully available** immediately before that entry's ownership production under `local-bindings.md`.
+Because every selected path was fully available in the pre-pattern state and the selected direct paths are pairwise disjoint, ownership transitions performed for earlier entries cannot invalidate the current entry's path.
 
 If `T` is duplicable under `types.md`:
 
@@ -145,11 +148,10 @@ The accepted structural availability relation yields the pattern consequences di
 
 - a duplicable selected field leaves its path and root availability unchanged;
 - a consumed non-duplicable selected field becomes unavailable and may make its proper ancestors, including the complete root, partially available;
-- a consumed path does not invalidate a disjoint sibling field path;
-- a later pattern entry selecting a disjoint fully available field remains valid;
-- if a selected path is unavailable or partially available when its entry is processed, the declaration is source-invalid under the final-path requirement;
+- a consumed path does not invalidate a structurally disjoint sibling field path;
+- every selected field path has already been proven fully available before the first pattern ownership transition;
 - an all-duplicable pattern leaves the complete root fully available;
-- a pattern that consumes at least one top-level field normally leaves the complete root partially available unless a prior accepted transition already made a selected path invalid; and
+- a source-valid pattern that consumes at least one top-level field leaves the complete root partially available; and
 - later whole-binding use, disjoint field-value use, assignment/reinitialization, and cleanup follow `local-bindings.md`, `field-access.md`, and `function-execution.md` without a pattern-specific second state machine.
 
 An immutable root binding may legally lose ownership of non-duplicable field subvalues through a source-valid pattern. Assignment mutability restricts later assignment/reinitialization and is independent of owned-value transfer.
@@ -166,9 +168,9 @@ let Empty {} = root;
 
 When the pattern head/root category and exact type requirements hold, this declaration is valid.
 
-It contains no pattern entry, introduces no local binding, duplicates no value, consumes no structural path, and leaves the root consumed-path set unchanged.
+It contains no pattern entry, introduces no local binding, has no selected non-empty field path whose availability must be checked, duplicates no value, consumes no structural path, and leaves the root consumed-path set unchanged.
 
-The empty exhaustive pattern is therefore an ownership no-op. It is not an implicit discard and does not consume the empty root path merely because the record has no fields.
+The empty exhaustive pattern is therefore an ownership no-op. It is not an implicit discard and does not consume or require ordinary whole-value use of the empty root merely because the record has no fields.
 
 ## Zero-leaf field ownership
 
