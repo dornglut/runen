@@ -187,36 +187,43 @@ fn consuming_field_composes_with_call_transfer() {
 }
 
 #[test]
-fn partial_target_replacement_uses_projected_move_then_existing_whole_assign() {
+fn assignment_rhs_consumes_target_field_before_existing_whole_assign() {
     let lowered = lower_source(
         "record Token { value: I8 } record Holder { token: Token, count: I8 } \
          fn f() -> Holder { \
              let mut holder: Holder = Holder { token: Token { value: 1 }, count: 2 }; \
-             let token: Token = holder.token; \
-             holder = Holder { token: token, count: 3 }; \
+             holder = Holder { token: holder.token, count: 3 }; \
              return holder; \
          }",
     );
     let f = function(lowered.as_program(), "f");
 
-    assert!(f.body.blocks.iter().flat_map(|block| &block.statements).any(
-        |statement| matches!(
-            statement,
-            CoreStatement::Init {
-                src: Operand::Move(PlaceAccess::Direct(place)),
-                ..
-            } if place.local == LocalId(0) && place.projections == vec![Projection::Field(0)]
-        )
-    ));
-    assert!(f.body.blocks.iter().flat_map(|block| &block.statements).any(
-        |statement| matches!(
-            statement,
-            CoreStatement::Assign {
-                dst: PlaceAccess::Direct(place),
-                ..
-            } if place.local == LocalId(0) && place.projections.is_empty()
-        )
-    ));
+    assert!(
+        f.body
+            .blocks
+            .iter()
+            .flat_map(|block| &block.statements)
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Init {
+                    src: Operand::Move(PlaceAccess::Direct(place)),
+                    ..
+                } if place.local == LocalId(0) && place.projections == vec![Projection::Field(0)]
+            ))
+    );
+    assert!(
+        f.body
+            .blocks
+            .iter()
+            .flat_map(|block| &block.statements)
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Assign {
+                    dst: PlaceAccess::Direct(place),
+                    ..
+                } if place.local == LocalId(0) && place.projections.is_empty()
+            ))
+    );
 }
 
 #[test]
