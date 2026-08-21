@@ -5,8 +5,8 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 use crate::{
     Accessibility, AssignmentMutability, BindingId, Block, Body, CleanupPath, Diagnostic,
     DiagnosticKind, Field, Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId,
-    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, Return, SourceLocation, SourceUnit,
-    Statement, Type, TypedCompilation, Value, ValueKind,
+    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, RecordPatternBinding, Return,
+    SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -793,6 +793,18 @@ fn validate_body(
                     statements.push(statement);
                 }
             }
+            SyntaxKind::RecordDestructuringDeclaration => {
+                if let Some(statement) = validate_record_destructure(
+                    header,
+                    &node,
+                    &context,
+                    &mut bindings,
+                    next_binding,
+                    diagnostics,
+                ) {
+                    statements.push(statement);
+                }
+            }
             SyntaxKind::AssignmentStatement => {
                 if let Some(statement) =
                     validate_assignment(header, &node, &context, &mut bindings, diagnostics)
@@ -868,6 +880,14 @@ fn validate_block(
             SyntaxKind::LocalDeclaration => {
                 validate_local(header, &child, context, bindings, next_binding, diagnostics)
             }
+            SyntaxKind::RecordDestructuringDeclaration => validate_record_destructure(
+                header,
+                &child,
+                context,
+                bindings,
+                next_binding,
+                diagnostics,
+            ),
             SyntaxKind::AssignmentStatement => {
                 validate_assignment(header, &child, context, bindings, diagnostics)
             }
@@ -888,8 +908,18 @@ fn validate_block(
         };
 
         if let Some(statement) = statement {
-            if let Statement::Local { binding, name, .. } = &statement {
-                direct_bindings.push((name.clone(), *binding));
+            match &statement {
+                Statement::Local { binding, name, .. } => {
+                    direct_bindings.push((name.clone(), *binding));
+                }
+                Statement::RecordDestructure { bindings, .. } => {
+                    direct_bindings.extend(
+                        bindings
+                            .iter()
+                            .map(|binding| (binding.name.clone(), binding.binding)),
+                    );
+                }
+                Statement::Assignment { .. } | Statement::Call { .. } | Statement::Block(_) => {}
             }
             statements.push(statement);
         }
@@ -1030,6 +1060,228 @@ fn validate_local(
         mutability,
         initializer,
         location: local_location,
+    })
+}
+
+fn validate_record_destructure(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let direct_identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let [head_token, root_token] = direct_identifiers.as_slice() else {
+        unreachable!("syntax-clean record destructuring has head and root identifiers");
+    };
+    let head_name = key(head_token);
+    let root_name = key(root_token);
+    let head_location = SourceLocation {
+        unit: header.unit,
+        range: head_token.text_range(),
+    };
+    let root_location = SourceLocation {
+        unit: header.unit,
+        range: root_token.text_range(),
+    };
+
+    let record = match context
+        .modules
+        .get(&header.module)
+        .and_then(|module| module.namespace.get(&head_name))
+        .copied()
+        .map(|entity| entity.entity)
+    {
+        Some(EntityId::Record(record)) => record,
+        Some(EntityId::Function(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedRecordType,
+                location: head_location,
+            });
+            return None;
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: head_location,
+            });
+            return None;
+        }
+    };
+    let record_decl = &context.records[record.0];
+    debug_assert_eq!(record_decl.module, header.module);
+
+    let root_state = match bindings.get(&root_name).cloned() {
+        Some(binding) => binding,
+        None => {
+            let entity = context
+                .modules
+                .get(&header.module)
+                .and_then(|module| module.namespace.get(&root_name));
+            diagnostics.push(Diagnostic {
+                kind: if entity.is_some() {
+                    DiagnosticKind::ExpectedValueBinding
+                } else {
+                    DiagnosticKind::UnresolvedName
+                },
+                location: root_location,
+            });
+            return None;
+        }
+    };
+
+    let mut valid = true;
+    if root_state.ty != Type::Record(record) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: Type::Record(record),
+                found: root_state.ty,
+            },
+            location: root_location,
+        });
+        valid = false;
+    }
+
+    struct ResolvedPatternBinding {
+        field: usize,
+        name: String,
+    }
+
+    let mut seen_fields = BTreeSet::<usize>::new();
+    let mut seen_bindings = BTreeSet::<String>::new();
+    let mut resolved = Vec::<ResolvedPatternBinding>::new();
+
+    for pattern_field in node
+        .children()
+        .filter(|child| child.kind() == SyntaxKind::RecordPatternField)
+    {
+        let identifiers = pattern_field
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .filter(|token| token.kind() == SyntaxKind::Ident)
+            .collect::<Vec<_>>();
+        let [field_token, binding_token] = identifiers.as_slice() else {
+            unreachable!("syntax-clean record pattern field has field and binding identifiers");
+        };
+        let field_name = key(field_token);
+        let binding_name = key(binding_token);
+        let field_location = SourceLocation {
+            unit: header.unit,
+            range: field_token.text_range(),
+        };
+        let binding_location = SourceLocation {
+            unit: header.unit,
+            range: binding_token.text_range(),
+        };
+
+        let Some(field) = record_decl
+            .fields
+            .iter()
+            .position(|field| field.name == field_name)
+        else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnknownRecordField,
+                location: field_location,
+            });
+            valid = false;
+            continue;
+        };
+
+        if !seen_fields.insert(field) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicateRecordPatternField,
+                location: field_location,
+            });
+            valid = false;
+        }
+        if !seen_bindings.insert(binding_name.clone()) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicatePatternBinding,
+                location: binding_location,
+            });
+            valid = false;
+        }
+        if bindings.contains_key(&binding_name) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::LocalShadowing,
+                location: binding_location,
+            });
+            valid = false;
+        }
+        if root_state.path_availability(&[field]) != PathAvailability::FullyAvailable {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnavailableFieldValue,
+                location: field_location,
+            });
+            valid = false;
+        }
+
+        resolved.push(ResolvedPatternBinding {
+            field,
+            name: binding_name,
+        });
+    }
+
+    if seen_fields.len() != record_decl.fields.len() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::MissingRecordPatternField,
+            location: location(header.unit, node),
+        });
+        valid = false;
+    }
+
+    if !valid {
+        return None;
+    }
+
+    let mut pattern_bindings = Vec::with_capacity(resolved.len());
+    let mut new_states = Vec::with_capacity(resolved.len());
+    for resolved in resolved {
+        let field_decl = &record_decl.fields[resolved.field];
+        let ownership = if field_decl.ty.is_duplicable() {
+            OwnedUse::Duplicate
+        } else {
+            bindings
+                .get_mut(&root_name)
+                .expect("validated pattern root remains in active binding scope")
+                .consume_path(&[resolved.field]);
+            OwnedUse::Consume
+        };
+        let binding = BindingId(*next_binding);
+        *next_binding += 1;
+        pattern_bindings.push(RecordPatternBinding {
+            field: resolved.field,
+            binding,
+            name: resolved.name.clone(),
+            ty: field_decl.ty,
+            ownership,
+        });
+        new_states.push((
+            resolved.name,
+            BindingState {
+                id: binding,
+                ty: field_decl.ty,
+                mutability: AssignmentMutability::Immutable,
+                consumed_paths: BTreeSet::new(),
+            },
+        ));
+    }
+
+    for (name, state) in new_states {
+        let previous = bindings.insert(name, state);
+        debug_assert!(previous.is_none());
+    }
+
+    Some(Statement::RecordDestructure {
+        record,
+        root: root_state.id,
+        bindings: pattern_bindings,
+        location: location(header.unit, node),
     })
 }
 
