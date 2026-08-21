@@ -4,9 +4,9 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for source function body attachment, straight-line body and nested-block execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, record-construction field evaluation and transient assembly, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
 
-It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), and parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
+It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md), and binding-rooted field-value production from [Source field-value access](field-access.md). It does not redefine those owners.
 
-The represented concrete function/body/block/value/call/record-construction/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. This document owns execution consequences where those forms map to the semantic operations defined here; it does not own concrete spelling, literal typing, or parser representation.
+The represented concrete function/body/block/value/call/record-construction/field-value/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. Field-path selection, direct field accessibility, and final-field duplicability are owned by `field-access.md`. This document owns execution consequences where those forms feed the receiving operations defined here; it does not own concrete spelling, literal typing, field selection, or parser representation.
 
 This document does not define a universal expression taxonomy, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
 
@@ -14,7 +14,7 @@ This document does not define a universal expression taxonomy, operators, genera
 
 A represented source function entity MAY have one represented source body. It MUST NOT have more than one represented source body.
 
-Attaching a represented source body to a function entity is a source-semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
+Attaching a represented source body to the function entity is a source semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
 
 In the represented direct-call subset, a direct source call targets exactly one resolved source function entity that has a represented source body.
 
@@ -52,14 +52,15 @@ The represented owned value producers sufficient for this revision are:
 
 - a source-valid boolean or materialized decimal integer literal from `literals.md`;
 - ordinary whole-binding owned-value use from `local-bindings.md`;
-- a successful result-bearing direct call under this document; and
-- a source-valid named-field record construction under this document and `concrete-syntax.md`.
+- a successful result-bearing direct call under this document;
+- a source-valid named-field record construction under this document and `concrete-syntax.md`; and
+- a source-valid binding-rooted field-value use under `field-access.md`.
 
-`concrete-syntax.md` exposes exactly those four producer families in its current `Value` grammar. Future operator, conversion, member-access, or other expression owners MAY introduce additional owned value producers without redefining the execution relation in this document.
+`concrete-syntax.md` exposes exactly those five producer families in its current `Value` grammar. Future operator, conversion, consuming-field, or other expression owners MAY introduce additional owned value producers without redefining the receiving relations in this document.
 
 Unless another accepted source owner defines a distinct rule for its producer, a producer used where this document requires a value MUST finish evaluation before that value is transferred to the receiving binding or transient ownership position.
 
-Literal evaluation itself is effect-free, non-faulting, and non-diverging after source validation under `literals.md`. This execution owner only supplies the consuming position's required source type where contextual integer-literal materialization needs it and then transfers the resulting owned value under the ordinary rules below.
+Literal evaluation itself is effect-free, non-faulting, and non-diverging after source validation under `literals.md`. Represented field-value use is likewise effect-free, non-faulting, and non-diverging after source validation under `field-access.md`. This execution owner supplies the consuming position's required source type where applicable and then transfers the resulting owned value under the ordinary receiving rules below.
 
 ## Record construction
 
@@ -101,7 +102,7 @@ A result-bearing direct call used as a field initializer must complete successfu
 
 The completed record value is otherwise an ordinary owned value producer result. It may be transferred by the existing local-initialization, whole-binding assignment RHS, direct-call argument, return-result, or enclosing record-construction field relations. Those consuming relations keep their existing outer ordering and exact-type requirements.
 
-This represented construction relation adds no member read/access, field assignment, partial field move or availability relation, destructuring, update/spread/default initialization, field-init shorthand, positive duplicability selection, constructor or method body, or cross-module field-accessibility contract.
+This represented construction relation itself adds no field-value access, field assignment, partial field move or availability relation, destructuring, update/spread/default initialization, field-init shorthand, positive duplicability selection, constructor or method body, or cross-module construction contract. Represented binding-rooted duplicable field-value access is independently owned by `field-access.md`.
 
 ## Direct-call arguments
 
@@ -113,7 +114,7 @@ The corresponding parameter source type is the required source type supplied to 
 
 Arguments are evaluated left to right in their ordered call/signature sequence.
 
-When argument evaluation uses a complete parameter or local binding, that use is ordinary whole-binding owned-value use under `local-bindings.md` unless another accepted source owner explicitly defines a different context. Any resulting duplicate-or-consume transition therefore occurs in the same left-to-right order as argument evaluation.
+When argument evaluation uses a complete parameter or local binding, that use is ordinary whole-binding owned-value use under `local-bindings.md` unless another accepted source owner explicitly defines a different context. Any resulting duplicate-or-consume transition therefore occurs in the same left-to-right order as argument evaluation. A represented field-value argument instead follows `field-access.md` and leaves its root binding available.
 
 Each successfully evaluated argument is held as one owned **transient argument value** until all arguments have evaluated successfully. Transient ownership is semantic and does not require a materialized temporary storage place.
 
@@ -124,7 +125,7 @@ If evaluation of argument `i` yields a defined fault before callee activation:
 3. binding availability changes already caused while evaluating earlier arguments remain in effect; and
 4. the same defined fault continues in the caller activation under the fault-propagation rules below.
 
-If evaluation of an argument diverges, no callee activation is created and the caller remains suspended in that argument evaluation. Earlier transient argument values remain owned by the suspended computation; passage of time alone does not trigger cleanup.
+If evaluation of an argument diverges, no callee activation is created and the caller remains suspended in that argument evaluation. Earlier transient argument values remain owned by that suspended computation; passage of time alone does not trigger cleanup.
 
 After all arguments evaluate successfully:
 
@@ -165,7 +166,7 @@ For a source-valid assignment, execution is **source-first** with respect to rep
 7. transfer the produced RHS value into the target binding without duplication; and
 8. make the target binding available as required by `local-bindings.md`.
 
-The assignment target remains in scope during RHS evaluation. Consequently, ordinary RHS use of the target follows the existing whole-binding owned-use relation rather than a special self-assignment rule.
+The assignment target remains in scope during RHS evaluation. Consequently, ordinary RHS use of the target follows the existing whole-binding owned-use relation rather than a special self-assignment rule. A field-value RHS rooted at the target follows `field-access.md` and does not consume or partially consume the target before replacement.
 
 For a duplicable mutable target `x`, `x = x` duplicates the old value during RHS evaluation and leaves `x` available; replacement then cleans that old target-owned value and transfers the duplicate into `x`.
 
@@ -263,7 +264,7 @@ After successful result evaluation:
 
 The transfer to the caller does not duplicate the result value.
 
-Consequently, when return evaluation obtains a non-duplicable local through ordinary whole-binding owned use, that binding becomes unavailable before cleanup and is not cleaned again as a remaining local value.
+Consequently, when return evaluation obtains a non-duplicable local through ordinary whole-binding owned use, that binding becomes unavailable before cleanup and is not cleaned again as a remaining local value. A represented field-value return leaves its root binding available, so the complete root remains selected for ordinary activation cleanup after the duplicated field result has been preserved for transfer.
 
 For a source function whose callable signature specifies no result value, a represented no-result return performs the same scope and parameter cleanup and normal activation termination but produces no source value.
 
@@ -303,6 +304,8 @@ An owned transient return result is not part of callee activation-local cleanup 
 
 A successfully produced assignment RHS value is transferred into the assignment target and therefore is not an independently remaining transient after successful assignment completion. If RHS production faults before successful value production, existing producer-specific transient cleanup rules remain controlling.
 
+Represented field-value use creates no producer-specific intermediate transient ownership. Once its one duplicated field value is successfully produced, the receiving operation owns the ordinary transient/transfer consequence required by its context.
+
 This revision does not define general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented record construction, direct-call argument, return, and assignment transfer are owned here.
 
 ## Divergence
@@ -313,11 +316,13 @@ If a directly called callee diverges, the caller remains suspended at that direc
 
 Active caller and callee ownership state, together with any transient values retained by the suspended evaluation, persists subject to operations already performed. The same applies when the diverging call is the RHS of a represented assignment. There is no implicit source execution-step budget.
 
+Field-value use itself cannot diverge after source validation under `field-access.md`.
+
 ## Effects boundary
 
 Left-to-right record-initializer evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body/nested-block execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
 
-Literal evaluation has no source-visible side effect under `literals.md`; adding literals to these positions therefore adds no competing effect-order relation.
+Literal evaluation has no source-visible side effect under `literals.md`; represented field-value use likewise has no source-visible side effect under `field-access.md`. Adding either producer to these positions therefore adds no competing effect-order relation.
 
 Record assembly after successful initializer evaluation is itself effect-free under the represented construction relation. Initializer source order, rather than record declaration order, remains the ordering authority for producer effects.
 
@@ -325,14 +330,14 @@ This revision does not define a source effect system, purity, effect inference, 
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/record-construction/assignment/block/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics.
+`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/record-construction/field-value/assignment/block/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics. `field-access.md` owns represented binding-rooted field-path selection, direct field accessibility, and final-field duplication semantics.
 
-Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, member access, and other concrete source forms remain outside the represented execution relation.
+Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, consuming/partial field access, arbitrary-receiver members, and other concrete source forms remain outside the represented execution relation.
 
-The source record-construction relation is defined entirely by source record/field identity, owned values, source evaluation order, transient ownership, transfer, and cleanup. It does not add or alter a Core operation, aggregate initialization rule, destruction-domain rule, or cleanup rule. Any source-to-Core lowering must refine these source requirements through accepted Core semantics rather than using Core representation behavior as source authority.
+The source record-construction relation is defined entirely by source record/field identity, owned values, source evaluation order, transient ownership, transfer, and cleanup. It does not add or alter a Core operation, aggregate initialization rule, destruction-domain rule, or cleanup rule. The source field-value relation likewise does not make Core projections or copyability source authority. Any source-to-Core lowering must refine these source requirements through accepted Core semantics rather than using Core representation behavior as source authority.
 
 No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner.
 
 ## Further boundaries
 
-This revision does not define literal spelling or materialization, floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, field/member access or assignment, partial-field moves/availability, destructuring, qualified/cross-module record construction, record update/default/shorthand forms, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
+This revision does not define literal spelling or materialization, floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, consuming/non-duplicable field access, partial-field moves/availability, field assignment, arbitrary-receiver member/method access, destructuring, qualified/cross-module record construction, record update/default/shorthand forms, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
