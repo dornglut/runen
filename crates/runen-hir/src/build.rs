@@ -5,8 +5,8 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 use crate::{
     Accessibility, AssignmentMutability, BindingId, Block, Body, Diagnostic, DiagnosticKind, Field,
     Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter,
-    Record, RecordId, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value,
-    ValueKind,
+    Record, RecordFieldValue, RecordId, Return, SourceLocation, SourceUnit, Statement, Type,
+    TypedCompilation, Value, ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -76,6 +76,7 @@ type UnitImports = BTreeMap<String, ModuleId>;
 struct BodyResolutionContext<'a> {
     modules: &'a BTreeMap<ModuleId, ModuleBuild>,
     imports: &'a [UnitImports],
+    records: &'a [Record],
     headers: &'a [FunctionHeader],
 }
 
@@ -121,6 +122,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             header,
             &modules,
             &imports,
+            &records,
             &headers,
             &mut next_binding,
             &mut diagnostics,
@@ -710,6 +712,7 @@ fn validate_body(
     header: &FunctionHeader,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
     imports: &[UnitImports],
+    records: &[Record],
     headers: &[FunctionHeader],
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -730,6 +733,7 @@ fn validate_body(
     let context = BodyResolutionContext {
         modules,
         imports,
+        records,
         headers,
     };
     let mut statements = Vec::new();
@@ -1201,8 +1205,132 @@ fn validate_value(
                 location: value_location,
             })
         }
+        SyntaxKind::RecordConstruction => {
+            validate_record_construction(header, node, required, context, bindings, diagnostics)
+        }
         _ => unreachable!("syntax-clean value has represented value kind"),
     }
+}
+
+fn validate_record_construction(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Value> {
+    let construction_location = location(header.unit, node);
+    let target_token = direct_token(node, SyntaxKind::Ident);
+    let target_name = key(&target_token);
+    let target_location = SourceLocation {
+        unit: header.unit,
+        range: target_token.text_range(),
+    };
+
+    let record = match context
+        .modules
+        .get(&header.module)
+        .and_then(|module| module.namespace.get(&target_name))
+        .copied()
+        .map(|entity| entity.entity)
+    {
+        Some(EntityId::Record(record)) => record,
+        Some(EntityId::Function(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedRecordType,
+                location: target_location,
+            });
+            return None;
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: target_location,
+            });
+            return None;
+        }
+    };
+
+    let record_ty = Type::Record(record);
+    let record_decl = &context.records[record.0];
+    let mut seen = BTreeSet::<usize>::new();
+    let mut resolved = Vec::<(usize, SyntaxNode)>::new();
+    let mut structurally_valid = true;
+
+    for initializer in node
+        .children()
+        .filter(|child| child.kind() == SyntaxKind::RecordInitializer)
+    {
+        let name_token = direct_token(&initializer, SyntaxKind::Ident);
+        let name = key(&name_token);
+        let initializer_location = location(header.unit, &initializer);
+        let Some(field) = record_decl
+            .fields
+            .iter()
+            .position(|field| field.name == name)
+        else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnknownRecordField,
+                location: initializer_location,
+            });
+            structurally_valid = false;
+            continue;
+        };
+
+        if !seen.insert(field) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicateRecordInitializer,
+                location: initializer_location,
+            });
+            structurally_valid = false;
+            continue;
+        }
+        resolved.push((field, initializer));
+    }
+
+    if seen.len() != record_decl.fields.len() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::MissingRecordInitializer,
+            location: construction_location,
+        });
+        structurally_valid = false;
+    }
+
+    if record_ty != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found: record_ty,
+            },
+            location: construction_location,
+        });
+        structurally_valid = false;
+    }
+
+    if !structurally_valid {
+        return None;
+    }
+
+    let mut fields = Vec::with_capacity(resolved.len());
+    for (field, initializer) in resolved {
+        let value_node = value_child(&initializer);
+        let value = validate_value(
+            header,
+            &value_node,
+            record_decl.fields[field].ty,
+            context,
+            bindings,
+            diagnostics,
+        )?;
+        fields.push(RecordFieldValue { field, value });
+    }
+
+    Some(Value {
+        ty: record_ty,
+        kind: ValueKind::RecordConstruction { record, fields },
+        location: construction_location,
+    })
 }
 
 fn materialize_integer_literal(
@@ -1454,6 +1582,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
             | SyntaxKind::DecimalIntegerLiteral
             | SyntaxKind::IdentifierUse
             | SyntaxKind::DirectCall
+            | SyntaxKind::RecordConstruction
     )
 }
 

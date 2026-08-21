@@ -395,18 +395,15 @@ impl Parser<'_> {
 
     fn parse_value(&mut self) {
         match self.current() {
-            Some(SyntaxKind::Ident) => {
-                if matches!(
-                    self.peek_nontrivia(1),
-                    Some(SyntaxKind::LParen | SyntaxKind::ColonColon)
-                ) {
-                    self.parse_direct_call();
-                } else {
+            Some(SyntaxKind::Ident) => match self.peek_nontrivia(1) {
+                Some(SyntaxKind::LBrace) => self.parse_record_construction(),
+                Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_direct_call(),
+                _ => {
                     self.builder.start_node(SyntaxKind::IdentifierUse.into());
                     self.bump();
                     self.builder.finish_node();
                 }
-            }
+            },
             Some(SyntaxKind::KwTrue | SyntaxKind::KwFalse) => {
                 self.builder.start_node(SyntaxKind::BooleanLiteral.into());
                 self.bump();
@@ -449,6 +446,87 @@ impl Parser<'_> {
                 }
             }
         }
+    }
+
+    fn parse_record_construction(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::RecordConstruction.into());
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if !self.expect(SyntaxKind::LBrace, ExpectedSyntax::LeftBrace) {
+            self.builder.finish_node();
+            return;
+        }
+
+        self.bump_trivia();
+        let mut missing_close = false;
+        while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
+            if self.at(SyntaxKind::RParen)
+                || self.at(SyntaxKind::Semicolon)
+                || self.at(SyntaxKind::LBrace)
+                || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwReturn)
+                || self.at_any(TOP_LEVEL_STARTERS)
+            {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
+                missing_close = true;
+                break;
+            }
+
+            if self.at(SyntaxKind::Ident) {
+                self.builder
+                    .start_node(SyntaxKind::RecordInitializer.into());
+                self.bump();
+                self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
+                self.parse_value();
+                self.builder.finish_node();
+
+                if self.eat(SyntaxKind::Comma) {
+                    self.bump_trivia();
+                    continue;
+                }
+                if !self.at(SyntaxKind::RBrace) {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightBrace));
+                    self.recover_until(&[
+                        SyntaxKind::Ident,
+                        SyntaxKind::Comma,
+                        SyntaxKind::RBrace,
+                        SyntaxKind::RParen,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::LBrace,
+                        SyntaxKind::KwLet,
+                        SyntaxKind::KwReturn,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
+                        SyntaxKind::KwFn,
+                        SyntaxKind::KwRecord,
+                    ]);
+                    self.eat(SyntaxKind::Comma);
+                }
+            } else {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+                self.recover_until(&[
+                    SyntaxKind::Ident,
+                    SyntaxKind::Comma,
+                    SyntaxKind::RBrace,
+                    SyntaxKind::RParen,
+                    SyntaxKind::Semicolon,
+                    SyntaxKind::LBrace,
+                    SyntaxKind::KwLet,
+                    SyntaxKind::KwReturn,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
+                    SyntaxKind::KwFn,
+                    SyntaxKind::KwRecord,
+                ]);
+                self.eat(SyntaxKind::Comma);
+            }
+            self.bump_trivia();
+        }
+
+        if !missing_close {
+            self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
+        }
+        self.builder.finish_node();
     }
 
     fn parse_direct_call(&mut self) {

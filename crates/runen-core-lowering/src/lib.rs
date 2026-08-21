@@ -367,6 +367,36 @@ impl<'a> FunctionLowerer<'a> {
                 self.emit_call(*function, arguments, Some(core::Place::local(result)))?;
                 Ok(result)
             }
+            hir::ValueKind::RecordConstruction { record, fields } => {
+                if value.ty != hir::Type::Record(*record) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "record construction result type does not match its record identity",
+                    ));
+                }
+
+                let mut lowered_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let temporary = self.lower_value(&field.value)?;
+                    lowered_fields.push((field.field, temporary));
+                }
+
+                let result = self.push_temporary(value.ty)?;
+                if lowered_fields.is_empty() {
+                    self.push_statement(core::Statement::Init {
+                        dst: core::Place::local(result),
+                        src: core::Operand::Constant(core::Value::Struct(Vec::new())),
+                    });
+                } else {
+                    for (field, temporary) in lowered_fields {
+                        let field = index_u32(field, "Core field projection")?;
+                        self.push_statement(core::Statement::Init {
+                            dst: core::Place::local(result).field(field),
+                            src: core::Operand::Move(core::Place::local(temporary).into()),
+                        });
+                    }
+                }
+                Ok(result)
+            }
         }
     }
 

@@ -191,6 +191,14 @@ pub struct Value {
     pub location: SourceLocation,
 }
 
+/// One record-construction field producer, retaining constructor source order
+/// while naming the resolved declaration-field index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordFieldValue {
+    pub field: usize,
+    pub value: Value,
+}
+
 /// Resolved producer for one typed HIR value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
@@ -202,6 +210,10 @@ pub enum ValueKind {
     DirectCall {
         function: FunctionId,
         arguments: Vec<Value>,
+    },
+    RecordConstruction {
+        record: RecordId,
+        fields: Vec<RecordFieldValue>,
     },
 }
 
@@ -318,6 +330,9 @@ pub enum DiagnosticKind {
     TypeMismatch { expected: Type, found: Type },
     IntegerLiteralRequiresInteger { required: Type },
     IntegerLiteralOutOfRange { required: Type },
+    DuplicateRecordInitializer,
+    UnknownRecordField,
+    MissingRecordInitializer,
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
     MissingResultReturn,
