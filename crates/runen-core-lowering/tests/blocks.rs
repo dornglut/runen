@@ -112,10 +112,12 @@ fn block_cleanup_after_direct_call_is_emitted_in_call_continuation() {
             .iter()
             .all(|statement| direct_drop_local(statement).is_none())
     );
-    assert!(continuation
-        .statements
-        .iter()
-        .any(|statement| direct_drop_local(statement) == Some(LocalId(1))));
+    assert!(
+        continuation
+            .statements
+            .iter()
+            .any(|statement| direct_drop_local(statement) == Some(LocalId(1)))
+    );
 }
 
 #[test]
@@ -160,8 +162,7 @@ fn future_source_local_precedes_temporaries_but_initializes_only_after_call_cont
     assert!(f.body.blocks[0].statements.iter().all(|statement| {
         !matches!(statement, CoreStatement::Init { dst, .. } if dst.local == LocalId(2))
     }));
-    assert!(f.body.blocks[target.0 as usize]
-        .statements
-        .iter()
-        .any(|statement| matches!(statement, CoreStatement::Init { dst, .. } if dst.local == LocalId(2))));
+    assert!(f.body.blocks[target.0 as usize].statements.iter().any(
+        |statement| matches!(statement, CoreStatement::Init { dst, .. } if dst.local == LocalId(2))
+    ));
 }
