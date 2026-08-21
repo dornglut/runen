@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, straight-line body and nested-block execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, straight-line body and nested-block execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, record-construction field evaluation and transient assembly, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
 
-It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), and parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
+It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), and parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-The represented concrete function/body/block/value/call/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. This document owns execution consequences where those forms map to the semantic operations defined here; it does not own concrete spelling, literal typing, or parser representation.
+The represented concrete function/body/block/value/call/record-construction/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. This document owns execution consequences where those forms map to the semantic operations defined here; it does not own concrete spelling, literal typing, or parser representation.
 
 This document does not define a universal expression taxonomy, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
 
@@ -51,14 +51,57 @@ An **owned value producer** for this execution relation is an applicable accepte
 The represented owned value producers sufficient for this revision are:
 
 - a source-valid boolean or materialized decimal integer literal from `literals.md`;
-- ordinary whole-binding owned-value use from `local-bindings.md`; and
-- a successful result-bearing direct call under this document.
+- ordinary whole-binding owned-value use from `local-bindings.md`;
+- a successful result-bearing direct call under this document; and
+- a source-valid named-field record construction under this document and `concrete-syntax.md`.
 
-`concrete-syntax.md` exposes exactly those three producer families in its current `Value` grammar. Future operator, record-construction, conversion, member-access, or other expression owners MAY introduce additional owned value producers without redefining the execution relation in this document.
+`concrete-syntax.md` exposes exactly those four producer families in its current `Value` grammar. Future operator, conversion, member-access, or other expression owners MAY introduce additional owned value producers without redefining the execution relation in this document.
 
 Unless another accepted source owner defines a distinct rule for its producer, a producer used where this document requires a value MUST finish evaluation before that value is transferred to the receiving binding or transient ownership position.
 
 Literal evaluation itself is effect-free, non-faulting, and non-diverging after source validation under `literals.md`. This execution owner only supplies the consuming position's required source type where contextual integer-literal materialization needs it and then transfers the resulting owned value under the ordinary rules below.
+
+## Record construction
+
+A source-valid represented record construction has one resolved same-module nominal record target and one named initializer for every declared field as mapped by `concrete-syntax.md`.
+
+Construction produces exactly one owned source value of that nominal record type. The target is explicit rather than inferred from an outer required type. When an enclosing value consumer supplies a required source type, the construction result MUST be exactly equal to that required type under `types.md`.
+
+Each initializer is associated with the selected declaration field identified by `concrete-syntax.md`. That declaration field's source type is the required source type supplied to the initializer's `Value` producer. The produced field value MUST have exactly that type under `types.md`; this relation introduces no conversion, coercion, widening, narrowing, defaulting, or inference.
+
+In particular, a represented decimal integer literal used as a field initializer materializes under that selected field type through `literals.md`. This is the same required-type materialization relation used by the existing value consumers and does not create a conversion or an inferred constructor target.
+
+Initializers evaluate strictly left to right in their concrete constructor source order, regardless of the target record's declaration field order. For each initializer in turn:
+
+1. evaluate its `Value` producer completely under that producer's accepted semantics;
+2. preserve every ownership and binding-availability transition caused by that evaluation; and
+3. hold the successfully produced owned field value as one **transient construction value** associated with the selected declaration field.
+
+A transient construction value is semantic ownership held by the in-progress construction. It does not require an independently source-addressable temporary, source binding, storage extent, field place, or other source identity.
+
+If initializer `i` yields a defined fault before construction completes:
+
+1. no record value is produced;
+2. apply any producer-specific cleanup required within the failing initializer evaluation itself;
+3. clean transient construction values already produced by earlier initializers in reverse production, and therefore reverse constructor-source, order;
+4. preserve all binding availability and ownership transitions already caused by evaluated initializers; and
+5. continue the same defined fault under the fault-propagation rules below.
+
+In particular, if an earlier initializer consumed a non-duplicable binding, that binding remains unavailable while the transient value produced from it is cleaned exactly once after a later initializer faults.
+
+If initializer `i` diverges, no record value is produced and no construction cleanup occurs merely because execution continues indefinitely. Transient construction values produced by earlier initializers remain owned by the suspended construction, and ownership or binding-availability transitions already performed remain effective.
+
+Only after every initializer has completed successfully does assembly occur. Assembly transfers every transient construction value exactly once, without duplication, into its selected declaration field and thereby forms one owned record value with the declaration-defined field/value shape from `types.md`. The resulting structural field order is the record declaration order; constructor source order controls evaluation and transient production, not the semantic record field sequence.
+
+Assembly itself is effect-free after successful initializer evaluation and introduces no additional defined fault or divergence. After a field transient is transferred into the record result, it is no longer independently owned by the construction and MUST NOT be cleaned separately from that result.
+
+For a zero-field record construction there are no initializer producers or construction transients. Successful construction immediately produces the owned empty record value of the resolved nominal type.
+
+A result-bearing direct call used as a field initializer must complete successfully before its field transient exists and before any later initializer begins. A nested record construction used as a field initializer recursively follows this same relation before producing its field value.
+
+The completed record value is otherwise an ordinary owned value producer result. It may be transferred by the existing local-initialization, whole-binding assignment RHS, direct-call argument, return-result, or enclosing record-construction field relations. Those consuming relations keep their existing outer ordering and exact-type requirements.
+
+This represented construction relation adds no member read/access, field assignment, partial field move or availability relation, destructuring, update/spread/default initialization, field-init shorthand, positive duplicability selection, constructor or method body, or cross-module field-accessibility contract.
 
 ## Direct-call arguments
 
@@ -188,7 +231,7 @@ For the represented operations in this document, **cleaning an owned source valu
 
 When such a source value is realized in Core storage, applicable destruction-domain, stored-value-lifetime, and cleanup semantics remain owned by `core/value-storage.md`; this document determines only the source-owned value or binding selected for cleanup and the source order in which those selections occur.
 
-A source value that has already been transferred or consumed is not cleaned again by its former owner. This applies equally to lexical-scope/activation cleanup and to old target-owned values selected for assignment replacement.
+A source value that has already been transferred or consumed is not cleaned again by its former owner. This applies equally to lexical-scope/activation cleanup, transient construction/argument cleanup, and old target-owned values selected for assignment replacement.
 
 This revision introduces no custom source destructor body, source `drop` ability, or general temporary-lifetime extension rule.
 
@@ -252,15 +295,19 @@ Recoverable domain or application failures represented as ordinary source values
 
 ## Transient-value cleanup
 
+Transient construction values already produced when a later record initializer yields a defined fault are cleaned in reverse constructor production/source order before the same fault continues in the enclosing activation. Once all construction transients have been transferred into a successful record result, they are no longer independently remaining transient values.
+
 Transient argument values already produced when a later argument yields a defined fault are cleaned in reverse production order before the defined fault continues in the caller activation.
 
 An owned transient return result is not part of callee activation-local cleanup after successful result evaluation because ownership has already been separated for transfer to the caller.
 
 A successfully produced assignment RHS value is transferred into the assignment target and therefore is not an independently remaining transient after successful assignment completion. If RHS production faults before successful value production, existing producer-specific transient cleanup rules remain controlling.
 
-This revision does not define general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented direct-call argument, return, and assignment transfer are owned here.
+This revision does not define general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented record construction, direct-call argument, return, and assignment transfer are owned here.
 
 ## Divergence
+
+If a record-construction initializer diverges, the enclosing construction remains suspended in that initializer evaluation. Earlier transient construction values and ownership/availability changes remain as defined above; no construction, activation, or lexical-scope cleanup occurs merely because execution continues indefinitely.
 
 If a directly called callee diverges, the caller remains suspended at that direct call and does not perform return or fault cleanup merely because execution continues indefinitely.
 
@@ -268,20 +315,24 @@ Active caller and callee ownership state, together with any transient values ret
 
 ## Effects boundary
 
-Left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body/nested-block execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
+Left-to-right record-initializer evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body/nested-block execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
 
 Literal evaluation has no source-visible side effect under `literals.md`; adding literals to these positions therefore adds no competing effect-order relation.
+
+Record assembly after successful initializer evaluation is itself effect-free under the represented construction relation. Initializer source order, rather than record declaration order, remains the ordering authority for producer effects.
 
 This revision does not define a source effect system, purity, effect inference, speculation legality, or general transformation rules.
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/assignment/block/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics.
+`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/record-construction/assignment/block/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics.
 
-Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, record construction, member access, and other concrete source forms remain outside the represented execution relation.
+Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, member access, and other concrete source forms remain outside the represented execution relation.
+
+The source record-construction relation is defined entirely by source record/field identity, owned values, source evaluation order, transient ownership, transfer, and cleanup. It does not add or alter a Core operation, aggregate initialization rule, destruction-domain rule, or cleanup rule. Any source-to-Core lowering must refine these source requirements through accepted Core semantics rather than using Core representation behavior as source authority.
 
 No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner.
 
 ## Further boundaries
 
-This revision does not define literal spelling or materialization, floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, field/member assignment, record construction, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
+This revision does not define literal spelling or materialization, floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, field/member access or assignment, partial-field moves/availability, destructuring, qualified/cross-module record construction, record update/default/shorthand forms, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
