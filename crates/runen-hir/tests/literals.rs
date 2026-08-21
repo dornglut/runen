@@ -95,10 +95,13 @@ fn every_fixed_width_integer_rejects_values_immediately_outside_its_domain() {
     for (source_type, spelling) in cases {
         let source = format!("fn bad() -> {source_type} {{ return {spelling}; }}");
         let diagnostics = errors(&source);
-        assert!(diagnostics.iter().any(|diagnostic| matches!(
-            diagnostic.kind,
-            DiagnosticKind::IntegerLiteralOutOfRange { .. }
-        )), "missing out-of-range diagnostic for {source_type} literal {spelling}");
+        assert!(
+            diagnostics.iter().any(|diagnostic| matches!(
+                diagnostic.kind,
+                DiagnosticKind::IntegerLiteralOutOfRange { .. }
+            )),
+            "missing out-of-range diagnostic for {source_type} literal {spelling}"
+        );
     }
 }
 
