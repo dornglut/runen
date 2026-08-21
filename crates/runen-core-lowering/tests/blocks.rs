@@ -1,5 +1,5 @@
 use runen_core_ir::{
-    Function as CoreFunction, LocalId, PlaceAccess, Statement as CoreStatement, Terminator,
+    Function as CoreFunction, LocalId, Place, PlaceAccess, Statement as CoreStatement, Terminator,
     ValidatedProgram,
 };
 use runen_core_lowering::lower;
@@ -25,14 +25,29 @@ fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a CoreFunc
         .unwrap_or_else(|| panic!("missing Core function {name}"))
 }
 
-fn direct_drop_local(statement: &CoreStatement) -> Option<LocalId> {
+fn direct_drop_place(statement: &CoreStatement) -> Option<Place> {
     let CoreStatement::Drop {
         place: PlaceAccess::Direct(place),
     } = statement
     else {
         return None;
     };
+    Some(place.clone())
+}
+
+fn direct_drop_local(statement: &CoreStatement) -> Option<LocalId> {
+    let place = direct_drop_place(statement)?;
     place.projections.is_empty().then_some(place.local)
+}
+
+fn drop_places(function: &CoreFunction) -> Vec<Place> {
+    function
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .filter_map(direct_drop_place)
+        .collect()
 }
 
 fn drop_sequence(function: &CoreFunction) -> Vec<LocalId> {
@@ -140,6 +155,83 @@ fn consumed_child_local_receives_no_normal_exit_drop() {
         !drop_sequence(f).contains(&LocalId(1)),
         "consumed child local must already be Dead at normal child exit"
     );
+}
+
+#[test]
+fn partial_child_cleanup_emits_exact_projected_frontier_in_source_order() {
+    let lowered = lower_source(
+        "record Left { value: I8 } record Right { value: I8 } \
+         record Pair { left: Left, right: Right, count: I8 } \
+         fn sink(value: Left) {} \
+         fn f() { \
+             { \
+                 let pair: Pair = Pair { \
+                     left: Left { value: 1 }, \
+                     right: Right { value: 2 }, \
+                     count: 3 \
+                 }; \
+                 sink(pair.left); \
+             } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert_eq!(
+        drop_places(f),
+        vec![Place::local(LocalId(0)).field(2), Place::local(LocalId(0)).field(1)]
+    );
+    assert!(
+        drop_places(f)
+            .iter()
+            .all(|place| !(place.local == LocalId(0) && place.projections.is_empty())),
+        "partial cleanup must not fall back to whole-record Drop"
+    );
+}
+
+#[test]
+fn zero_leaf_only_remaining_frontier_erases_without_invalid_whole_drop() {
+    let lowered = lower_source(
+        "record Empty {} record Payload { value: I8 } \
+         record Mixed { empty: Empty, payload: Payload } \
+         fn take(value: Payload) {} \
+         fn f() { \
+             { \
+                 let mixed: Mixed = Mixed { \
+                     empty: Empty {}, \
+                     payload: Payload { value: 1 } \
+                 }; \
+                 take(mixed.payload); \
+             } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert!(
+        drop_places(f).is_empty(),
+        "the only source-owned remainder has an empty Core destruction domain"
+    );
+}
+
+#[test]
+fn separately_consumed_scalar_bearing_siblings_need_no_child_drop() {
+    let lowered = lower_source(
+        "record Left { value: I8 } record Right { value: I8 } \
+         record Pair { left: Left, right: Right } \
+         fn take_left(value: Left) {} fn take_right(value: Right) {} \
+         fn f() { \
+             { \
+                 let pair: Pair = Pair { \
+                     left: Left { value: 1 }, \
+                     right: Right { value: 2 } \
+                 }; \
+                 take_left(pair.left); \
+                 take_right(pair.right); \
+             } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert!(drop_places(f).is_empty());
 }
 
 #[test]
