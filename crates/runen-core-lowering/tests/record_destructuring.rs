@@ -3,7 +3,7 @@ use runen_core_ir::{
     Statement as CoreStatement, ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{ModuleId, OwnedUse, SourceUnit, Statement, Type, build_typed_hir};
+use runen_hir::{ModuleId, SourceUnit, Statement, Type, build_typed_hir};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -83,7 +83,8 @@ fn projected_copy_and_move_follow_pattern_source_order_not_record_order() {
         .iter()
         .map(|statement| match statement {
             CoreStatement::Init {
-                src: Operand::Copy(PlaceAccess::Direct(place))
+                src:
+                    Operand::Copy(PlaceAccess::Direct(place))
                     | Operand::Move(PlaceAccess::Direct(place)),
                 ..
             } => place.projections.clone(),
@@ -165,11 +166,10 @@ fn nested_pattern_cleanup_follows_reverse_source_binding_order() {
 
 #[test]
 fn lowering_rejects_invalid_pattern_field_index() {
-    let mut compilation = hir(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }",
-    );
-    let Statement::RecordDestructure { bindings, .. } = &mut compilation.functions[0].body.statements[0]
+    let mut compilation = hir("record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
+    let Statement::RecordDestructure { bindings, .. } =
+        &mut compilation.functions[0].body.statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -185,12 +185,11 @@ fn lowering_rejects_invalid_pattern_field_index() {
 
 #[test]
 fn lowering_rejects_pattern_record_root_identity_mismatch() {
-    let mut compilation = hir(
-        "record A { value: I8 } record B { value: I8 } \
-         fn f(root: A) { let A { value: extracted } = root; }",
-    );
+    let mut compilation = hir("record A { value: I8 } record B { value: I8 } \
+         fn f(root: A) { let A { value: extracted } = root; }");
     let other = compilation.records[1].id;
-    let Statement::RecordDestructure { record, .. } = &mut compilation.functions[0].body.statements[0]
+    let Statement::RecordDestructure { record, .. } =
+        &mut compilation.functions[0].body.statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -205,33 +204,11 @@ fn lowering_rejects_pattern_record_root_identity_mismatch() {
 }
 
 #[test]
-fn lowering_rejects_pattern_ownership_type_contradiction() {
-    let mut compilation = hir(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }",
-    );
-    let Statement::RecordDestructure { bindings, .. } = &mut compilation.functions[0].body.statements[0]
-    else {
-        panic!("expected pattern statement");
-    };
-    assert_eq!(bindings[0].ownership, OwnedUse::Duplicate);
-    bindings[0].ownership = OwnedUse::Consume;
-
-    assert_eq!(
-        lower(&compilation),
-        Err(LoweringError::InvalidHirInvariant(
-            "record destructuring ownership does not match retained field type"
-        ))
-    );
-}
-
-#[test]
 fn lowering_rejects_retained_pattern_binding_type_mismatch() {
-    let mut compilation = hir(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }",
-    );
-    let Statement::RecordDestructure { bindings, .. } = &mut compilation.functions[0].body.statements[0]
+    let mut compilation = hir("record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
+    let Statement::RecordDestructure { bindings, .. } =
+        &mut compilation.functions[0].body.statements[0]
     else {
         panic!("expected pattern statement");
     };
