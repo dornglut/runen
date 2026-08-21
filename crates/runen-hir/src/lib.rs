@@ -199,6 +199,16 @@ pub struct RecordFieldValue {
     pub value: Value,
 }
 
+/// One resolved record-pattern leaf binding, retained in pattern source order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordPatternBinding {
+    pub field: usize,
+    pub binding: BindingId,
+    pub name: String,
+    pub ty: Type,
+    pub ownership: OwnedUse,
+}
+
 /// Resolved producer for one typed HIR value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
@@ -250,6 +260,12 @@ pub enum Statement {
         ty: Type,
         mutability: AssignmentMutability,
         initializer: Value,
+        location: SourceLocation,
+    },
+    RecordDestructure {
+        record: RecordId,
+        root: BindingId,
+        bindings: Vec<RecordPatternBinding>,
         location: SourceLocation,
     },
     Assignment {
@@ -349,6 +365,9 @@ pub enum DiagnosticKind {
     DuplicateRecordInitializer,
     UnknownRecordField,
     MissingRecordInitializer,
+    DuplicateRecordPatternField,
+    MissingRecordPatternField,
+    DuplicatePatternBinding,
     ExpectedRecordForFieldAccess,
     InaccessibleRecordField,
     UnavailableFieldValue,
