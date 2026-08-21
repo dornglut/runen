@@ -141,6 +141,26 @@ impl TypeMap {
                 "HIR type is absent from the lowering type map",
             ))
     }
+
+    fn has_scalar_leaf(&self, ty: core::TypeId) -> Result<bool, LoweringError> {
+        let definition = self
+            .types
+            .get(ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "lowered Core type is absent from the type table",
+            ))?;
+        match &definition.kind {
+            core::TypeKind::Scalar(_) => Ok(true),
+            core::TypeKind::Struct(fields) => {
+                for field in fields {
+                    if self.has_scalar_leaf(field.ty)? {
+                        return Ok(true);
+                    }
+                }
+                Ok(false)
+            }
+        }
+    }
 }
 
 const INTRINSICS: [(hir::IntrinsicType, core::ScalarType, &str); 12] = [
@@ -321,9 +341,18 @@ impl<'a> FunctionLowerer<'a> {
                     self.lower_statements(&block.statements)?;
                     for binding in &block.normal_cleanup {
                         let local = self.binding(*binding)?;
-                        self.push_statement(core::Statement::Drop {
-                            place: core::Place::local(local).into(),
-                        });
+                        let ty = self
+                            .locals
+                            .get(local.0 as usize)
+                            .ok_or(LoweringError::InvalidHirInvariant(
+                                "bound Core local is absent from local declarations",
+                            ))?
+                            .ty;
+                        if self.types.has_scalar_leaf(ty)? {
+                            self.push_statement(core::Statement::Drop {
+                                place: core::Place::local(local).into(),
+                            });
+                        }
                     }
                 }
             }
