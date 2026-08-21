@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for function-local binding identity, abstract lexical scopes and function-local lookup precedence, binding assignment mutability, structural binding availability, ordinary whole-binding owned-value use, and whole-binding assignment legality and post-assignment availability.
+This document owns the represented source semantics for function-local binding identity, abstract lexical scopes and function-local lookup precedence, binding assignment mutability, structural binding availability, ordinary whole-binding owned-value use, whole-binding assignment legality and post-assignment availability, and the lifecycle/order of represented function-local bindings introduced by ordinary or pattern declarations.
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types, nominal record field identity and structure, and owned-value duplicability from [Source type foundation](types.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
 
-Represented binding-rooted field-path selection, direct field accessibility, and final-field duplicate-or-consume value production are owned by [Source field-value access](field-access.md), which consumes the root lookup and structural availability relations defined here. Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer and assignment execution interaction, assignment replacement ordering, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call/field-value/assignment/block spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented binding-rooted field-path selection, direct field accessibility, and final-field duplicate-or-consume value production are owned by [Source field-value access](field-access.md), which consumes the root lookup and structural availability relations defined here. Represented binding-rooted exhaustive record-pattern selection, field-to-binding mapping, and pattern-specific duplicate-or-consume production are owned by [Source patterns](patterns.md), which consumes the binding identity, scope, lookup, assignment mutability, structural path, and structural availability relations defined here. Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer and assignment execution interaction, assignment replacement ordering, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/pattern/value/call/field-value/assignment/block spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define general expression evaluation, references, patterns, traits, ABI, or an implementation representation.
+This document does not define general expression evaluation, general pattern semantics, references, traits, ABI, or an implementation representation.
 
 ## Function-local binding identity
 
@@ -25,7 +25,7 @@ Parameter lexical keys MUST be unique within one function body.
 
 Parameter lexical keys, parameter binding identities, and assignment-mutability classifications are body-local facts. They are not part of source function entity identity, callable-signature structure, or callable-signature equality.
 
-Parameter bindings and ordinary function-local bindings occupy one **function-local value-binding domain**.
+Parameter bindings and every represented function-local binding occupy one **function-local value-binding domain**.
 
 Every represented parameter/local binding identity is independent of original identifier spelling, token or source offset, physical storage address, compiler collection index, HIR or MIR identifier choice, and runtime storage identity.
 
@@ -49,6 +49,30 @@ The concrete `let` forms in `concrete-syntax.md` supply an explicit source type 
 
 This revision does not define type inference or an uninitialized local form. `function-execution.md` owns represented initializer value production, transfer, and abnormal-completion interaction for the currently accepted owned value producers.
 
+## Represented pattern-introduced local bindings
+
+One source-valid record-destructuring declaration under `patterns.md` may introduce zero or more ordinary function-local bindings as one grouped declaration boundary.
+
+For each pattern entry, `patterns.md` supplies the selected record field identity, the introduced lexical key, the exact field source type, the source declaration order, and the duplicate-or-consume ownership consequence that produces the binding's initial owned value.
+
+This binding owner supplies each introduced binding with one stable source-semantic binding identity and classifies it as immutable for assignment purposes.
+
+Before any such binding is introduced:
+
+- all introduced lexical keys MUST be unique within that pattern declaration;
+- every introduced key MUST satisfy the overlapping-shadowing prohibition below against the lexical environment at the declaration point; and
+- the complete pattern declaration MUST have passed the non-binding structural/type/accessibility validation owned by `patterns.md`.
+
+If any introduced key would be invalid, the complete pattern declaration is rejected. It introduces no subset of its bindings and does not create a partially extended lexical environment.
+
+All bindings introduced by one successful record-destructuring declaration enter scope **together after the complete pattern declaration finishes**. None participates in function-local lookup while the same pattern declaration is validating or performing its field ownership transfers.
+
+The pattern entry source order is the declaration order of these bindings. That order is independent of the containing nominal record's structural field declaration order and is consumed by lexical cleanup ordering under `function-execution.md`.
+
+A zero-field record pattern introduces zero bindings and therefore does not change the function-local lookup environment by itself.
+
+This section does not define pattern field selection, exhaustiveness, ownership production, shorthand/rest/nesting, or another pattern category; those concerns remain owned by `patterns.md`.
+
 ## Abstract lexical scopes
 
 A represented function body has one root lexical scope. A represented nested block establishes one child lexical scope of its containing lexical scope. The resulting lexical scopes form a finite rooted tree.
@@ -59,7 +83,7 @@ The semantic scope tree does not prescribe parser nodes, lossless-syntax nodes, 
 
 A parameter binding belongs to the function root scope and is in scope throughout the represented function body, including descendant lexical scopes.
 
-An ordinary local binding is in scope from immediately after its declaration/initialization boundary through the end of its containing lexical scope, including descendant lexical scopes.
+An ordinary local binding or pattern-introduced local binding is in scope from immediately after its successful declaration/initialization boundary through the end of its containing lexical scope, including descendant lexical scopes.
 
 ## Function-local shadowing and key reuse
 
@@ -67,11 +91,14 @@ An ordinary local binding is in scope from immediately after its declaration/ini
 
 A parameter/local binding declaration MUST NOT introduce a lexical identifier key equal to the key of another parameter/local binding whose lexical scope contains the new declaration point.
 
+For a grouped record-destructuring declaration, this rule applies to every introduced key against the pre-declaration lexical environment, and the keys introduced by the same pattern MUST also be pairwise distinct.
+
 Consequently:
 
 - a local cannot shadow a parameter;
 - a nested local cannot shadow an enclosing local;
-- two sequential locals in the same continuing lexical scope cannot reuse one key; and
+- two sequential locals in the same continuing lexical scope cannot reuse one key;
+- two bindings introduced by one pattern cannot share a key; and
 - disjoint sibling lexical scopes MAY independently introduce the same key because their binding scopes do not overlap.
 
 This prohibition applies only inside the function-local value-binding domain.
@@ -88,11 +115,13 @@ Only when no active parameter/local binding resolves the key does lookup fall th
 
 Lookup MUST NOT skip an active function-local binding merely because the consuming context would prefer a module-level entity of another category.
 
-The concrete whole-binding value uses, binding-rooted `FieldValueUse` roots, whole-binding assignment targets, and **unqualified** direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, an unqualified direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding. Conversely, an assignment target whose key has no active local binding may select a same-module declaration, but that selected module entity is invalid as an assignment target rather than being bypassed to find another binding. A field-value root likewise does not bypass the selected entity merely to obtain a record-valued binding.
+The concrete whole-binding value uses, binding-rooted `FieldValueUse` roots, binding-rooted record-destructuring scrutinee roots, whole-binding assignment targets, and **unqualified** direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, an unqualified direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding. Conversely, an assignment target whose key has no active local binding may select a same-module declaration, but that selected module entity is invalid as an assignment target rather than being bypassed to find another binding. A field-value root or pattern scrutinee root likewise does not bypass the selected entity merely to obtain a record-valued binding.
+
+The nominal record-pattern head is not a function-local value-binding lookup. `patterns.md` defines that head as a same-module nominal-record declaration lookup independently of an active local binding with the same key.
 
 Source-unit module aliases remain a distinct qualified-lookup mechanism owned by `names-modules.md`. They are not searched by unqualified function-body identifier lookup. The concrete `alias::member` direct-call target in `concrete-syntax.md` is explicitly qualified and resolves through that module-alias domain rather than this function-local lookup. Therefore an active local binding whose key equals the alias key does not block that syntactically qualified lookup.
 
-Beyond the represented two-part module-alias qualification owned by `concrete-syntax.md` and `names-modules.md` and the operation-specific field selector owned by `field-access.md`, this revision does not define arbitrary member lookup, nested module paths, labels, pattern bindings, generic parameters, lifetime names, methods, associated items, or another future name domain.
+Beyond the represented two-part module-alias qualification owned by `concrete-syntax.md` and `names-modules.md`, the operation-specific field selector owned by `field-access.md`, and the bounded same-module record-pattern head/field relation owned by `patterns.md`, this revision does not define arbitrary member lookup, nested module paths, labels, generic parameters, lifetime names, methods, associated items, or another future name domain.
 
 ## Binding assignment mutability
 
@@ -103,9 +132,9 @@ Every represented parameter/local binding is classified as exactly one of:
 
 Assignment mutability is a binding property independent of source type identity, source owned-value duplicability, callable-signature identity or equality, and future source alias/borrow authority.
 
-Consuming an owned value from an immutable binding, including a represented field subvalue when `field-access.md` permits that consumption, is permitted. Immutability restricts later assignment or reinitialization; it does not require the binding to retain ownership of every subvalue forever.
+Consuming an owned value from an immutable binding, including a represented field subvalue when `field-access.md` or `patterns.md` permits that consumption, is permitted. Immutability restricts later assignment or reinitialization; it does not require the binding to retain ownership of every subvalue forever.
 
-The concrete parameter form in `concrete-syntax.md` establishes immutable parameter bindings. The concrete ordinary-local forms establish immutable bindings without `mut` and mutable bindings with `mut`. No concrete parameter-mutability form is represented by this revision.
+The concrete parameter form in `concrete-syntax.md` establishes immutable parameter bindings. The concrete ordinary-local forms establish immutable bindings without `mut` and mutable bindings with `mut`. Every binding introduced by the represented record-destructuring pattern is immutable. No concrete parameter-mutability or pattern-binding-mutability form is represented by this revision.
 
 Assignment to an immutable binding is language-invalid regardless of whether its complete value is fully available, partially available, or unavailable. Assignment to a mutable binding is permitted by this mutability rule subject to the target, type, structural-availability transition, and execution requirements below and in `function-execution.md`.
 
@@ -145,7 +174,7 @@ The relation includes zero-field and recursively zero-leaf record subvalues. Suc
 
 A parameter binding has an empty consumed-path set at represented function-body entry. `function-execution.md` owns how successful direct-call argument transfer establishes each parameter value before body entry.
 
-A represented ordinary local binding receives an empty consumed-path set after its initializer successfully establishes its initial source value. `function-execution.md` owns the represented initializer evaluation and transfer relation.
+A represented ordinary local binding receives an empty consumed-path set after its initializer successfully establishes its initial source value. A represented pattern-introduced binding likewise begins with an empty consumed-path set after its pattern-owned initial value has been successfully established. `function-execution.md` owns the ordinary initializer transfer and grouped pattern declaration completion boundaries.
 
 A successful represented whole-binding assignment to a mutable binding resets the target consumed-path set to empty after replacement transfer completes, regardless of whether the target was fully available, partially available, or unavailable when assignment began. `function-execution.md` owns when this reset occurs relative to RHS evaluation, remaining-old-value cleanup, and transfer.
 
@@ -165,9 +194,9 @@ Ordinary whole-binding owned use of a partially available or unavailable complet
 
 The concrete `IdentifierUse` value form in `concrete-syntax.md` maps to this ordinary whole-binding use after lookup selects a parameter/local binding.
 
-This implicit duplicate-or-consume relation applies only to the complete binding value. Binding-rooted field-value use is independently owned by `field-access.md`: it selects a non-empty structural path and may either duplicate or consume exactly the final selected subvalue according to that operation's accepted rules.
+This implicit duplicate-or-consume relation applies only to the complete binding value. Binding-rooted field-value use is independently owned by `field-access.md`: it selects a non-empty structural path and may either duplicate or consume exactly the final selected subvalue according to that operation's accepted rules. Binding-rooted record destructuring is independently owned by `patterns.md`: it processes its exhaustive direct field paths without first applying ordinary whole-binding use to the root.
 
-A later borrow/reference, explicit clone/copy-construction, pattern/destructuring, or other context may define distinct behavior without redefining this ordinary whole-binding relation.
+A later borrow/reference, explicit clone/copy-construction, additional pattern category, or other context may define distinct behavior without redefining this ordinary whole-binding relation.
 
 ## Whole-binding assignment and reinitialization
 
@@ -184,7 +213,7 @@ The target binding remains in scope during RHS evaluation. Every RHS owned use i
 
 This section owns assignment legality and the resulting source structural-availability fact only. [Source function execution](function-execution.md) owns RHS evaluation, source-first replacement ordering, cleanup of the target's still-owned old subvalues, transfer, straight-line statement sequencing, and fault/divergence interaction.
 
-This revision defines no assignment through a field/member, partial-field reinitialization, borrow/reference, pointer, interior-mutability mechanism, destructuring target, pattern, or other place form.
+This revision defines no assignment through a field/member, partial-field reinitialization, borrow/reference, pointer, interior-mutability mechanism, destructuring target, or other place form.
 
 ## Remaining ownership frontier
 
@@ -214,7 +243,7 @@ This revision introduces no source `drop` ability, must-consume type class, cust
 
 `function-execution.md` owns which remaining ownership frontiers are selected for normal-return, assignment replacement, lexical-scope, or defined-fault cleanup and their source ordering. Applicable [Core value and storage semantics](../core/value-storage.md) remains authoritative for Core structural destruction domains, stored-value lifetime endings, and Core storage cleanup. This document does not duplicate either owner's cleanup relation.
 
-## Function, call, assignment, and fault boundary
+## Function, call, assignment, pattern, and fault boundary
 
 This document defines body-local binding facts, function-local lookup, assignment target legality, structural availability consequences, and the remaining ownership frontier. It does not redefine the execution relation owned by `function-execution.md`, including:
 
@@ -226,16 +255,18 @@ This document defines body-local binding facts, function-local lookup, assignmen
 - lexical-scope, caller, or callee cleanup sequencing; or
 - defined-fault propagation across source activations.
 
+It likewise does not redefine record-pattern head/field selection, exhaustiveness, or per-field pattern ownership production owned by `patterns.md`.
+
 Indirect calls, function values, closures, references/pass modes, broader panic/catch forms, and other future execution relations remain outside this owner.
 
 ## Implementation boundary
 
 This revision does not add or require a parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime representation, or backend representation.
 
-`concrete-syntax.md` provides one bounded concrete parameter/local/value/call/field-value/assignment/block subset. Its field-value form consumes the root lookup and structural availability relation above through `field-access.md`; its block form maps to the abstract child-scope relation above. Concrete syntax does not redefine binding identity, lookup, mutability, structural availability, remaining ownership, or owned-use authority.
+`concrete-syntax.md` provides one bounded concrete parameter/local/pattern/value/call/field-value/assignment/block subset. Its field-value form consumes the root lookup and structural availability relation above through `field-access.md`; its record-destructuring form consumes these relations through `patterns.md`; its block form maps to the abstract child-scope relation above. Concrete syntax does not redefine binding identity, lookup, mutability, structural availability, remaining ownership, or owned-use authority.
 
 A faithful implementation MAY represent source structural paths by resolved indices or other internal identities after source field resolution, but those representations are not source semantic identity. Lower Core path state or scalar liveness MUST NOT be imported as the source consumed-path set or used to decide source validity.
 
 ## Further boundaries
 
-Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment expressions or assignment-as-value, uninitialized locals, literals, precedence, parser recovery, general expression typing, field assignment or partial-field reinitialization, arbitrary member/method lookup, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment expressions or assignment-as-value, uninitialized locals, literals, precedence, parser recovery, general expression typing, field assignment or partial-field reinitialization, arbitrary member/method lookup, additional/refutable/nested/rest/shorthand patterns, arbitrary pattern scrutinees, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
