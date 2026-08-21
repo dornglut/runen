@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, return, cleanup, divergence, fault, and straight-line execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -82,7 +82,7 @@ This revision defines no documentation-comment category or documentation semanti
 
 The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above. `DecimalMagnitude` denotes one decimal magnitude token as defined above.
 
-Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role; represented statements use mandatory semicolons.
+Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role. Semicolons are required exactly where a grammar production includes `;`; a represented `BlockStatement` terminates at its closing `}` and has no trailing semicolon.
 
 ## Source units and items
 
@@ -178,18 +178,24 @@ The concrete function form attaches the following body to the same function enti
 
 ## Function bodies
 
-The represented body grammar has exactly the function root lexical scope established by `local-bindings.md`:
+The represented body grammar delimits the function root lexical scope and admits recursively nested child lexical scopes through `BlockStatement`:
 
 ```text
-Body          = "{" BodyStatement* ReturnStatement? "}"
-BodyStatement = LocalDeclaration | AssignmentStatement | CallStatement
+Body           = "{" BodyStatement* ReturnStatement? "}"
+BodyStatement  = LocalDeclaration
+               | AssignmentStatement
+               | CallStatement
+               | BlockStatement
+BlockStatement = "{" BodyStatement* "}"
 ```
 
-A represented return statement, when present, is terminal in this grammar. Source containing another body statement after a represented return does not match this body grammar.
+A represented return statement, when present, is terminal at the function-root body level. Source containing another root body statement after that represented return does not match this body grammar.
 
-Nested block statements are not represented.
+A represented `BlockStatement` is statement-only and produces no source value. Its closing `}` is the complete statement terminator; no trailing semicolon is present. The enclosed sequence may be empty, and block statements may nest recursively because `BlockStatement` is itself a `BodyStatement`.
 
-Execution order and abnormal completion of the represented straight-line body are owned by `function-execution.md`.
+Because `ReturnStatement` is not a `BodyStatement`, this block form does not admit a return inside a nested block. It does not create a block expression, tail value, Unit/Void value, label, branch, loop, break, continue, or catch form.
+
+Each `BlockStatement` maps to exactly one child lexical scope under `local-bindings.md`. Execution order, normal child-scope cleanup, fault propagation, and divergence consequences are owned by `function-execution.md`.
 
 ## Ordinary local declarations
 
@@ -315,7 +321,7 @@ This revision does not define:
 - grouping or general expression grammar;
 - assignment expressions, assignment-as-value, or general place/lvalue syntax beyond the represented whole-binding statement;
 - uninitialized locals, type inference, or mutable parameters;
-- nested blocks, branches, loops, patterns, or general control flow;
+- branches, loops, patterns, or other multiple-path/control-transfer forms;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - record construction, member access, field assignment, or destructuring;
 - positive record duplicability-selection syntax;
