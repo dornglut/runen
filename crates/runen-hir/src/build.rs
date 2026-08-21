@@ -752,9 +752,7 @@ fn validate_body(
                 if let Some(statement) = validate_assignment(
                     header,
                     &node,
-                    modules,
-                    imports,
-                    headers,
+                    &context,
                     &mut bindings,
                     diagnostics,
                 ) {
@@ -765,9 +763,7 @@ fn validate_body(
                 if let Some(statement) = validate_call_statement(
                     header,
                     &node,
-                    modules,
-                    imports,
-                    headers,
+                    &context,
                     &mut bindings,
                     diagnostics,
                 ) {
@@ -778,9 +774,7 @@ fn validate_body(
                 terminal_return = Some(validate_return(
                     header,
                     &node,
-                    modules,
-                    imports,
-                    headers,
+                    &context,
                     &mut bindings,
                     diagnostics,
                 ));
@@ -848,9 +842,7 @@ fn validate_local(
             header,
             &value_node,
             required,
-            context.modules,
-            context.imports,
-            context.headers,
+            context,
             bindings,
             diagnostics,
         )
@@ -898,9 +890,7 @@ fn validate_local(
 fn validate_assignment(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
@@ -923,7 +913,8 @@ fn validate_assignment(
             (binding.id, binding.ty)
         }
         None => {
-            let entity = modules
+            let entity = context
+                .modules
                 .get(&header.module)
                 .and_then(|module| module.namespace.get(&name));
             diagnostics.push(Diagnostic {
@@ -943,9 +934,7 @@ fn validate_assignment(
         header,
         &value_node,
         target_ty,
-        modules,
-        imports,
-        headers,
+        context,
         bindings,
         diagnostics,
     )?;
@@ -965,22 +954,13 @@ fn validate_assignment(
 fn validate_call_statement(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let call = direct_child(node, SyntaxKind::DirectCall);
-    let (function, arguments, result) = validate_call(
-        header,
-        &call,
-        modules,
-        imports,
-        headers,
-        bindings,
-        diagnostics,
-    )?;
+    let (function, arguments, result) =
+        validate_call(header, &call, context, bindings, diagnostics)?;
     if result.is_some() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ResultCallUsedAsStatement,
@@ -998,9 +978,7 @@ fn validate_call_statement(
 fn validate_return(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Return {
@@ -1011,9 +989,7 @@ fn validate_return(
             header,
             &value_node,
             required,
-            modules,
-            imports,
-            headers,
+            context,
             bindings,
             diagnostics,
         ),
@@ -1037,9 +1013,7 @@ fn validate_value(
     header: &FunctionHeader,
     node: &SyntaxNode,
     required: Type,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -1113,7 +1087,8 @@ fn validate_value(
                 });
             }
 
-            let entity = modules
+            let entity = context
+                .modules
                 .get(&header.module)
                 .and_then(|module| module.namespace.get(&name));
             diagnostics.push(Diagnostic {
@@ -1130,15 +1105,8 @@ fn validate_value(
             None
         }
         SyntaxKind::DirectCall => {
-            let (function, arguments, result) = validate_call(
-                header,
-                node,
-                modules,
-                imports,
-                headers,
-                bindings,
-                diagnostics,
-            )?;
+            let (function, arguments, result) =
+                validate_call(header, node, context, bindings, diagnostics)?;
             let Some(ty) = result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
@@ -1281,9 +1249,7 @@ fn parse_decimal_magnitude(text: &str, limit: u64) -> Option<u64> {
 fn validate_call(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<(FunctionId, Vec<Value>, Option<Type>)> {
@@ -1291,7 +1257,13 @@ fn validate_call(
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        match resolve_qualified_entity(header.unit, &qualified, modules, imports, diagnostics)? {
+        match resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )? {
             EntityId::Function(id) => id,
             EntityId::Record(_) => {
                 diagnostics.push(Diagnostic {
@@ -1317,7 +1289,8 @@ fn validate_call(
             return None;
         }
 
-        match modules
+        match context
+            .modules
             .get(&header.module)
             .and_then(|module| module.namespace.get(&name))
             .copied()
@@ -1341,7 +1314,7 @@ fn validate_call(
         }
     };
 
-    let target = &headers[function.0];
+    let target = &context.headers[function.0];
     let argument_list = direct_child(node, SyntaxKind::ArgumentList);
     let argument_nodes = argument_list
         .children()
@@ -1365,9 +1338,7 @@ fn validate_call(
             header,
             &argument_node,
             parameter.ty,
-            modules,
-            imports,
-            headers,
+            context,
             bindings,
             diagnostics,
         )?;
