@@ -243,7 +243,7 @@ impl Parser<'_> {
             }
 
             match self.current() {
-                Some(SyntaxKind::KwLet) => self.parse_local_declaration(),
+                Some(SyntaxKind::KwLet) => self.parse_let_statement(),
                 Some(SyntaxKind::KwReturn) => {
                     self.parse_return_statement();
                     returned = true;
@@ -282,7 +282,7 @@ impl Parser<'_> {
             }
 
             match self.current() {
-                Some(SyntaxKind::KwLet) => self.parse_local_declaration(),
+                Some(SyntaxKind::KwLet) => self.parse_let_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(SyntaxKind::KwReturn) => self.recover_nested_return(),
@@ -319,6 +319,17 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
+    fn parse_let_statement(&mut self) {
+        debug_assert!(self.at(SyntaxKind::KwLet));
+        if self.peek_nontrivia(1) == Some(SyntaxKind::Ident)
+            && self.peek_nontrivia(2) == Some(SyntaxKind::LBrace)
+        {
+            self.parse_record_destructuring_declaration();
+        } else {
+            self.parse_local_declaration();
+        }
+    }
+
     fn parse_local_declaration(&mut self) {
         self.builder.start_node(SyntaxKind::LocalDeclaration.into());
         self.expect(SyntaxKind::KwLet, ExpectedSyntax::Item);
@@ -329,6 +340,94 @@ impl Parser<'_> {
         self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
         self.parse_value();
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_record_destructuring_declaration(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::RecordDestructuringDeclaration.into());
+        self.expect(SyntaxKind::KwLet, ExpectedSyntax::Item);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if !self.expect(SyntaxKind::LBrace, ExpectedSyntax::LeftBrace) {
+            self.builder.finish_node();
+            return;
+        }
+
+        self.bump_trivia();
+        let mut missing_close = false;
+        while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
+            if self.at(SyntaxKind::Eq)
+                || self.at(SyntaxKind::Semicolon)
+                || self.at(SyntaxKind::LBrace)
+                || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwReturn)
+                || self.at_any(TOP_LEVEL_STARTERS)
+            {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
+                missing_close = true;
+                break;
+            }
+
+            if self.at(SyntaxKind::Ident) {
+                self.parse_record_pattern_field();
+                if self.eat(SyntaxKind::Comma) {
+                    self.bump_trivia();
+                    continue;
+                }
+                if !self.at(SyntaxKind::RBrace) {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightBrace));
+                    self.recover_until(&[
+                        SyntaxKind::Ident,
+                        SyntaxKind::Comma,
+                        SyntaxKind::RBrace,
+                        SyntaxKind::Eq,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::LBrace,
+                        SyntaxKind::KwLet,
+                        SyntaxKind::KwReturn,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
+                        SyntaxKind::KwFn,
+                        SyntaxKind::KwRecord,
+                    ]);
+                    self.eat(SyntaxKind::Comma);
+                }
+            } else {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+                self.recover_until(&[
+                    SyntaxKind::Ident,
+                    SyntaxKind::Comma,
+                    SyntaxKind::RBrace,
+                    SyntaxKind::Eq,
+                    SyntaxKind::Semicolon,
+                    SyntaxKind::LBrace,
+                    SyntaxKind::KwLet,
+                    SyntaxKind::KwReturn,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
+                    SyntaxKind::KwFn,
+                    SyntaxKind::KwRecord,
+                ]);
+                self.eat(SyntaxKind::Comma);
+            }
+            self.bump_trivia();
+        }
+
+        if !missing_close {
+            self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
+        }
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_record_pattern_field(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::RecordPatternField.into());
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.builder.finish_node();
     }
 

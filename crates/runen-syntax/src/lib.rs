@@ -87,6 +87,8 @@ pub enum SyntaxKind {
     RecordInitializer,
     Dot,
     FieldValueUse,
+    RecordDestructuringDeclaration,
+    RecordPatternField,
 }
 
 impl SyntaxKind {
@@ -202,6 +204,8 @@ impl Language for RunenLanguage {
             62 => SyntaxKind::RecordInitializer,
             63 => SyntaxKind::Dot,
             64 => SyntaxKind::FieldValueUse,
+            65 => SyntaxKind::RecordDestructuringDeclaration,
+            66 => SyntaxKind::RecordPatternField,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
