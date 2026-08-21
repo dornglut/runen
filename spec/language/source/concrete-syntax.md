@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, and final-field value production from [Source field-value access](field-access.md); and direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -49,12 +49,12 @@ Reserved-key classification uses the lexical identifier key, not original source
 The represented punctuation tokens are exactly:
 
 ```text
-( ) { } : :: , -> - = ;
+( ) { } : :: , -> - = ; .
 ```
 
 `->` and `::` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens and `->` is never tokenized as `-` followed by unrepresented `>` material.
 
-The standalone `-` punctuation token participates only in the represented negative decimal integer literal production below. It does not by itself define unary negation, subtraction, or another operator. This revision defines no standalone `>` token and no other punctuation or operator token.
+The standalone `-` punctuation token participates only in the represented negative decimal integer literal production below. It does not by itself define unary negation, subtraction, or another operator. The `.` punctuation token participates only in the represented `FieldValueUse` production below. It does not define floating-point literal spelling, general member access, a method call, field assignment, or another operator. This revision defines no standalone `>` token and no other punctuation or operator token.
 
 ## Decimal magnitude tokens
 
@@ -137,7 +137,7 @@ The field sequence MAY be empty. A trailing comma is permitted.
 
 The concrete record form makes no positive owned-value duplicability selection. Its duplicability classification therefore follows the no-selection case defined by `types.md`.
 
-The represented record definition does not itself construct a value. Record construction is represented separately below. Member access, field expressions, destructuring, and duplicability-selection syntax are not represented.
+The represented record definition does not itself construct or access a value. Record construction and binding-rooted field-value access are represented separately below. Field assignment, consuming/partial field operations, destructuring, methods, and duplicability-selection syntax are not represented.
 
 ## Type forms
 
@@ -266,7 +266,7 @@ RecordInitializer  = UserIdentifier ":" Value
 
 The constructor target `UserIdentifier` maps directly to same-module lookup under `names-modules.md` for the source module containing the construction. Function-local parameter and ordinary-local bindings do not participate in constructor-target lookup, even when an active local has the same lexical identifier key. The selected same-module binding MUST denote one nominal record declaration under `types.md`; lookup does not bypass a selected wrong-category module binding merely because the constructor context requires a record.
 
-This constructor-specific lookup does not create a general type/value namespace rule. Imported modules are not searched, and `alias::Record { ... }` is not a represented constructor form. Cross-module construction and the field-accessibility/public-construction contract it would require remain outside this revision.
+This constructor-specific lookup does not create a general type/value namespace rule. Imported modules are not searched, and `alias::Record { ... }` is not a represented constructor form. Cross-module construction and the field-construction accessibility contract it would require remain outside this revision.
 
 Each `RecordInitializer` key selects the unique declared field of the resolved record whose lexical field key is equal under the accepted identifier-key relation. Every declared field MUST be selected exactly once. A duplicate initializer key, an initializer key that denotes no declared field, or omission of any declared field makes the construction source-invalid.
 
@@ -278,12 +278,31 @@ The resulting record value has exactly the declaration-defined field/value shape
 
 Because each initializer contains a `Value`, record construction composes recursively with another record construction as well as the other represented value producers.
 
-This form defines no inferred or anonymous constructor target, positional field list, field-init shorthand, default field value, update/spread/base syntax, member access, field assignment, partial-field operation, destructuring, constructor/method body, or positive duplicability selection.
+This form defines no inferred or anonymous constructor target, positional field list, field-init shorthand, default field value, update/spread/base syntax, field-value access itself, field assignment, partial-field operation, destructuring, constructor/method body, or positive duplicability selection.
+
+## Binding-rooted field-value access
+
+The represented field-value form has this grammar:
+
+```text
+FieldValueUse = UserIdentifier FieldSelector+
+FieldSelector = "." UserIdentifier
+```
+
+The root `UserIdentifier` maps to the unqualified function-body lookup precedence owned by `local-bindings.md`. The sequence of `FieldSelector` entries supplies the lexical field keys consumed by `field-access.md` in source order.
+
+At least one selector is required, so a bare `UserIdentifier` remains `IdentifierUse` rather than `FieldValueUse`.
+
+`FieldValueUse` is binding-rooted. This grammar does not admit a record construction, direct call, parenthesized value, qualified module member, or another arbitrary value as its receiver.
+
+The exact field-path selection, same-module direct field accessibility, final-field duplicability requirement, resulting source type, ownership consequence, and unchanged root-binding availability are owned by `field-access.md`. This grammar does not duplicate those relations.
+
+The `.` token in this production has no decimal-literal, method, assignment, reference, place/lvalue, or general-member meaning.
 
 ## Value forms
 
 ```text
-Value                 = Literal | IdentifierUse | DirectCall | RecordConstruction
+Value                 = Literal | IdentifierUse | DirectCall | RecordConstruction | FieldValueUse
 Literal               = BooleanLiteral | DecimalIntegerLiteral
 BooleanLiteral        = "true" | "false"
 DecimalIntegerLiteral = "-"? DecimalMagnitude
@@ -300,9 +319,11 @@ A `DirectCall` may be used as a `Value` only when its callable signature specifi
 
 A `RecordConstruction` maps to the same-module record-construction relation above and produces one owned record value under `function-execution.md`. Record construction is not a literal and does not add a general expression hierarchy.
 
+A `FieldValueUse` maps to the binding-rooted field-value relation above and produces one owned value under `field-access.md` when source-valid. It does not create a general member or place expression hierarchy.
+
 A qualified module member without a direct-call argument list is not an `IdentifierUse` value under this subset. Module aliases and module-level declarations do not become source values.
 
-This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; member access; assignment expression; block expression; closure; or other value form beyond the represented producers above.
+This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; arbitrary-receiver member access; assignment expression; block expression; closure; or other value form beyond the represented producers above.
 
 ## Returns and normal completion
 
@@ -324,7 +345,7 @@ Except for a `RecordConstruction` target, whose constructor-specific same-module
 
 After lookup selects an entity, the consuming syntactic context validates its category. The lookup MUST NOT skip the selected entity to find another binding of a context-preferred category.
 
-Consequently, when a parameter or local binding has the same lexical key as a module-level function, an unqualified direct-call spelling with that key resolves to the function-local binding and is invalid as a direct call rather than silently bypassing the local binding. For an assignment target, a selected parameter/local binding is validated for assignment mutability; when no local binding exists and same-module lookup selects a module declaration, that selected entity is invalid as an assignment target rather than being bypassed.
+Consequently, when a parameter or local binding has the same lexical key as a module-level function, an unqualified direct-call spelling with that key resolves to the function-local binding and is invalid as a direct call rather than silently bypassing the local binding. For an assignment target, a selected parameter/local binding is validated for assignment mutability; when no local binding exists and same-module lookup selects a module declaration, that selected entity is invalid as an assignment target rather than being bypassed. A `FieldValueUse` root follows the same lookup precedence and requires the selected entity to be a parameter/local binding under `field-access.md`.
 
 A record-construction target is the explicit exception: an active parameter/local of the same key does not participate in that target lookup, and the same-module binding selected by `names-modules.md` is validated as a record declaration.
 
@@ -340,20 +361,22 @@ After qualified lookup selects the target binding, the consuming type or direct-
 
 A parameter or local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local continues to control an ordinary unqualified spelling but does not block the syntactically qualified `alias::member` form.
 
-The two-part qualification syntax does not create general member access, nested module paths, associated-item lookup, methods, re-export behavior, or qualified record construction.
+The two-part qualification syntax does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, or qualified record construction. Binding-rooted field-value access uses the distinct `.` form and semantics owned by `field-access.md` rather than this module-qualified lookup.
 
 ## Deliberate boundaries
 
 This revision does not define:
 
-- floating, string, byte, character, or other literal syntax beyond the represented boolean and signed decimal integer forms, nor any literal suffix, digit separator, or alternate-radix form;
+- floating, string, byte, character, or other literal syntax beyond the represented boolean and signed decimal integer forms, nor any literal suffix, digit separator, alternate-radix form, or decimal-point form;
 - arithmetic, comparison, logical, compound-assignment, general unary-negation, subtraction, or other operator forms;
 - grouping or general expression grammar;
-- assignment expressions, assignment-as-value, or general place/lvalue syntax beyond the represented whole-binding statement;
+- assignment expressions, assignment-as-value, field assignment, or general place/lvalue syntax beyond the represented whole-binding statement;
 - uninitialized locals, type inference, or mutable parameters;
 - branches, loops, patterns, or other multiple-path/control-transfer forms;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
-- qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction; member access; field assignment; partial-field operations; or destructuring;
+- qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction;
+- consuming/non-duplicable field access, partial-field availability, arbitrary-receiver member access, cross-module field access, field visibility modifiers, methods, or associated-item lookup;
+- destructuring;
 - positive record duplicability-selection syntax;
 - references, borrow syntax, source interior mutability, raw-pointer assignment, or lifetime syntax;
 - indirect calls, function values, or closures;
