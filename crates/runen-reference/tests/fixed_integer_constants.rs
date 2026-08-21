@@ -109,6 +109,65 @@ fn non_i64_values_survive_init_copy_assign_and_move() {
 }
 
 #[test]
+fn u64_max_round_trips_through_call_argument_and_result() {
+    let mut types = TypeTable::new();
+    let u64_ty = types.push(TypeDef::scalar("u64", ScalarType::U64));
+
+    let caller = Function {
+        name: "entry".into(),
+        parameters: Vec::new(),
+        result: Some(u64_ty),
+        body: Body {
+            locals: vec![LocalDecl::new("result", u64_ty, false)],
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: vec![Operand::Constant(Value::U64(u64::MAX))],
+                        destination: Some(Place::local(LocalId(0))),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
+                ),
+            ],
+        },
+    };
+    let callee = Function {
+        name: "identity".into(),
+        parameters: vec![LocalId(0)],
+        result: Some(u64_ty),
+        body: Body {
+            locals: vec![LocalDecl::new("value", u64_ty, false)],
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
+            )],
+        },
+    };
+
+    let validated = validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect("u64 boundary call must validate");
+    let report = Machine::new(validated, FunctionId(0))
+        .expect("entry has zero parameters")
+        .execute()
+        .expect("u64 boundary call is defined");
+
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(Value::U64(u64::MAX)));
+}
+
+#[test]
 fn mixed_fixed_width_struct_round_trips_through_storage() {
     let mut types = TypeTable::new();
     let i8_ty = types.push(TypeDef::scalar("i8", ScalarType::I8));
