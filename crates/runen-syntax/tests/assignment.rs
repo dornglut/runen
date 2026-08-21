@@ -77,8 +77,8 @@ fn identifier_started_statements_distinguish_assignment_and_calls() {
             .descendants()
             .filter(|node| node.kind() == SyntaxKind::DirectCall)
             .count(),
-        3,
-        "result call in assignment, call statement, and id body return"
+        2,
+        "result call in the assignment and the no-result call statement"
     );
 }
 
