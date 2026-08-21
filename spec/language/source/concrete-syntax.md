@@ -180,8 +180,8 @@ Execution order and abnormal completion of the represented straight-line body ar
 ## Ordinary local declarations
 
 ```text
-LocalDeclaration  = "let" MutableModifier? UserIdentifier ":" Type "=" Value ";"
-MutableModifier   = "mut"
+LocalDeclaration = "let" MutableModifier? UserIdentifier ":" Type "=" Value ";"
+MutableModifier  = "mut"
 ```
 
 The concrete form maps to one ordinary local declaration under `local-bindings.md`. The explicit type and initializer are mandatory in both forms.
@@ -198,9 +198,7 @@ This subset has no uninitialized local, inferred local type, pattern binding, de
 AssignmentStatement = UserIdentifier "=" Value ";"
 ```
 
-The target identifier is resolved using the unqualified function-body lookup precedence from `local-bindings.md`. The selected entity MUST be one represented parameter/local binding and MUST satisfy the assignment-mutability and availability rules defined there. Lookup does not bypass a selected local or same-module entity merely because that entity is an invalid assignment target.
-
-The RHS is exactly the existing `Value` form below. It MUST produce one owned source value whose source type is exactly equal to the target binding's declared source type.
+The target identifier is resolved using the unqualified function-body lookup precedence from `local-bindings.md`. The concrete form maps that selected target and RHS `Value` to the whole-binding assignment relation owned there. A source-valid assignment therefore requires the selected entity, assignment mutability, availability transition, and target/RHS source types to satisfy `local-bindings.md`; concrete syntax does not redefine those requirements.
 
 Assignment is a statement and produces no source value. It does not introduce Unit/Void or participate in `Value` grammar.
 
@@ -232,7 +230,7 @@ This subset has no indirect call, function-value call, method call, named argume
 CallStatement = DirectCall ";"
 ```
 
-A direct call used as a body statement is language-valid only when its resolved callable signature specifies no result value. A result-bearing direct call cannot be used as a statement because this subset defines no arbitrary produced-value discard relation.
+A direct call used as a body statement is language-valid only when its resolved callable signature specifies no result value. A result-bearing direct call cannot be used as a statement under this grammar because this subset defines no arbitrary produced-value discard relation.
 
 A valid no-result call statement produces no source value to discard.
 
