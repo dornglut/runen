@@ -221,3 +221,26 @@ fn lowering_rejects_retained_pattern_binding_type_mismatch() {
         ))
     );
 }
+
+#[test]
+fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicability() {
+    let mut compilation = hir("record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
+    let Statement::RecordDestructure { bindings, .. } =
+        &mut compilation.functions[0].body.statements[0]
+    else {
+        panic!("expected pattern statement");
+    };
+    bindings[0].ownership = runen_hir::OwnedUse::Consume;
+
+    let lowered = lower(&compilation)
+        .expect("lowering must refine retained ownership without re-running source duplicability");
+    let f = function(lowered.as_program(), "f");
+    assert_eq!(
+        f.body.blocks[0].statements[0],
+        CoreStatement::Init {
+            dst: Place::local(LocalId(1)),
+            src: Operand::Move(direct(Place::local(LocalId(0)).field(0))),
+        }
+    );
+}
