@@ -820,14 +820,9 @@ fn validate_block(
 
     for child in node.children() {
         let statement = match child.kind() {
-            SyntaxKind::LocalDeclaration => validate_local(
-                header,
-                &child,
-                context,
-                bindings,
-                next_binding,
-                diagnostics,
-            ),
+            SyntaxKind::LocalDeclaration => {
+                validate_local(header, &child, context, bindings, next_binding, diagnostics)
+            }
             SyntaxKind::AssignmentStatement => {
                 validate_assignment(header, &child, context, bindings, diagnostics)
             }
@@ -842,9 +837,9 @@ fn validate_block(
                 next_binding,
                 diagnostics,
             )),
-            _ => unreachable!(
-                "syntax-clean nested block contains only represented body statements"
-            ),
+            _ => {
+                unreachable!("syntax-clean nested block contains only represented body statements")
+            }
         };
 
         if let Some(statement) = statement {
