@@ -385,10 +385,10 @@ fn same_alias_key_in_distinct_units_may_target_different_modules() {
     build_typed_hir(&[
         SourceUnit::new(ModuleId::new(1), &use_a, &target_a),
         unit(ModuleId::new(2), &a),
-        SourceUnit::new(ModuleId::new(3), &use_b, &target_b),
+        SourceUnit::new(ModuleId::new(1), &use_b, &target_b),
         unit(ModuleId::new(4), &b),
     ])
-    .expect("alias identity and target are source-unit-local");
+    .expect("alias identity and target are source-unit-local even within one source module");
 }
 
 #[test]
