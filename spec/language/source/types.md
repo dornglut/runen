@@ -6,7 +6,7 @@ This document owns the represented intrinsic scalar source type identities, repr
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), and applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md). It does not redefine those owners.
 
-The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Function-local binding mutability, availability, and ordinary owned-value use are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities and value domains defined here when it forms represented boolean and integer literal values. This document does not define literal materialization, conversions, member lookup, or an implementation representation.
+The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Function-local binding mutability, availability, and ordinary owned-value use are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities and value domains defined here when it forms represented boolean and integer literal values. [Source field-value access](field-access.md) consumes nominal record/field identity, field source types, source type equality, and owned-value duplicability from this document when it selects and duplicates a represented field value. This document does not define literal materialization, field-access execution/accessibility, conversions, general member lookup, or an implementation representation.
 
 ## Intrinsic scalar source types
 
@@ -95,11 +95,13 @@ The ordered field sequence is semantic structural order for the source record va
 
 A value of a represented record source type contains exactly one field value of the declared field type for every field in the declaration. This source value shape does not create a separate physical layout contract.
 
+`field-access.md` may consume a field's lexical key, containing nominal record identity, and declared source type to select a represented field value. The field-value operation's accessibility and ownership consequences are owned there rather than by the type declaration itself.
+
 ## Direct record containment
 
 For represented record types, define a **direct-containment edge** `A -> B` exactly when record type `A` has a field whose source type is record type `B`.
 
-The finite directed graph consisting of represented record types and all such direct-containment edges MUST be acyclic.
+The finite directed graph consisting of represented record types and all such direct-containment edges MUST contain no directed cycle.
 
 This requirement applies because every represented field type in this revision is either scalar or direct structural record containment; no accepted source pointer, reference, or other indirection type exists in this source type set.
 
@@ -131,7 +133,7 @@ The nominal selection is a conservative source ownership-policy choice. Structur
 
 **Non-duplicable** means only that the non-consuming owned-value duplication capability defined here is unavailable. It does not prohibit a future explicit cloning, copy-construction, conversion, factory, deserialization, or other operation from producing another value under that operation's independently accepted semantics.
 
-Ordinary whole-binding owned use of this capability, including when a local use duplicates or consumes its binding, is owned by `local-bindings.md`. This section does not define other expression contexts, partial field moves, member access, parameter passing, result transfer, calls, or any explicit cloning/copy-construction operation.
+Ordinary whole-binding owned use of this capability, including when a local use duplicates or consumes its binding, is owned by `local-bindings.md`. Represented field-value use consumes this capability through `field-access.md` only for its final selected field type. This section does not define other expression contexts, partial field moves, parameter passing, result transfer, calls, or any explicit cloning/copy-construction operation.
 
 Duplicability is source semantics independent of any future `Copy`-like trait spelling. A later trait or generic mechanism may expose, derive, or constrain this capability only if its canonical semantics preserve the classification defined here; this revision introduces no trait membership.
 
@@ -159,22 +161,25 @@ This document does not define constants, statics, variables, type aliases, opaqu
 
 Those declarations require independently owned source semantics rather than being inferred from the current proving MIR.
 
-## Local-binding, mutability, and member boundary
+## Local-binding, mutability, and field-access boundary
 
 Function-local binding identity, assignment mutability, availability, lexical lookup, and ordinary whole-binding duplicate-or-consume behavior are owned by `local-bindings.md`; they are not source type properties.
 
-The represented source type identity, record shape, and owned-value duplicability classification do not determine:
+Represented binding-rooted field-value selection and its direct field accessibility/ownership consequences are owned by `field-access.md`. This type owner supplies nominal field identity, field source types, source type equality, and duplicability only.
+
+The represented source type identity, record shape, and owned-value duplicability classification do not by themselves determine:
 
 - interior mutability;
 - partial field move/member availability;
-- field accessibility or access syntax;
-- method, member, associated-item, trait, extension, or overload lookup;
+- field assignment or mutation;
+- broader cross-module field visibility;
+- method, associated-item, trait, extension, or overload lookup;
 - custom destruction or destructor bodies.
 
 Proving-kernel copyability or interior-mutability metadata is not source-language authority for those concerns.
 
 ## Further boundaries
 
-The concrete intrinsic and record forms represented by `concrete-syntax.md` do not themselves define literal semantics, patterns, record construction, member access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation. Represented boolean and integer literal semantics are instead owned by `literals.md`.
+The concrete intrinsic and record forms represented by `concrete-syntax.md` do not themselves define literal semantics, patterns, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation. Represented boolean and integer literal semantics are instead owned by `literals.md`; represented binding-rooted field-value access is owned by `field-access.md`.
 
 Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities and relations defined here.
