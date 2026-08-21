@@ -154,6 +154,16 @@ impl TypeMap {
             ))
     }
 
+    fn is_scalar(&self, ty: core::TypeId) -> Result<bool, LoweringError> {
+        let definition = self
+            .types
+            .get(ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "lowered Core type is absent from the type table",
+            ))?;
+        Ok(matches!(definition.kind, core::TypeKind::Scalar(_)))
+    }
+
     fn has_scalar_leaf(&self, ty: core::TypeId) -> Result<bool, LoweringError> {
         let definition = self
             .types
@@ -265,6 +275,17 @@ impl<'a> FunctionLowerer<'a> {
                         ));
                     }
                 }
+                hir::Statement::RecordDestructure { bindings, .. } => {
+                    for binding in bindings {
+                        let local =
+                            self.push_source_local(binding.name.clone(), binding.ty, false)?;
+                        if self.bindings.insert(binding.binding, local).is_some() {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "duplicate HIR binding identity",
+                            ));
+                        }
+                    }
+                }
                 hir::Statement::Block(block) => self.register_source_locals(&block.statements)?,
                 hir::Statement::Assignment { .. } | hir::Statement::Call { .. } => {}
             }
@@ -334,6 +355,12 @@ impl<'a> FunctionLowerer<'a> {
                         src: core::Operand::Move(core::Place::local(value).into()),
                     });
                 }
+                hir::Statement::RecordDestructure {
+                    record,
+                    root,
+                    bindings,
+                    ..
+                } => self.lower_record_destructure(*record, *root, bindings)?,
                 hir::Statement::Assignment { target, value, .. } => {
                     let destination = self.binding(*target)?;
                     let value = self.lower_value(value)?;
@@ -353,13 +380,7 @@ impl<'a> FunctionLowerer<'a> {
                     self.lower_statements(&block.statements)?;
                     for cleanup in &block.normal_cleanup {
                         let place = self.binding_place(cleanup.binding, &cleanup.fields)?;
-                        let root_ty = self
-                            .locals
-                            .get(place.local.0 as usize)
-                            .ok_or(LoweringError::InvalidHirInvariant(
-                                "bound Core local is absent from local declarations",
-                            ))?
-                            .ty;
+                        let root_ty = self.local_type(place.local)?;
                         let ty = self.types.project_type(root_ty, &place.projections)?;
                         if self.types.has_scalar_leaf(ty)? {
                             self.push_statement(core::Statement::Drop {
@@ -369,6 +390,63 @@ impl<'a> FunctionLowerer<'a> {
                     }
                 }
             }
+        }
+        Ok(())
+    }
+
+    fn lower_record_destructure(
+        &mut self,
+        record: hir::RecordId,
+        root: hir::BindingId,
+        bindings: &[hir::RecordPatternBinding],
+    ) -> Result<(), LoweringError> {
+        let root_local = self.binding(root)?;
+        let root_ty = self.local_type(root_local)?;
+        let expected_root_ty = self.types.get(hir::Type::Record(record))?;
+        if root_ty != expected_root_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "record destructuring root type does not match its record identity",
+            ));
+        }
+
+        let mut seen_fields = BTreeSet::new();
+        for binding in bindings {
+            if !seen_fields.insert(binding.field) {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "record destructuring contains duplicate resolved field identity",
+                ));
+            }
+
+            let source = self.binding_place(root, &[binding.field])?;
+            let projected_ty = self.types.project_type(root_ty, &source.projections)?;
+            let retained_ty = self.types.get(binding.ty)?;
+            if projected_ty != retained_ty {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "record destructuring retained binding type does not match projected field type",
+                ));
+            }
+
+            let destination = self.binding(binding.binding)?;
+            if self.local_type(destination)? != retained_ty {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "record destructuring destination local type does not match retained binding type",
+                ));
+            }
+
+            let scalar = self.types.is_scalar(projected_ty)?;
+            let operand = match (binding.ownership, scalar) {
+                (hir::OwnedUse::Duplicate, true) => core::Operand::Copy(source.into()),
+                (hir::OwnedUse::Consume, false) => core::Operand::Move(source.into()),
+                _ => {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "record destructuring ownership does not match retained field type",
+                    ));
+                }
+            };
+            self.push_statement(core::Statement::Init {
+                dst: core::Place::local(destination),
+                src: operand,
+            });
         }
         Ok(())
     }
@@ -563,6 +641,15 @@ impl<'a> FunctionLowerer<'a> {
             place = place.field(index_u32(*field, "Core field projection")?);
         }
         Ok(place)
+    }
+
+    fn local_type(&self, local: core::LocalId) -> Result<core::TypeId, LoweringError> {
+        self.locals
+            .get(local.0 as usize)
+            .map(|local| local.ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "bound Core local is absent from local declarations",
+            ))
     }
 
     fn push_statement(&mut self, statement: core::Statement) {
