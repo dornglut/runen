@@ -43,7 +43,10 @@ fn round_trips_import_export_and_qualified_forms_losslessly() {
 
 #[test]
 fn imports_only_and_trivia_only_units_are_clean() {
-    for source in ["import a; import b;", " // trivia only\n /* nested /* x */ y */ "] {
+    for source in [
+        "import a; import b;",
+        " // trivia only\n /* nested /* x */ y */ ",
+    ] {
         let parsed = parse(source);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
         assert_eq!(parsed.text(), source);
@@ -98,7 +101,10 @@ fn malformed_qualification_and_export_import_recover_losslessly() {
 
     for source in malformed {
         let parsed = parse(source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly clean: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly clean: {source}"
+        );
         assert_eq!(parsed.text(), source);
     }
 }
@@ -114,7 +120,10 @@ fn malformed_constructs_do_not_swallow_later_top_level_elements() {
 
     for source in cases {
         let parsed = parse(source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly clean: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly clean: {source}"
+        );
         assert_eq!(parsed.text(), source);
         let root = parsed.syntax();
         assert!(
@@ -145,7 +154,10 @@ fn bare_or_nested_qualified_members_are_not_general_values_or_paths() {
         "record R { value: dep::nested::Type }",
     ] {
         let parsed = parse(source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly clean: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly clean: {source}"
+        );
         assert_eq!(parsed.text(), source);
     }
 }
