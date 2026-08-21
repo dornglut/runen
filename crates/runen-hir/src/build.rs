@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
-    Accessibility, AssignmentMutability, BindingId, Body, Diagnostic, DiagnosticKind, Field,
+    Accessibility, AssignmentMutability, BindingId, Block, Body, Diagnostic, DiagnosticKind, Field,
     Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter,
     Record, RecordId, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value,
     ValueKind,
@@ -762,6 +762,14 @@ fn validate_body(
                     statements.push(statement);
                 }
             }
+            SyntaxKind::BlockStatement => statements.push(validate_block(
+                header,
+                &node,
+                &context,
+                &mut bindings,
+                next_binding,
+                diagnostics,
+            )),
             SyntaxKind::ReturnStatement => {
                 terminal_return = Some(validate_return(
                     header,
@@ -797,6 +805,74 @@ fn validate_body(
         statements,
         terminal_return,
     }
+}
+
+fn validate_block(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Statement {
+    let mut statements = Vec::new();
+    let mut direct_bindings = Vec::<(String, BindingId)>::new();
+
+    for child in node.children() {
+        let statement = match child.kind() {
+            SyntaxKind::LocalDeclaration => {
+                validate_local(header, &child, context, bindings, next_binding, diagnostics)
+            }
+            SyntaxKind::AssignmentStatement => {
+                validate_assignment(header, &child, context, bindings, diagnostics)
+            }
+            SyntaxKind::CallStatement => {
+                validate_call_statement(header, &child, context, bindings, diagnostics)
+            }
+            SyntaxKind::BlockStatement => Some(validate_block(
+                header,
+                &child,
+                context,
+                bindings,
+                next_binding,
+                diagnostics,
+            )),
+            _ => {
+                unreachable!("syntax-clean nested block contains only represented body statements")
+            }
+        };
+
+        if let Some(statement) = statement {
+            if let Statement::Local { binding, name, .. } = &statement {
+                direct_bindings.push((name.clone(), *binding));
+            }
+            statements.push(statement);
+        }
+    }
+
+    let mut normal_cleanup = Vec::new();
+    for (name, binding) in direct_bindings.iter().rev() {
+        let state = bindings
+            .get(name)
+            .expect("validated direct child binding remains active through block end");
+        debug_assert_eq!(state.id, *binding);
+        if state.available {
+            normal_cleanup.push(*binding);
+        }
+    }
+
+    for (name, binding) in direct_bindings {
+        let removed = bindings
+            .remove(&name)
+            .expect("validated direct child binding is removed at block end");
+        debug_assert_eq!(removed.id, binding);
+    }
+
+    Statement::Block(Block {
+        statements,
+        normal_cleanup,
+        location: location(header.unit, node),
+    })
 }
 
 fn validate_local(
@@ -933,7 +1009,7 @@ fn validate_assignment(
 
     bindings
         .get_mut(&name)
-        .expect("resolved assignment target remains in the root binding scope")
+        .expect("resolved assignment target remains in the active binding scope")
         .available = true;
 
     Some(Statement::Assignment {

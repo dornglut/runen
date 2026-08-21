@@ -249,6 +249,7 @@ impl Parser<'_> {
                     returned = true;
                 }
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
+                Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
                     self.recover_one();
@@ -261,6 +262,60 @@ impl Parser<'_> {
         if !missing_close {
             self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
         }
+        self.builder.finish_node();
+    }
+
+    fn parse_block_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::BlockStatement.into());
+        if !self.expect(SyntaxKind::LBrace, ExpectedSyntax::LeftBrace) {
+            self.builder.finish_node();
+            return;
+        }
+
+        self.bump_trivia();
+        let mut missing_close = false;
+        while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
+            if self.at_any(TOP_LEVEL_STARTERS) {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
+                missing_close = true;
+                break;
+            }
+
+            match self.current() {
+                Some(SyntaxKind::KwLet) => self.parse_local_declaration(),
+                Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
+                Some(SyntaxKind::LBrace) => self.parse_block_statement(),
+                Some(SyntaxKind::KwReturn) => self.recover_nested_return(),
+                Some(_) => {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
+                    self.recover_one();
+                }
+                None => break,
+            }
+            self.bump_trivia();
+        }
+
+        if !missing_close {
+            self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
+        }
+        self.builder.finish_node();
+    }
+
+    fn recover_nested_return(&mut self) {
+        self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
+        self.builder.start_node(SyntaxKind::ErrorNode.into());
+        self.bump();
+        while self.current().is_some()
+            && !self.at(SyntaxKind::Semicolon)
+            && !self.at(SyntaxKind::RBrace)
+            && !self.at(SyntaxKind::LBrace)
+            && !self.at(SyntaxKind::KwLet)
+            && !self.at(SyntaxKind::KwReturn)
+            && !self.at_any(TOP_LEVEL_STARTERS)
+        {
+            self.bump();
+        }
+        self.eat(SyntaxKind::Semicolon);
         self.builder.finish_node();
     }
 
@@ -286,6 +341,7 @@ impl Parser<'_> {
                 self.recover_until(&[
                     SyntaxKind::Semicolon,
                     SyntaxKind::RBrace,
+                    SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -380,6 +436,7 @@ impl Parser<'_> {
                         SyntaxKind::RParen,
                         SyntaxKind::Semicolon,
                         SyntaxKind::RBrace,
+                        SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
@@ -414,6 +471,7 @@ impl Parser<'_> {
         while !self.at(SyntaxKind::RParen) && self.current().is_some() {
             if self.at(SyntaxKind::Semicolon)
                 || self.at(SyntaxKind::RBrace)
+                || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
@@ -436,6 +494,7 @@ impl Parser<'_> {
                     SyntaxKind::RParen,
                     SyntaxKind::Semicolon,
                     SyntaxKind::RBrace,
+                    SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,

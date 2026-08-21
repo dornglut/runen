@@ -205,6 +205,14 @@ pub enum ValueKind {
     },
 }
 
+/// One resolved nested lexical block and its validated normal-exit cleanup order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Block {
+    pub statements: Vec<Statement>,
+    pub normal_cleanup: Vec<BindingId>,
+    pub location: SourceLocation,
+}
+
 /// Straight-line body statement represented by the current source subset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
@@ -226,6 +234,7 @@ pub enum Statement {
         arguments: Vec<Value>,
         location: SourceLocation,
     },
+    Block(Block),
 }
 
 /// Terminal represented return, when concrete source contains one.

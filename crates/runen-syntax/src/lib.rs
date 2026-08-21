@@ -82,6 +82,7 @@ pub enum SyntaxKind {
     Minus,
     BooleanLiteral,
     DecimalIntegerLiteral,
+    BlockStatement,
 }
 
 impl SyntaxKind {
@@ -192,6 +193,7 @@ impl Language for RunenLanguage {
             57 => SyntaxKind::Minus,
             58 => SyntaxKind::BooleanLiteral,
             59 => SyntaxKind::DecimalIntegerLiteral,
+            60 => SyntaxKind::BlockStatement,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
