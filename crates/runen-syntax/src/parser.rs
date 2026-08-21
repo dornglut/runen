@@ -398,6 +398,7 @@ impl Parser<'_> {
             Some(SyntaxKind::Ident) => match self.peek_nontrivia(1) {
                 Some(SyntaxKind::LBrace) => self.parse_record_construction(),
                 Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_direct_call(),
+                Some(SyntaxKind::Dot) => self.parse_field_value_use(),
                 _ => {
                     self.builder.start_node(SyntaxKind::IdentifierUse.into());
                     self.bump();
@@ -446,6 +447,15 @@ impl Parser<'_> {
                 }
             }
         }
+    }
+
+    fn parse_field_value_use(&mut self) {
+        self.builder.start_node(SyntaxKind::FieldValueUse.into());
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        while self.eat(SyntaxKind::Dot) {
+            self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        }
+        self.builder.finish_node();
     }
 
     fn parse_record_construction(&mut self) {

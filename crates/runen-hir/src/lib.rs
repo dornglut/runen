@@ -215,6 +215,10 @@ pub enum ValueKind {
         record: RecordId,
         fields: Vec<RecordFieldValue>,
     },
+    FieldValueUse {
+        binding: BindingId,
+        fields: Vec<usize>,
+    },
 }
 
 /// One resolved nested lexical block and its validated normal-exit cleanup order.
@@ -333,6 +337,9 @@ pub enum DiagnosticKind {
     DuplicateRecordInitializer,
     UnknownRecordField,
     MissingRecordInitializer,
+    ExpectedRecordForFieldAccess,
+    InaccessibleRecordField,
+    NonDuplicableFieldValue,
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
     MissingResultReturn,

@@ -1208,8 +1208,136 @@ fn validate_value(
         SyntaxKind::RecordConstruction => {
             validate_record_construction(header, node, required, context, bindings, diagnostics)
         }
+        SyntaxKind::FieldValueUse => {
+            validate_field_value_use(header, node, required, context, bindings, diagnostics)
+        }
         _ => unreachable!("syntax-clean value has represented value kind"),
     }
+}
+
+fn validate_field_value_use(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    bindings: &BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Value> {
+    let value_location = location(header.unit, node);
+    let identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let (root_token, selectors) = identifiers
+        .split_first()
+        .expect("syntax-clean field-value use contains a root identifier");
+    debug_assert!(!selectors.is_empty());
+
+    let root_name = key(root_token);
+    let root_location = SourceLocation {
+        unit: header.unit,
+        range: root_token.text_range(),
+    };
+    let binding = match bindings.get(&root_name).copied() {
+        Some(binding) => binding,
+        None => {
+            let entity = context
+                .modules
+                .get(&header.module)
+                .and_then(|module| module.namespace.get(&root_name));
+            diagnostics.push(Diagnostic {
+                kind: if entity.is_some() {
+                    DiagnosticKind::ExpectedValueBinding
+                } else {
+                    DiagnosticKind::UnresolvedName
+                },
+                location: root_location,
+            });
+            return None;
+        }
+    };
+
+    if !binding.available {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableBinding,
+            location: root_location,
+        });
+        return None;
+    }
+
+    let mut current = binding.ty;
+    let mut fields = Vec::with_capacity(selectors.len());
+    for selector in selectors {
+        let selector_location = SourceLocation {
+            unit: header.unit,
+            range: selector.text_range(),
+        };
+        let Type::Record(record) = current else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedRecordForFieldAccess,
+                location: selector_location,
+            });
+            return None;
+        };
+        let record_decl = &context.records[record.0];
+        if record_decl.module != header.module {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InaccessibleRecordField,
+                location: selector_location,
+            });
+            return None;
+        }
+
+        let selector_name = key(selector);
+        let Some(field) = record_decl
+            .fields
+            .iter()
+            .position(|field| field.name == selector_name)
+        else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnknownRecordField,
+                location: selector_location,
+            });
+            return None;
+        };
+        fields.push(field);
+        current = record_decl.fields[field].ty;
+    }
+
+    if !current.is_duplicable() {
+        let selector = selectors
+            .last()
+            .expect("syntax-clean field-value use has at least one selector");
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::NonDuplicableFieldValue,
+            location: SourceLocation {
+                unit: header.unit,
+                range: selector.text_range(),
+            },
+        });
+        return None;
+    }
+
+    if current != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found: current,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    Some(Value {
+        ty: current,
+        kind: ValueKind::FieldValueUse {
+            binding: binding.id,
+            fields,
+        },
+        location: value_location,
+    })
 }
 
 fn validate_record_construction(
@@ -1583,6 +1711,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
             | SyntaxKind::IdentifierUse
             | SyntaxKind::DirectCall
             | SyntaxKind::RecordConstruction
+            | SyntaxKind::FieldValueUse
     )
 }
 
