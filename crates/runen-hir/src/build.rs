@@ -749,24 +749,16 @@ fn validate_body(
                 }
             }
             SyntaxKind::AssignmentStatement => {
-                if let Some(statement) = validate_assignment(
-                    header,
-                    &node,
-                    &context,
-                    &mut bindings,
-                    diagnostics,
-                ) {
+                if let Some(statement) =
+                    validate_assignment(header, &node, &context, &mut bindings, diagnostics)
+                {
                     statements.push(statement);
                 }
             }
             SyntaxKind::CallStatement => {
-                if let Some(statement) = validate_call_statement(
-                    header,
-                    &node,
-                    &context,
-                    &mut bindings,
-                    diagnostics,
-                ) {
+                if let Some(statement) =
+                    validate_call_statement(header, &node, &context, &mut bindings, diagnostics)
+                {
                     statements.push(statement);
                 }
             }
