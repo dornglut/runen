@@ -6,7 +6,7 @@ This document owns the represented source semantics for function-local binding i
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
 
-Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer and assignment execution interaction, assignment replacement ordering, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call/assignment/block spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented binding-rooted field-path selection, direct field accessibility, and final-field duplication are owned by [Source field-value access](field-access.md), which consumes the root lookup and availability relations defined here. Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer and assignment execution interaction, assignment replacement ordering, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call/field-value/assignment/block spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
 This document does not define general expression evaluation, references, patterns, traits, ABI, or an implementation representation.
 
@@ -88,11 +88,11 @@ Only when no active parameter/local binding resolves the key does lookup fall th
 
 Lookup MUST NOT skip an active function-local binding merely because the consuming context would prefer a module-level entity of another category.
 
-The concrete whole-binding value uses, whole-binding assignment targets, and **unqualified** direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, an unqualified direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding. Conversely, an assignment target whose key has no active local binding may select a same-module declaration, but that selected module entity is invalid as an assignment target rather than being bypassed to find another binding.
+The concrete whole-binding value uses, binding-rooted `FieldValueUse` roots, whole-binding assignment targets, and **unqualified** direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, an unqualified direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding. Conversely, an assignment target whose key has no active local binding may select a same-module declaration, but that selected module entity is invalid as an assignment target rather than being bypassed to find another binding. A field-value root likewise does not bypass the selected entity merely to obtain a record-valued binding.
 
 Source-unit module aliases remain a distinct qualified-lookup mechanism owned by `names-modules.md`. They are not searched by unqualified function-body identifier lookup. The concrete `alias::member` direct-call target in `concrete-syntax.md` is explicitly qualified and resolves through that module-alias domain rather than this function-local lookup. Therefore an active local binding whose key equals the alias key does not block that syntactically qualified lookup.
 
-Beyond the represented two-part module-alias qualification owned by `concrete-syntax.md` and `names-modules.md`, this revision does not define arbitrary member access, nested module paths, fields, labels, pattern bindings, generic parameters, lifetime names, methods, associated items, or another future name domain.
+Beyond the represented two-part module-alias qualification owned by `concrete-syntax.md` and `names-modules.md` and the operation-specific field selector owned by `field-access.md`, this revision does not define arbitrary member lookup, nested module paths, labels, pattern bindings, generic parameters, lifetime names, methods, associated items, or another future name domain.
 
 ## Binding assignment mutability
 
@@ -128,6 +128,8 @@ A successful represented assignment to a mutable binding establishes one replace
 
 A source operation that requires an owned value from a binding is valid only when that binding is **definitely available** at the operation's source program point.
 
+Represented field-value use under `field-access.md` requires its root binding to be definitely available. Because that operation duplicates only a duplicable final selected field and does not consume any containing record, successful field-value use leaves the root binding definitely available and changes no other binding availability. It introduces no field/member availability state.
+
 For the represented straight-line `BlockStatement`, entering or normally exiting a child lexical scope does not itself change the availability of any ancestor binding. Availability transitions caused by valid owned uses or assignments of ancestor bindings inside the child remain in force at the following parent-scope program point after normal child exit. A child binding instead ceases to participate in lookup when its child lexical scope ends.
 
 A later control-flow owner MUST preserve the definite-availability requirement when defining branches, loops, joins, or other multiple-path control flow. It MUST NOT replace a statically required availability check with a defined runtime use-after-consumption fault merely because physical execution could detect the state dynamically.
@@ -144,7 +146,7 @@ Ordinary owned-value use of an unavailable or not-definitely-available binding i
 
 The concrete `IdentifierUse` value form in `concrete-syntax.md` maps to this ordinary whole-binding use after lookup selects a parameter/local binding.
 
-This implicit duplicate-or-consume relation applies only to ordinary owned-value contexts. A later borrow/reference, explicit consume/move, explicit clone/copy-construction, pattern/destructuring, field/member, or other context may define distinct behavior without redefining this ordinary owned-use relation.
+This implicit duplicate-or-consume relation applies only to ordinary whole-binding owned-value contexts. Binding-rooted field-value use is independently owned by `field-access.md` and may non-consumingly duplicate its final selected field even when the complete root record is non-duplicable. A later borrow/reference, explicit consume/move, explicit clone/copy-construction, pattern/destructuring, consuming field operation, or other context may define distinct behavior without redefining this ordinary owned-use relation.
 
 Partial field moves and member-level availability are not represented by this revision.
 
@@ -193,8 +195,8 @@ Indirect calls, function values, closures, references/pass modes, broader panic/
 
 This revision does not add or require a parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime representation, or backend representation.
 
-`concrete-syntax.md` provides one bounded concrete parameter/local/value/call/assignment/block subset. Its block form maps to the abstract child-scope relation above; the concrete syntax does not redefine binding identity, lookup, mutability, availability, or owned-use authority.
+`concrete-syntax.md` provides one bounded concrete parameter/local/value/call/field-value/assignment/block subset. Its field-value form consumes the root lookup/availability relation above through `field-access.md`; its block form maps to the abstract child-scope relation above. Concrete syntax does not redefine binding identity, lookup, mutability, availability, or owned-use authority.
 
 ## Further boundaries
 
-Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment expressions or assignment-as-value, uninitialized locals, literals, precedence, parser recovery, general expression typing, partial field moves, member access, field assignment, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment expressions or assignment-as-value, uninitialized locals, literals, precedence, parser recovery, general expression typing, partial field moves, member-level availability, field assignment, arbitrary member/method lookup, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
