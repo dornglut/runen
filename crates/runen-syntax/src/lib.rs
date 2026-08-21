@@ -74,6 +74,8 @@ pub enum SyntaxKind {
     ColonColon,
     ImportDeclaration,
     QualifiedModuleMember,
+    KwMut,
+    AssignmentStatement,
 }
 
 impl SyntaxKind {
@@ -169,6 +171,8 @@ impl Language for RunenLanguage {
             49 => SyntaxKind::ColonColon,
             50 => SyntaxKind::ImportDeclaration,
             51 => SyntaxKind::QualifiedModuleMember,
+            52 => SyntaxKind::KwMut,
+            53 => SyntaxKind::AssignmentStatement,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -345,6 +349,7 @@ pub(crate) fn reserved_identifier_kind(key: &str) -> Option<SyntaxKind> {
         "fn" => Some(SyntaxKind::KwFn),
         "record" => Some(SyntaxKind::KwRecord),
         "let" => Some(SyntaxKind::KwLet),
+        "mut" => Some(SyntaxKind::KwMut),
         "return" => Some(SyntaxKind::KwReturn),
         "import" => Some(SyntaxKind::KwImport),
         "export" => Some(SyntaxKind::KwExport),
