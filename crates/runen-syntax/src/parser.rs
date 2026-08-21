@@ -423,7 +423,8 @@ impl Parser<'_> {
     }
 
     fn parse_record_pattern_field(&mut self) {
-        self.builder.start_node(SyntaxKind::RecordPatternField.into());
+        self.builder
+            .start_node(SyntaxKind::RecordPatternField.into());
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
