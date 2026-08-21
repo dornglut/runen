@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for binding-rooted field-path selection, direct field accessibility, final-path structural availability, final-field duplicate-or-consume ownership behavior, and production of one owned field value.
+This document owns the represented source semantics for binding-rooted dot field-path selection, the current direct record-field accessibility relation, final-path structural availability for `FieldValueUse`, final-field duplicate-or-consume ownership behavior, and production of one owned field value.
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module identity from [Source names and modules](names-modules.md), nominal record and field identity, source field types, source type equality, and owned-value duplicability from [Source type foundation](types.md), and function-local binding lookup, structural source paths, and structural availability from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-The represented `.` spelling and bounded field-value grammar are owned by [Source concrete syntax](concrete-syntax.md). Transfer of a successfully produced value into a local, assignment RHS, direct-call argument, return result, or record-construction initializer is owned by [Source function execution](function-execution.md).
+The represented `.` spelling and bounded field-value grammar are owned by [Source concrete syntax](concrete-syntax.md). Transfer of a successfully produced value into a local, assignment RHS, direct-call argument, return result, or record-construction initializer is owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct record-field accessibility relation defined here for its selected direct record fields; pattern selection, exhaustiveness, binding introduction, and pattern ownership consequences remain owned there.
 
-This document does not define a general member system, place/lvalue grammar, field assignment, partial-field reinitialization, reference/borrow operation, physical layout, or implementation representation.
+This document does not define a general member system, place/lvalue grammar, field assignment, partial-field reinitialization, reference/borrow operation, general pattern semantics, physical layout, or implementation representation.
 
 ## Represented operation
 
@@ -23,7 +23,7 @@ root.outer.inner
 
 The root is one unqualified function-body identifier. One or more field selectors follow it. The receiver is not an arbitrary source value or expression.
 
-Field-value use is an owned-value producer. It is not a source place, lvalue, reference, borrow, storage identity, address, method receiver, or field-assignment target.
+Field-value use is an owned-value producer. It is not a source place, lvalue, reference, borrow, storage identity, address, method receiver, field-assignment target, or record pattern.
 
 After static path selection and structural-availability validation, the final selected field's owned-value duplicability determines whether production duplicates that subvalue or consumes/transfers it exactly once.
 
@@ -46,7 +46,7 @@ Let the root binding have source type `T0`. Let the field selectors, in source o
 For each selector `fi`:
 
 1. the current source type `Ti` MUST be one nominal record source type under `types.md`;
-2. the record declaration defining `Ti` MUST belong to the same source module as the function containing this field-value use;
+2. the record declaration defining `Ti` MUST permit direct record-field access to the containing function under the direct accessibility relation below;
 3. `fi` selects exactly the unique declared field of that nominal record whose lexical field key equals `fi` under `lexical.md`;
 4. the selected field's declared source type becomes `Ti+1`;
 5. the selected source field identity extends the root binding's structural source path under `local-bindings.md`; and
@@ -60,15 +60,17 @@ Field declaration order is not lookup priority. Field identity remains scoped by
 
 Static selection through a partially available intermediate record path is permitted. Selection itself neither observes nor recreates a complete value for that intermediate path. The operation becomes source-valid only if the final selected path passes the structural-availability requirement below.
 
-## Direct field accessibility
+## Direct record-field accessibility
 
-The represented concrete record declaration has no field-level accessibility modifier. For this direct field-value operation, each represented record field is **module-private**.
+The represented concrete record declaration has no field-level accessibility modifier. Under the currently represented **direct record-field accessibility** relation, every represented record field is module-private.
 
-A field may be selected only when the record declaration containing that field belongs to the same source module as the function containing the field-value use.
+A source operation that explicitly consumes this direct accessibility relation may directly select a field only when the record declaration containing that field belongs to the same source module as the function containing the operation.
 
-This requirement applies independently at every selector step. Consequently, a path may select a field of a same-module record whose field type is a record defined in another module, but a later selector cannot enter that foreign record under this revision.
+`FieldValueUse` consumes this relation independently at every selector step. Consequently, a dot path may select a field of a same-module record whose field type is a record defined in another module, but a later selector cannot enter that foreign record under this revision.
 
-Module-level accessibility of the record type itself remains owned by `names-modules.md` and is independent of this field-accessibility rule. An exported record may therefore be nameable in another module while its fields remain unavailable to direct field-value use there.
+The binding-rooted record pattern in `patterns.md` consumes this same relation for each direct field of its selected same-module record. It does not thereby inherit dot-path selection, `FieldValueUse` production, or this document's final-path ownership rules.
+
+Module-level accessibility of the record type itself remains owned by `names-modules.md` and is independent of this field-accessibility rule. An exported record may therefore be nameable in another module while its fields remain unavailable to direct `FieldValueUse` or direct record-pattern binding there.
 
 This field accessibility has no ABI, linkage, layout, serialization, reflection, or confidentiality meaning.
 
@@ -91,6 +93,8 @@ A consumed path that is structurally disjoint from `p` does not prevent use of `
 In particular, a partially available root or intermediate record may still be traversed to a final path that is fully available when prior consumption occurred only in a disjoint branch.
 
 Failure of this requirement is a source-validation failure. It is not a defined runtime `Fault` and MUST NOT be deferred to a physical moved-state check.
+
+This section owns the final-path requirement for `FieldValueUse`. `patterns.md` consumes the canonical path-availability relation directly for each of its own selected field paths and does not derive pattern validity from this operation-specific section.
 
 ## Duplicable final fields
 
@@ -178,7 +182,7 @@ Those receiving operations retain their existing ordering, transfer, replacement
 
 ## Operation-specific selector boundary
 
-The represented field path exists only to identify the source subvalue produced by this operation and to apply structural availability to that selected subvalue.
+The represented dot field path exists only to identify the source subvalue produced by this `FieldValueUse` operation and to apply structural availability to that selected subvalue.
 
 It does not establish:
 
@@ -188,10 +192,10 @@ It does not establish:
 - a source reference or borrow;
 - address-taking, pointer provenance, or physical offsets;
 - arbitrary value receivers;
-- method, associated-item, extension, trait, or overload lookup;
-- destructuring or pattern binding.
+- method, associated-item, extension, trait, or overload lookup; or
+- record-pattern binding semantics.
 
-A later operation may consume compatible syntax only through its own accepted semantic owner.
+`patterns.md` may independently consume nominal field identities and the direct accessibility relation above only through its own accepted semantics. That reuse does not turn a record pattern into dot field-value access or make this operation a general member system.
 
 ## Concrete and implementation boundary
 
@@ -207,4 +211,4 @@ Cleanup of remaining source-owned subvalues after partial consumption is owned b
 
 ## Further boundaries
 
-This revision does not define field assignment or partial-field reinitialization; arbitrary value receivers; cross-module field access; field visibility modifiers; methods or associated items; references, borrowing, or lifetimes; patterns or destructuring; positive record duplicability-selection syntax; general expressions or operators; floating literal formation; branches/loops or control-flow joins; custom destructors; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.
+This revision does not define field assignment or partial-field reinitialization; arbitrary value receivers; cross-module field access; field visibility modifiers; methods or associated items; references, borrowing, or lifetimes; additional/refutable/nested/rest/shorthand patterns or arbitrary pattern scrutinees; positive record duplicability-selection syntax; general expressions or operators; floating literal formation; branches/loops or control-flow joins; custom destructors; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.
