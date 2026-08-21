@@ -1,6 +1,6 @@
 use runen_hir::{
-    Block, CleanupPath, DiagnosticKind, ModuleId, OwnedUse, SourceUnit, Statement, TypedCompilation,
-    ValueKind, build_typed_hir,
+    Block, CleanupPath, DiagnosticKind, ModuleId, OwnedUse, SourceUnit, Statement,
+    TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
