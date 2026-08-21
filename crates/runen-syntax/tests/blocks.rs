@@ -27,9 +27,12 @@ fn semicolon_after_block_is_not_part_of_the_block_statement() {
     let parsed = parse("fn f() { {}; }");
 
     assert_eq!(parsed.text(), "fn f() { {}; }");
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Statement)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Statement) })
+    );
     assert_eq!(count_kind(&parsed, SyntaxKind::BlockStatement), 1);
 }
 
@@ -38,9 +41,12 @@ fn nested_return_remains_outside_nested_block_grammar() {
     let parsed = parse("fn f() { { return; } }");
 
     assert_eq!(parsed.text(), "fn f() { { return; } }");
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Statement)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Statement) })
+    );
     assert_eq!(count_kind(&parsed, SyntaxKind::ReturnStatement), 0);
 }
 
@@ -49,9 +55,12 @@ fn block_is_not_accepted_as_a_value() {
     let parsed = parse("fn f() { let x: I64 = {}; }");
 
     assert_eq!(parsed.text(), "fn f() { let x: I64 = {}; }");
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value) })
+    );
 }
 
 #[test]
