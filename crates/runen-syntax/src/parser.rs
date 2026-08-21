@@ -318,7 +318,7 @@ impl Parser<'_> {
     fn parse_return_statement(&mut self) {
         self.builder.start_node(SyntaxKind::ReturnStatement.into());
         self.expect(SyntaxKind::KwReturn, ExpectedSyntax::Item);
-        if self.at(SyntaxKind::Ident) {
+        if self.current().is_some_and(SyntaxKind::is_value_start) {
             self.parse_value();
         }
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
@@ -338,36 +338,59 @@ impl Parser<'_> {
     }
 
     fn parse_value(&mut self) {
-        if !self.at(SyntaxKind::Ident) {
-            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
-            if self.current().is_some()
-                && !self.at_any(&[
-                    SyntaxKind::Comma,
-                    SyntaxKind::RParen,
-                    SyntaxKind::Semicolon,
-                    SyntaxKind::RBrace,
-                    SyntaxKind::KwLet,
-                    SyntaxKind::KwReturn,
-                    SyntaxKind::KwImport,
-                    SyntaxKind::KwExport,
-                    SyntaxKind::KwFn,
-                    SyntaxKind::KwRecord,
-                ])
-            {
-                self.recover_one();
+        match self.current() {
+            Some(SyntaxKind::Ident) => {
+                if matches!(
+                    self.peek_nontrivia(1),
+                    Some(SyntaxKind::LParen | SyntaxKind::ColonColon)
+                ) {
+                    self.parse_direct_call();
+                } else {
+                    self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                    self.bump();
+                    self.builder.finish_node();
+                }
             }
-            return;
-        }
-
-        if matches!(
-            self.peek_nontrivia(1),
-            Some(SyntaxKind::LParen | SyntaxKind::ColonColon)
-        ) {
-            self.parse_direct_call();
-        } else {
-            self.builder.start_node(SyntaxKind::IdentifierUse.into());
-            self.bump();
-            self.builder.finish_node();
+            Some(SyntaxKind::KwTrue | SyntaxKind::KwFalse) => {
+                self.builder.start_node(SyntaxKind::BooleanLiteral.into());
+                self.bump();
+                self.builder.finish_node();
+            }
+            Some(SyntaxKind::DecimalMagnitude) => {
+                self.builder
+                    .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                self.bump();
+                self.builder.finish_node();
+            }
+            Some(SyntaxKind::Minus) => {
+                self.builder
+                    .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                self.bump();
+                self.expect(
+                    SyntaxKind::DecimalMagnitude,
+                    ExpectedSyntax::DecimalMagnitude,
+                );
+                self.builder.finish_node();
+            }
+            _ => {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
+                if self.current().is_some()
+                    && !self.at_any(&[
+                        SyntaxKind::Comma,
+                        SyntaxKind::RParen,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::RBrace,
+                        SyntaxKind::KwLet,
+                        SyntaxKind::KwReturn,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
+                        SyntaxKind::KwFn,
+                        SyntaxKind::KwRecord,
+                    ])
+                {
+                    self.recover_one();
+                }
+            }
         }
     }
 

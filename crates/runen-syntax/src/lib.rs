@@ -76,6 +76,12 @@ pub enum SyntaxKind {
     QualifiedModuleMember,
     KwMut,
     AssignmentStatement,
+    KwTrue,
+    KwFalse,
+    DecimalMagnitude,
+    Minus,
+    BooleanLiteral,
+    DecimalIntegerLiteral,
 }
 
 impl SyntaxKind {
@@ -104,6 +110,13 @@ impl SyntaxKind {
                 | Self::TyF16
                 | Self::TyF32
                 | Self::TyF64
+        )
+    }
+
+    pub(crate) const fn is_value_start(self) -> bool {
+        matches!(
+            self,
+            Self::Ident | Self::KwTrue | Self::KwFalse | Self::DecimalMagnitude | Self::Minus
         )
     }
 }
@@ -173,6 +186,12 @@ impl Language for RunenLanguage {
             51 => SyntaxKind::QualifiedModuleMember,
             52 => SyntaxKind::KwMut,
             53 => SyntaxKind::AssignmentStatement,
+            54 => SyntaxKind::KwTrue,
+            55 => SyntaxKind::KwFalse,
+            56 => SyntaxKind::DecimalMagnitude,
+            57 => SyntaxKind::Minus,
+            58 => SyntaxKind::BooleanLiteral,
+            59 => SyntaxKind::DecimalIntegerLiteral,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -243,6 +262,7 @@ pub enum ExpectedSyntax {
     Equals,
     Semicolon,
     Value,
+    DecimalMagnitude,
 }
 
 /// One syntax diagnostic with a source byte range.
@@ -353,6 +373,8 @@ pub(crate) fn reserved_identifier_kind(key: &str) -> Option<SyntaxKind> {
         "return" => Some(SyntaxKind::KwReturn),
         "import" => Some(SyntaxKind::KwImport),
         "export" => Some(SyntaxKind::KwExport),
+        "true" => Some(SyntaxKind::KwTrue),
+        "false" => Some(SyntaxKind::KwFalse),
         "Bool" => Some(SyntaxKind::TyBool),
         "I8" => Some(SyntaxKind::TyI8),
         "I16" => Some(SyntaxKind::TyI16),

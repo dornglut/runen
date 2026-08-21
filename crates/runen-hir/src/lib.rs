@@ -141,6 +141,20 @@ pub enum OwnedUse {
     Consume,
 }
 
+/// Exact typed scalar literal value represented by the current source subset.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LiteralValue {
+    Bool(bool),
+    I8(i8),
+    I16(i16),
+    I32(i32),
+    I64(i64),
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
+}
+
 /// One resolved record field.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
@@ -180,6 +194,7 @@ pub struct Value {
 /// Resolved producer for one typed HIR value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
+    Literal(LiteralValue),
     BindingUse {
         binding: BindingId,
         ownership: OwnedUse,
@@ -292,6 +307,8 @@ pub enum DiagnosticKind {
     ExpectedFunction,
     ArgumentCount { expected: usize, found: usize },
     TypeMismatch { expected: Type, found: Type },
+    IntegerLiteralRequiresInteger { required: Type },
+    IntegerLiteralOutOfRange { required: Type },
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
     MissingResultReturn,

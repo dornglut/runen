@@ -4,8 +4,9 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
     Accessibility, AssignmentMutability, BindingId, Body, Diagnostic, DiagnosticKind, Field,
-    Function, FunctionId, IntrinsicType, Module, ModuleId, OwnedUse, Parameter, Record, RecordId,
-    Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
+    Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter,
+    Record, RecordId, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value,
+    ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -748,28 +749,16 @@ fn validate_body(
                 }
             }
             SyntaxKind::AssignmentStatement => {
-                if let Some(statement) = validate_assignment(
-                    header,
-                    &node,
-                    modules,
-                    imports,
-                    headers,
-                    &mut bindings,
-                    diagnostics,
-                ) {
+                if let Some(statement) =
+                    validate_assignment(header, &node, &context, &mut bindings, diagnostics)
+                {
                     statements.push(statement);
                 }
             }
             SyntaxKind::CallStatement => {
-                if let Some(statement) = validate_call_statement(
-                    header,
-                    &node,
-                    modules,
-                    imports,
-                    headers,
-                    &mut bindings,
-                    diagnostics,
-                ) {
+                if let Some(statement) =
+                    validate_call_statement(header, &node, &context, &mut bindings, diagnostics)
+                {
                     statements.push(statement);
                 }
             }
@@ -777,9 +766,7 @@ fn validate_body(
                 terminal_return = Some(validate_return(
                     header,
                     &node,
-                    modules,
-                    imports,
-                    headers,
+                    &context,
                     &mut bindings,
                     diagnostics,
                 ));
@@ -801,16 +788,6 @@ fn validate_body(
             }),
         ) => diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ExpectedResultValue,
-            location: *location,
-        }),
-        (
-            None,
-            Some(Return {
-                value: Some(_),
-                location,
-            }),
-        ) => diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::UnexpectedResultValue,
             location: *location,
         }),
         _ => {}
@@ -851,16 +828,17 @@ fn validate_local(
         context.imports,
         diagnostics,
     );
-    let value_node = value_child(node);
-    let initializer = validate_value(
-        header,
-        &value_node,
-        context.modules,
-        context.imports,
-        context.headers,
-        bindings,
-        diagnostics,
-    );
+    let initializer = declared.and_then(|required| {
+        let value_node = value_child(node);
+        validate_value(
+            header,
+            &value_node,
+            required,
+            context,
+            bindings,
+            diagnostics,
+        )
+    });
 
     let shadows = bindings.contains_key(&name);
     if shadows {
@@ -876,16 +854,6 @@ fn validate_local(
     let (Some(ty), Some(initializer)) = (declared, initializer) else {
         return None;
     };
-    if initializer.ty != ty {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected: ty,
-                found: initializer.ty,
-            },
-            location: initializer.location,
-        });
-        return None;
-    }
     if shadows {
         return None;
     }
@@ -914,9 +882,7 @@ fn validate_local(
 fn validate_assignment(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
@@ -939,7 +905,8 @@ fn validate_assignment(
             (binding.id, binding.ty)
         }
         None => {
-            let entity = modules
+            let entity = context
+                .modules
                 .get(&header.module)
                 .and_then(|module| module.namespace.get(&name));
             diagnostics.push(Diagnostic {
@@ -958,22 +925,11 @@ fn validate_assignment(
     let value = validate_value(
         header,
         &value_node,
-        modules,
-        imports,
-        headers,
+        target_ty,
+        context,
         bindings,
         diagnostics,
     )?;
-    if value.ty != target_ty {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected: target_ty,
-                found: value.ty,
-            },
-            location: value.location,
-        });
-        return None;
-    }
 
     bindings
         .get_mut(&name)
@@ -990,22 +946,13 @@ fn validate_assignment(
 fn validate_call_statement(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let call = direct_child(node, SyntaxKind::DirectCall);
-    let (function, arguments, result) = validate_call(
-        header,
-        &call,
-        modules,
-        imports,
-        headers,
-        bindings,
-        diagnostics,
-    )?;
+    let (function, arguments, result) =
+        validate_call(header, &call, context, bindings, diagnostics)?;
     if result.is_some() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ResultCallUsedAsStatement,
@@ -1023,42 +970,30 @@ fn validate_call_statement(
 fn validate_return(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Return {
     let return_location = location(header.unit, node);
-    let value = node.children().find(|child| {
-        matches!(
-            child.kind(),
-            SyntaxKind::IdentifierUse | SyntaxKind::DirectCall
-        )
-    });
-    let value = value.and_then(|value_node| {
-        validate_value(
+    let value_node = node.children().find(|child| is_value_node(child.kind()));
+    let value = match (header.result, value_node) {
+        (Some(required), Some(value_node)) => validate_value(
             header,
             &value_node,
-            modules,
-            imports,
-            headers,
+            required,
+            context,
             bindings,
             diagnostics,
-        )
-    });
-
-    if let (Some(expected), Some(value)) = (header.result, value.as_ref())
-        && value.ty != expected
-    {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected,
-                found: value.ty,
-            },
-            location: value.location,
-        });
-    }
+        ),
+        (None, Some(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnexpectedResultValue,
+                location: return_location,
+            });
+            None
+        }
+        (_, None) => None,
+    };
 
     Return {
         value,
@@ -1069,17 +1004,47 @@ fn validate_return(
 fn validate_value(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    required: Type,
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
+    let value_location = location(header.unit, node);
     match node.kind() {
+        SyntaxKind::BooleanLiteral => {
+            let found = Type::Intrinsic(IntrinsicType::Bool);
+            if required != found {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::TypeMismatch {
+                        expected: required,
+                        found,
+                    },
+                    location: value_location,
+                });
+                return None;
+            }
+            let token = node
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .find(|token| matches!(token.kind(), SyntaxKind::KwTrue | SyntaxKind::KwFalse))
+                .expect("syntax-clean boolean literal contains one boolean token");
+            Some(Value {
+                ty: found,
+                kind: ValueKind::Literal(LiteralValue::Bool(token.kind() == SyntaxKind::KwTrue)),
+                location: value_location,
+            })
+        }
+        SyntaxKind::DecimalIntegerLiteral => {
+            let literal = materialize_integer_literal(node, required, value_location, diagnostics)?;
+            Some(Value {
+                ty: required,
+                kind: ValueKind::Literal(literal),
+                location: value_location,
+            })
+        }
         SyntaxKind::IdentifierUse => {
             let token = direct_token(node, SyntaxKind::Ident);
             let name = key(&token);
-            let value_location = location(header.unit, node);
             if let Some(binding) = bindings.get_mut(&name) {
                 if !binding.available {
                     diagnostics.push(Diagnostic {
@@ -1094,6 +1059,16 @@ fn validate_value(
                     binding.available = false;
                     OwnedUse::Consume
                 };
+                if binding.ty != required {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::TypeMismatch {
+                            expected: required,
+                            found: binding.ty,
+                        },
+                        location: value_location,
+                    });
+                    return None;
+                }
                 return Some(Value {
                     ty: binding.ty,
                     kind: ValueKind::BindingUse {
@@ -1104,7 +1079,8 @@ fn validate_value(
                 });
             }
 
-            let entity = modules
+            let entity = context
+                .modules
                 .get(&header.module)
                 .and_then(|module| module.namespace.get(&name));
             diagnostics.push(Diagnostic {
@@ -1121,42 +1097,151 @@ fn validate_value(
             None
         }
         SyntaxKind::DirectCall => {
-            let call_location = location(header.unit, node);
-            let (function, arguments, result) = validate_call(
-                header,
-                node,
-                modules,
-                imports,
-                headers,
-                bindings,
-                diagnostics,
-            )?;
+            let (function, arguments, result) =
+                validate_call(header, node, context, bindings, diagnostics)?;
             let Some(ty) = result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
-                    location: call_location,
+                    location: value_location,
                 });
                 return None;
             };
+            if ty != required {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::TypeMismatch {
+                        expected: required,
+                        found: ty,
+                    },
+                    location: value_location,
+                });
+                return None;
+            }
             Some(Value {
                 ty,
                 kind: ValueKind::DirectCall {
                     function,
                     arguments,
                 },
-                location: call_location,
+                location: value_location,
             })
         }
         _ => unreachable!("syntax-clean value has represented value kind"),
     }
 }
 
+fn materialize_integer_literal(
+    node: &SyntaxNode,
+    required: Type,
+    value_location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<LiteralValue> {
+    let Type::Intrinsic(intrinsic) = required else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::IntegerLiteralRequiresInteger { required },
+            location: value_location,
+        });
+        return None;
+    };
+
+    let negative = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::Minus);
+    let magnitude = direct_token(node, SyntaxKind::DecimalMagnitude);
+    let text = magnitude.text();
+
+    let literal = match intrinsic {
+        IntrinsicType::I8 => materialize_signed(text, negative, 127, 128)
+            .and_then(|value| i8::try_from(value).ok())
+            .map(LiteralValue::I8),
+        IntrinsicType::I16 => materialize_signed(text, negative, 32_767, 32_768)
+            .and_then(|value| i16::try_from(value).ok())
+            .map(LiteralValue::I16),
+        IntrinsicType::I32 => materialize_signed(text, negative, 2_147_483_647, 2_147_483_648)
+            .and_then(|value| i32::try_from(value).ok())
+            .map(LiteralValue::I32),
+        IntrinsicType::I64 => materialize_signed(
+            text,
+            negative,
+            9_223_372_036_854_775_807,
+            9_223_372_036_854_775_808,
+        )
+        .and_then(|value| i64::try_from(value).ok())
+        .map(LiteralValue::I64),
+        IntrinsicType::U8 => materialize_unsigned(text, negative, u64::from(u8::MAX))
+            .and_then(|value| u8::try_from(value).ok())
+            .map(LiteralValue::U8),
+        IntrinsicType::U16 => materialize_unsigned(text, negative, u64::from(u16::MAX))
+            .and_then(|value| u16::try_from(value).ok())
+            .map(LiteralValue::U16),
+        IntrinsicType::U32 => materialize_unsigned(text, negative, u64::from(u32::MAX))
+            .and_then(|value| u32::try_from(value).ok())
+            .map(LiteralValue::U32),
+        IntrinsicType::U64 => materialize_unsigned(text, negative, u64::MAX).map(LiteralValue::U64),
+        IntrinsicType::Bool | IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64 => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::IntegerLiteralRequiresInteger { required },
+                location: value_location,
+            });
+            return None;
+        }
+    };
+
+    match literal {
+        Some(literal) => Some(literal),
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::IntegerLiteralOutOfRange { required },
+                location: value_location,
+            });
+            None
+        }
+    }
+}
+
+fn materialize_signed(
+    text: &str,
+    negative: bool,
+    positive_limit: u64,
+    negative_limit: u64,
+) -> Option<i128> {
+    let limit = if negative {
+        negative_limit
+    } else {
+        positive_limit
+    };
+    let magnitude = parse_decimal_magnitude(text, limit)?;
+    let magnitude = i128::from(magnitude);
+    Some(if negative { -magnitude } else { magnitude })
+}
+
+fn materialize_unsigned(text: &str, negative: bool, limit: u64) -> Option<u64> {
+    let magnitude = parse_decimal_magnitude(text, limit)?;
+    if negative && magnitude != 0 {
+        None
+    } else {
+        Some(magnitude)
+    }
+}
+
+fn parse_decimal_magnitude(text: &str, limit: u64) -> Option<u64> {
+    let mut value = 0_u64;
+    for byte in text.bytes() {
+        debug_assert!(byte.is_ascii_digit());
+        let digit = u64::from(byte - b'0');
+        let remaining = limit.checked_sub(digit)?;
+        if value > remaining / 10 {
+            return None;
+        }
+        value = value * 10 + digit;
+    }
+    Some(value)
+}
+
 fn validate_call(
     header: &FunctionHeader,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    headers: &[FunctionHeader],
+    context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<(FunctionId, Vec<Value>, Option<Type>)> {
@@ -1164,7 +1249,13 @@ fn validate_call(
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        match resolve_qualified_entity(header.unit, &qualified, modules, imports, diagnostics)? {
+        match resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )? {
             EntityId::Function(id) => id,
             EntityId::Record(_) => {
                 diagnostics.push(Diagnostic {
@@ -1190,7 +1281,8 @@ fn validate_call(
             return None;
         }
 
-        match modules
+        match context
+            .modules
             .get(&header.module)
             .and_then(|module| module.namespace.get(&name))
             .copied()
@@ -1214,16 +1306,11 @@ fn validate_call(
         }
     };
 
-    let target = &headers[function.0];
+    let target = &context.headers[function.0];
     let argument_list = direct_child(node, SyntaxKind::ArgumentList);
     let argument_nodes = argument_list
         .children()
-        .filter(|child| {
-            matches!(
-                child.kind(),
-                SyntaxKind::IdentifierUse | SyntaxKind::DirectCall
-            )
-        })
+        .filter(|child| is_value_node(child.kind()))
         .collect::<Vec<_>>();
 
     if argument_nodes.len() != target.parameters.len() {
@@ -1242,22 +1329,11 @@ fn validate_call(
         let argument = validate_value(
             header,
             &argument_node,
-            modules,
-            imports,
-            headers,
+            parameter.ty,
+            context,
             bindings,
             diagnostics,
         )?;
-        if argument.ty != parameter.ty {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::TypeMismatch {
-                    expected: parameter.ty,
-                    found: argument.ty,
-                },
-                location: argument.location,
-            });
-            return None;
-        }
         arguments.push(argument);
     }
 
@@ -1291,13 +1367,18 @@ fn direct_token(node: &SyntaxNode, kind: SyntaxKind) -> SyntaxToken {
 
 fn value_child(node: &SyntaxNode) -> SyntaxNode {
     node.children()
-        .find(|child| {
-            matches!(
-                child.kind(),
-                SyntaxKind::IdentifierUse | SyntaxKind::DirectCall
-            )
-        })
+        .find(|child| is_value_node(child.kind()))
         .expect("syntax-clean value-producing construct contains a value")
+}
+
+fn is_value_node(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::BooleanLiteral
+            | SyntaxKind::DecimalIntegerLiteral
+            | SyntaxKind::IdentifierUse
+            | SyntaxKind::DirectCall
+    )
 }
 
 fn key(token: &SyntaxToken) -> String {

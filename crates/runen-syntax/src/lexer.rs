@@ -119,6 +119,20 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
             continue;
         }
 
+        if character.is_ascii_digit() {
+            let mut end = offset + 1;
+            while end < source.len() && source.as_bytes()[end].is_ascii_digit() {
+                end += 1;
+            }
+            tokens.push(LexToken {
+                kind: SyntaxKind::DecimalMagnitude,
+                start: offset,
+                end,
+            });
+            offset = end;
+            continue;
+        }
+
         let punctuation = if rest.starts_with("->") {
             Some((SyntaxKind::Arrow, 2))
         } else if rest.starts_with("::") {
@@ -131,6 +145,7 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
                 '}' => Some((SyntaxKind::RBrace, 1)),
                 ':' => Some((SyntaxKind::Colon, 1)),
                 ',' => Some((SyntaxKind::Comma, 1)),
+                '-' => Some((SyntaxKind::Minus, 1)),
                 '=' => Some((SyntaxKind::Eq, 1)),
                 ';' => Some((SyntaxKind::Semicolon, 1)),
                 _ => None,
