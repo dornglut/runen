@@ -91,7 +91,10 @@ fn malformed_assignment_forms_preserve_following_constructs() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty(), "malformed source must diagnose");
+        assert!(
+            !parsed.errors().is_empty(),
+            "malformed source must diagnose"
+        );
         assert_eq!(
             parsed
                 .syntax()
