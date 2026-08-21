@@ -6,7 +6,7 @@ This document owns the represented source semantics for function-local binding i
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
 
-Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer and assignment execution interaction, assignment replacement ordering, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call/assignment spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer and assignment execution interaction, assignment replacement ordering, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call/assignment/block spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
 This document does not define general expression evaluation, references, patterns, traits, ABI, or an implementation representation.
 
@@ -51,9 +51,9 @@ This revision does not define type inference or an uninitialized local form. `fu
 
 ## Abstract lexical scopes
 
-A represented function body has one root lexical scope. Later body constructs may establish nested child lexical scopes. The resulting lexical scopes form a finite rooted tree.
+A represented function body has one root lexical scope. A represented nested block establishes one child lexical scope of its containing lexical scope. The resulting lexical scopes form a finite rooted tree.
 
-The root braces in the concrete body form owned by `concrete-syntax.md` delimit that already-defined root lexical scope. The current concrete subset establishes no nested lexical-scope form.
+The root braces in the concrete body form owned by `concrete-syntax.md` delimit the root lexical scope. Each concrete `BlockStatement` establishes exactly one child lexical scope containing its enclosed `BodyStatement` sequence and ending at that block's closing boundary. Recursively nested block statements therefore establish descendant lexical scopes.
 
 The semantic scope tree does not prescribe parser nodes, lossless-syntax nodes, source-range representation, or recovery behavior.
 
@@ -128,7 +128,9 @@ A successful represented assignment to a mutable binding establishes one replace
 
 A source operation that requires an owned value from a binding is valid only when that binding is **definitely available** at the operation's source program point.
 
-A later control-flow owner MUST preserve this requirement when defining branches, loops, joins, or other multiple-path control flow. It MUST NOT replace a statically required availability check with a defined runtime use-after-consumption fault merely because physical execution could detect the state dynamically.
+For the represented straight-line `BlockStatement`, entering or normally exiting a child lexical scope does not itself change the availability of any ancestor binding. Availability transitions caused by valid owned uses or assignments of ancestor bindings inside the child remain in force at the following parent-scope program point after normal child exit. A child binding instead ceases to participate in lookup when its child lexical scope ends.
+
+A later control-flow owner MUST preserve the definite-availability requirement when defining branches, loops, joins, or other multiple-path control flow. It MUST NOT replace a statically required availability check with a defined runtime use-after-consumption fault merely because physical execution could detect the state dynamically.
 
 ## Ordinary whole-binding owned-value use
 
@@ -191,8 +193,8 @@ Indirect calls, function values, closures, references/pass modes, broader panic/
 
 This revision does not add or require a parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime representation, or backend representation.
 
-`concrete-syntax.md` provides one bounded concrete parameter/local/value/call/assignment subset. That syntax does not alter binding identity, scope, lookup, mutability, availability, or owned-use authority defined here.
+`concrete-syntax.md` provides one bounded concrete parameter/local/value/call/assignment/block subset. Its block form maps to the abstract child-scope relation above; the concrete syntax does not redefine binding identity, lookup, mutability, availability, or owned-use authority.
 
 ## Further boundaries
 
-Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment expressions or assignment-as-value, uninitialized locals, nested-block forms, literals, precedence, parser recovery, general expression typing, partial field moves, member access, field assignment, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment expressions or assignment-as-value, uninitialized locals, literals, precedence, parser recovery, general expression typing, partial field moves, member access, field assignment, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
