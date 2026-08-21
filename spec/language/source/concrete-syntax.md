@@ -28,6 +28,8 @@ The represented concrete subset reserves exactly these lexical identifier keys:
 - `record`;
 - `let`;
 - `return`;
+- `import`;
+- `export`;
 - `Bool`;
 - `I8`, `I16`, `I32`, `I64`;
 - `U8`, `U16`, `U32`, `U64`;
@@ -44,10 +46,10 @@ Reserved-key classification uses the lexical identifier key, not original source
 The represented punctuation tokens are exactly:
 
 ```text
-( ) { } : , -> = ;
+( ) { } : :: , -> = ;
 ```
 
-`->` is one punctuation token. This revision defines no standalone `-` or `>` token and no other punctuation or operator token.
+`->` and `::` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens. This revision defines no standalone `-` or `>` token and no other punctuation or operator token.
 
 ## Ordinary comments
 
@@ -72,17 +74,39 @@ Trivia MAY occur around and between the tokens shown by these productions. Line 
 A represented source unit has this grammar:
 
 ```text
-SourceUnit = Item*
-Item       = RecordDefinition | FunctionDefinition
+SourceUnit        = SourceUnitElement*
+SourceUnitElement = ImportDeclaration | Item
+Item              = ExportModifier? (RecordDefinition | FunctionDefinition)
+ExportModifier    = "export"
 ```
 
-A well-formed source unit under this concrete subset is fully consumed by `SourceUnit` plus permitted trivia. No unmatched non-trivia material may remain before, between, or after represented items.
+A well-formed source unit under this concrete subset is fully consumed by `SourceUnit` plus permitted trivia. No unmatched non-trivia material may remain before, between, or after represented elements.
 
-The textual order of module-level items does not change the order-independent module binding and lookup relations owned by `names-modules.md`.
+Import declarations and module-level items MAY be interspersed. Their textual order does not change the order-independent module binding, source-unit alias, or qualified lookup relations owned by `names-modules.md`.
 
-Every represented record or function definition establishes one **module-private** module binding in the source module to which the source compilation context assigns that source unit.
+A represented source unit MAY contain imports and no module-level declarations.
 
-This subset has no declaration-without-body, import, export, re-export, package, alias, constant, static, or other module-item syntax.
+A record or function definition without `ExportModifier` establishes one **module-private** module binding. The same definition with `ExportModifier` establishes one **exported** module binding. Those accessibility classes and their lookup consequences are owned by `names-modules.md`; `export` has no ABI, linkage, FFI, runtime, or realization meaning.
+
+`export` modifies only a represented record or function item. `export import` is not a represented form.
+
+This subset has no declaration-without-body, re-export, package, constant, static, or other module-item syntax.
+
+## Module import declarations
+
+```text
+ImportDeclaration = "import" UserIdentifier ";"
+```
+
+The concrete identifier supplies the lexical identifier key of one source-unit-local module alias under `names-modules.md`.
+
+The source spelling does not identify, name, discover, or derive the target source module. For each represented import declaration, the source compilation context supplies exactly one opaque target source-module identity associated with that alias key for that source unit. The concrete declaration maps to the module-import relation consisting of that alias key and the supplied target identity.
+
+Duplicate aliases, alias conflicts with declarations in the source unit's own module, and self-import are governed by `names-modules.md`. Distinct aliases in one source unit may target the same module, and the same alias key in different source units may target different modules when the compilation context supplies those relations.
+
+An external or build-system mapping for an alias key that has no corresponding concrete import declaration does not create a source alias and has no source lookup effect.
+
+This form defines no source-visible module path, package coordinate, dependency locator, filename, filesystem relation, or source-visible canonical module name.
 
 ## Record definitions
 
@@ -92,7 +116,7 @@ RecordFields     = RecordField ("," RecordField)* ","?
 RecordField      = UserIdentifier ":" Type
 ```
 
-A represented record definition maps to exactly one nominal record declaration under `types.md` using the record name's lexical identifier key and the field sequence in concrete source order.
+A represented record definition maps to exactly one nominal record declaration under `types.md` using the record name's lexical identifier key and the field sequence in concrete source order. Its module accessibility is determined by the enclosing optional `ExportModifier` as described above.
 
 The field sequence MAY be empty. A trailing comma is permitted.
 
@@ -103,7 +127,8 @@ Record construction, member access, field expressions, destructuring, and duplic
 ## Type forms
 
 ```text
-Type = IntrinsicType | UserIdentifier
+Type                  = IntrinsicType | UserIdentifier | QualifiedModuleMember
+QualifiedModuleMember = UserIdentifier "::" UserIdentifier
 
 IntrinsicType = "Bool"
               | "I8"  | "I16" | "I32" | "I64"
@@ -115,7 +140,9 @@ Each intrinsic spelling maps one-to-one to the source type identity with the sam
 
 A `UserIdentifier` used as a type form undergoes same-module lookup under `names-modules.md`. The resolved binding MUST denote a nominal record source type. Resolution does not skip a binding of another category merely because the type context requires a type.
 
-This subset has no qualified type path, type inference, type alias, generic application, pointer/reference type, tuple, array, vector, or other type form.
+A `QualifiedModuleMember` used as a type form maps its first identifier to the source-unit module-alias key and its second identifier to the target-member key consumed by qualified cross-module lookup under `names-modules.md`. The resolved target binding MUST be exported and MUST denote a nominal record source type. Lookup does not bypass an inaccessible or wrong-category binding.
+
+This subset has no nested module path, type inference, type alias, generic application, pointer/reference type, tuple, array, vector, or other type form.
 
 ## Function definitions
 
@@ -126,7 +153,7 @@ Parameter          = UserIdentifier ":" Type
 ResultClause       = "->" Type
 ```
 
-A represented function definition maps to exactly one source function declaration/entity under `callables.md`, one callable signature, one body attachment under `function-execution.md`, and the corresponding parameter bindings under `local-bindings.md`.
+A represented function definition maps to exactly one source function declaration/entity under `callables.md`, one callable signature, one body attachment under `function-execution.md`, and the corresponding parameter bindings under `local-bindings.md`. Its module accessibility is determined by the enclosing optional `ExportModifier` as described above.
 
 Parameter source order maps directly to callable-signature parameter-slot order. Each concrete parameter identifier establishes the parameter binding corresponding to that slot. Every concrete parameter binding in this subset is immutable for assignment purposes.
 
@@ -164,17 +191,20 @@ This subset has no mutable-local spelling, uninitialized local, inferred local t
 ## Direct calls
 
 ```text
-DirectCall = UserIdentifier "(" Arguments? ")"
-Arguments  = Value ("," Value)* ","?
+DirectCall       = DirectCallTarget "(" Arguments? ")"
+DirectCallTarget = UserIdentifier | QualifiedModuleMember
+Arguments        = Value ("," Value)* ","?
 ```
 
-A direct call maps to the direct-call relation owned by `function-execution.md` after its target identifier is resolved using the function-local lookup precedence from `local-bindings.md` and the same-module fallback from `names-modules.md`.
+An unqualified `UserIdentifier` call target maps to the direct-call relation owned by `function-execution.md` after its target identifier is resolved using the function-local lookup precedence from `local-bindings.md` and the same-module fallback from `names-modules.md`.
 
-The resolved entity MUST be one source function entity with a represented source body. Lookup does not bypass a nearer function-local binding merely because that binding is not callable.
+A qualified `alias::member` call target resolves only through the source-unit module-alias and qualified cross-module lookup relation in `names-modules.md`. Function-local bindings do not participate in that syntactically qualified lookup.
+
+In either form, the resolved entity MUST be one source function entity with a represented source body. Lookup does not bypass a selected wrong-category or inaccessible binding merely because the call context requires a function.
 
 Argument source order is the direct-call argument order consumed by `function-execution.md`. A trailing comma is permitted.
 
-This subset has no qualified call, indirect call, function-value call, method call, named argument, default argument, or variadic argument form.
+This subset has no indirect call, function-value call, method call, named argument, default argument, variadic argument, nested module path, or arbitrary member-call form.
 
 ## Call statements
 
@@ -197,6 +227,8 @@ An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-b
 
 A `DirectCall` may be used as a `Value` only when its callable signature specifies one result value. The successful call result is the owned value produced by `function-execution.md`.
 
+A qualified module member without a direct-call argument list is not an `IdentifierUse` value under this subset. Module aliases and module-level declarations do not become source values.
+
 This subset has no literal, grouping expression, unary or binary operator, conversion, record construction, member access, assignment expression, block expression, closure, or other value form.
 
 ## Returns and normal completion
@@ -215,13 +247,25 @@ This subset defines no tail-expression return and no earlier/nonterminal return 
 
 ## Unqualified lookup and category validation
 
-For the represented function-body identifier forms, lookup first applies the function-local precedence defined by `local-bindings.md`. Only when no active parameter/local binding resolves the lexical identifier key does lookup fall through to same-module lookup under `names-modules.md`.
+For the represented unqualified function-body identifier forms, lookup first applies the function-local precedence defined by `local-bindings.md`. Only when no active parameter/local binding resolves the lexical identifier key does lookup fall through to same-module lookup under `names-modules.md`.
 
 After lookup selects an entity, the consuming syntactic context validates its category. The lookup MUST NOT skip the selected entity to find another binding of a context-preferred category.
 
-Consequently, when a parameter or local binding has the same lexical key as a module-level function, a direct-call spelling with that key resolves to the function-local binding and is invalid as a direct call rather than silently bypassing the local binding.
+Consequently, when a parameter or local binding has the same lexical key as a module-level function, an unqualified direct-call spelling with that key resolves to the function-local binding and is invalid as a direct call rather than silently bypassing the local binding.
 
-This rule does not introduce overload resolution, separate type/value module namespaces, or qualified lookup syntax.
+Imported modules are not searched by this unqualified lookup relation.
+
+This rule does not introduce overload resolution or separate type/value module namespaces.
+
+## Qualified module lookup and category validation
+
+A concrete `alias::member` form is explicitly qualified. Its first identifier is interpreted only as a source-unit module alias under `names-modules.md`; it does not perform function-local or same-module declaration lookup. Its second identifier is resolved only in the aliased target module's declaration namespace under the exported-binding requirement owned by `names-modules.md`.
+
+After qualified lookup selects the target binding, the consuming type or direct-call context validates the entity category. The lookup MUST NOT skip a private or wrong-category target to search for another entity.
+
+A parameter or local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local continues to control an unqualified spelling but does not block the syntactically qualified `alias::member` form.
+
+The two-part qualification syntax does not create general member access, nested module paths, associated-item lookup, methods, or re-export behavior.
 
 ## Deliberate boundaries
 
@@ -232,7 +276,7 @@ This revision does not define:
 - grouping or general expression grammar;
 - assignment/replacement operations or mutable-binding syntax;
 - nested blocks, branches, loops, patterns, or general control flow;
-- import, export, re-export, or qualified module-path syntax;
+- source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - record construction, member access, or destructuring;
 - positive record duplicability-selection syntax;
 - references, borrow syntax, or lifetime syntax;
