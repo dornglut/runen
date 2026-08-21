@@ -56,11 +56,7 @@ pub struct SourceUnit<'a> {
 
 impl<'a> SourceUnit<'a> {
     #[must_use]
-    pub const fn new(
-        module: ModuleId,
-        parse: &'a Parse,
-        imports: &'a [ImportTarget],
-    ) -> Self {
+    pub const fn new(module: ModuleId, parse: &'a Parse, imports: &'a [ImportTarget]) -> Self {
         Self {
             module,
             parse,
