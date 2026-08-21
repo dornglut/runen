@@ -80,6 +80,54 @@ fn emits_validated_inner_then_outer_normal_cleanup_without_root_cleanup() {
 }
 
 #[test]
+fn skips_normal_exit_drop_for_zero_field_record() {
+    let lowered = lower_source(
+        "record Empty {} \
+         fn f() { { let child: Empty = Empty {}; } }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert!(drop_sequence(f).is_empty());
+}
+
+#[test]
+fn skips_normal_exit_drop_for_recursively_zero_leaf_record() {
+    let lowered = lower_source(
+        "record Inner {} \
+         record Outer { inner: Inner } \
+         fn f() { { let child: Outer = Outer { inner: Inner {} }; } }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert!(drop_sequence(f).is_empty());
+}
+
+#[test]
+fn emits_normal_exit_drop_for_scalar_bearing_record() {
+    let lowered = lower_source(
+        "record Box { value: I64 } \
+         fn f() { { let child: Box = Box { value: 1 }; } }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert_eq!(drop_sequence(f), vec![LocalId(0)]);
+}
+
+#[test]
+fn emits_normal_exit_drop_for_mixed_zero_and_scalar_leaf_record() {
+    let lowered = lower_source(
+        "record Empty {} \
+         record Mixed { empty: Empty, value: I64 } \
+         fn f() { \
+             { let child: Mixed = Mixed { empty: Empty {}, value: 1 }; } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert_eq!(drop_sequence(f), vec![LocalId(0)]);
+}
+
+#[test]
 fn consumed_child_local_receives_no_normal_exit_drop() {
     let lowered = lower_source(
         "record Ticket {} \
