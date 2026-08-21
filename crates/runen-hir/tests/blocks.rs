@@ -1,6 +1,6 @@
 use runen_hir::{
-    Block, DiagnosticKind, ModuleId, OwnedUse, SourceUnit, Statement, TypedCompilation, ValueKind,
-    build_typed_hir,
+    Block, CleanupPath, DiagnosticKind, ModuleId, OwnedUse, SourceUnit, Statement,
+    TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -25,6 +25,13 @@ fn block(statement: &Statement) -> &Block {
         panic!("expected nested block statement");
     };
     block
+}
+
+fn cleanup(binding: runen_hir::BindingId, fields: &[usize]) -> CleanupPath {
+    CleanupPath {
+        binding,
+        fields: fields.to_vec(),
+    }
 }
 
 fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
@@ -55,7 +62,10 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
     else {
         panic!("expected first sibling local b");
     };
-    assert_eq!(first.normal_cleanup, vec![*first_b, *first_a]);
+    assert_eq!(
+        first.normal_cleanup,
+        vec![cleanup(*first_b, &[]), cleanup(*first_a, &[])]
+    );
 
     let second = block(&f.body.statements[1]);
     let Statement::Local {
@@ -65,7 +75,7 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
         panic!("expected second sibling local a");
     };
     assert_ne!(*first_a, *second_a);
-    assert_eq!(second.normal_cleanup, vec![*second_a]);
+    assert_eq!(second.normal_cleanup, vec![cleanup(*second_a, &[])]);
 }
 
 #[test]
@@ -145,6 +155,90 @@ fn consumed_child_local_is_omitted_from_normal_cleanup() {
 }
 
 #[test]
+fn partial_child_cleanup_records_exact_remaining_frontier_order() {
+    let hir = build(
+        "record Left {} record Right {} \
+         record Pair { left: Left, right: Right, count: I8 } \
+         fn sink(value: Left) {} \
+         fn f() { \
+             { \
+                 let pair: Pair = Pair { left: Left {}, right: Right {}, count: 1 }; \
+                 sink(pair.left); \
+             } \
+         }",
+    )
+    .expect("partial child ownership must be represented in HIR cleanup");
+    let f = function(&hir, "f");
+    let child = block(&f.body.statements[0]);
+    let Statement::Local { binding, .. } = &child.statements[0] else {
+        panic!("expected child pair local");
+    };
+
+    assert_eq!(
+        child.normal_cleanup,
+        vec![cleanup(*binding, &[2]), cleanup(*binding, &[1])]
+    );
+}
+
+#[test]
+fn zero_leaf_remaining_subvalue_is_retained_as_source_cleanup_fact() {
+    let hir = build(
+        "record Empty {} record Payload { value: I8 } \
+         record Mixed { empty: Empty, payload: Payload } \
+         fn take(value: Payload) {} \
+         fn f() { \
+             { \
+                 let mixed: Mixed = Mixed { empty: Empty {}, payload: Payload { value: 1 } }; \
+                 take(mixed.payload); \
+             } \
+         }",
+    )
+    .expect("zero-leaf source ownership remains a HIR cleanup fact");
+    let f = function(&hir, "f");
+    let child = block(&f.body.statements[0]);
+    let Statement::Local { binding, .. } = &child.statements[0] else {
+        panic!("expected mixed local");
+    };
+
+    assert_eq!(child.normal_cleanup, vec![cleanup(*binding, &[0])]);
+}
+
+#[test]
+fn recursively_zero_leaf_complete_value_is_retained_as_cleanup_fact() {
+    let hir = build(
+        "record Empty {} record Wrapper { empty: Empty } \
+         fn f() { { let value: Wrapper = Wrapper { empty: Empty {} }; } }",
+    )
+    .expect("fully available zero-leaf record remains source-owned until scope exit");
+    let f = function(&hir, "f");
+    let child = block(&f.body.statements[0]);
+    let Statement::Local { binding, .. } = &child.statements[0] else {
+        panic!("expected wrapper local");
+    };
+
+    assert_eq!(child.normal_cleanup, vec![cleanup(*binding, &[])]);
+}
+
+#[test]
+fn separately_consumed_siblings_can_exhaust_remaining_frontier() {
+    let hir = build(
+        "record Left {} record Right {} record Pair { left: Left, right: Right } \
+         fn take_left(value: Left) {} fn take_right(value: Right) {} \
+         fn f() { \
+             { \
+                 let pair: Pair = Pair { left: Left {}, right: Right {} }; \
+                 take_left(pair.left); \
+                 take_right(pair.right); \
+             } \
+         }",
+    )
+    .expect("all child subvalues may be consumed separately");
+    let f = function(&hir, "f");
+    let child = block(&f.body.statements[0]);
+    assert!(child.normal_cleanup.is_empty());
+}
+
+#[test]
 fn recursively_nested_blocks_retain_independent_cleanup_selections() {
     let hir = build("fn f() { { let outer: I64 = 1; { let inner: I64 = 2; } } }")
         .expect("recursive blocks must validate");
@@ -166,6 +260,6 @@ fn recursively_nested_blocks_retain_independent_cleanup_selections() {
         panic!("expected inner local");
     };
 
-    assert_eq!(inner.normal_cleanup, vec![*inner_binding]);
-    assert_eq!(outer.normal_cleanup, vec![*outer_binding]);
+    assert_eq!(inner.normal_cleanup, vec![cleanup(*inner_binding, &[])]);
+    assert_eq!(outer.normal_cleanup, vec![cleanup(*outer_binding, &[])]);
 }

@@ -3,10 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
-    Accessibility, AssignmentMutability, BindingId, Block, Body, Diagnostic, DiagnosticKind, Field,
-    Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter,
-    Record, RecordFieldValue, RecordId, Return, SourceLocation, SourceUnit, Statement, Type,
-    TypedCompilation, Value, ValueKind,
+    Accessibility, AssignmentMutability, BindingId, Block, Body, CleanupPath, Diagnostic,
+    DiagnosticKind, Field, Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId,
+    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, Return, SourceLocation, SourceUnit,
+    Statement, Type, TypedCompilation, Value, ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -63,12 +63,53 @@ struct FunctionHeader {
     location: SourceLocation,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 struct BindingState {
     id: BindingId,
     ty: Type,
     mutability: AssignmentMutability,
-    available: bool,
+    consumed_paths: BTreeSet<Vec<usize>>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PathAvailability {
+    FullyAvailable,
+    PartiallyAvailable,
+    Unavailable,
+}
+
+impl BindingState {
+    fn path_availability(&self, path: &[usize]) -> PathAvailability {
+        if self
+            .consumed_paths
+            .iter()
+            .any(|consumed| path.starts_with(consumed))
+        {
+            return PathAvailability::Unavailable;
+        }
+        if self
+            .consumed_paths
+            .iter()
+            .any(|consumed| consumed.len() > path.len() && consumed.starts_with(path))
+        {
+            return PathAvailability::PartiallyAvailable;
+        }
+        PathAvailability::FullyAvailable
+    }
+
+    fn consume_path(&mut self, path: &[usize]) {
+        debug_assert_eq!(
+            self.path_availability(path),
+            PathAvailability::FullyAvailable
+        );
+        let inserted = self.consumed_paths.insert(path.to_vec());
+        debug_assert!(inserted);
+        debug_assert!(self.consumed_paths.iter().all(|left| {
+            self.consumed_paths
+                .iter()
+                .all(|right| left == right || !(left.starts_with(right) || right.starts_with(left)))
+        }));
+    }
 }
 
 type UnitImports = BTreeMap<String, ModuleId>;
@@ -725,7 +766,7 @@ fn validate_body(
                 id: parameter.binding,
                 ty: parameter.ty,
                 mutability: AssignmentMutability::Immutable,
-                available: true,
+                consumed_paths: BTreeSet::new(),
             },
         );
     }
@@ -860,8 +901,11 @@ fn validate_block(
             .get(name)
             .expect("validated direct child binding remains active through block end");
         debug_assert_eq!(state.id, *binding);
-        if state.available {
-            normal_cleanup.push(*binding);
+        for fields in remaining_ownership_frontier(state, context.records) {
+            normal_cleanup.push(CleanupPath {
+                binding: *binding,
+                fields,
+            });
         }
     }
 
@@ -877,6 +921,36 @@ fn validate_block(
         normal_cleanup,
         location: location(header.unit, node),
     })
+}
+
+fn remaining_ownership_frontier(state: &BindingState, records: &[Record]) -> Vec<Vec<usize>> {
+    let mut frontier = Vec::new();
+    let mut path = Vec::new();
+    append_remaining_ownership_frontier(state, state.ty, records, &mut path, &mut frontier);
+    frontier
+}
+
+fn append_remaining_ownership_frontier(
+    state: &BindingState,
+    ty: Type,
+    records: &[Record],
+    path: &mut Vec<usize>,
+    frontier: &mut Vec<Vec<usize>>,
+) {
+    match state.path_availability(path) {
+        PathAvailability::Unavailable => {}
+        PathAvailability::FullyAvailable => frontier.push(path.clone()),
+        PathAvailability::PartiallyAvailable => {
+            let Type::Record(record) = ty else {
+                unreachable!("only record paths can contain consumed descendants");
+            };
+            for (field_index, field) in records[record.0].fields.iter().enumerate().rev() {
+                path.push(field_index);
+                append_remaining_ownership_frontier(state, field.ty, records, path, frontier);
+                path.pop();
+            }
+        }
+    }
 }
 
 fn validate_local(
@@ -946,7 +1020,7 @@ fn validate_local(
             id: binding,
             ty,
             mutability,
-            available: true,
+            consumed_paths: BTreeSet::new(),
         },
     );
     Some(Statement::Local {
@@ -973,7 +1047,7 @@ fn validate_assignment(
         range: target_token.text_range(),
     };
 
-    let (target, target_ty) = match bindings.get(&name).copied() {
+    let (target, target_ty) = match bindings.get(&name) {
         Some(binding) => {
             if !binding.mutability.is_mutable() {
                 diagnostics.push(Diagnostic {
@@ -1014,7 +1088,8 @@ fn validate_assignment(
     bindings
         .get_mut(&name)
         .expect("resolved assignment target remains in the active binding scope")
-        .available = true;
+        .consumed_paths
+        .clear();
 
     Some(Statement::Assignment {
         target,
@@ -1126,19 +1201,13 @@ fn validate_value(
             let token = direct_token(node, SyntaxKind::Ident);
             let name = key(&token);
             if let Some(binding) = bindings.get_mut(&name) {
-                if !binding.available {
+                if binding.path_availability(&[]) != PathAvailability::FullyAvailable {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::UnavailableBinding,
                         location: value_location,
                     });
                     return None;
                 }
-                let ownership = if binding.ty.is_duplicable() {
-                    OwnedUse::Duplicate
-                } else {
-                    binding.available = false;
-                    OwnedUse::Consume
-                };
                 if binding.ty != required {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::TypeMismatch {
@@ -1149,6 +1218,12 @@ fn validate_value(
                     });
                     return None;
                 }
+                let ownership = if binding.ty.is_duplicable() {
+                    OwnedUse::Duplicate
+                } else {
+                    binding.consume_path(&[]);
+                    OwnedUse::Consume
+                };
                 return Some(Value {
                     ty: binding.ty,
                     kind: ValueKind::BindingUse {
@@ -1220,7 +1295,7 @@ fn validate_field_value_use(
     node: &SyntaxNode,
     required: Type,
     context: &BodyResolutionContext<'_>,
-    bindings: &BTreeMap<String, BindingState>,
+    bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
     let value_location = location(header.unit, node);
@@ -1239,8 +1314,8 @@ fn validate_field_value_use(
         unit: header.unit,
         range: root_token.text_range(),
     };
-    let binding = match bindings.get(&root_name).copied() {
-        Some(binding) => binding,
+    let (binding_id, binding_ty) = match bindings.get(&root_name) {
+        Some(binding) => (binding.id, binding.ty),
         None => {
             let entity = context
                 .modules
@@ -1258,15 +1333,7 @@ fn validate_field_value_use(
         }
     };
 
-    if !binding.available {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::UnavailableBinding,
-            location: root_location,
-        });
-        return None;
-    }
-
-    let mut current = binding.ty;
+    let mut current = binding_ty;
     let mut fields = Vec::with_capacity(selectors.len());
     for selector in selectors {
         let selector_location = SourceLocation {
@@ -1305,12 +1372,15 @@ fn validate_field_value_use(
         current = record_decl.fields[field].ty;
     }
 
-    if !current.is_duplicable() {
+    let binding = bindings
+        .get(&root_name)
+        .expect("resolved field-value root remains in active binding scope");
+    if binding.path_availability(&fields) != PathAvailability::FullyAvailable {
         let selector = selectors
             .last()
             .expect("syntax-clean field-value use has at least one selector");
         diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::NonDuplicableFieldValue,
+            kind: DiagnosticKind::UnavailableFieldValue,
             location: SourceLocation {
                 unit: header.unit,
                 range: selector.text_range(),
@@ -1330,11 +1400,22 @@ fn validate_field_value_use(
         return None;
     }
 
+    let ownership = if current.is_duplicable() {
+        OwnedUse::Duplicate
+    } else {
+        bindings
+            .get_mut(&root_name)
+            .expect("resolved field-value root remains in active binding scope")
+            .consume_path(&fields);
+        OwnedUse::Consume
+    };
+
     Some(Value {
         ty: current,
         kind: ValueKind::FieldValueUse {
-            binding: binding.id,
+            binding: binding_id,
             fields,
+            ownership,
         },
         location: value_location,
     })

@@ -42,8 +42,15 @@ fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool
     diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
 }
 
+fn count_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> usize {
+    diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.kind == kind)
+        .count()
+}
+
 #[test]
-fn resolves_one_level_and_nested_paths_to_declaration_field_indices() {
+fn resolves_paths_and_retains_duplicate_ownership() {
     let hir = build(
         "record Inner { pad: U8, value: I8 } \
          record Outer { first: I8, inner: Inner } \
@@ -52,19 +59,31 @@ fn resolves_one_level_and_nested_paths_to_declaration_field_indices() {
     );
 
     let one = function(&hir, "one");
-    let ValueKind::FieldValueUse { binding, fields } = &returned_value(one).kind else {
+    let ValueKind::FieldValueUse {
+        binding,
+        fields,
+        ownership,
+    } = &returned_value(one).kind
+    else {
         panic!("expected field-value use");
     };
     assert_eq!(*binding, one.parameters[0].binding);
     assert_eq!(fields, &[0]);
+    assert_eq!(*ownership, OwnedUse::Duplicate);
     assert_eq!(returned_value(one).ty, Type::Intrinsic(IntrinsicType::I8));
 
     let nested = function(&hir, "nested");
-    let ValueKind::FieldValueUse { binding, fields } = &returned_value(nested).kind else {
+    let ValueKind::FieldValueUse {
+        binding,
+        fields,
+        ownership,
+    } = &returned_value(nested).kind
+    else {
         panic!("expected nested field-value use");
     };
     assert_eq!(*binding, nested.parameters[0].binding);
     assert_eq!(fields, &[1, 1]);
+    assert_eq!(*ownership, OwnedUse::Duplicate);
 }
 
 #[test]
@@ -94,11 +113,17 @@ fn root_lookup_uses_active_binding_precedence_without_category_bypass() {
          fn f(root: Box) -> I8 { return root.value; }",
     );
     let f = function(&hir, "f");
-    let ValueKind::FieldValueUse { binding, fields } = &returned_value(f).kind else {
+    let ValueKind::FieldValueUse {
+        binding,
+        fields,
+        ownership,
+    } = &returned_value(f).kind
+    else {
         panic!("expected field use rooted in parameter");
     };
     assert_eq!(*binding, f.parameters[0].binding);
     assert_eq!(fields, &[0]);
+    assert_eq!(*ownership, OwnedUse::Duplicate);
     assert_eq!(returned_value(f).ty, Type::Intrinsic(IntrinsicType::I8));
 
     let wrong_category = errors("record root { value: I8 } fn g() -> I8 { return root.value; }");
@@ -109,17 +134,20 @@ fn root_lookup_uses_active_binding_precedence_without_category_bypass() {
 }
 
 #[test]
-fn field_access_requires_available_root() {
+fn whole_consumed_root_makes_descendant_field_unavailable() {
     let unavailable = errors(
         "record Box { value: I8 } \
          fn take(value: Box) {} \
          fn f(root: Box) -> I8 { take(root); return root.value; }",
     );
-    assert!(has_kind(&unavailable, DiagnosticKind::UnavailableBinding));
+    assert!(has_kind(
+        &unavailable,
+        DiagnosticKind::UnavailableFieldValue
+    ));
 }
 
 #[test]
-fn rejects_non_record_unknown_and_nonduplicable_final_fields() {
+fn rejects_non_record_and_unknown_fields() {
     let non_record = errors("fn f(root: I8) -> I8 { return root.value; }");
     assert!(has_kind(
         &non_record,
@@ -131,20 +159,84 @@ fn rejects_non_record_unknown_and_nonduplicable_final_fields() {
          fn f(root: Box) -> I8 { return root.missing; }",
     );
     assert!(has_kind(&unknown, DiagnosticKind::UnknownRecordField));
+}
 
-    let nonduplicable = errors(
+#[test]
+fn nonduplicable_final_field_is_consumed_and_retained_in_hir() {
+    let hir = build(
         "record Inner { value: I8 } record Outer { inner: Inner } \
-         fn take(value: Outer) {} \
-         fn f(root: Outer) { let bad: Inner = root.inner; take(root); }",
+         fn f(root: Outer) -> Inner { return root.inner; }",
     );
-    assert!(has_kind(
-        &nonduplicable,
-        DiagnosticKind::NonDuplicableFieldValue
-    ));
-    assert!(!has_kind(
-        &nonduplicable,
-        DiagnosticKind::UnavailableBinding
-    ));
+    let f = function(&hir, "f");
+    let ValueKind::FieldValueUse {
+        binding,
+        fields,
+        ownership,
+    } = &returned_value(f).kind
+    else {
+        panic!("expected consuming field-value use");
+    };
+    assert_eq!(*binding, f.parameters[0].binding);
+    assert_eq!(fields, &[0]);
+    assert_eq!(*ownership, OwnedUse::Consume);
+}
+
+#[test]
+fn nested_nonduplicable_field_consumes_exact_resolved_path() {
+    let hir = build(
+        "record Leaf { value: I8 } \
+         record Inner { pad: I8, leaf: Leaf } \
+         record Outer { first: I8, inner: Inner } \
+         fn f(root: Outer) -> Leaf { return root.inner.leaf; }",
+    );
+    let ValueKind::FieldValueUse {
+        fields, ownership, ..
+    } = &returned_value(function(&hir, "f")).kind
+    else {
+        panic!("expected nested consuming field-value use");
+    };
+    assert_eq!(fields, &[1, 1]);
+    assert_eq!(*ownership, OwnedUse::Consume);
+}
+
+#[test]
+fn repeated_consumption_and_ancestor_whole_use_are_rejected() {
+    let repeated = errors(
+        "record Inner {} record Outer { inner: Inner } \
+         fn sink(value: Inner) {} \
+         fn f(root: Outer) { sink(root.inner); sink(root.inner); }",
+    );
+    assert!(has_kind(&repeated, DiagnosticKind::UnavailableFieldValue));
+
+    let ancestor = errors(
+        "record Inner {} record Outer { inner: Inner } \
+         fn sink_inner(value: Inner) {} fn sink_outer(value: Outer) {} \
+         fn f(root: Outer) { sink_inner(root.inner); sink_outer(root); }",
+    );
+    assert!(has_kind(&ancestor, DiagnosticKind::UnavailableBinding));
+}
+
+#[test]
+fn disjoint_siblings_remain_available_after_consumption() {
+    build(
+        "record Left {} record Right {} \
+         record Pair { left: Left, right: Right, count: I8 } \
+         fn sink_left(value: Left) {} fn sink_right(value: Right) {} \
+         fn f(root: Pair) -> I8 { \
+             sink_left(root.left); \
+             sink_right(root.right); \
+             return root.count; \
+         }",
+    );
+}
+
+#[test]
+fn partially_available_intermediate_allows_untouched_descendant() {
+    build(
+        "record Token {} record Inner { token: Token, value: I8 } \
+         record Outer { inner: Inner } fn sink(value: Token) {} \
+         fn f(root: Outer) -> I8 { sink(root.inner.token); return root.inner.value; }",
+    );
 }
 
 #[test]
@@ -155,12 +247,15 @@ fn nonduplicable_intermediate_records_allow_deeper_duplicable_field() {
     );
     assert!(matches!(
         returned_value(function(&hir, "f")).kind,
-        ValueKind::FieldValueUse { .. }
+        ValueKind::FieldValueUse {
+            ownership: OwnedUse::Duplicate,
+            ..
+        }
     ));
 }
 
 #[test]
-fn successful_and_repeated_access_leave_root_available_for_later_whole_binding_use() {
+fn repeated_duplicate_access_leaves_root_available_for_whole_consumption() {
     let hir = build(
         "record Box { value: I8 } \
          fn f(root: Box) -> Box { \
@@ -175,7 +270,13 @@ fn successful_and_repeated_access_leave_root_available_for_later_whole_binding_u
         let Statement::Local { initializer, .. } = statement else {
             panic!("expected local");
         };
-        assert!(matches!(initializer.kind, ValueKind::FieldValueUse { .. }));
+        assert!(matches!(
+            initializer.kind,
+            ValueKind::FieldValueUse {
+                ownership: OwnedUse::Duplicate,
+                ..
+            }
+        ));
     }
     assert!(matches!(
         returned_value(f).kind,
@@ -184,6 +285,129 @@ fn successful_and_repeated_access_leave_root_available_for_later_whole_binding_u
             ..
         }
     ));
+}
+
+#[test]
+fn immutable_partial_root_rejects_assignment_without_losing_disjoint_field() {
+    let diagnostics = errors(
+        "record Left {} record Right {} record Pair { left: Left, right: Right } \
+         fn sink_left(value: Left) {} fn sink_right(value: Right) {} \
+         fn f(root: Pair) { \
+             sink_left(root.left); \
+             root = Pair { left: Left {}, right: Right {} }; \
+             sink_right(root.right); \
+         }",
+    );
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::ImmutableAssignmentTarget
+    ));
+    assert!(!has_kind(
+        &diagnostics,
+        DiagnosticKind::UnavailableFieldValue
+    ));
+}
+
+#[test]
+fn mutable_partial_root_whole_replacement_restores_full_availability() {
+    let hir = build(
+        "record Left {} record Right {} record Pair { left: Left, right: Right } \
+         fn sink_left(value: Left) {} fn sink_pair(value: Pair) {} \
+         fn f() { \
+             let mut pair: Pair = Pair { left: Left {}, right: Right {} }; \
+             sink_left(pair.left); \
+             pair = Pair { left: Left {}, right: Right {} }; \
+             sink_pair(pair); \
+         }",
+    );
+    let f = function(&hir, "f");
+    assert_eq!(f.body.statements.len(), 4);
+    assert!(matches!(f.body.statements[2], Statement::Assignment { .. }));
+}
+
+#[test]
+fn assignment_rhs_can_consume_target_field_before_successful_whole_reset() {
+    let hir = build(
+        "record Token {} record Holder { token: Token, count: I8 } \
+         fn sink(value: Holder) {} \
+         fn f() { \
+             let mut holder: Holder = Holder { token: Token {}, count: 1 }; \
+             holder = Holder { token: holder.token, count: 2 }; \
+             sink(holder); \
+         }",
+    );
+    let f = function(&hir, "f");
+    let Statement::Local { binding, .. } = &f.body.statements[0] else {
+        panic!("expected mutable holder local");
+    };
+    let Statement::Assignment { target, value, .. } = &f.body.statements[1] else {
+        panic!("expected whole-binding assignment");
+    };
+    assert_eq!(*target, *binding);
+    let ValueKind::RecordConstruction { fields, .. } = &value.kind else {
+        panic!("assignment RHS must remain a record construction");
+    };
+    assert!(matches!(
+        fields[0].value.kind,
+        ValueKind::FieldValueUse {
+            binding: consumed,
+            ownership: OwnedUse::Consume,
+            ..
+        } if consumed == *binding
+    ));
+    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+        panic!("expected post-assignment call");
+    };
+    assert!(matches!(
+        arguments[0].kind,
+        ValueKind::BindingUse {
+            binding: restored,
+            ownership: OwnedUse::Consume,
+        } if restored == *binding
+    ));
+}
+
+#[test]
+fn call_and_constructor_producers_observe_left_to_right_consumption() {
+    let diagnostics = errors(
+        "record Token {} record Pair { left: Token, right: Token } \
+         record Holder { a: Token, b: Token } \
+         fn two(a: Token, b: Token) {} \
+         fn bad_call(root: Pair) { two(root.left, root.left); } \
+         fn bad_constructor(root: Pair) -> Holder { \
+             return Holder { a: root.left, b: root.left }; \
+         }",
+    );
+    assert_eq!(
+        count_kind(&diagnostics, DiagnosticKind::UnavailableFieldValue),
+        2
+    );
+}
+
+#[test]
+fn rejected_required_type_does_not_apply_consumption_transition() {
+    let whole = errors(
+        "record Ticket {} fn needs_i8(value: I8) {} fn take(value: Ticket) {} \
+         fn f(ticket: Ticket) { needs_i8(ticket); take(ticket); }",
+    );
+    assert!(
+        whole
+            .iter()
+            .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
+    assert!(!has_kind(&whole, DiagnosticKind::UnavailableBinding));
+
+    let field = errors(
+        "record Inner {} record Outer { inner: Inner } \
+         fn needs_i8(value: I8) {} fn take(value: Inner) {} \
+         fn f(root: Outer) { needs_i8(root.inner); take(root.inner); }",
+    );
+    assert!(
+        field
+            .iter()
+            .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
+    assert!(!has_kind(&field, DiagnosticKind::UnavailableFieldValue));
 }
 
 #[test]
@@ -224,7 +448,7 @@ fn nested_path_may_reach_foreign_record_but_cannot_select_inside_it() {
 }
 
 #[test]
-fn field_values_require_exact_consumer_types() {
+fn duplicable_field_values_require_exact_consumer_types() {
     let diagnostics = errors(
         "record Box { value: I8 } record Holder { value: U8 } \
          fn sink(value: U8) {} \
