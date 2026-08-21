@@ -1,26 +1,31 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
-    TypeDef, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
-fn error_kind(body: Body) -> MirValidationErrorKind {
-    validate_body(body).expect_err("invalid MIR").kind
+fn error_kind(program: Program) -> MirValidationErrorKind {
+    validate_program(program).expect_err("invalid MIR").kind
 }
 
 #[test]
@@ -63,7 +68,7 @@ fn shared_child_preserves_parent_shared_authority_for_address_formation() {
         ],
     );
 
-    validate_body(body).expect("a shared child leaves parent shared authority available");
+    validate_program(body).expect("a shared child leaves parent shared authority available");
 }
 
 #[test]
@@ -158,7 +163,7 @@ fn disjoint_exclusive_child_does_not_block_parent_address_formation_on_sibling()
         ],
     );
 
-    validate_body(body).expect("delegation constrains only overlapping structural storage");
+    validate_program(body).expect("delegation constrains only overlapping structural storage");
 }
 
 #[test]
@@ -197,7 +202,8 @@ fn address_formation_through_exclusive_loan_does_not_require_live_pointee() {
         ],
     );
 
-    validate_body(body).expect("loan authority may still name Dead storage for address formation");
+    validate_program(body)
+        .expect("loan authority may still name Dead storage for address formation");
 }
 
 #[test]

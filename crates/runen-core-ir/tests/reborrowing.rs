@@ -1,22 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, Projection, ScalarType,
+    Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 fn i64_type() -> (TypeTable, TypeId) {
@@ -25,7 +30,7 @@ fn i64_type() -> (TypeTable, TypeId) {
     (types, ty)
 }
 
-fn scalar_body(mutable: bool, loan_count: u32, rest: Vec<Statement>) -> Body {
+fn scalar_body(mutable: bool, loan_count: u32, rest: Vec<Statement>) -> Program {
     let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
     let mut statements = vec![Statement::Init {
@@ -54,8 +59,8 @@ fn pair_types() -> (TypeTable, TypeId, TypeId) {
     (types, scalar, pair)
 }
 
-fn error_kind(body: Body) -> MirValidationErrorKind {
-    validate_body(body).expect_err("invalid MIR").kind
+fn error_kind(program: Program) -> MirValidationErrorKind {
+    validate_program(program).expect_err("invalid MIR").kind
 }
 
 fn root(loan: u32, kind: BorrowKind, place: Place) -> Statement {
@@ -92,7 +97,7 @@ fn shared_child_is_valid_from_shared_or_exclusive_parent() {
                 },
             ],
         );
-        validate_body(body).expect("shared child preserves read authority");
+        validate_program(body).expect("shared child preserves read authority");
     }
 }
 
@@ -153,7 +158,7 @@ fn ending_child_restores_exclusive_parent_authority() {
         ],
     );
 
-    validate_body(body).expect("child end restores delegated parent authority");
+    validate_program(body).expect("child end restores delegated parent authority");
 }
 
 #[test]
@@ -195,7 +200,7 @@ fn shared_child_downgrades_exclusive_parent_to_read_only() {
             },
         ],
     );
-    validate_body(readable).expect("shared child retains parent read authority");
+    validate_program(readable).expect("shared child retains parent read authority");
 
     let consuming = scalar_body(
         true,
@@ -254,7 +259,7 @@ fn disjoint_child_preserves_parent_authority_and_allows_exclusive_sibling() {
         ],
     );
 
-    validate_body(body).expect("disjoint delegation preserves parent authority");
+    validate_program(body).expect("disjoint delegation preserves parent authority");
 }
 
 #[test]
@@ -269,7 +274,7 @@ fn overlapping_shared_children_coexist_but_block_exclusive_sibling() {
             child(2, BorrowKind::Shared, 0),
         ],
     );
-    validate_body(coexist).expect("overlapping shared children may coexist");
+    validate_program(coexist).expect("overlapping shared children may coexist");
 
     let blocked = scalar_body(
         false,
@@ -311,7 +316,7 @@ fn grandchild_delegation_restores_authority_leaf_to_root() {
         ],
     );
 
-    validate_body(body).expect("nested delegation composes recursively");
+    validate_program(body).expect("nested delegation composes recursively");
 }
 
 #[test]
@@ -404,7 +409,7 @@ fn exclusive_child_controls_storage_across_value_replacement() {
         ],
     );
 
-    validate_body(body).expect("exclusive child authority spans stored-value lifetimes");
+    validate_program(body).expect("exclusive child authority spans stored-value lifetimes");
 }
 
 #[test]
@@ -421,7 +426,7 @@ fn immutable_storage_supports_exclusive_reborrow_without_assignment_privilege() 
             },
         ],
     );
-    validate_body(valid).expect("exclusive delegation is independent from mutability");
+    validate_program(valid).expect("exclusive delegation is independent from mutability");
 
     let invalid = scalar_body(
         false,
@@ -444,23 +449,25 @@ fn immutable_storage_supports_exclusive_reborrow_without_assignment_privilege() 
 #[test]
 fn reborrow_source_projection_is_typed_even_when_unreachable() {
     let (types, ty) = i64_type();
-    let body = Body {
+    let body = one_function_program(
         types,
-        locals: Vec::new(),
-        loans: vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
-        entry: BasicBlockId(0),
-        blocks: vec![
-            BasicBlock::new(Vec::new(), Terminator::Return),
-            BasicBlock::new(
-                vec![Statement::Borrow {
-                    loan: LoanId(1),
-                    kind: BorrowKind::Shared,
-                    src: PlaceAccess::loan(LoanId(0)).field(0),
-                }],
-                Terminator::Return,
-            ),
-        ],
-    };
+        Body {
+            locals: Vec::new(),
+            loans: vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                BasicBlock::new(
+                    vec![Statement::Borrow {
+                        loan: LoanId(1),
+                        kind: BorrowKind::Shared,
+                        src: PlaceAccess::loan(LoanId(0)).field(0),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        },
+    );
 
     assert_eq!(
         error_kind(body),
@@ -489,38 +496,40 @@ fn sequential_loan_id_reuse_gets_fresh_parentage() {
         ],
     );
 
-    validate_body(body).expect("each activation receives fresh parentage");
+    validate_program(body).expect("each activation receives fresh parentage");
 }
 
 #[test]
 fn stable_loop_state_includes_loan_tree_parentage() {
     let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = Body {
+    let body = one_function_program(
         types,
-        locals: vec![LocalDecl::new("value", ty, false)],
-        loans: vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
-        entry: BasicBlockId(0),
-        blocks: vec![
-            BasicBlock::new(
-                vec![
-                    Statement::Init {
-                        dst: value.clone(),
-                        src: Operand::Constant(Value::I64(1)),
-                    },
-                    root(0, BorrowKind::Shared, value),
-                    child(1, BorrowKind::Shared, 0),
-                ],
-                Terminator::Goto(BasicBlockId(1)),
-            ),
-            BasicBlock::new(
-                vec![Statement::Read {
-                    src: PlaceAccess::loan(LoanId(1)),
-                }],
-                Terminator::Goto(BasicBlockId(1)),
-            ),
-        ],
-    };
+        Body {
+            locals: vec![LocalDecl::new("value", ty, false)],
+            loans: vec![LoanDecl::new("parent", ty), LoanDecl::new("child", ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: value.clone(),
+                            src: Operand::Constant(Value::I64(1)),
+                        },
+                        root(0, BorrowKind::Shared, value),
+                        child(1, BorrowKind::Shared, 0),
+                    ],
+                    Terminator::Goto(BasicBlockId(1)),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: PlaceAccess::loan(LoanId(1)),
+                    }],
+                    Terminator::Goto(BasicBlockId(1)),
+                ),
+            ],
+        },
+    );
 
-    validate_body(body).expect("repeated loan-tree state proves possible divergence");
+    validate_program(body).expect("repeated loan-tree state proves possible divergence");
 }

@@ -1,22 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, ScalarType, Statement, Terminator,
-    TypeDef, TypeTable, Value, validate_body,
+    MirLocation, MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType,
+    Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 #[test]
@@ -40,7 +45,7 @@ fn raw_assign_requires_raw_pointer_operand() {
         ],
     );
 
-    let error = validate_body(body).expect_err("RawAssign requires a raw-pointer value");
+    let error = validate_program(body).expect_err("RawAssign requires a raw-pointer value");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::RawAssignRequiresPointer(value_ty)
@@ -72,7 +77,7 @@ fn raw_assign_source_type_must_match_pointee() {
         ],
     );
 
-    let error = validate_body(body).expect_err("RawAssign source must match pointee type");
+    let error = validate_program(body).expect_err("RawAssign source must match pointee type");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::TypeMismatch { expected: value_ty }
@@ -96,7 +101,7 @@ fn raw_assign_requires_live_pointer_value() {
         }],
     );
 
-    let error = validate_body(body).expect_err("uninitialized pointer value is invalid MIR");
+    let error = validate_program(body).expect_err("uninitialized pointer value is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(pointer)
@@ -133,7 +138,7 @@ fn raw_assign_rejects_moved_pointer_value() {
         ],
     );
 
-    let error = validate_body(body).expect_err("moved pointer value is invalid MIR");
+    let error = validate_program(body).expect_err("moved pointer value is invalid MIR");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(pointer)
@@ -170,7 +175,8 @@ fn exclusive_loan_over_pointer_storage_blocks_raw_assign_at_validation() {
         ],
     );
 
-    let error = validate_body(body).expect_err("exclusive pointer-storage loan blocks RawAssign");
+    let error =
+        validate_program(body).expect_err("exclusive pointer-storage loan blocks RawAssign");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::DirectAccessConflict {
@@ -206,7 +212,7 @@ fn raw_assign_makes_never_initialized_target_live_for_later_safe_read() {
         ],
     );
 
-    validate_body(body).expect("defined RawAssign must update exact target path-state");
+    validate_program(body).expect("defined RawAssign must update exact target path-state");
 }
 
 #[test]
@@ -244,7 +250,7 @@ fn raw_assign_reinitializes_dead_target_for_later_safe_read() {
         ],
     );
 
-    validate_body(body).expect("RawAssign must make the exact Dead target Live again");
+    validate_program(body).expect("RawAssign must make the exact Dead target Live again");
 }
 
 #[test]
@@ -281,7 +287,7 @@ fn raw_assign_completes_partially_initialized_aggregate_for_later_safe_read() {
         ],
     );
 
-    validate_body(body).expect("RawAssign replacement must leave the complete target Live");
+    validate_program(body).expect("RawAssign replacement must leave the complete target Live");
 }
 
 #[test]
@@ -318,7 +324,7 @@ fn shared_loan_can_supply_raw_assign_pointer_value() {
         ],
     );
 
-    validate_body(body).expect("shared authority may obtain the stored pointer value");
+    validate_program(body).expect("shared authority may obtain the stored pointer value");
 }
 
 #[test]
@@ -352,7 +358,7 @@ fn pointer_copy_transports_exact_target_for_raw_assign() {
         ],
     );
 
-    validate_body(body).expect("pointer Copy must preserve exact target verification metadata");
+    validate_program(body).expect("pointer Copy must preserve exact target verification metadata");
 }
 
 #[test]
@@ -386,7 +392,7 @@ fn pointer_move_transports_exact_target_for_raw_assign() {
         ],
     );
 
-    validate_body(body).expect("pointer Move must transfer exact target verification metadata");
+    validate_program(body).expect("pointer Move must transfer exact target verification metadata");
 }
 
 #[test]
@@ -426,7 +432,7 @@ fn aggregate_copy_transports_nested_pointer_target_for_raw_assign() {
         ],
     );
 
-    validate_body(body).expect("aggregate Copy must preserve nested raw-pointer targets");
+    validate_program(body).expect("aggregate Copy must preserve nested raw-pointer targets");
 }
 
 #[test]
@@ -466,7 +472,7 @@ fn aggregate_move_transports_nested_pointer_target_for_raw_assign() {
         ],
     );
 
-    validate_body(body).expect("aggregate Move must transfer nested raw-pointer targets");
+    validate_program(body).expect("aggregate Move must transfer nested raw-pointer targets");
 }
 
 #[test]
@@ -502,7 +508,7 @@ fn pointer_replacement_installs_new_exact_target() {
         ],
     );
 
-    validate_body(body).expect("pointer replacement must replace exact target metadata too");
+    validate_program(body).expect("pointer replacement must replace exact target metadata too");
 }
 
 #[test]
@@ -541,7 +547,7 @@ fn pointer_destruction_and_reinitialization_replace_exact_target_metadata() {
         ],
     );
 
-    validate_body(body)
+    validate_program(body)
         .expect("reinitializing pointer storage must install only the new exact target");
 }
 
@@ -553,71 +559,73 @@ fn pointer_target_metadata_participates_in_loop_state_repetition() {
     let first = Place::local(LocalId(0));
     let second = Place::local(LocalId(1));
     let pointer = Place::local(LocalId(2));
-    let body = Body {
+    let body = one_function_program(
         types,
-        locals: vec![
-            LocalDecl::new("first", value_ty, false),
-            LocalDecl::new("second", value_ty, false),
-            LocalDecl::new("pointer", pointer_ty, true),
-        ],
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![
-            BasicBlock::new(
-                vec![
-                    Statement::Init {
-                        dst: first.clone(),
-                        src: Operand::Constant(Value::I64(0)),
-                    },
-                    Statement::Drop {
-                        place: first.clone().into(),
-                    },
-                    Statement::Init {
-                        dst: second.clone(),
-                        src: Operand::Constant(Value::I64(0)),
-                    },
-                    Statement::Drop {
-                        place: second.clone().into(),
-                    },
-                    Statement::Init {
-                        dst: pointer.clone(),
-                        src: Operand::AddressOf(first.clone().into()),
-                    },
-                ],
-                Terminator::Goto(BasicBlockId(1)),
-            ),
-            BasicBlock::new(
-                vec![
-                    Statement::RawAssign {
-                        pointer: pointer.clone().into(),
-                        src: Operand::Constant(Value::I64(1)),
-                    },
-                    Statement::Read {
-                        src: first.clone().into(),
-                    },
-                    Statement::Drop {
-                        place: first.clone().into(),
-                    },
-                    Statement::Assign {
-                        dst: pointer.into(),
-                        src: Operand::AddressOf(second.into()),
-                    },
-                ],
-                Terminator::Goto(BasicBlockId(1)),
-            ),
-        ],
-    };
+        Body {
+            locals: vec![
+                LocalDecl::new("first", value_ty, false),
+                LocalDecl::new("second", value_ty, false),
+                LocalDecl::new("pointer", pointer_ty, true),
+            ],
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: first.clone(),
+                            src: Operand::Constant(Value::I64(0)),
+                        },
+                        Statement::Drop {
+                            place: first.clone().into(),
+                        },
+                        Statement::Init {
+                            dst: second.clone(),
+                            src: Operand::Constant(Value::I64(0)),
+                        },
+                        Statement::Drop {
+                            place: second.clone().into(),
+                        },
+                        Statement::Init {
+                            dst: pointer.clone(),
+                            src: Operand::AddressOf(first.clone().into()),
+                        },
+                    ],
+                    Terminator::Goto(BasicBlockId(1)),
+                ),
+                BasicBlock::new(
+                    vec![
+                        Statement::RawAssign {
+                            pointer: pointer.clone().into(),
+                            src: Operand::Constant(Value::I64(1)),
+                        },
+                        Statement::Read {
+                            src: first.clone().into(),
+                        },
+                        Statement::Drop {
+                            place: first.clone().into(),
+                        },
+                        Statement::Assign {
+                            dst: pointer.into(),
+                            src: Operand::AddressOf(second.into()),
+                        },
+                    ],
+                    Terminator::Goto(BasicBlockId(1)),
+                ),
+            ],
+        },
+    );
 
-    let error = validate_body(body)
+    let error = validate_program(body)
         .expect_err("second loop iteration must be validated because the pointer target changed");
-    assert_eq!(
-        error.point.as_ref().map(|point| point.block),
-        Some(BasicBlockId(1))
-    );
-    assert_eq!(
-        error.point.as_ref().and_then(|point| point.statement),
-        Some(1)
-    );
+    let point = match &error.location {
+        MirLocation::Point(point) => point,
+        MirLocation::Program | MirLocation::Function(_) => {
+            panic!("loop-state failure must identify a body point")
+        }
+    };
+    assert_eq!(point.block, BasicBlockId(1));
+    assert_eq!(point.statement, Some(1));
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(first)

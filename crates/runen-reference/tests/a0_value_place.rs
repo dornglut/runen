@@ -1,25 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Field, LocalDecl, LocalId, MirValidationErrorKind,
-    Operand, Place, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_body,
+    Operand, Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
+    validate_program,
 };
-use runen_reference::{ExecutionReport, Machine, TerminalStatus, VerificationEvent};
+use runen_reference::{ExecutionReport, TerminalStatus, VerificationEventKind};
+use support::{event_kinds, machine, one_function_program};
 
-fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Body {
-    Body {
+fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement>) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
-fn machine(body: Body) -> Machine {
-    Machine::new(validate_body(body).expect("A0 test MIR must pass validation"))
-}
-
-fn defined_report(body: Body) -> ExecutionReport {
-    machine(body)
+fn defined_report(program: Program) -> ExecutionReport {
+    machine(program)
         .execute()
         .expect("A0 value/place fixture must have defined execution")
 }
@@ -32,7 +34,7 @@ fn move_invalidates_source() {
         ScalarType::TrackedFixture,
     ));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![
             LocalDecl::new("source", tracked, false),
@@ -53,7 +55,7 @@ fn move_invalidates_source() {
         ],
     );
 
-    let error = validate_body(body).expect_err("read after move must fail MIR validation");
+    let error = validate_program(program).expect_err("read after move must fail MIR validation");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::UseOfUninitialized(Place::local(LocalId(0)))
@@ -65,7 +67,7 @@ fn copy_preserves_source() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![
             LocalDecl::new("source", i64_ty, false),
@@ -89,18 +91,11 @@ fn copy_preserves_source() {
         ],
     );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::Copy(Place::local(LocalId(0))))
-    );
-    assert!(
-        report
-            .verification_events
-            .contains(&VerificationEvent::Read(Place::local(LocalId(0))))
-    );
+    let events = event_kinds(&report.verification_events);
+    assert!(events.contains(&VerificationEventKind::Copy(Place::local(LocalId(0)))));
+    assert!(events.contains(&VerificationEventKind::Read(Place::local(LocalId(0)))));
 }
 
 #[test]
@@ -118,7 +113,7 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
     let left = Place::local(LocalId(0)).field(0);
     let right = Place::local(LocalId(0)).field(1);
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![
             LocalDecl::new("pair", pair, false),
@@ -142,12 +137,12 @@ fn partial_move_keeps_disjoint_field_live_and_drops_only_remaining_value() {
         ],
     );
 
-    let report = defined_report(body);
-    let drops: Vec<_> = report
-        .verification_events
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
+    let drops: Vec<_> = events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
+            VerificationEventKind::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
             _ => None,
         })
         .collect();
@@ -165,7 +160,7 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
         ScalarType::TrackedFixture,
     ));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("value", tracked, false)],
         vec![
@@ -179,11 +174,16 @@ fn explicit_drop_is_not_repeated_at_scope_cleanup() {
         ],
     );
 
-    let report = defined_report(body);
-    let drops = report
-        .verification_events
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
+    let drops = events
         .iter()
-        .filter(|event| matches!(event, VerificationEvent::DropTrackedFixture { id: 99, .. }))
+        .filter(|event| {
+            matches!(
+                event,
+                VerificationEventKind::DropTrackedFixture { id: 99, .. }
+            )
+        })
         .count();
     assert_eq!(drops, 1);
 }
@@ -196,40 +196,42 @@ fn fault_unwinds_live_locals_once_in_reverse_declaration_order() {
         ScalarType::TrackedFixture,
     ));
 
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals: vec![
-            LocalDecl::new("first", tracked, false),
-            LocalDecl::new("second", tracked, false),
-        ],
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![
-                Statement::Init {
-                    dst: Place::local(LocalId(0)),
-                    src: Operand::Constant(Value::TrackedFixture(1)),
-                },
-                Statement::Init {
-                    dst: Place::local(LocalId(1)),
-                    src: Operand::Constant(Value::TrackedFixture(2)),
-                },
+        Body {
+            locals: vec![
+                LocalDecl::new("first", tracked, false),
+                LocalDecl::new("second", tracked, false),
             ],
-            Terminator::Fault(Fault::new("TEST_FAULT")),
-        )],
-    };
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: Place::local(LocalId(0)),
+                        src: Operand::Constant(Value::TrackedFixture(1)),
+                    },
+                    Statement::Init {
+                        dst: Place::local(LocalId(1)),
+                        src: Operand::Constant(Value::TrackedFixture(2)),
+                    },
+                ],
+                Terminator::Fault(Fault::new("TEST_FAULT")),
+            )],
+        },
+    );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("TEST_FAULT".into())
     );
 
-    let ids: Vec<_> = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let ids: Vec<_> = events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
+            VerificationEventKind::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect();
@@ -252,46 +254,48 @@ fn fault_cleanup_uses_the_current_partial_destruction_domain() {
     let right = root.clone().field(1);
     let taken = Place::local(LocalId(1));
 
-    let body = Body {
+    let program = one_function_program(
         types,
-        locals: vec![
-            LocalDecl::new("pair", pair, false),
-            LocalDecl::new("taken", tracked, false),
-        ],
-        loans: Vec::new(),
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(
-            vec![
-                Statement::Init {
-                    dst: root,
-                    src: Operand::Constant(Value::Struct(vec![
-                        Value::TrackedFixture(10),
-                        Value::TrackedFixture(20),
-                    ])),
-                },
-                Statement::Init {
-                    dst: taken.clone(),
-                    src: Operand::Move(left.into()),
-                },
-                Statement::Drop {
-                    place: right.clone().into(),
-                },
+        Body {
+            locals: vec![
+                LocalDecl::new("pair", pair, false),
+                LocalDecl::new("taken", tracked, false),
             ],
-            Terminator::Fault(Fault::new("PARTIAL_FAULT")),
-        )],
-    };
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: root,
+                        src: Operand::Constant(Value::Struct(vec![
+                            Value::TrackedFixture(10),
+                            Value::TrackedFixture(20),
+                        ])),
+                    },
+                    Statement::Init {
+                        dst: taken.clone(),
+                        src: Operand::Move(left.into()),
+                    },
+                    Statement::Drop {
+                        place: right.clone().into(),
+                    },
+                ],
+                Terminator::Fault(Fault::new("PARTIAL_FAULT")),
+            )],
+        },
+    );
 
-    let report = defined_report(body);
+    let report = defined_report(program);
     assert_eq!(
         report.terminal,
         TerminalStatus::Faulted("PARTIAL_FAULT".into())
     );
 
-    let drops = report
-        .verification_events
+    let events = event_kinds(&report.verification_events);
+    let drops = events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
+            VerificationEventKind::DropTrackedFixture { place, id } => Some((place.clone(), *id)),
             _ => None,
         })
         .collect::<Vec<_>>();
@@ -311,7 +315,7 @@ fn fields_can_be_first_initialized_independently_before_whole_value_is_read() {
     ));
     let root = Place::local(LocalId(0));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("pair", pair, false)],
         vec![
@@ -327,7 +331,7 @@ fn fields_can_be_first_initialized_independently_before_whole_value_is_read() {
         ],
     );
 
-    defined_report(body);
+    defined_report(program);
 }
 
 #[test]
@@ -342,7 +346,7 @@ fn struct_fields_drop_in_reverse_declaration_order() {
         vec![Field::new("left", tracked), Field::new("right", tracked)],
     ));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![LocalDecl::new("pair", pair, false)],
         vec![Statement::Init {
@@ -354,12 +358,12 @@ fn struct_fields_drop_in_reverse_declaration_order() {
         }],
     );
 
-    let report = defined_report(body);
-    let ids: Vec<_> = report
-        .verification_events
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
+    let ids: Vec<_> = events
         .iter()
         .filter_map(|event| match event {
-            VerificationEvent::DropTrackedFixture { id, .. } => Some(*id),
+            VerificationEventKind::DropTrackedFixture { id, .. } => Some(*id),
             _ => None,
         })
         .collect();
@@ -374,7 +378,7 @@ fn copy_of_noncopy_value_is_rejected_before_execution() {
         ScalarType::TrackedFixture,
     ));
 
-    let body = one_block(
+    let program = one_block(
         types,
         vec![
             LocalDecl::new("source", tracked, false),
@@ -392,6 +396,7 @@ fn copy_of_noncopy_value_is_rejected_before_execution() {
         ],
     );
 
-    let error = validate_body(body).expect_err("TrackedFixture values are not copyable in A0");
+    let error =
+        validate_program(program).expect_err("TrackedFixture values are not copyable in A0");
     assert_eq!(error.kind, MirValidationErrorKind::CopyOfNonCopy(tracked));
 }

@@ -1,25 +1,29 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
     Operand, Place, PlaceAccess, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
-    validate_body,
 };
-use runen_reference::{Machine, VerificationEvent};
+use runen_reference::{ExecutionReport, VerificationEventKind};
+use support::{event_kinds, machine, one_function_program};
 
 fn execute(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> runen_reference::ExecutionReport {
-    let body = Body {
+) -> ExecutionReport {
+    let program = one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    };
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    );
 
-    Machine::new(validate_body(body).expect("language-valid RawRead alias fixture"))
+    machine(program)
         .execute()
         .expect("fixture satisfies RawRead unsafe target preconditions")
 }
@@ -60,9 +64,10 @@ fn shared_loan_can_supply_raw_read_pointer_value_during_execution() {
         ],
     );
 
-    assert!(report.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&report.verification_events);
+    assert!(events.iter().any(|event| matches!(
         event,
-        VerificationEvent::RawRead { target: read, .. } if read == &target
+        VerificationEventKind::RawRead { target: read, .. } if read == &target
     )));
 }
 
@@ -106,8 +111,9 @@ fn disjoint_exclusive_target_loan_does_not_block_raw_read() {
         ],
     );
 
-    assert!(report.verification_events.iter().any(|event| matches!(
+    let events = event_kinds(&report.verification_events);
+    assert!(events.iter().any(|event| matches!(
         event,
-        VerificationEvent::RawRead { target: read, .. } if read == &left
+        VerificationEventKind::RawRead { target: read, .. } if read == &left
     )));
 }

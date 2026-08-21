@@ -1,22 +1,27 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Field, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, Projection, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, Value, validate_body,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, Projection, ScalarType,
+    Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
+use support::one_function_program;
 
 fn one_block(
     types: TypeTable,
     locals: Vec<LocalDecl>,
     loans: Vec<LoanDecl>,
     statements: Vec<Statement>,
-) -> Body {
-    Body {
+) -> Program {
+    one_function_program(
         types,
-        locals,
-        loans,
-        entry: BasicBlockId(0),
-        blocks: vec![BasicBlock::new(statements, Terminator::Return)],
-    }
+        Body {
+            locals,
+            loans,
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(statements, Terminator::Return(None))],
+        },
+    )
 }
 
 fn i64_type() -> (TypeTable, TypeId) {
@@ -25,8 +30,8 @@ fn i64_type() -> (TypeTable, TypeId) {
     (types, ty)
 }
 
-fn error_kind(body: Body) -> MirValidationErrorKind {
-    validate_body(body).expect_err("invalid MIR").kind
+fn error_kind(program: Program) -> MirValidationErrorKind {
+    validate_program(program).expect_err("invalid MIR").kind
 }
 
 fn borrow(loan: u32, kind: BorrowKind, place: Place) -> Statement {
@@ -70,7 +75,7 @@ fn overlapping_shared_root_loans_are_valid() {
         ],
     );
 
-    validate_body(body).expect("overlapping shared root loans are valid");
+    validate_program(body).expect("overlapping shared root loans are valid");
 }
 
 #[test]
@@ -134,7 +139,7 @@ fn disjoint_exclusive_field_loans_are_valid() {
         ],
     );
 
-    validate_body(body).expect("disjoint sibling fields may be borrowed exclusively");
+    validate_program(body).expect("disjoint sibling fields may be borrowed exclusively");
 }
 
 #[test]
@@ -164,7 +169,7 @@ fn direct_non_consuming_access_survives_shared_borrow() {
         ],
     );
 
-    validate_body(body).expect("shared root loan permits direct read/copy");
+    validate_program(body).expect("shared root loan permits direct read/copy");
 }
 
 #[test]
@@ -294,7 +299,7 @@ fn exclusive_loan_survives_value_replacement() {
         ],
     );
 
-    validate_body(body).expect("exclusive authority is over storage, not one value lifetime");
+    validate_program(body).expect("exclusive authority is over storage, not one value lifetime");
 }
 
 #[test]
@@ -319,7 +324,7 @@ fn loan_end_and_sequential_reuse_are_explicit() {
         ],
     );
 
-    validate_body(body).expect("inactive declaration may begin a new borrow interval");
+    validate_program(body).expect("inactive declaration may begin a new borrow interval");
 }
 
 #[test]
@@ -396,21 +401,23 @@ fn exclusive_borrow_does_not_grant_assignment_mutability() {
 #[test]
 fn loan_projection_is_typed_even_when_unreachable() {
     let (types, ty) = i64_type();
-    let body = Body {
+    let body = one_function_program(
         types,
-        locals: Vec::new(),
-        loans: vec![LoanDecl::new("scalar", ty)],
-        entry: BasicBlockId(0),
-        blocks: vec![
-            BasicBlock::new(Vec::new(), Terminator::Return),
-            BasicBlock::new(
-                vec![Statement::Read {
-                    src: PlaceAccess::loan(LoanId(0)).field(0),
-                }],
-                Terminator::Return,
-            ),
-        ],
-    };
+        Body {
+            locals: Vec::new(),
+            loans: vec![LoanDecl::new("scalar", ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: PlaceAccess::loan(LoanId(0)).field(0),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        },
+    );
 
     assert_eq!(
         error_kind(body),
@@ -425,30 +432,32 @@ fn loan_projection_is_typed_even_when_unreachable() {
 fn stable_loop_state_includes_active_loans() {
     let (types, ty) = i64_type();
     let value = Place::local(LocalId(0));
-    let body = Body {
+    let body = one_function_program(
         types,
-        locals: vec![LocalDecl::new("value", ty, false)],
-        loans: vec![LoanDecl::new("shared", ty)],
-        entry: BasicBlockId(0),
-        blocks: vec![
-            BasicBlock::new(
-                vec![
-                    Statement::Init {
-                        dst: value.clone(),
-                        src: Operand::Constant(Value::I64(1)),
-                    },
-                    borrow(0, BorrowKind::Shared, value),
-                ],
-                Terminator::Goto(BasicBlockId(1)),
-            ),
-            BasicBlock::new(
-                vec![Statement::Read {
-                    src: PlaceAccess::loan(LoanId(0)),
-                }],
-                Terminator::Goto(BasicBlockId(1)),
-            ),
-        ],
-    };
+        Body {
+            locals: vec![LocalDecl::new("value", ty, false)],
+            loans: vec![LoanDecl::new("shared", ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: value.clone(),
+                            src: Operand::Constant(Value::I64(1)),
+                        },
+                        borrow(0, BorrowKind::Shared, value),
+                    ],
+                    Terminator::Goto(BasicBlockId(1)),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: PlaceAccess::loan(LoanId(0)),
+                    }],
+                    Terminator::Goto(BasicBlockId(1)),
+                ),
+            ],
+        },
+    );
 
-    validate_body(body).expect("repeated active-loan state proves possible divergence");
+    validate_program(body).expect("repeated active-loan state proves possible divergence");
 }
