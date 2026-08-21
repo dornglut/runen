@@ -28,7 +28,12 @@ fn maps_only_mutable_source_locals_to_mutable_core_locals() {
     );
     let function = &lowered.as_program().functions[0];
 
-    let p = function.body.locals.iter().find(|local| local.name == "p").unwrap();
+    let p = function
+        .body
+        .locals
+        .iter()
+        .find(|local| local.name == "p")
+        .unwrap();
     let immutable = function
         .body
         .locals
@@ -188,9 +193,7 @@ fn result_call_completes_before_assignment_in_the_continuation_block() {
 
 #[test]
 fn assignment_target_uses_binding_map_not_hir_numeric_identity() {
-    let lowered = lower_source(
-        "fn before(a: I64) {} fn f(p: I64) { let mut x: I64 = p; x = p; }",
-    );
+    let lowered = lower_source("fn before(a: I64) {} fn f(p: I64) { let mut x: I64 = p; x = p; }");
     let function = lowered
         .as_program()
         .functions
