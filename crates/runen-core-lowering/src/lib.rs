@@ -347,10 +347,10 @@ impl<'a> FunctionLowerer<'a> {
                 }
                 hir::Statement::RecordDestructure {
                     record,
-                    root,
+                    scrutinee,
                     bindings,
                     ..
-                } => self.lower_record_destructure(*record, *root, bindings)?,
+                } => self.lower_record_destructure(*record, scrutinee, bindings)?,
                 hir::Statement::Assignment { target, value, .. } => {
                     let destination = self.binding(*target)?;
                     let value = self.lower_value(value)?;
@@ -387,17 +387,35 @@ impl<'a> FunctionLowerer<'a> {
     fn lower_record_destructure(
         &mut self,
         record: hir::RecordId,
-        root: hir::BindingId,
+        scrutinee: &hir::RecordPatternScrutinee,
         bindings: &[hir::RecordPatternBinding],
     ) -> Result<(), LoweringError> {
-        let root_local = self.binding(root)?;
-        let root_ty = self.local_type(root_local)?;
-        let expected_root_ty = self.types.get(hir::Type::Record(record))?;
-        if root_ty != expected_root_ty {
-            return Err(LoweringError::InvalidHirInvariant(
-                "record destructuring root type does not match its record identity",
-            ));
-        }
+        let expected_ty = self.types.get(hir::Type::Record(record))?;
+        let source_local = match scrutinee {
+            hir::RecordPatternScrutinee::DirectRoot(root) => {
+                let root_local = self.binding(*root)?;
+                if self.local_type(root_local)? != expected_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "record destructuring root type does not match its record identity",
+                    ));
+                }
+                root_local
+            }
+            hir::RecordPatternScrutinee::Producer { value, .. } => {
+                if value.ty != hir::Type::Record(record) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "producer-backed record destructuring value type does not match its record identity",
+                    ));
+                }
+                let temporary = self.lower_value(value)?;
+                if self.local_type(temporary)? != expected_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "producer-backed record destructuring temporary type does not match its record identity",
+                    ));
+                }
+                temporary
+            }
+        };
 
         let mut seen_fields = BTreeSet::new();
         for binding in bindings {
@@ -407,8 +425,9 @@ impl<'a> FunctionLowerer<'a> {
                 ));
             }
 
-            let source = self.binding_place(root, &[binding.field])?;
-            let projected_ty = self.types.project_type(root_ty, &source.projections)?;
+            let field = index_u32(binding.field, "Core field projection")?;
+            let source = core::Place::local(source_local).field(field);
+            let projected_ty = self.types.project_type(expected_ty, &source.projections)?;
             let retained_ty = self.types.get(binding.ty)?;
             if projected_ty != retained_ty {
                 return Err(LoweringError::InvalidHirInvariant(
@@ -431,6 +450,47 @@ impl<'a> FunctionLowerer<'a> {
                 dst: core::Place::local(destination),
                 src: operand,
             });
+        }
+
+        if let hir::RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee {
+            self.lower_record_pattern_transient_cleanup(source_local, expected_ty, cleanup)?;
+        }
+        Ok(())
+    }
+
+    fn lower_record_pattern_transient_cleanup(
+        &mut self,
+        source_local: core::LocalId,
+        source_ty: core::TypeId,
+        cleanup: &hir::RecordPatternTransientCleanup,
+    ) -> Result<(), LoweringError> {
+        match cleanup {
+            hir::RecordPatternTransientCleanup::None => {}
+            hir::RecordPatternTransientCleanup::Complete => {
+                if self.types.has_scalar_leaf(source_ty)? {
+                    self.push_statement(core::Statement::Drop {
+                        place: core::Place::local(source_local).into(),
+                    });
+                }
+            }
+            hir::RecordPatternTransientCleanup::DirectFields(fields) => {
+                let mut seen = BTreeSet::new();
+                for field in fields {
+                    if !seen.insert(*field) {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "record pattern transient cleanup contains duplicate field identity",
+                        ));
+                    }
+                    let place = core::Place::local(source_local)
+                        .field(index_u32(*field, "Core field projection")?);
+                    let field_ty = self.types.project_type(source_ty, &place.projections)?;
+                    if self.types.has_scalar_leaf(field_ty)? {
+                        self.push_statement(core::Statement::Drop {
+                            place: place.into(),
+                        });
+                    }
+                }
+            }
         }
         Ok(())
     }
