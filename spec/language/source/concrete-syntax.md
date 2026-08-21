@@ -127,7 +127,7 @@ This form defines no source-visible module path, package coordinate, dependency 
 
 ```text
 RecordDefinition = "record" UserIdentifier "{" RecordFields? "}"
-RecordFields     = RecordField ("," RecordField)* ","?"
+RecordFields     = RecordField ("," RecordField)* ","?
 RecordField      = UserIdentifier ":" Type
 ```
 
@@ -163,7 +163,7 @@ This subset has no nested module path, type inference, type alias, generic appli
 
 ```text
 FunctionDefinition = "fn" UserIdentifier "(" Parameters? ")" ResultClause? Body
-Parameters         = Parameter ("," Parameter)* ","?"
+Parameters         = Parameter ("," Parameter)* ","?
 Parameter          = UserIdentifier ":" Type
 ResultClause       = "->" Type
 ```
@@ -231,7 +231,7 @@ This form targets only the complete selected binding. There is no field/member a
 ```text
 DirectCall       = DirectCallTarget "(" Arguments? ")"
 DirectCallTarget = UserIdentifier | QualifiedModuleMember
-Arguments        = Value ("," Value)* ","?"
+Arguments        = Value ("," Value)* ","?
 ```
 
 An unqualified `UserIdentifier` call target maps to the direct-call relation owned by `function-execution.md` after its target identifier is resolved using the function-local lookup precedence from `local-bindings.md` and the same-module fallback from `names-modules.md`.
@@ -260,7 +260,7 @@ The represented same-module named-field record constructor has this grammar:
 
 ```text
 RecordConstruction = UserIdentifier "{" RecordInitializers? "}"
-RecordInitializers = RecordInitializer ("," RecordInitializer)* ","?"
+RecordInitializers = RecordInitializer ("," RecordInitializer)* ","?
 RecordInitializer  = UserIdentifier ":" Value
 ```
 
