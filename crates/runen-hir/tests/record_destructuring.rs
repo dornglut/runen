@@ -1,6 +1,7 @@
 use runen_hir::{
-    AssignmentMutability, DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Statement,
-    Type, ValueKind, build_typed_hir,
+    AssignmentMutability, DiagnosticKind, IntrinsicType, ModuleId, OwnedUse,
+    RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit, Statement, Type, ValueKind,
+    build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -45,7 +46,7 @@ fn retains_resolved_pattern_facts_in_source_order() {
     let f = function(&hir, "f");
     let Statement::RecordDestructure {
         record,
-        root,
+        scrutinee,
         bindings,
         ..
     } = &f.body.statements[0]
@@ -54,7 +55,10 @@ fn retains_resolved_pattern_facts_in_source_order() {
     };
 
     assert_eq!(*record, hir.records[1].id);
-    assert_eq!(*root, f.parameters[0].binding);
+    assert_eq!(
+        scrutinee,
+        &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+    );
     assert_eq!(bindings.len(), 3);
     assert_eq!(
         bindings
@@ -79,6 +83,235 @@ fn retains_resolved_pattern_facts_in_source_order() {
     assert_ne!(bindings[0].binding, bindings[1].binding);
     assert_ne!(bindings[1].binding, bindings[2].binding);
     assert_ne!(bindings[0].binding, bindings[2].binding);
+}
+
+#[test]
+fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
+    let hir = build(
+        "record Token {} \
+         record Mixed { first: I8, token: Token, last: U8 } \
+         record Left {} record Right {} record Owned { left: Left, right: Right } \
+         record Empty {} record Outer { mixed: Mixed } \
+         fn make() -> Mixed { return Mixed { first: 1, token: Token {}, last: 2 }; } \
+         fn call() { let Mixed { token: moved, last: z, first: a } = make(); } \
+         fn construct() { let Mixed { first: a, token: moved, last: z } = Mixed { first: 1, token: Token {}, last: 2 }; } \
+         fn field(root: Outer) { let Mixed { first: a, token: moved, last: z } = root.mixed; } \
+         fn owned() { let Owned { left: l, right: r } = Owned { left: Left {}, right: Right {} }; } \
+         fn empty() { let Empty {} = Empty {}; }",
+    );
+
+    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "call").body.statements[0]
+    else {
+        panic!("expected call-backed pattern");
+    };
+    let RecordPatternScrutinee::Producer { value, cleanup } = scrutinee else {
+        panic!("expected producer-backed scrutinee");
+    };
+    assert!(matches!(value.kind, ValueKind::DirectCall { .. }));
+    assert_eq!(
+        cleanup,
+        &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
+    );
+
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &function(&hir, "construct").body.statements[0]
+    else {
+        panic!("expected construction-backed pattern");
+    };
+    let RecordPatternScrutinee::Producer { value, cleanup } = scrutinee else {
+        panic!("expected producer-backed scrutinee");
+    };
+    assert!(matches!(value.kind, ValueKind::RecordConstruction { .. }));
+    assert_eq!(
+        cleanup,
+        &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
+    );
+
+    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "field").body.statements[0]
+    else {
+        panic!("expected field-backed pattern");
+    };
+    let RecordPatternScrutinee::Producer { value, cleanup } = scrutinee else {
+        panic!("expected producer-backed scrutinee");
+    };
+    assert!(matches!(
+        value.kind,
+        ValueKind::FieldValueUse {
+            fields: ref path,
+            ownership: OwnedUse::Consume,
+            ..
+        } if path == &[0]
+    ));
+    assert_eq!(
+        cleanup,
+        &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
+    );
+
+    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "owned").body.statements[0]
+    else {
+        panic!("expected all-consumed pattern");
+    };
+    assert!(matches!(
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            cleanup: RecordPatternTransientCleanup::None,
+            ..
+        }
+    ));
+
+    let Statement::RecordDestructure { scrutinee, bindings, .. } =
+        &function(&hir, "empty").body.statements[0]
+    else {
+        panic!("expected zero-field producer-backed pattern");
+    };
+    assert!(bindings.is_empty());
+    assert!(matches!(
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            cleanup: RecordPatternTransientCleanup::Complete,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn all_duplicable_producer_backed_pattern_retains_complete_transient_cleanup() {
+    let hir = build(
+        "record Pair { left: I8, right: U8 } \
+         fn f() { let Pair { right: r, left: l } = Pair { left: 1, right: 2 }; }",
+    );
+    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
+    else {
+        panic!("expected record destructuring statement");
+    };
+    assert!(matches!(
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            cleanup: RecordPatternTransientCleanup::Complete,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn producer_lookup_occurs_before_pattern_bindings_enter_scope() {
+    let hir = build(
+        "record Pair { left: I8, right: U8 } \
+         fn make() -> Pair { return Pair { left: 1, right: 2 }; } \
+         fn f() -> I8 { \
+             let Pair { left: make, right: other } = make(); \
+             return make; \
+         }",
+    );
+    let f = function(&hir, "f");
+    let Statement::RecordDestructure {
+        scrutinee,
+        bindings,
+        ..
+    } = &f.body.statements[0]
+    else {
+        panic!("expected record destructuring statement");
+    };
+    assert!(matches!(
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            value: runen_hir::Value {
+                kind: ValueKind::DirectCall { .. },
+                ..
+            },
+            ..
+        }
+    ));
+    let returned = f
+        .body
+        .terminal_return
+        .as_ref()
+        .and_then(|returned| returned.value.as_ref())
+        .expect("returned value");
+    assert!(matches!(
+        returned.kind,
+        ValueKind::BindingUse { binding, .. } if binding == bindings[0].binding
+    ));
+}
+
+#[test]
+fn invalid_pattern_structure_does_not_validate_or_consume_producer() {
+    let diagnostics = errors(
+        "record Token {} record Pair { token: Token, count: I8 } \
+         fn make(token: Token, count: I8) -> Pair { return Pair { token: token, count: count }; } \
+         fn take(value: Token) {} \
+         fn f(root: Pair) { \
+             let Pair { missing: bad, count: copied } = make(root.token, 1); \
+             take(root.token); \
+         }",
+    );
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::UnknownRecordField
+    ));
+    assert!(!has_kind(
+        &diagnostics,
+        DiagnosticKind::UnavailableFieldValue
+    ));
+}
+
+#[test]
+fn invalid_producer_rolls_back_tentative_ownership_transitions() {
+    let diagnostics = errors(
+        "record Token {} record Pair { token: Token, count: I8 } \
+         fn make(token: Token, count: I8) -> Pair { return Pair { token: token, count: count }; } \
+         fn take(value: Token) {} \
+         fn f(root: Pair) { \
+             let Pair { token: moved, count: copied } = make(root.token, missing); \
+             take(root.token); \
+         }",
+    );
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
+    assert!(!has_kind(
+        &diagnostics,
+        DiagnosticKind::UnavailableFieldValue
+    ));
+}
+
+#[test]
+fn successful_field_producer_commits_source_binding_transition() {
+    let diagnostics = errors(
+        "record Token {} record Pair { token: Token, count: I8 } record Outer { pair: Pair } \
+         fn take(value: Pair) {} \
+         fn f(root: Outer) { \
+             let Pair { token: moved, count: copied } = root.pair; \
+             take(root.pair); \
+         }",
+    );
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::UnavailableFieldValue
+    ));
+}
+
+#[test]
+fn producer_result_must_match_pattern_nominal_type_and_have_a_result() {
+    let mismatch = errors(
+        "record A { value: I8 } record B { value: I8 } \
+         fn make() -> B { return B { value: 1 }; } \
+         fn f() { let A { value: extracted } = make(); }",
+    );
+    assert!(mismatch.iter().any(|diagnostic| matches!(
+        diagnostic.kind,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Record(_),
+            found: Type::Record(_),
+        }
+    )));
+
+    let no_result = errors(
+        "record A { value: I8 } fn make() {} \
+         fn f() { let A { value: extracted } = make(); }",
+    );
+    assert!(has_kind(
+        &no_result,
+        DiagnosticKind::NoResultCallUsedAsValue
+    ));
 }
 
 #[test]
@@ -286,11 +519,19 @@ fn all_nonduplicable_fields_remain_independent_pattern_consumes() {
          fn f(root: Pair) { let Pair { right: moved_right, left: moved_left } = root; }",
     );
     let f = function(&hir, "f");
-    let Statement::RecordDestructure { root, bindings, .. } = &f.body.statements[0] else {
+    let Statement::RecordDestructure {
+        scrutinee,
+        bindings,
+        ..
+    } = &f.body.statements[0]
+    else {
         panic!("expected record destructuring statement");
     };
 
-    assert_eq!(*root, f.parameters[0].binding);
+    assert_eq!(
+        scrutinee,
+        &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+    );
     assert_eq!(
         bindings
             .iter()
@@ -430,7 +671,6 @@ fn pattern_bindings_are_immutable_and_enter_normal_local_lookup_after_declaratio
         DiagnosticKind::ImmutableAssignmentTarget
     ));
 
-    // Existing ordinary mutable-local classification remains represented independently.
     let ordinary = build("fn local() { let mut value: I8 = 1; value = 2; }");
     let Statement::Local { mutability, .. } = &function(&ordinary, "local").body.statements[0]
     else {
