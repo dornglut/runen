@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId, Operand,
+    Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{Machine, TerminalStatus, VerificationEventKind};
 
@@ -85,9 +85,7 @@ fn non_i64_values_survive_init_copy_assign_and_move() {
                             src: Operand::Constant(Value::U32(u32::MAX)),
                         },
                     ],
-                    Terminator::Return(Some(Operand::Move(
-                        Place::local(LocalId(1)).into(),
-                    ))),
+                    Terminator::Return(Some(Operand::Move(Place::local(LocalId(1)).into()))),
                 )],
             },
         }],
@@ -102,10 +100,10 @@ fn non_i64_values_survive_init_copy_assign_and_move() {
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(Value::U32(u32::MAX)));
     assert!(
-        !report.verification_events.iter().any(|event| matches!(
-            event.kind,
-            VerificationEventKind::DropTrackedFixture { .. }
-        )),
+        !report
+            .verification_events
+            .iter()
+            .any(|event| matches!(event.kind, VerificationEventKind::DropTrackedFixture { .. })),
         "ordinary integer transport must not invent integer-specific cleanup events"
     );
 }
@@ -135,9 +133,7 @@ fn mixed_fixed_width_struct_round_trips_through_storage() {
                         dst: Place::local(LocalId(0)),
                         src: Operand::Constant(expected.clone()),
                     }],
-                    Terminator::Return(Some(Operand::Move(
-                        Place::local(LocalId(0)).into(),
-                    ))),
+                    Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
                 )],
             },
         }],
