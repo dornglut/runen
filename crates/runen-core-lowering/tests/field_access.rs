@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    Function as CoreFunction, LocalId, Operand, Place, PlaceAccess, Projection, Statement as CoreStatement,
-    Terminator, ValidatedProgram,
+    Function as CoreFunction, LocalId, Operand, Place, PlaceAccess, Projection,
+    Statement as CoreStatement, Terminator, ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{ModuleId, SourceUnit, ValueKind, build_typed_hir};
@@ -35,9 +35,8 @@ fn direct(place: Place) -> PlaceAccess {
 
 #[test]
 fn one_level_field_value_lowers_to_projected_copy() {
-    let lowered = lower_source(
-        "record Box { value: I8 } fn read(root: Box) -> I8 { return root.value; }",
-    );
+    let lowered =
+        lower_source("record Box { value: I8 } fn read(root: Box) -> I8 { return root.value; }");
     let read = function(lowered.as_program(), "read");
 
     assert_eq!(
@@ -134,9 +133,8 @@ fn field_value_composes_with_call_transfer() {
 
 #[test]
 fn lowering_rejects_empty_resolved_field_path_as_invalid_hir() {
-    let mut compilation = hir(
-        "record Box { value: I8 } fn read(root: Box) -> I8 { return root.value; }",
-    );
+    let mut compilation =
+        hir("record Box { value: I8 } fn read(root: Box) -> I8 { return root.value; }");
     let value = compilation.functions[0]
         .body
         .terminal_return
