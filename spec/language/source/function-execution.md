@@ -157,7 +157,7 @@ A source-valid represented record-destructuring declaration consumes the pattern
 
 This execution owner adds only the straight-line declaration completion boundary:
 
-1. all non-ownership source validation for the complete pattern has already succeeded before execution of its ownership productions;
+1. complete source validation for the entire pattern, including every selected field path's required pre-pattern structural availability, has succeeded before any pattern ownership production begins;
 2. apply the pattern-owned direct-field duplicate/consume productions in pattern source order;
 3. each produced field value becomes the complete initial owned value of its corresponding pattern-introduced binding, whose consumed-path set begins empty;
 4. after every pattern entry has completed, establish all of those new bindings in the containing lexical scope together; and
