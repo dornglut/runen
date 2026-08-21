@@ -1113,9 +1113,16 @@ fn validate_operand_state(
 
 fn validation_value_from_constant(value: &Value) -> ValidationValue {
     match value {
-        Value::Bool(_) | Value::I64(_) | Value::TrackedFixture(_) => {
-            ValidationValue::Scalar(ValidationScalar::NonPointer)
-        }
+        Value::Bool(_)
+        | Value::I8(_)
+        | Value::I16(_)
+        | Value::I32(_)
+        | Value::I64(_)
+        | Value::U8(_)
+        | Value::U16(_)
+        | Value::U32(_)
+        | Value::U64(_)
+        | Value::TrackedFixture(_) => ValidationValue::Scalar(ValidationScalar::NonPointer),
         Value::Struct(values) => {
             ValidationValue::Struct(values.iter().map(validation_value_from_constant).collect())
         }

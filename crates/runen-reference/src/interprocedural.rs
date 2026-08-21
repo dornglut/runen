@@ -91,7 +91,14 @@ pub enum EntryError {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum RuntimeValue {
     Bool(bool),
+    I8(i8),
+    I16(i16),
+    I32(i32),
     I64(i64),
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
     RawPointer(RawPointerValue),
     TrackedFixture(u64),
     Struct(Vec<RuntimeValue>),
@@ -101,7 +108,14 @@ impl RuntimeValue {
     fn from_constant(value: &Value) -> Self {
         match value {
             Value::Bool(value) => Self::Bool(*value),
+            Value::I8(value) => Self::I8(*value),
+            Value::I16(value) => Self::I16(*value),
+            Value::I32(value) => Self::I32(*value),
             Value::I64(value) => Self::I64(*value),
+            Value::U8(value) => Self::U8(*value),
+            Value::U16(value) => Self::U16(*value),
+            Value::U32(value) => Self::U32(*value),
+            Value::U64(value) => Self::U64(*value),
             Value::TrackedFixture(value) => Self::TrackedFixture(*value),
             Value::Struct(values) => Self::Struct(values.iter().map(Self::from_constant).collect()),
         }
@@ -110,7 +124,14 @@ impl RuntimeValue {
     fn into_public_value(self) -> Value {
         match self {
             Self::Bool(value) => Value::Bool(value),
+            Self::I8(value) => Value::I8(value),
+            Self::I16(value) => Value::I16(value),
+            Self::I32(value) => Value::I32(value),
             Self::I64(value) => Value::I64(value),
+            Self::U8(value) => Value::U8(value),
+            Self::U16(value) => Value::U16(value),
+            Self::U32(value) => Value::U32(value),
+            Self::U64(value) => Value::U64(value),
             Self::TrackedFixture(value) => Value::TrackedFixture(value),
             Self::Struct(values) => {
                 Value::Struct(values.into_iter().map(Self::into_public_value).collect())
@@ -903,8 +924,29 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Ru
             ObjectState::Leaf(leaf),
             RuntimeValue::Bool(value),
         ) => *leaf = LeafState::Live(RuntimeValue::Bool(value)),
+        (TypeKind::Scalar(ScalarType::I8), ObjectState::Leaf(leaf), RuntimeValue::I8(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::I8(value));
+        }
+        (TypeKind::Scalar(ScalarType::I16), ObjectState::Leaf(leaf), RuntimeValue::I16(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::I16(value));
+        }
+        (TypeKind::Scalar(ScalarType::I32), ObjectState::Leaf(leaf), RuntimeValue::I32(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::I32(value));
+        }
         (TypeKind::Scalar(ScalarType::I64), ObjectState::Leaf(leaf), RuntimeValue::I64(value)) => {
             *leaf = LeafState::Live(RuntimeValue::I64(value));
+        }
+        (TypeKind::Scalar(ScalarType::U8), ObjectState::Leaf(leaf), RuntimeValue::U8(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::U8(value));
+        }
+        (TypeKind::Scalar(ScalarType::U16), ObjectState::Leaf(leaf), RuntimeValue::U16(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::U16(value));
+        }
+        (TypeKind::Scalar(ScalarType::U32), ObjectState::Leaf(leaf), RuntimeValue::U32(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::U32(value));
+        }
+        (TypeKind::Scalar(ScalarType::U64), ObjectState::Leaf(leaf), RuntimeValue::U64(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::U64(value));
         }
         (
             TypeKind::Scalar(ScalarType::RawPointer(_)),
