@@ -57,3 +57,29 @@ fn qualified_resolution_ignores_import_item_and_unit_presentation_order() {
         assert_eq!(hir.function(*function).name, "id");
     }
 }
+
+#[test]
+fn import_target_alias_matches_concrete_alias_by_normalized_lexical_key() {
+    let target = parse("export record Ticket {}");
+    let source = parse("import e\u{301}; fn use_ticket(value: e\u{301}::Ticket) {}");
+    let imports = [ImportTarget::new("\u{e9}", ModuleId::new(2)).unwrap()];
+
+    let hir = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &source, &imports),
+        SourceUnit::new(ModuleId::new(2), &target, &[]),
+    ])
+    .expect("NFC-equivalent concrete and context alias spellings must denote one alias key");
+
+    let ticket = hir
+        .records
+        .iter()
+        .find(|record| record.name == "Ticket")
+        .expect("target record exists")
+        .id;
+    let function = hir
+        .functions
+        .iter()
+        .find(|function| function.name == "use_ticket")
+        .expect("importing function exists");
+    assert_eq!(function.parameters[0].ty, Type::Record(ticket));
+}
