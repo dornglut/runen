@@ -30,9 +30,7 @@ fn function<'a>(hir: &'a runen_hir::TypedCompilation, name: &str) -> &'a runen_h
 }
 
 fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
-    diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.kind == kind)
+    diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
 }
 
 #[test]
@@ -141,10 +139,7 @@ fn mixed_pattern_consumes_exact_field_but_preserves_disjoint_field_access() {
              take(root); \
          }",
     );
-    assert!(has_kind(
-        &diagnostics,
-        DiagnosticKind::UnavailableBinding
-    ));
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnavailableBinding));
 }
 
 #[test]
@@ -218,10 +213,7 @@ fn duplicate_pattern_bindings_and_active_shadowing_are_rejected_atomically() {
         &duplicate,
         DiagnosticKind::DuplicatePatternBinding
     ));
-    assert!(!has_kind(
-        &duplicate,
-        DiagnosticKind::UnavailableFieldValue
-    ));
+    assert!(!has_kind(&duplicate, DiagnosticKind::UnavailableFieldValue));
 
     let shadow = errors(
         "record Token {} record Pair { left: Token, right: Token } fn take(value: Token) {} \
