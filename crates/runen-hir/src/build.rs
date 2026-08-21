@@ -1205,14 +1205,9 @@ fn validate_value(
                 location: value_location,
             })
         }
-        SyntaxKind::RecordConstruction => validate_record_construction(
-            header,
-            node,
-            required,
-            context,
-            bindings,
-            diagnostics,
-        ),
+        SyntaxKind::RecordConstruction => {
+            validate_record_construction(header, node, required, context, bindings, diagnostics)
+        }
         _ => unreachable!("syntax-clean value has represented value kind"),
     }
 }
