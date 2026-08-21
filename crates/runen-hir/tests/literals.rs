@@ -72,6 +72,37 @@ fn fixed_width_boundaries_and_zero_spellings_materialize_exactly() {
 }
 
 #[test]
+fn every_fixed_width_integer_rejects_values_immediately_outside_its_domain() {
+    let cases = [
+        ("I8", "128"),
+        ("I8", "-129"),
+        ("I16", "32768"),
+        ("I16", "-32769"),
+        ("I32", "2147483648"),
+        ("I32", "-2147483649"),
+        ("I64", "9223372036854775808"),
+        ("I64", "-9223372036854775809"),
+        ("U8", "256"),
+        ("U8", "-1"),
+        ("U16", "65536"),
+        ("U16", "-1"),
+        ("U32", "4294967296"),
+        ("U32", "-1"),
+        ("U64", "18446744073709551616"),
+        ("U64", "-1"),
+    ];
+
+    for (source_type, spelling) in cases {
+        let source = format!("fn bad() -> {source_type} {{ return {spelling}; }}");
+        let diagnostics = errors(&source);
+        assert!(diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic.kind,
+            DiagnosticKind::IntegerLiteralOutOfRange { .. }
+        )), "missing out-of-range diagnostic for {source_type} literal {spelling}");
+    }
+}
+
+#[test]
 fn integer_literal_diagnostics_distinguish_context_kind_from_range_failure() {
     let wrong_kind = errors("fn bad() -> Bool { return 1; }");
     assert!(wrong_kind.iter().any(|diagnostic| {
@@ -97,19 +128,13 @@ fn integer_literal_diagnostics_distinguish_context_kind_from_range_failure() {
         }
     )));
 
-    for source in [
-        "fn bad() -> I8 { return 128; }",
-        "fn bad() -> I8 { return -129; }",
-        "fn bad() -> U8 { return 256; }",
-        "fn bad() -> U8 { return -1; }",
+    let too_wide = errors(
         "fn bad() -> U64 { return 999999999999999999999999999999999999999999999999999999999999; }",
-    ] {
-        let diagnostics = errors(source);
-        assert!(diagnostics.iter().any(|diagnostic| matches!(
-            diagnostic.kind,
-            DiagnosticKind::IntegerLiteralOutOfRange { .. }
-        )));
-    }
+    );
+    assert!(too_wide.iter().any(|diagnostic| matches!(
+        diagnostic.kind,
+        DiagnosticKind::IntegerLiteralOutOfRange { .. }
+    )));
 }
 
 #[test]
