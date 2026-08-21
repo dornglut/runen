@@ -67,9 +67,7 @@ fn true_and_false_are_reserved_only_after_maximal_identifier_formation() {
 
     let literals = parse("fn flags() -> Bool { return true; }");
     assert!(literals.errors().is_empty(), "{:?}", literals.errors());
-    assert!(
-        nontrivia_tokens(&literals).contains(&(SyntaxKind::KwTrue, "true".into()))
-    );
+    assert!(nontrivia_tokens(&literals).contains(&(SyntaxKind::KwTrue, "true".into())));
 }
 
 #[test]
@@ -113,9 +111,12 @@ fn arrow_precedes_standalone_minus_tokenization() {
 #[test]
 fn non_ascii_decimal_lookalikes_are_not_decimal_magnitudes() {
     let parsed = parse("fn bad() -> I8 { return ١; }");
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::UnrecognizedToken
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::UnrecognizedToken })
+    );
     assert!(
         !nontrivia_tokens(&parsed)
             .iter()
@@ -140,7 +141,6 @@ fn unsupported_numeric_spellings_are_not_silently_reinterpreted() {
 fn minus_without_a_decimal_magnitude_has_a_structured_syntax_error() {
     let parsed = parse("fn bad() -> I8 { return -; }");
     assert!(parsed.errors().iter().any(|error| {
-        error.kind()
-            == SyntaxErrorKind::Expected(ExpectedSyntax::DecimalMagnitude)
+        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::DecimalMagnitude)
     }));
 }
