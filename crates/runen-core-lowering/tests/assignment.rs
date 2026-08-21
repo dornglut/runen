@@ -70,7 +70,12 @@ fn materializes_rhs_before_emitting_core_assign() {
 
     let assignment_index = statements
         .iter()
-        .position(|statement| matches!(statement, CoreStatement::Assign { dst, .. } if *dst == direct(Place::local(x))))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Assign { dst, .. } if dst == &direct(Place::local(x))
+            )
+        })
         .expect("assignment must lower to Core Assign");
     assert!(assignment_index > 0);
 
@@ -120,7 +125,12 @@ fn nonduplicable_self_assignment_moves_to_temporary_then_assigns_back() {
 
     let assign_index = statements
         .iter()
-        .position(|statement| matches!(statement, CoreStatement::Assign { dst, .. } if *dst == direct(Place::local(x))))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Assign { dst, .. } if dst == &direct(Place::local(x))
+            )
+        })
         .expect("self-assignment must emit Core Assign");
     let CoreStatement::Assign {
         src: Operand::Move(PlaceAccess::Direct(temp)),
@@ -193,7 +203,7 @@ fn assignment_target_uses_binding_map_not_hir_numeric_identity() {
     assert!(function.body.blocks[0].statements.iter().any(|statement| {
         matches!(
             statement,
-            CoreStatement::Assign { dst, .. } if *dst == direct(Place::local(LocalId(1)))
+            CoreStatement::Assign { dst, .. } if dst == &direct(Place::local(LocalId(1)))
         )
     }));
 }
