@@ -426,6 +426,24 @@ impl<'a> FunctionLowerer<'a> {
                 }
                 Ok(result)
             }
+            hir::ValueKind::FieldValueUse { binding, fields } => {
+                if fields.is_empty() {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "field-value use has empty field path",
+                    ));
+                }
+                let source = self.binding(*binding)?;
+                let mut place = core::Place::local(source);
+                for field in fields {
+                    place = place.field(index_u32(*field, "Core field projection")?);
+                }
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::Copy(place.into()),
+                });
+                Ok(temporary)
+            }
         }
     }
 
