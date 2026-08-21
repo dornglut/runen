@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
-    Accessibility, BindingId, Body, Diagnostic, DiagnosticKind, Field, Function, FunctionId,
-    IntrinsicType, Module, ModuleId, OwnedUse, Parameter, Record, RecordId, Return, SourceLocation,
-    SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
+    Accessibility, AssignmentMutability, BindingId, Body, Diagnostic, DiagnosticKind, Field,
+    Function, FunctionId, IntrinsicType, Module, ModuleId, OwnedUse, Parameter, Record, RecordId,
+    Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -66,6 +66,7 @@ struct FunctionHeader {
 struct BindingState {
     id: BindingId,
     ty: Type,
+    mutability: AssignmentMutability,
     available: bool,
 }
 
@@ -719,6 +720,7 @@ fn validate_body(
             BindingState {
                 id: parameter.binding,
                 ty: parameter.ty,
+                mutability: AssignmentMutability::Immutable,
                 available: true,
             },
         );
@@ -740,6 +742,19 @@ fn validate_body(
                     &context,
                     &mut bindings,
                     next_binding,
+                    diagnostics,
+                ) {
+                    statements.push(statement);
+                }
+            }
+            SyntaxKind::AssignmentStatement => {
+                if let Some(statement) = validate_assignment(
+                    header,
+                    &node,
+                    modules,
+                    imports,
+                    headers,
+                    &mut bindings,
                     diagnostics,
                 ) {
                     statements.push(statement);
@@ -817,6 +832,15 @@ fn validate_local(
 ) -> Option<Statement> {
     let name_token = direct_token(node, SyntaxKind::Ident);
     let name = key(&name_token);
+    let mutability = if node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::KwMut)
+    {
+        AssignmentMutability::Mutable
+    } else {
+        AssignmentMutability::Immutable
+    };
     let local_location = location(header.unit, node);
     let type_node = direct_child(node, SyntaxKind::TypeRef);
     let declared = resolve_type(
@@ -873,6 +897,7 @@ fn validate_local(
         BindingState {
             id: binding,
             ty,
+            mutability,
             available: true,
         },
     );
@@ -880,8 +905,85 @@ fn validate_local(
         binding,
         name,
         ty,
+        mutability,
         initializer,
         location: local_location,
+    })
+}
+
+fn validate_assignment(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    headers: &[FunctionHeader],
+    bindings: &mut BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let target_token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&target_token);
+    let target_location = SourceLocation {
+        unit: header.unit,
+        range: target_token.text_range(),
+    };
+
+    let (target, target_ty) = match bindings.get(&name).copied() {
+        Some(binding) => {
+            if !binding.mutability.is_mutable() {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ImmutableAssignmentTarget,
+                    location: target_location,
+                });
+                return None;
+            }
+            (binding.id, binding.ty)
+        }
+        None => {
+            let entity = modules
+                .get(&header.module)
+                .and_then(|module| module.namespace.get(&name));
+            diagnostics.push(Diagnostic {
+                kind: if entity.is_some() {
+                    DiagnosticKind::ExpectedValueBinding
+                } else {
+                    DiagnosticKind::UnresolvedName
+                },
+                location: target_location,
+            });
+            return None;
+        }
+    };
+
+    let value_node = value_child(node);
+    let value = validate_value(
+        header,
+        &value_node,
+        modules,
+        imports,
+        headers,
+        bindings,
+        diagnostics,
+    )?;
+    if value.ty != target_ty {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: target_ty,
+                found: value.ty,
+            },
+            location: value.location,
+        });
+        return None;
+    }
+
+    bindings
+        .get_mut(&name)
+        .expect("resolved assignment target remains in the root binding scope")
+        .available = true;
+
+    Some(Statement::Assignment {
+        target,
+        value,
+        location: location(header.unit, node),
     })
 }
 

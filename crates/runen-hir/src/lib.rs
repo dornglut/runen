@@ -84,6 +84,19 @@ pub enum Accessibility {
     Exported,
 }
 
+/// Assignment-mutability classification retained for represented ordinary locals.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AssignmentMutability {
+    Immutable,
+    Mutable,
+}
+
+impl AssignmentMutability {
+    pub(crate) const fn is_mutable(self) -> bool {
+        matches!(self, Self::Mutable)
+    }
+}
+
 /// Intrinsic source type identities represented by the current source subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IntrinsicType {
@@ -184,7 +197,13 @@ pub enum Statement {
         binding: BindingId,
         name: String,
         ty: Type,
+        mutability: AssignmentMutability,
         initializer: Value,
+        location: SourceLocation,
+    },
+    Assignment {
+        target: BindingId,
+        value: Value,
         location: SourceLocation,
     },
     Call {
@@ -269,6 +288,7 @@ pub enum DiagnosticKind {
     LocalShadowing,
     ExpectedValueBinding,
     UnavailableBinding,
+    ImmutableAssignmentTarget,
     ExpectedFunction,
     ArgumentCount { expected: usize, found: usize },
     TypeMismatch { expected: Type, found: Type },

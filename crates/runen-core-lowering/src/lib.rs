@@ -195,7 +195,7 @@ impl<'a> FunctionLowerer<'a> {
         };
 
         for parameter in &function.parameters {
-            let local = lowerer.push_source_local(parameter.name.clone(), parameter.ty)?;
+            let local = lowerer.push_source_local(parameter.name.clone(), parameter.ty, false)?;
             if lowerer.bindings.insert(parameter.binding, local).is_some() {
                 return Err(LoweringError::InvalidHirInvariant(
                     "duplicate HIR binding identity",
@@ -206,10 +206,18 @@ impl<'a> FunctionLowerer<'a> {
 
         for statement in &function.body.statements {
             if let hir::Statement::Local {
-                binding, name, ty, ..
+                binding,
+                name,
+                ty,
+                mutability,
+                ..
             } = statement
             {
-                let local = lowerer.push_source_local(name.clone(), *ty)?;
+                let local = lowerer.push_source_local(
+                    name.clone(),
+                    *ty,
+                    matches!(mutability, hir::AssignmentMutability::Mutable),
+                )?;
                 if lowerer.bindings.insert(*binding, local).is_some() {
                     return Err(LoweringError::InvalidHirInvariant(
                         "duplicate HIR binding identity",
@@ -234,6 +242,14 @@ impl<'a> FunctionLowerer<'a> {
                     let value = self.lower_value(initializer)?;
                     self.push_statement(core::Statement::Init {
                         dst: core::Place::local(destination),
+                        src: core::Operand::Move(core::Place::local(value).into()),
+                    });
+                }
+                hir::Statement::Assignment { target, value, .. } => {
+                    let destination = self.binding(*target)?;
+                    let value = self.lower_value(value)?;
+                    self.push_statement(core::Statement::Assign {
+                        dst: core::Place::local(destination).into(),
                         src: core::Operand::Move(core::Place::local(value).into()),
                     });
                 }
@@ -371,10 +387,11 @@ impl<'a> FunctionLowerer<'a> {
         &mut self,
         name: String,
         ty: hir::Type,
+        mutable: bool,
     ) -> Result<core::LocalId, LoweringError> {
         let ty = self.types.get(ty)?;
         let id = self.next_local_id()?;
-        self.locals.push(core::LocalDecl::new(name, ty, false));
+        self.locals.push(core::LocalDecl::new(name, ty, mutable));
         Ok(id)
     }
 
