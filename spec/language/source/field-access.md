@@ -6,7 +6,7 @@ This document owns the represented source semantics for binding-rooted dot field
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module identity from [Source names and modules](names-modules.md), nominal record and field identity, source field types, source type equality, and owned-value duplicability from [Source type foundation](types.md), and function-local binding lookup, structural source paths, and structural availability from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-The represented `.` spelling and bounded field-value grammar are owned by [Source concrete syntax](concrete-syntax.md). Transfer of a successfully produced value into a local, assignment RHS, direct-call argument, return result, or record-construction initializer is owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct record-field accessibility relation defined here for its selected direct record fields; pattern selection, exhaustiveness, binding introduction, and pattern ownership consequences remain owned there.
+The represented `.` spelling and bounded field-value grammar are owned by [Source concrete syntax](concrete-syntax.md). Transfer of a successfully produced value into a local, assignment RHS, direct-call argument, return result, record-construction initializer, or producer-backed record-pattern scrutinee is owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct record-field accessibility relation defined here for its selected direct record fields; pattern selection, exhaustiveness, binding introduction, and pattern ownership consequences remain owned there.
 
 This document does not define a general member system, place/lvalue grammar, field assignment, partial-field reinitialization, reference/borrow operation, general pattern semantics, physical layout, or implementation representation.
 
@@ -68,7 +68,7 @@ A source operation that explicitly consumes this direct accessibility relation m
 
 `FieldValueUse` consumes this relation independently at every selector step. Consequently, a dot path may select a field of a same-module record whose field type is a record defined in another module, but a later selector cannot enter that foreign record under this revision.
 
-The binding-rooted record pattern in `patterns.md` consumes this same relation for each direct field of its selected same-module record. It does not thereby inherit dot-path selection, `FieldValueUse` production, or this document's final-path ownership rules.
+The represented record pattern in `patterns.md` consumes this same relation for each direct field of its selected same-module record, for both its direct binding-root and producer-backed scrutinee categories. It does not thereby inherit dot-path selection, `FieldValueUse` production, or this document's final-path ownership rules.
 
 Module-level accessibility of the record type itself remains owned by `names-modules.md` and is independent of this field-accessibility rule. An exported record may therefore be nameable in another module while its fields remain unavailable to direct `FieldValueUse` or direct record-pattern binding there.
 
@@ -158,7 +158,7 @@ After source validation, field-value use itself is non-faulting and non-divergin
 
 It performs no nested value-producer evaluation and creates no construction-like intermediate transient ownership. The complete field path is statically selected before the operation produces its one owned result.
 
-For a duplicable final field, production is non-consuming and effect-free with respect to source ownership state. For a non-duplicable final field, production performs exactly the structural ownership transfer defined above. That source ownership transition occurs when the producer successfully produces its result and therefore precedes transfer of that result into an enclosing local, argument transient, construction transient, assignment RHS transient, or return result.
+For a duplicable final field, production is non-consuming and effect-free with respect to source ownership state. For a non-duplicable final field, production performs exactly the structural ownership transfer defined above. That source ownership transition occurs when the producer successfully produces its result and therefore precedes transfer of that result into an enclosing local, argument transient, construction transient, assignment RHS transient, return result, or producer-backed record-pattern scrutinee transient.
 
 The successful result may then be consumed by any currently represented receiving value context under `function-execution.md`.
 
@@ -175,8 +175,9 @@ The represented producer may therefore compose with:
 - ordinary local initialization;
 - whole-binding assignment RHS evaluation;
 - direct-call arguments;
-- result-bearing return; and
-- record-construction field initializers.
+- result-bearing return;
+- record-construction field initializers; and
+- a producer-backed record-pattern scrutinee whose pattern head selects exactly the same nominal record type as the field-value result.
 
 Those receiving operations retain their existing ordering, transfer, replacement, cleanup, fault, and divergence authority under `function-execution.md`. When a non-duplicable field-value producer has consumed its selected path before a later producer faults, that ownership transition remains effective and the transferred value is cleaned by its then-current owner rather than by the former root binding.
 
