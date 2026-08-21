@@ -247,7 +247,14 @@ impl TypeTable {
 
         match (&def.kind, value) {
             (TypeKind::Scalar(ScalarType::Bool), Value::Bool(_))
+            | (TypeKind::Scalar(ScalarType::I8), Value::I8(_))
+            | (TypeKind::Scalar(ScalarType::I16), Value::I16(_))
+            | (TypeKind::Scalar(ScalarType::I32), Value::I32(_))
             | (TypeKind::Scalar(ScalarType::I64), Value::I64(_))
+            | (TypeKind::Scalar(ScalarType::U8), Value::U8(_))
+            | (TypeKind::Scalar(ScalarType::U16), Value::U16(_))
+            | (TypeKind::Scalar(ScalarType::U32), Value::U32(_))
+            | (TypeKind::Scalar(ScalarType::U64), Value::U64(_))
             | (TypeKind::Scalar(ScalarType::TrackedFixture), Value::TrackedFixture(_)) => true,
             (TypeKind::Struct(fields), Value::Struct(values)) => {
                 fields.len() == values.len()
@@ -269,7 +276,14 @@ impl TypeTable {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Bool(bool),
+    I8(i8),
+    I16(i16),
+    I32(i32),
     I64(i64),
+    U8(u8),
+    U16(u16),
+    U32(u32),
+    U64(u64),
     /// Verification-only fixture identity whose destruction is visible in the oracle trace.
     /// This is not a Runen language value primitive.
     TrackedFixture(u64),
