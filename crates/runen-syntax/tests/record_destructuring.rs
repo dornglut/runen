@@ -72,7 +72,10 @@ fn excluded_pattern_extensions_are_not_silently_accepted() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty(), "excluded form parsed cleanly: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "excluded form parsed cleanly: {source}"
+        );
     }
 }
 
@@ -82,11 +85,9 @@ fn malformed_pattern_field_recovers_to_following_field_and_statement() {
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
-    assert!(
-        parsed.errors().iter().any(|error| {
-            error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightBrace)
-        })
-    );
+    assert!(parsed.errors().iter().any(|error| {
+        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightBrace)
+    }));
     let root = parsed.syntax();
     assert_eq!(
         root.descendants()
@@ -106,9 +107,10 @@ fn missing_pattern_close_preserves_following_body_and_top_level_boundaries() {
 
     assert_eq!(parsed.text(), source);
     assert!(
-        parsed.errors().iter().any(|error| {
-            error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
-        })
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
     );
     let root = parsed.syntax();
     assert!(root.descendants().any(|node| {
