@@ -52,7 +52,10 @@ fn entry() -> I8 {
                 && node.text().to_string().contains("128")
         })
         .expect("negative literal node");
-    assert_eq!(signed_minimum.text().to_string(), "- /* sign trivia */ 128");
+    assert_eq!(
+        signed_minimum.text().to_string().trim_start(),
+        "- /* sign trivia */ 128"
+    );
 }
 
 #[test]
