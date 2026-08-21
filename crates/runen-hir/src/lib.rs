@@ -242,7 +242,7 @@ pub struct Body {
     pub terminal_return: Option<Return>,
 }
 
-/// Resolved and validated source function entity and its typed body.
+/// One resolved source function entity and its typed body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub id: FunctionId,
