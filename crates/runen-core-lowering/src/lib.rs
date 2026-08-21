@@ -204,64 +204,45 @@ impl<'a> FunctionLowerer<'a> {
             lowerer.parameter_locals.push(local);
         }
 
-        for statement in &function.body.statements {
-            if let hir::Statement::Local {
-                binding,
-                name,
-                ty,
-                mutability,
-                ..
-            } = statement
-            {
-                let local = lowerer.push_source_local(
-                    name.clone(),
-                    *ty,
-                    matches!(mutability, hir::AssignmentMutability::Mutable),
-                )?;
-                if lowerer.bindings.insert(*binding, local).is_some() {
-                    return Err(LoweringError::InvalidHirInvariant(
-                        "duplicate HIR binding identity",
-                    ));
-                }
-            }
-        }
+        lowerer.register_source_locals(&function.body.statements)?;
 
         Ok(lowerer)
     }
 
-    fn lower(mut self) -> Result<core::Function, LoweringError> {
-        let body = self.function.body.clone();
-        for statement in &body.statements {
+    fn register_source_locals(
+        &mut self,
+        statements: &[hir::Statement],
+    ) -> Result<(), LoweringError> {
+        for statement in statements {
             match statement {
                 hir::Statement::Local {
                     binding,
-                    initializer,
+                    name,
+                    ty,
+                    mutability,
                     ..
                 } => {
-                    let destination = self.binding(*binding)?;
-                    let value = self.lower_value(initializer)?;
-                    self.push_statement(core::Statement::Init {
-                        dst: core::Place::local(destination),
-                        src: core::Operand::Move(core::Place::local(value).into()),
-                    });
+                    let local = self.push_source_local(
+                        name.clone(),
+                        *ty,
+                        matches!(mutability, hir::AssignmentMutability::Mutable),
+                    )?;
+                    if self.bindings.insert(*binding, local).is_some() {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "duplicate HIR binding identity",
+                        ));
+                    }
                 }
-                hir::Statement::Assignment { target, value, .. } => {
-                    let destination = self.binding(*target)?;
-                    let value = self.lower_value(value)?;
-                    self.push_statement(core::Statement::Assign {
-                        dst: core::Place::local(destination).into(),
-                        src: core::Operand::Move(core::Place::local(value).into()),
-                    });
-                }
-                hir::Statement::Call {
-                    function,
-                    arguments,
-                    ..
-                } => {
-                    self.lower_call(*function, arguments, None)?;
-                }
+                hir::Statement::Block(block) => self.register_source_locals(&block.statements)?,
+                hir::Statement::Assignment { .. } | hir::Statement::Call { .. } => {}
             }
         }
+        Ok(())
+    }
+
+    fn lower(mut self) -> Result<core::Function, LoweringError> {
+        let body = self.function.body.clone();
+        self.lower_statements(&body.statements)?;
 
         let terminator = match body.terminal_return.as_ref() {
             Some(hir::Return {
@@ -304,6 +285,50 @@ impl<'a> FunctionLowerer<'a> {
                 blocks,
             },
         })
+    }
+
+    fn lower_statements(&mut self, statements: &[hir::Statement]) -> Result<(), LoweringError> {
+        for statement in statements {
+            match statement {
+                hir::Statement::Local {
+                    binding,
+                    initializer,
+                    ..
+                } => {
+                    let destination = self.binding(*binding)?;
+                    let value = self.lower_value(initializer)?;
+                    self.push_statement(core::Statement::Init {
+                        dst: core::Place::local(destination),
+                        src: core::Operand::Move(core::Place::local(value).into()),
+                    });
+                }
+                hir::Statement::Assignment { target, value, .. } => {
+                    let destination = self.binding(*target)?;
+                    let value = self.lower_value(value)?;
+                    self.push_statement(core::Statement::Assign {
+                        dst: core::Place::local(destination).into(),
+                        src: core::Operand::Move(core::Place::local(value).into()),
+                    });
+                }
+                hir::Statement::Call {
+                    function,
+                    arguments,
+                    ..
+                } => {
+                    self.lower_call(*function, arguments, None)?;
+                }
+                hir::Statement::Block(block) => {
+                    self.lower_statements(&block.statements)?;
+                    for binding in &block.normal_cleanup {
+                        let local = self.binding(*binding)?;
+                        self.push_statement(core::Statement::Drop {
+                            place: core::Place::local(local).into(),
+                        });
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 
     fn lower_value(&mut self, value: &hir::Value) -> Result<core::LocalId, LoweringError> {
