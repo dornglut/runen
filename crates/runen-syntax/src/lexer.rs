@@ -119,6 +119,8 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
 
         let punctuation = if rest.starts_with("->") {
             Some((SyntaxKind::Arrow, 2))
+        } else if rest.starts_with("::") {
+            Some((SyntaxKind::ColonColon, 2))
         } else {
             match character {
                 '(' => Some((SyntaxKind::LParen, 1)),
@@ -165,6 +167,8 @@ fn classify_identifier_key(key: &str) -> SyntaxKind {
         "record" => SyntaxKind::KwRecord,
         "let" => SyntaxKind::KwLet,
         "return" => SyntaxKind::KwReturn,
+        "import" => SyntaxKind::KwImport,
+        "export" => SyntaxKind::KwExport,
         "Bool" => SyntaxKind::TyBool,
         "I8" => SyntaxKind::TyI8,
         "I16" => SyntaxKind::TyI16,
