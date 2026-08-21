@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, straight-line body execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, straight-line body and nested-block execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
 
 It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), and parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-The represented concrete function/body/value/call/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. This document owns execution consequences where those forms map to the semantic operations defined here; it does not own concrete spelling, literal typing, or parser representation.
+The represented concrete function/body/block/value/call/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. This document owns execution consequences where those forms map to the semantic operations defined here; it does not own concrete spelling, literal typing, or parser representation.
 
 This document does not define a universal expression taxonomy, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
 
@@ -138,11 +138,11 @@ Cleaning an old target-owned value under this relation uses the source cleanup r
 
 This revision defines no field/member/place assignment, compound assignment, assignment expression value, borrow/reference assignment, source interior mutability, raw-pointer assignment, or destructuring assignment.
 
-## Straight-line body execution
+## Straight-line body and nested-block execution
 
-For the root function-body form represented by `concrete-syntax.md`, body statements execute strictly in concrete source order.
+For the root function-body form and each represented `BlockStatement` in `concrete-syntax.md`, the applicable `BodyStatement` sequence executes strictly in concrete source order.
 
-Execution begins with the first body statement after successful parameter transfer. A later body statement begins only after the preceding statement completes normally.
+Root-body execution begins with its first body statement after successful parameter transfer. A nested block begins execution when that block statement is reached in its containing statement sequence. In either sequence, a later body statement begins only after the preceding statement completes normally.
 
 For a represented ordinary local declaration statement:
 
@@ -163,15 +163,24 @@ For a represented no-result direct-call statement:
 
 A valid no-result call statement has no produced source value and therefore performs no arbitrary result discard.
 
-If execution of a body statement yields a defined fault, later body statements do not execute and the fault cleanup/propagation rules below apply to the active function activation.
+For a represented nested block statement:
 
-If execution of a body statement diverges, later body statements do not execute and no termination cleanup occurs merely because execution continues indefinitely.
+1. the child lexical scope established for that block under `local-bindings.md` is active while its contained `BodyStatement` sequence executes;
+2. execute that sequence recursively under the same straight-line statement rules in concrete source order;
+3. if every contained statement completes normally, normally exit the child lexical scope using the lexical-scope cleanup relation below; and
+4. only after that child-scope cleanup completes may the next statement in the containing sequence begin.
 
-When the concrete body has a terminal return statement, that return begins only after every preceding body statement has completed normally and then follows the normal-return rules below.
+A represented block statement produces no source value and introduces no Unit, Void, or equivalent value.
 
-When a represented no-result concrete body reaches its closing body boundary without a terminal return, it performs the accepted normal no-result completion described below.
+If execution of a body statement yields a defined fault, later body statements in the active sequence do not execute and the fault cleanup/propagation rules below apply to the active function activation. A nested block that exits this way does not also perform a separate normal child-scope cleanup; its active child scope participates exactly once in the defined-fault cleanup relation.
 
-This straight-line relation introduces no nested block, branch, loop, early/nonterminal return, unreachable-statement, short-circuit, catch, defer, or other control-flow semantics.
+If execution of a body statement diverges, later body statements in the active sequence do not execute and no termination or child-scope cleanup occurs merely because execution continues indefinitely. A diverging operation inside a nested block leaves that child scope active in the suspended computation.
+
+When the concrete root body has a terminal return statement, that return begins only after every preceding root body statement has completed normally and then follows the normal-return rules below.
+
+When a represented no-result concrete root body reaches its closing body boundary without a terminal return, it performs the accepted normal no-result completion described below.
+
+This straight-line relation introduces no branch, loop, early/nonterminal return, unreachable-statement, short-circuit, catch, defer, or other multiple-path/control-transfer semantics.
 
 ## Source cleanup
 
@@ -259,7 +268,7 @@ Active caller and callee ownership state, together with any transient values ret
 
 ## Effects boundary
 
-Left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
+Left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body/nested-block execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
 
 Literal evaluation has no source-visible side effect under `literals.md`; adding literals to these positions therefore adds no competing effect-order relation.
 
@@ -267,9 +276,9 @@ This revision does not define a source effect system, purity, effect inference, 
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/assignment/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics.
+`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/assignment/block/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics.
 
-Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, record construction, member access, nested blocks, and other concrete source forms remain outside the represented execution relation.
+Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, record construction, member access, and other concrete source forms remain outside the represented execution relation.
 
 No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner.
 
