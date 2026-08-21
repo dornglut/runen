@@ -30,7 +30,9 @@ fn function<'a>(hir: &'a runen_hir::TypedCompilation, name: &str) -> &'a runen_h
 }
 
 fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
-    diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
+    diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.kind == kind)
 }
 
 #[test]
@@ -56,7 +58,13 @@ fn retains_resolved_pattern_facts_in_source_order() {
     assert_eq!(*record, hir.records[1].id);
     assert_eq!(*root, f.parameters[0].binding);
     assert_eq!(bindings.len(), 3);
-    assert_eq!(bindings.iter().map(|binding| binding.field).collect::<Vec<_>>(), [2, 1, 0]);
+    assert_eq!(
+        bindings
+            .iter()
+            .map(|binding| binding.field)
+            .collect::<Vec<_>>(),
+        [2, 1, 0]
+    );
     assert_eq!(
         bindings
             .iter()
@@ -133,7 +141,10 @@ fn mixed_pattern_consumes_exact_field_but_preserves_disjoint_field_access() {
              take(root); \
          }",
     );
-    assert!(has_kind(&diagnostics, DiagnosticKind::UnavailableBinding));
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::UnavailableBinding
+    ));
 }
 
 #[test]
@@ -217,10 +228,7 @@ fn duplicate_pattern_bindings_and_active_shadowing_are_rejected_atomically() {
          fn f(root: Pair, item: I8) { let Pair { left: item, right: other } = root; take(root.left); }",
     );
     assert!(has_kind(&shadow, DiagnosticKind::LocalShadowing));
-    assert!(!has_kind(
-        &shadow,
-        DiagnosticKind::UnavailableFieldValue
-    ));
+    assert!(!has_kind(&shadow, DiagnosticKind::UnavailableFieldValue));
 }
 
 #[test]
@@ -321,7 +329,12 @@ fn nested_block_cleanup_uses_reverse_pattern_source_binding_order() {
     assert_eq!(block.normal_cleanup.len(), 2);
     assert_eq!(block.normal_cleanup[0].binding, bindings[1].binding);
     assert_eq!(block.normal_cleanup[1].binding, bindings[0].binding);
-    assert!(block.normal_cleanup.iter().all(|cleanup| cleanup.fields.is_empty()));
+    assert!(
+        block
+            .normal_cleanup
+            .iter()
+            .all(|cleanup| cleanup.fields.is_empty())
+    );
 }
 
 #[test]
@@ -362,7 +375,8 @@ fn pattern_bindings_are_immutable_and_enter_normal_local_lookup_after_declaratio
 
     // Existing ordinary mutable-local classification remains represented independently.
     let ordinary = build("fn local() { let mut value: I8 = 1; value = 2; }");
-    let Statement::Local { mutability, .. } = &function(&ordinary, "local").body.statements[0] else {
+    let Statement::Local { mutability, .. } = &function(&ordinary, "local").body.statements[0]
+    else {
         panic!("expected ordinary local");
     };
     assert_eq!(*mutability, AssignmentMutability::Mutable);
