@@ -19,7 +19,10 @@ fn lower_source(source: &str) -> ValidatedProgram {
 }
 
 fn lower_units(module: ModuleId, sources: &[&str]) -> ValidatedProgram {
-    let parses = sources.iter().map(|source| parse(source)).collect::<Vec<_>>();
+    let parses = sources
+        .iter()
+        .map(|source| parse(source))
+        .collect::<Vec<_>>();
     let units = parses
         .iter()
         .map(|parse| SourceUnit::new(module, parse))
@@ -111,7 +114,10 @@ fn preserves_nominal_record_identity_field_order_and_dependency_resolution() {
         let take = function(program, "take");
         let a = take.parameter_type(0).unwrap();
         let b = take.parameter_type(1).unwrap();
-        assert_ne!(a, b, "equal record structure must remain nominally distinct");
+        assert_ne!(
+            a, b,
+            "equal record structure must remain nominally distinct"
+        );
 
         for record_ty in [a, b] {
             let TypeKind::Struct(fields) = &program.types.get(record_ty).unwrap().kind else {
@@ -368,4 +374,13 @@ fn source_unit_presentation_order_does_not_change_resolved_call_target() {
         };
         assert_eq!(function_name(program, *target), "callee");
     }
+}
+
+#[test]
+fn opaque_module_identity_is_erased_after_hir_resolution() {
+    let source = "record Ticket {} fn id(value: Ticket) -> Ticket { return value; }";
+    let first = lower_units(ModuleId::new(1), &[source]);
+    let second = lower_units(ModuleId::new(99), &[source]);
+
+    assert_eq!(first.as_program(), second.as_program());
 }

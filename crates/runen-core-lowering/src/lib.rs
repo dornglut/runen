@@ -349,9 +349,13 @@ impl<'a> FunctionLowerer<'a> {
         arguments: Vec<core::Operand>,
         destination: Option<core::Place>,
     ) -> Result<(), LoweringError> {
-        let target_function = self.functions.get(&function).copied().ok_or(
-            LoweringError::InvalidHirInvariant("HIR call target is absent from function map"),
-        )?;
+        let target_function =
+            self.functions
+                .get(&function)
+                .copied()
+                .ok_or(LoweringError::InvalidHirInvariant(
+                    "HIR call target is absent from function map",
+                ))?;
         let continuation = self.new_block()?;
         self.terminate_current(core::Terminator::Call {
             function: target_function,
@@ -378,12 +382,12 @@ impl<'a> FunctionLowerer<'a> {
         let ty = self.types.get(ty)?;
         let id = self.next_local_id()?;
         let name = format!("$tmp{}", self.next_temp);
-        self.next_temp = self
-            .next_temp
-            .checked_add(1)
-            .ok_or(LoweringError::RepresentationLimit(
-                "compiler temporary identity",
-            ))?;
+        self.next_temp =
+            self.next_temp
+                .checked_add(1)
+                .ok_or(LoweringError::RepresentationLimit(
+                    "compiler temporary identity",
+                ))?;
         self.locals.push(core::LocalDecl::new(name, ty, false));
         Ok(id)
     }
