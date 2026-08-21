@@ -4,8 +4,8 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
     Accessibility, AssignmentMutability, BindingId, Body, Diagnostic, DiagnosticKind, Field,
-    Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter, Record,
-    RecordId, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value,
+    Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter,
+    Record, RecordId, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value,
     ValueKind,
 };
 
@@ -1217,9 +1217,7 @@ fn materialize_integer_literal(
         IntrinsicType::U32 => materialize_unsigned(text, negative, u64::from(u32::MAX))
             .and_then(|value| u32::try_from(value).ok())
             .map(LiteralValue::U32),
-        IntrinsicType::U64 => {
-            materialize_unsigned(text, negative, u64::MAX).map(LiteralValue::U64)
-        }
+        IntrinsicType::U64 => materialize_unsigned(text, negative, u64::MAX).map(LiteralValue::U64),
         IntrinsicType::Bool | IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64 => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::IntegerLiteralRequiresInteger { required },
@@ -1271,7 +1269,8 @@ fn parse_decimal_magnitude(text: &str, limit: u64) -> Option<u64> {
     for byte in text.bytes() {
         debug_assert!(byte.is_ascii_digit());
         let digit = u64::from(byte - b'0');
-        if value > (limit - digit) / 10 {
+        let remaining = limit.checked_sub(digit)?;
+        if value > remaining / 10 {
             return None;
         }
         value = value * 10 + digit;
