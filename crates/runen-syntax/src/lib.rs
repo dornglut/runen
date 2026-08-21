@@ -69,6 +69,11 @@ pub enum SyntaxKind {
     IdentifierUse,
     ReturnStatement,
     ErrorNode,
+    KwImport,
+    KwExport,
+    ColonColon,
+    ImportDeclaration,
+    QualifiedModuleMember,
 }
 
 impl SyntaxKind {
@@ -159,6 +164,11 @@ impl Language for RunenLanguage {
             44 => SyntaxKind::IdentifierUse,
             45 => SyntaxKind::ReturnStatement,
             46 => SyntaxKind::ErrorNode,
+            47 => SyntaxKind::KwImport,
+            48 => SyntaxKind::KwExport,
+            49 => SyntaxKind::ColonColon,
+            50 => SyntaxKind::ImportDeclaration,
+            51 => SyntaxKind::QualifiedModuleMember,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -223,6 +233,7 @@ pub enum ExpectedSyntax {
     LeftBrace,
     RightBrace,
     Colon,
+    DoubleColon,
     CommaOrRightParen,
     CommaOrRightBrace,
     Equals,
