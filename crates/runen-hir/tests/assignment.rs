@@ -55,7 +55,8 @@ fn immutable_locals_and_parameters_reject_assignment_independent_of_availability
     ] {
         let errors = build(source).expect_err("immutable assignment must be source-invalid");
         assert!(
-            has_diagnostic(&errors, |kind| kind == DiagnosticKind::ImmutableAssignmentTarget),
+            has_diagnostic(&errors, |kind| kind
+                == DiagnosticKind::ImmutableAssignmentTarget),
             "missing immutable-target diagnostic for {source}: {errors:?}"
         );
     }
@@ -78,7 +79,10 @@ fn mutable_unavailable_binding_can_be_reinitialized_and_used_again() {
         panic!("expected replacement binding use");
     };
     assert_eq!(ownership, OwnedUse::Consume);
-    assert!(matches!(function.body.statements[3], Statement::Call { .. }));
+    assert!(matches!(
+        function.body.statements[3],
+        Statement::Call { .. }
+    ));
 }
 
 #[test]
@@ -145,7 +149,15 @@ fn call_rhs_ownership_effects_precede_assignment_reavailability() {
         panic!("expected target use as call argument");
     };
     assert_eq!(ownership, OwnedUse::Consume);
-    assert!(function.body.terminal_return.as_ref().unwrap().value.is_some());
+    assert!(
+        function
+            .body
+            .terminal_return
+            .as_ref()
+            .unwrap()
+            .value
+            .is_some()
+    );
 }
 
 #[test]
