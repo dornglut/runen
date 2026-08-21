@@ -14,7 +14,7 @@ This document does not define a universal expression taxonomy, literals, operato
 
 A represented source function entity MAY have one represented source body. It MUST NOT have more than one represented source body.
 
-Attaching a represented source body to the function entity is a source-semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
+Attaching a represented source body to a function entity is a source-semantic fact. `concrete-syntax.md` defines one concrete function form that introduces a function entity and attaches the following concrete body to it. This execution relation does not require all future declaration and definition forms to use that same concrete construct.
 
 In the represented direct-call subset, a direct source call targets exactly one resolved source function entity that has a represented source body.
 
@@ -100,18 +100,17 @@ If initializer evaluation yields a defined fault or diverges, that local binding
 
 ## Whole-binding assignment and replacement
 
-A represented whole-binding assignment consumes the assignment target legality, mutability, declared type, and pre/post-assignment availability relation defined by `local-bindings.md`.
+A represented whole-binding assignment consumes the assignment target legality, mutability, declared type, RHS type requirement, and pre/post-assignment availability relation defined by `local-bindings.md`.
 
 For a source-valid assignment, execution is **source-first** with respect to replacement:
 
-1. evaluate the assignment RHS completely as one owned value producer;
-2. require the produced value's source type to be exactly equal under `types.md` to the target binding's declared source type;
-3. preserve every ownership and availability transition caused while evaluating that RHS;
-4. only after successful RHS value production, observe whether the target binding is then available;
-5. if the target is then available, clean its old owned value exactly once;
-6. if the target is then unavailable, there is no old target-owned value to clean;
-7. transfer the produced RHS value into the target binding without duplication; and
-8. make the target binding available as required by `local-bindings.md`.
+1. evaluate the assignment RHS completely as the owned value producer required by the source-valid assignment relation;
+2. preserve every ownership and availability transition caused while evaluating that RHS;
+3. only after successful RHS value production, observe whether the target binding is then available;
+4. if the target is then available, clean its old owned value exactly once;
+5. if the target is then unavailable, there is no old target-owned value to clean;
+6. transfer the produced RHS value into the target binding without duplication; and
+7. make the target binding available as required by `local-bindings.md`.
 
 The assignment target remains in scope during RHS evaluation. Consequently, ordinary RHS use of the target follows the existing whole-binding owned-use relation rather than a special self-assignment rule.
 
@@ -220,7 +219,7 @@ When an applicable accepted source or Core operation yields a defined fault `F` 
 2. clean still-available parameter bindings in reverse parameter-slot order; and
 3. terminate that activation with the same defined fault `F`.
 
-If the defined fault arises from a directly called callee, the caller's direct-call evaluation therefore yields `F`. Because no represented catch boundary exists, the caller then performs its own fault cleanup and propagates `F` outward. This continues until the outermost applicable source execution denotes the defined-fault outcome under `behavior.md`.
+If the defined fault arises from a directly called callee, the caller's direct-call evaluation yields `F`. Because no represented catch boundary exists, the caller then performs its own fault cleanup and propagates `F` outward. This continues until the outermost applicable source execution denotes the defined-fault outcome under `behavior.md`.
 
 “Same defined fault” preserves the semantic defined-fault outcome selected by the initiating operation. This revision does not define fault payload representation, strings or messages, numeric fault codes, physical exception objects, backtraces, panic syntax, or catch syntax.
 
