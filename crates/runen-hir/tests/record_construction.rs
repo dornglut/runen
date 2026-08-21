@@ -46,7 +46,11 @@ fn constructor_target_ignores_local_and_hir_retains_source_ordered_field_identit
              return Pair { right: 1, left: Pair }; \
          }",
     );
-    let pair = hir.records.iter().find(|record| record.name == "Pair").unwrap();
+    let pair = hir
+        .records
+        .iter()
+        .find(|record| record.name == "Pair")
+        .unwrap();
     let value = returned_value(function(&hir, "make"));
 
     assert_eq!(value.ty, Type::Record(pair.id));
@@ -102,12 +106,16 @@ fn structural_initializer_errors_are_diagnosed_before_any_producer_consumption()
              return token; \
          }",
     );
-    assert!(duplicate.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::DuplicateRecordInitializer
-    }));
-    assert!(!duplicate.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::UnavailableBinding
-    }));
+    assert!(
+        duplicate
+            .iter()
+            .any(|diagnostic| { diagnostic.kind == DiagnosticKind::DuplicateRecordInitializer })
+    );
+    assert!(
+        !duplicate
+            .iter()
+            .any(|diagnostic| { diagnostic.kind == DiagnosticKind::UnavailableBinding })
+    );
 
     let unknown = errors(
         "record Token {} record Holder { item: Token } \
@@ -116,15 +124,21 @@ fn structural_initializer_errors_are_diagnosed_before_any_producer_consumption()
              return token; \
          }",
     );
-    assert!(unknown.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::UnknownRecordField
-    }));
-    assert!(unknown.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::MissingRecordInitializer
-    }));
-    assert!(!unknown.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::UnavailableBinding
-    }));
+    assert!(
+        unknown
+            .iter()
+            .any(|diagnostic| { diagnostic.kind == DiagnosticKind::UnknownRecordField })
+    );
+    assert!(
+        unknown
+            .iter()
+            .any(|diagnostic| { diagnostic.kind == DiagnosticKind::MissingRecordInitializer })
+    );
+    assert!(
+        !unknown
+            .iter()
+            .any(|diagnostic| { diagnostic.kind == DiagnosticKind::UnavailableBinding })
+    );
 
     let missing = errors(
         "record Token {} record Holder { item: Token } \
@@ -133,25 +147,27 @@ fn structural_initializer_errors_are_diagnosed_before_any_producer_consumption()
              return token; \
          }",
     );
-    assert!(missing.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::MissingRecordInitializer
-    }));
-    assert!(!missing.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::UnavailableBinding
-    }));
+    assert!(
+        missing
+            .iter()
+            .any(|diagnostic| { diagnostic.kind == DiagnosticKind::MissingRecordInitializer })
+    );
+    assert!(
+        !missing
+            .iter()
+            .any(|diagnostic| { diagnostic.kind == DiagnosticKind::UnavailableBinding })
+    );
 }
 
 #[test]
 fn constructor_result_requires_exact_outer_record_type() {
-    let diagnostics = errors(
-        "record A {} record B {} fn f() -> A { return B {}; }",
-    );
+    let diagnostics = errors("record A {} record B {} fn f() -> A { return B {}; }");
     assert!(diagnostics.iter().any(|diagnostic| matches!(
         diagnostic.kind,
         DiagnosticKind::TypeMismatch {
-            expected: Type::Record(_),
-            found: Type::Record(_),
-        }
+            expected: Type::Record(expected),
+            found: Type::Record(found),
+        } if expected != found
     )));
 }
 
@@ -173,7 +189,10 @@ fn nested_construction_calls_and_nonduplicable_field_consumption_are_retained() 
     };
     assert_eq!(fields.len(), 2);
     assert_eq!(fields[0].field, 1);
-    assert!(matches!(fields[0].value.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        fields[0].value.kind,
+        ValueKind::DirectCall { .. }
+    ));
     assert_eq!(fields[1].field, 0);
 
     let ValueKind::RecordConstruction {
@@ -210,7 +229,10 @@ fn construction_composes_with_every_current_value_consumer() {
 
     let all = function(&hir, "all");
     assert!(matches!(all.body.statements[0], Statement::Local { .. }));
-    assert!(matches!(all.body.statements[1], Statement::Assignment { .. }));
+    assert!(matches!(
+        all.body.statements[1],
+        Statement::Assignment { .. }
+    ));
     assert!(matches!(all.body.statements[2], Statement::Local { .. }));
     assert!(matches!(all.body.statements[3], Statement::Call { .. }));
     assert!(matches!(
