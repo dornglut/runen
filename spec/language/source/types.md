@@ -73,7 +73,7 @@ That binding denotes one nominal record source type. The source type identity is
 
 The binding's module-private or exported accessibility is determined only by `names-modules.md`; this document does not redefine accessibility.
 
-The represented `record` form in `concrete-syntax.md` establishes one such declaration with module-private accessibility and maps its concrete field sequence to the structure defined below. Other future declaration forms may establish the same semantic declaration category only through their accepted mapping.
+The represented `record` form in `concrete-syntax.md` establishes one such declaration and maps its concrete field sequence to the structure defined below. Without the concrete `export` modifier that declaration is module-private; with the modifier it is exported under `names-modules.md`. Other future declaration forms may establish the same semantic declaration category only through their accepted mapping.
 
 A record declaration contains one finite ordered sequence of fields. The sequence MAY be empty.
 
