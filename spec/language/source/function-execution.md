@@ -69,6 +69,8 @@ Construction produces exactly one owned source value of that nominal record type
 
 Each initializer is associated with the selected declaration field identified by `concrete-syntax.md`. That declaration field's source type is the required source type supplied to the initializer's `Value` producer. The produced field value MUST have exactly that type under `types.md`; this relation introduces no conversion, coercion, widening, narrowing, defaulting, or inference.
 
+In particular, a represented decimal integer literal used as a field initializer materializes under that selected field type through `literals.md`. This is the same required-type materialization relation used by the existing value consumers and does not create a conversion or an inferred constructor target.
+
 Initializers evaluate strictly left to right in their concrete constructor source order, regardless of the target record's declaration field order. For each initializer in turn:
 
 1. evaluate its `Value` producer completely under that producer's accepted semantics;
