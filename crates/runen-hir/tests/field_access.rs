@@ -39,9 +39,7 @@ fn returned_value(function: &runen_hir::Function) -> &Value {
 }
 
 fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
-    diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.kind == kind)
+    diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
 }
 
 #[test]
@@ -117,10 +115,7 @@ fn field_access_requires_available_root() {
          fn take(value: Box) {} \
          fn f(root: Box) -> I8 { take(root); return root.value; }",
     );
-    assert!(has_kind(
-        &unavailable,
-        DiagnosticKind::UnavailableBinding
-    ));
+    assert!(has_kind(&unavailable, DiagnosticKind::UnavailableBinding));
 }
 
 #[test]
@@ -139,7 +134,8 @@ fn rejects_non_record_unknown_and_nonduplicable_final_fields() {
 
     let nonduplicable = errors(
         "record Inner { value: I8 } record Outer { inner: Inner } \
-         fn f(root: Outer) -> Inner { return root.inner; }",
+         fn take(value: Outer) {} \
+         fn f(root: Outer) { let bad: Inner = root.inner; take(root); }",
     );
     assert!(has_kind(
         &nonduplicable,
