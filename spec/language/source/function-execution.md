@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, straight-line body and nested-block execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, record-construction field evaluation and transient assembly, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, straight-line body and nested-block execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, record-construction field evaluation and transient assembly, ordinary local initialization, record-destructuring declaration completion, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
 
-It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), parameter/local binding identity, scope, lookup, assignment mutability, structural availability, remaining ownership, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md), and binding-rooted field-value production from [Source field-value access](field-access.md). It does not redefine those owners.
+It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), parameter/local binding identity, scope, lookup, assignment mutability, structural availability, remaining ownership, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md), binding-rooted field-value production from [Source field-value access](field-access.md), and binding-rooted exhaustive record-pattern validation, binding production order, and field ownership consequences from [Source patterns](patterns.md). It does not redefine those owners.
 
-The represented concrete function/body/block/value/call/record-construction/field-value/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. Field-path selection, direct field accessibility, final-path structural availability, final-field duplicability, and producer-specific duplicate-or-consume field-value behavior are owned by `field-access.md`. This document owns execution consequences where those forms feed the receiving operations defined here; it does not own concrete spelling, literal typing, field selection, or parser representation.
+The represented concrete function/body/block/value/call/record-construction/field-value/record-destructuring/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. Field-value path selection, direct field accessibility, final-path structural availability, final-field duplicability, and producer-specific duplicate-or-consume field-value behavior are owned by `field-access.md`. Record-pattern head/root/field selection, exhaustiveness, pattern binding production, and pattern-specific duplicate-or-consume behavior are owned by `patterns.md`. This document owns execution consequences where those accepted forms participate in straight-line execution and cleanup; it does not own concrete spelling, literal typing, field selection, pattern selection, or parser representation.
 
 This document does not define a universal expression taxonomy, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
 
@@ -26,7 +26,7 @@ The represented direct call is statically bound to its resolved source function 
 
 Every dynamic direct call creates one distinct **source function activation** for the target source function entity.
 
-The activation provides independent dynamic value and structural-availability state for that function body's static parameter and ordinary local binding identities. Distinct simultaneously active or recursively nested calls therefore have distinct dynamic binding state even when they execute the same static declarations.
+The activation provides independent dynamic value and structural-availability state for that function body's static parameter and represented local binding identities, including locals introduced by ordinary declarations and accepted record patterns. Distinct simultaneously active or recursively nested calls therefore have distinct dynamic binding state even when they execute the same static declarations.
 
 Activation identity exists only to distinguish dynamic executions. It is not source-observable, not a physical stack-frame address, not ABI identity, not task or thread identity, and not required to have a numeric runtime representation.
 
@@ -56,7 +56,7 @@ The represented owned value producers sufficient for this revision are:
 - a source-valid named-field record construction under this document and `concrete-syntax.md`; and
 - a source-valid binding-rooted field-value use under `field-access.md`.
 
-`concrete-syntax.md` exposes exactly those five producer families in its current `Value` grammar. Future operator, conversion, or other expression owners MAY introduce additional owned value producers without redefining the receiving relations in this document.
+`concrete-syntax.md` exposes exactly those five producer families in its current `Value` grammar. The represented record-destructuring declaration is not a sixth `Value` producer: `patterns.md` owns its grouped production of zero or more initial local-binding values. Future operator, conversion, or other expression owners MAY introduce additional owned value producers without redefining the receiving relations in this document.
 
 Unless another accepted source owner defines a distinct rule for its producer, a producer used where this document requires a value MUST finish evaluation before that value is transferred to the receiving binding or transient ownership position.
 
@@ -104,7 +104,7 @@ A result-bearing direct call used as a field initializer must complete successfu
 
 The completed record value is otherwise an ordinary owned value producer result. It may be transferred by the existing local-initialization, whole-binding assignment RHS, direct-call argument, return-result, or enclosing record-construction field relations. Those consuming relations keep their existing outer ordering and exact-type requirements.
 
-This represented construction relation itself adds no field-value access, field assignment, partial-field reinitialization, destructuring, update/spread/default initialization, field-init shorthand, positive duplicability selection, constructor or method body, or cross-module construction contract. Represented binding-rooted field-value access, including its duplicable and consuming cases, is independently owned by `field-access.md`.
+This represented construction relation itself adds no field-value access, field assignment, partial-field reinitialization, record destructuring, update/spread/default initialization, field-init shorthand, positive duplicability selection, constructor or method body, or cross-module construction contract. Represented binding-rooted field-value access is independently owned by `field-access.md`; represented binding-rooted record destructuring is independently owned by `patterns.md`.
 
 ## Direct-call arguments
 
@@ -139,7 +139,7 @@ The transfer does not duplicate a transient argument value.
 
 Parameter slots in this represented direct-call relation are owned-value parameters. This rule neither introduces nor prohibits future reference, borrow, or other pass-mode parameter forms.
 
-## Local initialization
+## Ordinary local initialization
 
 When a represented ordinary local initializer evaluates an owned value producer, evaluation completes before the produced value is transferred into the local binding.
 
@@ -150,6 +150,24 @@ The produced value's source type MUST be exactly equal under `types.md` to the l
 After the transfer completes, the local binding receives an empty consumed-path set and its complete value becomes fully available under `local-bindings.md`. The transfer does not duplicate the produced value.
 
 If initializer evaluation yields a defined fault or diverges, that local binding never receives an owned value. Ownership and structural-availability transitions already performed by earlier evaluated operations remain effective.
+
+## Record-destructuring declaration completion
+
+A source-valid represented record-destructuring declaration consumes the pattern head/root/field validation, source field order, newly introduced binding facts, exact field types, structural availability requirements, and per-field duplicate-or-consume ownership consequences owned by `patterns.md` and `local-bindings.md`.
+
+This execution owner adds only the straight-line declaration completion boundary:
+
+1. all non-ownership source validation for the complete pattern has already succeeded before execution of its ownership productions;
+2. apply the pattern-owned direct-field duplicate/consume productions in pattern source order;
+3. each produced field value becomes the complete initial owned value of its corresponding pattern-introduced binding, whose consumed-path set begins empty;
+4. after every pattern entry has completed, establish all of those new bindings in the containing lexical scope together; and
+5. only then may the next body statement begin.
+
+The represented pattern entries contain no nested `Value` producer, and pattern-owned field production is non-faulting and non-diverging after source validation. This declaration therefore introduces no construction-like transient staging, rollback, fault cleanup, or divergence boundary between its field transfers.
+
+The zero-field record pattern performs no ownership production and establishes no binding; it completes immediately as the ownership no-op defined by `patterns.md`.
+
+This section does not redefine pattern exhaustiveness, field selection, duplicability, root structural transitions, or pattern binding scope. It does not generalize the scrutinee to an arbitrary owned value.
 
 ## Whole-binding assignment and replacement
 
@@ -193,9 +211,14 @@ Root-body execution begins with its first body statement after successful parame
 
 For a represented ordinary local declaration statement:
 
-1. evaluate its initializer under the local-initialization and owned-value rules above;
+1. evaluate its initializer under the ordinary local-initialization and owned-value rules above;
 2. transfer the produced value into the new local binding and establish its complete value as fully available; and
 3. only after that transfer completes normally may the next body statement begin.
+
+For a represented record-destructuring declaration statement:
+
+1. complete the grouped pattern declaration under the record-destructuring completion boundary above and `patterns.md`; and
+2. only after all pattern-introduced bindings have been established may the next body statement begin.
 
 For a represented whole-binding assignment statement:
 
@@ -227,7 +250,7 @@ When the concrete root body has a terminal return statement, that return begins 
 
 When a represented no-result concrete root body reaches its closing body boundary without a terminal return, it performs the accepted normal no-result completion described below.
 
-This straight-line relation introduces no branch, loop, early/nonterminal return, unreachable-statement, short-circuit, catch, defer, or other multiple-path/control-transfer semantics.
+This straight-line relation introduces no branch, loop, early/nonterminal return, unreachable-statement, short-circuit, catch, defer, refutable match, or other multiple-path/control-transfer semantics.
 
 ## Source cleanup
 
@@ -245,13 +268,15 @@ This revision introduces no custom source destructor body, source `drop` ability
 
 ## Lexical-scope cleanup
 
-When execution normally exits a represented lexical scope, consider ordinary local bindings declared directly in that scope in **reverse local declaration order**. For each such binding, compute its then-current remaining ownership frontier under `local-bindings.md` and clean every frontier member in that frontier's order.
+When execution normally exits a represented lexical scope, consider all represented local bindings declared directly in that scope in **reverse local declaration order**. This includes bindings introduced by ordinary local declarations and bindings introduced by accepted record-destructuring declarations. For each such binding, compute its then-current remaining ownership frontier under `local-bindings.md` and clean every frontier member in that frontier's order.
 
-A fully available binding therefore preserves the previously represented behavior: its frontier contains only the complete binding value. An unavailable binding has an empty frontier. A partially available binding cleans exactly its maximal still-owned disjoint subvalues and never re-cleans a consumed path.
+For one record-destructuring declaration, `patterns.md` and `local-bindings.md` define pattern source entry order as the declaration order of the introduced bindings. Reverse local declaration cleanup therefore visits later pattern entries before earlier pattern entries, independent of the containing record's structural field declaration order.
+
+A fully available binding preserves the previously represented behavior: its frontier contains only the complete binding value. An unavailable binding has an empty frontier. A partially available binding cleans exactly its maximal still-owned disjoint subvalues and never re-cleans a consumed path.
 
 When one source completion exits multiple active lexical scopes, cleanup proceeds from the innermost active scope outward. Each scope uses reverse local declaration order, and each selected binding uses its own remaining ownership frontier.
 
-Function parameters belong to the root activation under `local-bindings.md` but are not ordinary local declarations. On source function activation termination, after the root lexical scope's ordinary locals have been processed as above, parameter bindings are processed in **reverse callable-signature parameter-slot order**, each using its then-current remaining ownership frontier.
+Function parameters belong to the root activation under `local-bindings.md` but are not local declarations. On source function activation termination, after the root lexical scope's locals have been processed as above, parameter bindings are processed in **reverse callable-signature parameter-slot order**, each using its then-current remaining ownership frontier.
 
 This cleanup ordering is semantic and independent of physical stack layout, ABI passing, compiler local numbering, Core local numbering, or backend cleanup strategy.
 
@@ -316,6 +341,8 @@ A successfully produced assignment RHS value is transferred into the assignment 
 
 A transient value produced by consuming a non-duplicable field is owned by that transient position after production. Its former binding path is already consumed and MUST NOT re-enter that binding's remaining ownership frontier if a later producer faults.
 
+The represented record-destructuring declaration has no independently owned transient value under this revision. Its accepted field ownership transfers initialize the final pattern bindings directly at the grouped declaration completion boundary owned above.
+
 This revision does not define general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented record construction, direct-call argument, return, and assignment transfer are owned here.
 
 ## Divergence
@@ -326,13 +353,17 @@ If a directly called callee diverges, the caller remains suspended at that direc
 
 Active caller and callee ownership state, together with any transient values retained by the suspended evaluation, persists subject to operations already performed. The same applies when the diverging call is the RHS of a represented assignment. There is no implicit source execution-step budget.
 
+The represented record-destructuring operation itself has no divergence point after successful validation under `patterns.md`.
+
 ## Effects boundary
 
-Left-to-right record-initializer evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body/nested-block execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
+Left-to-right record-initializer evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, pattern-source-order record-destructuring ownership production, and concrete straight-line body/nested-block execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
 
 Literal evaluation has no source-visible side effect under `literals.md`; adding literals to these positions therefore adds no competing effect-order relation.
 
 Field-value production is non-faulting and non-diverging after source validation under `field-access.md`, but consuming a non-duplicable final field performs the source ownership transition owned there at that producer position. Later producer and cleanup behavior observes that transition.
+
+Pattern field production is likewise non-faulting and non-diverging after source validation under `patterns.md`; its source-ordered non-duplicable field transfers are ownership transitions whose consequences are visible to later pattern entries and later statements.
 
 Record assembly after successful initializer evaluation is itself effect-free under the represented construction relation. Initializer source order, rather than record declaration order, remains the ordering authority for producer effects.
 
@@ -340,16 +371,16 @@ This revision does not define a source effect system, purity, effect inference, 
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/record-construction/field-value/assignment/block/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics. `field-access.md` owns represented binding-rooted field-path selection, direct field accessibility, final-path structural availability, final-field duplicability, and producer-specific duplicate-or-consume field-value behavior. `local-bindings.md` owns structural availability and the remaining ownership frontier.
+`concrete-syntax.md` owns the currently represented concrete record/function/type/local/pattern/value/literal/call/record-construction/field-value/assignment/block/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics. `field-access.md` owns represented binding-rooted dot field-path selection, direct field accessibility, final-path structural availability, final-field duplicability, and producer-specific duplicate-or-consume field-value behavior. `patterns.md` owns represented record-pattern head/root/field selection, exhaustiveness, pattern binding facts/order, and per-field pattern ownership production. `local-bindings.md` owns structural availability and the remaining ownership frontier.
 
-Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, arbitrary-receiver members, and other concrete source forms remain outside the represented execution relation.
+Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, arbitrary-receiver members, additional pattern categories, arbitrary pattern scrutinees, and other concrete source forms remain outside the represented execution relation.
 
-The source record-construction and partial-ownership cleanup relations are defined entirely by source record/field identity, owned values, source evaluation order, structural availability, transient ownership, transfer, and cleanup. They do not add or alter a Core operation, aggregate initialization rule, destruction-domain rule, or cleanup rule. Any source-to-Core lowering must refine these source requirements through accepted Core semantics rather than using Core representation behavior as source authority.
+The source record-construction, record-pattern, and partial-ownership cleanup relations are defined entirely by source record/field identity, owned values, source order, structural availability, binding identity, transfer, and cleanup. They do not add or alter a Core operation, aggregate initialization rule, destruction-domain rule, or cleanup rule. Any source-to-Core lowering must refine these source requirements through accepted Core semantics rather than using Core representation behavior as source authority.
 
-In particular, after source validation a duplicating field-value use may refine to an accepted projected Core `Copy`, a consuming field-value use may refine to an accepted projected Core `Move`, and whole-binding replacement may refine to accepted source-first Core `Assign`. Remaining source-owned frontier paths may refine to applicable projected or aggregate Core destruction only where the lower destruction domain is non-empty. Ending ownership of a zero-leaf source frontier value may refine to no Core `Drop`; emitting an invalid lower destruction operation merely to materialize source ownership is not required.
+In particular, after source validation a duplicating field-value use may refine to an accepted projected Core `Copy`, a consuming field-value use may refine to an accepted projected Core `Move`, and whole-binding replacement may refine to accepted source-first Core `Assign`. A pattern-introduced binding may refine to an ordinary mapped source local initialized in pattern source order by projected Core `Copy` or `Move` according to the source-selected pattern ownership consequence. Remaining source-owned frontier paths may refine to applicable projected or aggregate Core destruction only where the lower destruction domain is non-empty. Ending ownership of a zero-leaf source frontier value may refine to no Core `Drop`; emitting an invalid lower destruction operation merely to materialize source ownership is not required.
 
-No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner. Core path state and scalar liveness are not source structural-availability authority.
+No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner. Core path state and scalar liveness are not source structural-availability or pattern-validity authority.
 
 ## Further boundaries
 
-This revision does not define literal spelling or materialization, floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, field assignment or partial-field reinitialization, arbitrary-receiver member/method access, destructuring, qualified/cross-module record construction, record update/default/shorthand forms, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
+This revision does not define literal spelling or materialization, floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/refutable-match control flow, field assignment or partial-field reinitialization, arbitrary-receiver member/method access, additional/refutable/nested/rest/shorthand patterns, arbitrary pattern scrutinees, destructuring assignment, qualified/cross-module record construction or patterns, record update/default/shorthand forms, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
