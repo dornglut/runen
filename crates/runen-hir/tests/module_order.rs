@@ -7,9 +7,8 @@ fn parse(source: &str) -> Parse {
 
 #[test]
 fn qualified_resolution_ignores_import_item_and_unit_presentation_order() {
-    let target = parse(
-        "export record Ticket {} export fn id(value: Ticket) -> Ticket { return value; }",
-    );
+    let target =
+        parse("export record Ticket {} export fn id(value: Ticket) -> Ticket { return value; }");
     let import_first = parse(
         "import dep; fn use_ticket(value: dep::Ticket) -> dep::Ticket { return dep::id(value); }",
     );
