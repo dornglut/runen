@@ -72,10 +72,7 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
 fn active_ancestor_shadowing_is_rejected_and_child_binding_ends_at_exit() {
     let shadowing = build("fn f(x: I64) { { let x: I64 = x; } }")
         .expect_err("active ancestor key reuse must be rejected");
-    assert!(has_diagnostic(
-        &shadowing,
-        DiagnosticKind::LocalShadowing
-    ));
+    assert!(has_diagnostic(&shadowing, DiagnosticKind::LocalShadowing));
 
     let escaped = build("fn f() { { let x: I64 = 1; } let y: I64 = x; }")
         .expect_err("child local must not resolve after child scope exit");
