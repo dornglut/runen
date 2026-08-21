@@ -38,6 +38,12 @@ fn returned_value(function: &runen_hir::Function) -> &Value {
         .expect("result-bearing test function has returned value")
 }
 
+fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
+    diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.kind == kind)
+}
+
 #[test]
 fn resolves_one_level_and_nested_paths_to_declaration_field_indices() {
     let hir = build(
@@ -84,44 +90,65 @@ fn field_lookup_is_nominal_and_not_declaration_order_priority() {
 }
 
 #[test]
-fn root_lookup_does_not_bypass_wrong_category_and_requires_availability() {
-    let wrong_category = errors("record root { value: I8 } fn f() -> I8 { return root.value; }");
-    assert!(wrong_category.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::ExpectedValueBinding
-    }));
+fn root_lookup_uses_active_binding_precedence_without_category_bypass() {
+    let hir = build(
+        "record root { value: U8 } record Box { value: I8 } \
+         fn f(root: Box) -> I8 { return root.value; }",
+    );
+    let f = function(&hir, "f");
+    let ValueKind::FieldValueUse { binding, fields } = &returned_value(f).kind else {
+        panic!("expected field use rooted in parameter");
+    };
+    assert_eq!(*binding, f.parameters[0].binding);
+    assert_eq!(fields, &[0]);
+    assert_eq!(returned_value(f).ty, Type::Intrinsic(IntrinsicType::I8));
 
+    let wrong_category = errors("record root { value: I8 } fn g() -> I8 { return root.value; }");
+    assert!(has_kind(
+        &wrong_category,
+        DiagnosticKind::ExpectedValueBinding
+    ));
+}
+
+#[test]
+fn field_access_requires_available_root() {
     let unavailable = errors(
         "record Box { value: I8 } \
          fn take(value: Box) {} \
          fn f(root: Box) -> I8 { take(root); return root.value; }",
     );
-    assert!(unavailable.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::UnavailableBinding
-    }));
+    assert!(has_kind(
+        &unavailable,
+        DiagnosticKind::UnavailableBinding
+    ));
 }
 
 #[test]
 fn rejects_non_record_unknown_and_nonduplicable_final_fields() {
     let non_record = errors("fn f(root: I8) -> I8 { return root.value; }");
-    assert!(non_record.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::ExpectedRecordForFieldAccess
-    }));
+    assert!(has_kind(
+        &non_record,
+        DiagnosticKind::ExpectedRecordForFieldAccess
+    ));
 
-    let unknown = errors("record Box { value: I8 } fn f(root: Box) -> I8 { return root.missing; }");
-    assert!(unknown.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::UnknownRecordField
-    }));
+    let unknown = errors(
+        "record Box { value: I8 } record Other { missing: I8 } \
+         fn f(root: Box) -> I8 { return root.missing; }",
+    );
+    assert!(has_kind(&unknown, DiagnosticKind::UnknownRecordField));
 
     let nonduplicable = errors(
         "record Inner { value: I8 } record Outer { inner: Inner } \
          fn f(root: Outer) -> Inner { return root.inner; }",
     );
-    assert!(nonduplicable.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::NonDuplicableFieldValue
-    }));
-    assert!(!nonduplicable.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::UnavailableBinding
-    }));
+    assert!(has_kind(
+        &nonduplicable,
+        DiagnosticKind::NonDuplicableFieldValue
+    ));
+    assert!(!has_kind(
+        &nonduplicable,
+        DiagnosticKind::UnavailableBinding
+    ));
 }
 
 #[test]
@@ -174,9 +201,10 @@ fn direct_access_to_foreign_record_fields_is_rejected() {
     ])
     .expect_err("foreign direct field access must be rejected");
 
-    assert!(diagnostics.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::InaccessibleRecordField
-    }));
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
 }
 
 #[test]
@@ -193,9 +221,10 @@ fn nested_path_may_reach_foreign_record_but_cannot_select_inside_it() {
     ])
     .expect_err("selector into foreign record must be rejected");
 
-    assert!(diagnostics.iter().any(|diagnostic| {
-        diagnostic.kind == DiagnosticKind::InaccessibleRecordField
-    }));
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
 }
 
 #[test]
@@ -204,6 +233,7 @@ fn field_values_require_exact_consumer_types() {
         "record Box { value: I8 } record Holder { value: U8 } \
          fn sink(value: U8) {} \
          fn bad_local(root: Box) { let value: U8 = root.value; } \
+         fn bad_assignment(root: Box) { let mut target: U8 = 0; target = root.value; } \
          fn bad_call(root: Box) { sink(root.value); } \
          fn bad_return(root: Box) -> U8 { return root.value; } \
          fn bad_constructor(root: Box) -> Holder { return Holder { value: root.value }; }",
@@ -213,6 +243,6 @@ fn field_values_require_exact_consumer_types() {
             .iter()
             .filter(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
             .count()
-            >= 4
+            >= 5
     );
 }
