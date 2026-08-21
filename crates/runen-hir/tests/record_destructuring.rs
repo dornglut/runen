@@ -280,6 +280,32 @@ fn partially_consumed_selected_field_rejects_pattern_before_any_new_transition()
 }
 
 #[test]
+fn all_nonduplicable_fields_remain_independent_pattern_consumes() {
+    let hir = build(
+        "record Left {} record Right {} record Pair { left: Left, right: Right } \
+         fn f(root: Pair) { let Pair { right: moved_right, left: moved_left } = root; }",
+    );
+    let f = function(&hir, "f");
+    let Statement::RecordDestructure { root, bindings, .. } = &f.body.statements[0] else {
+        panic!("expected record destructuring statement");
+    };
+
+    assert_eq!(*root, f.parameters[0].binding);
+    assert_eq!(
+        bindings
+            .iter()
+            .map(|binding| binding.field)
+            .collect::<Vec<_>>(),
+        [1, 0]
+    );
+    assert!(
+        bindings
+            .iter()
+            .all(|binding| binding.ownership == OwnedUse::Consume)
+    );
+}
+
+#[test]
 fn zero_field_pattern_is_noop_and_zero_leaf_field_still_records_consumption() {
     let hir = build(
         "record Empty {} record Holder { empty: Empty } \
@@ -327,6 +353,45 @@ fn nested_block_cleanup_uses_reverse_pattern_source_binding_order() {
             .iter()
             .all(|cleanup| cleanup.fields.is_empty())
     );
+}
+
+#[test]
+fn nested_pattern_bindings_obey_child_scope_lookup() {
+    let hir = build(
+        "record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { \
+             { \
+                 let Pair { left: extracted, right: other } = root; \
+                 { let copied: I8 = extracted; } \
+             } \
+         }",
+    );
+    let f = function(&hir, "f");
+    let Statement::Block(outer) = &f.body.statements[0] else {
+        panic!("expected outer child block");
+    };
+    let Statement::RecordDestructure { bindings, .. } = &outer.statements[0] else {
+        panic!("expected pattern statement");
+    };
+    let Statement::Block(inner) = &outer.statements[1] else {
+        panic!("expected nested child block");
+    };
+    let Statement::Local { initializer, .. } = &inner.statements[0] else {
+        panic!("expected nested local");
+    };
+    assert!(matches!(
+        initializer.kind,
+        ValueKind::BindingUse { binding, .. } if binding == bindings[0].binding
+    ));
+
+    let diagnostics = errors(
+        "record Pair { left: I8, right: U8 } \
+         fn bad(root: Pair) { \
+             { let Pair { left: extracted, right: other } = root; } \
+             let copied: I8 = extracted; \
+         }",
+    );
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
 }
 
 #[test]
