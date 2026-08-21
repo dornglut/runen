@@ -88,11 +88,11 @@ Only when no active parameter/local binding resolves the key does lookup fall th
 
 Lookup MUST NOT skip an active function-local binding merely because the consuming context would prefer a module-level entity of another category.
 
-The concrete whole-binding value uses and direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, a direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding.
+The concrete whole-binding value uses and **unqualified** direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, an unqualified direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding.
 
-Source-unit module aliases remain a distinct qualified-lookup mechanism owned by `names-modules.md`. They are not searched by unqualified function-body identifier lookup.
+Source-unit module aliases remain a distinct qualified-lookup mechanism owned by `names-modules.md`. They are not searched by unqualified function-body identifier lookup. The concrete `alias::member` direct-call target in `concrete-syntax.md` is explicitly qualified and resolves through that module-alias domain rather than this function-local lookup. Therefore an active local binding whose key equals the alias key does not block that syntactically qualified lookup.
 
-This revision does not define qualified path syntax, fields, members, labels, pattern bindings, generic parameters, lifetime names, methods, associated items, or another future name domain.
+Beyond the represented two-part module-alias qualification owned by `concrete-syntax.md` and `names-modules.md`, this revision does not define arbitrary member access, nested module paths, fields, labels, pattern bindings, generic parameters, lifetime names, methods, associated items, or another future name domain.
 
 ## Binding assignment mutability
 

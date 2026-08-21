@@ -22,7 +22,7 @@ The binding's module-private or exported accessibility is determined only by `na
 
 Different callable signatures do not make duplicate module binding keys legal. This revision defines no function overloading or overload set.
 
-The represented `fn` definition in `concrete-syntax.md` establishes one function declaration/entity with module-private accessibility, one callable signature as mapped below, and one represented source body attached under `function-execution.md`. Concrete spelling does not redefine function identity or callable-signature structure.
+The represented `fn` definition in `concrete-syntax.md` establishes one function declaration/entity, one callable signature as mapped below, and one represented source body attached under `function-execution.md`. Without the concrete `export` modifier that function binding is module-private; with the modifier it is exported under `names-modules.md`. Concrete spelling does not redefine function identity or callable-signature structure.
 
 A future concrete declaration-only or alternate definition form, if accepted, must map to these semantic entities without creating a competing identity relation.
 
@@ -74,7 +74,7 @@ This rule checks only source types directly present in the callable signature. I
 
 This accessibility rule concerns source name/type accessibility only. It does not define ABI symbol export, linkage, calling convention, interface serialization, physical visibility, or binary compatibility.
 
-The current concrete function form is module-private under `concrete-syntax.md`, so it does not itself exercise the exported-signature rule. The abstract exported-function contract remains available to later accepted concrete declaration forms.
+The represented concrete function form exercises this rule when modified by `export`; the unmodified form remains module-private under `concrete-syntax.md` and `names-modules.md`.
 
 ## Explicitly absent callable dimensions
 
