@@ -85,6 +85,8 @@ pub enum SyntaxKind {
     BlockStatement,
     RecordConstruction,
     RecordInitializer,
+    Dot,
+    FieldValueUse,
 }
 
 impl SyntaxKind {
@@ -198,6 +200,8 @@ impl Language for RunenLanguage {
             60 => SyntaxKind::BlockStatement,
             61 => SyntaxKind::RecordConstruction,
             62 => SyntaxKind::RecordInitializer,
+            63 => SyntaxKind::Dot,
+            64 => SyntaxKind::FieldValueUse,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
