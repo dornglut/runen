@@ -101,7 +101,7 @@ A value of a represented record source type contains exactly one field value of 
 
 For represented record types, define a **direct-containment edge** `A -> B` exactly when record type `A` has a field whose source type is record type `B`.
 
-The finite directed graph consisting of represented record types and all such direct-containment edges MUST contain no directed cycle.
+The finite directed graph consisting of represented record types and all such direct-containment edges MUST be acyclic.
 
 This requirement applies because every represented field type in this revision is either scalar or direct structural record containment; no accepted source pointer, reference, or other indirection type exists in this source type set.
 
