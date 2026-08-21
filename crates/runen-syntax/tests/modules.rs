@@ -6,7 +6,7 @@ fn parse(source: &str) -> runen_syntax::Parse {
 
 #[test]
 fn round_trips_import_export_and_qualified_forms_losslessly() {
-    let source = "/* head */ import dep; export record Holder { value: dep::Ticket } export fn use(value: dep::Ticket) -> dep::Ticket { dep::ping(); return value; }";
+    let source = "/* head */ export record Holder { value: dep::Ticket } /* middle */ import dep; export fn use(value: dep::Ticket) -> dep::Ticket { dep::ping(); return value; }";
     let parsed = parse(source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(parsed.text(), source);
@@ -16,8 +16,8 @@ fn round_trips_import_export_and_qualified_forms_losslessly() {
     assert_eq!(
         kinds,
         vec![
-            SyntaxKind::ImportDeclaration,
             SyntaxKind::RecordDefinition,
+            SyntaxKind::ImportDeclaration,
             SyntaxKind::FunctionDefinition,
         ]
     );
