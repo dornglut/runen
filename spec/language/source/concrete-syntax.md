@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -127,7 +127,7 @@ This form defines no source-visible module path, package coordinate, dependency 
 
 ```text
 RecordDefinition = "record" UserIdentifier "{" RecordFields? "}"
-RecordFields     = RecordField ("," RecordField)* ","?
+RecordFields     = RecordField ("," RecordField)* ","?"
 RecordField      = UserIdentifier ":" Type
 ```
 
@@ -137,7 +137,7 @@ The field sequence MAY be empty. A trailing comma is permitted.
 
 The concrete record form makes no positive owned-value duplicability selection. Its duplicability classification therefore follows the no-selection case defined by `types.md`.
 
-Record construction, member access, field expressions, destructuring, and duplicability-selection syntax are not represented.
+The represented record definition does not itself construct a value. Record construction is represented separately below. Member access, field expressions, destructuring, and duplicability-selection syntax are not represented.
 
 ## Type forms
 
@@ -163,7 +163,7 @@ This subset has no nested module path, type inference, type alias, generic appli
 
 ```text
 FunctionDefinition = "fn" UserIdentifier "(" Parameters? ")" ResultClause? Body
-Parameters         = Parameter ("," Parameter)* ","?
+Parameters         = Parameter ("," Parameter)* ","?"
 Parameter          = UserIdentifier ":" Type
 ResultClause       = "->" Type
 ```
@@ -231,7 +231,7 @@ This form targets only the complete selected binding. There is no field/member a
 ```text
 DirectCall       = DirectCallTarget "(" Arguments? ")"
 DirectCallTarget = UserIdentifier | QualifiedModuleMember
-Arguments        = Value ("," Value)* ","?
+Arguments        = Value ("," Value)* ","?"
 ```
 
 An unqualified `UserIdentifier` call target maps to the direct-call relation owned by `function-execution.md` after its target identifier is resolved using the function-local lookup precedence from `local-bindings.md` and the same-module fallback from `names-modules.md`.
@@ -254,10 +254,36 @@ A direct call used as a body statement is language-valid only when its resolved 
 
 A valid no-result call statement produces no source value to discard.
 
+## Record construction
+
+The represented same-module named-field record constructor has this grammar:
+
+```text
+RecordConstruction = UserIdentifier "{" RecordInitializers? "}"
+RecordInitializers = RecordInitializer ("," RecordInitializer)* ","?"
+RecordInitializer  = UserIdentifier ":" Value
+```
+
+The constructor target `UserIdentifier` maps directly to same-module lookup under `names-modules.md` for the source module containing the construction. Function-local parameter and ordinary-local bindings do not participate in constructor-target lookup, even when an active local has the same lexical identifier key. The selected same-module binding MUST denote one nominal record declaration under `types.md`; lookup does not bypass a selected wrong-category module binding merely because the constructor context requires a record.
+
+This constructor-specific lookup does not create a general type/value namespace rule. Imported modules are not searched, and `alias::Record { ... }` is not a represented constructor form. Cross-module construction and the field-accessibility/public-construction contract it would require remain outside this revision.
+
+Each `RecordInitializer` key selects the unique declared field of the resolved record whose lexical field key is equal under the accepted identifier-key relation. Every declared field MUST be selected exactly once. A duplicate initializer key, an initializer key that denotes no declared field, or omission of any declared field makes the construction source-invalid.
+
+Initializers MAY appear in any source order and MAY have a trailing comma. The initializer sequence remains the source evaluation sequence consumed by `function-execution.md`; declaration field order does not reorder initializer evaluation. For a record declaration with no fields, `Empty {}` is valid when `Empty` resolves to that record. For a record with one or more fields, an empty initializer list is invalid because required fields are missing.
+
+The selected declaration field's source type is the required source type for its initializer `Value` producer. The initializer MUST produce exactly that source type under `types.md`; this form introduces no conversion, coercion, defaulting, widening, narrowing, or inference. The construction itself produces exactly the resolved nominal record type under `function-execution.md`, and any containing `Value` consumer continues to require exact source type equality with its own required type.
+
+The resulting record value has exactly the declaration-defined field/value shape from `types.md`, independent of initializer source order. Evaluation, transient ownership, defined-fault cleanup, divergence, and final ownership transfer into the selected fields are owned by `function-execution.md`.
+
+Because each initializer contains a `Value`, record construction composes recursively with another record construction as well as the other represented value producers.
+
+This form defines no inferred or anonymous constructor target, positional field list, field-init shorthand, default field value, update/spread/base syntax, member access, field assignment, partial-field operation, destructuring, constructor/method body, or positive duplicability selection.
+
 ## Value forms
 
 ```text
-Value                 = Literal | IdentifierUse | DirectCall
+Value                 = Literal | IdentifierUse | DirectCall | RecordConstruction
 Literal               = BooleanLiteral | DecimalIntegerLiteral
 BooleanLiteral        = "true" | "false"
 DecimalIntegerLiteral = "-"? DecimalMagnitude
@@ -272,9 +298,11 @@ An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-b
 
 A `DirectCall` may be used as a `Value` only when its callable signature specifies one result value. The successful call result is the owned value produced by `function-execution.md`.
 
+A `RecordConstruction` maps to the same-module record-construction relation above and produces one owned record value under `function-execution.md`. Record construction is not a literal and does not add a general expression hierarchy.
+
 A qualified module member without a direct-call argument list is not an `IdentifierUse` value under this subset. Module aliases and module-level declarations do not become source values.
 
-This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; record construction; member access; assignment expression; block expression; closure; or other value form.
+This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; member access; assignment expression; block expression; closure; or other value form beyond the represented producers above.
 
 ## Returns and normal completion
 
@@ -292,15 +320,17 @@ This subset defines no tail-expression return and no earlier/nonterminal return 
 
 ## Unqualified lookup and category validation
 
-For the represented unqualified function-body identifier forms, lookup first applies the function-local precedence defined by `local-bindings.md`. Only when no active parameter/local binding resolves the lexical identifier key does lookup fall through to same-module lookup under `names-modules.md`.
+Except for a `RecordConstruction` target, whose constructor-specific same-module lookup is defined above, the represented unqualified function-body identifier forms first apply the function-local precedence defined by `local-bindings.md`. Only when no active parameter/local binding resolves the lexical identifier key does lookup fall through to same-module lookup under `names-modules.md`.
 
 After lookup selects an entity, the consuming syntactic context validates its category. The lookup MUST NOT skip the selected entity to find another binding of a context-preferred category.
 
 Consequently, when a parameter or local binding has the same lexical key as a module-level function, an unqualified direct-call spelling with that key resolves to the function-local binding and is invalid as a direct call rather than silently bypassing the local binding. For an assignment target, a selected parameter/local binding is validated for assignment mutability; when no local binding exists and same-module lookup selects a module declaration, that selected entity is invalid as an assignment target rather than being bypassed.
 
-Imported modules are not searched by this unqualified lookup relation.
+A record-construction target is the explicit exception: an active parameter/local of the same key does not participate in that target lookup, and the same-module binding selected by `names-modules.md` is validated as a record declaration.
 
-This rule does not introduce overload resolution or separate type/value module namespaces.
+Imported modules are not searched by the ordinary unqualified lookup relation or by the represented constructor-target relation.
+
+This rule does not introduce overload resolution or general separate type/value module namespaces.
 
 ## Qualified module lookup and category validation
 
@@ -308,9 +338,9 @@ A concrete `alias::member` form is explicitly qualified. Its first identifier is
 
 After qualified lookup selects the target binding, the consuming type or direct-call context validates the entity category. The lookup MUST NOT skip a private or wrong-category target to search for another entity.
 
-A parameter or local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local continues to control an unqualified spelling but does not block the syntactically qualified `alias::member` form.
+A parameter or local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local continues to control an ordinary unqualified spelling but does not block the syntactically qualified `alias::member` form.
 
-The two-part qualification syntax does not create general member access, nested module paths, associated-item lookup, methods, or re-export behavior.
+The two-part qualification syntax does not create general member access, nested module paths, associated-item lookup, methods, re-export behavior, or qualified record construction.
 
 ## Deliberate boundaries
 
@@ -323,7 +353,7 @@ This revision does not define:
 - uninitialized locals, type inference, or mutable parameters;
 - branches, loops, patterns, or other multiple-path/control-transfer forms;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
-- record construction, member access, field assignment, or destructuring;
+- qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction; member access; field assignment; partial-field operations; or destructuring;
 - positive record duplicability-selection syntax;
 - references, borrow syntax, source interior mutability, raw-pointer assignment, or lifetime syntax;
 - indirect calls, function values, or closures;
