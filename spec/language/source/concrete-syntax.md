@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, return, cleanup, divergence, fault, and straight-line execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); function entities and callable signatures from [Source callables](callables.md); parameter/local binding semantics, assignment mutability and availability, and function-local lookup from [Source function-local bindings](local-bindings.md); and direct-call, initialization, assignment/replacement, return, cleanup, divergence, fault, and straight-line execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -27,6 +27,7 @@ The represented concrete subset reserves exactly these lexical identifier keys:
 - `fn`;
 - `record`;
 - `let`;
+- `mut`;
 - `return`;
 - `import`;
 - `export`;
@@ -39,7 +40,7 @@ A **user identifier** is an identifier-form token under `lexical.md` whose lexic
 
 A reserved key is not legal where the grammar requires a user identifier. This revision reserves no other identifier key and defines no escaping mechanism for a reserved key.
 
-Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality.
+Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality. In particular, a longer identifier-form token such as `mutable` is one complete identifier token and is not split because it begins with the reserved key `mut`.
 
 ## Punctuation tokens
 
@@ -167,7 +168,7 @@ The represented body grammar has exactly the function root lexical scope establi
 
 ```text
 Body          = "{" BodyStatement* ReturnStatement? "}"
-BodyStatement = LocalDeclaration | CallStatement
+BodyStatement = LocalDeclaration | AssignmentStatement | CallStatement
 ```
 
 A represented return statement, when present, is terminal in this grammar. Source containing another body statement after a represented return does not match this body grammar.
@@ -179,14 +180,33 @@ Execution order and abnormal completion of the represented straight-line body ar
 ## Ordinary local declarations
 
 ```text
-LocalDeclaration = "let" UserIdentifier ":" Type "=" Value ";"
+LocalDeclaration  = "let" MutableModifier? UserIdentifier ":" Type "=" Value ";"
+MutableModifier   = "mut"
 ```
 
-The concrete form maps to one ordinary local declaration under `local-bindings.md`. The explicit type and initializer are mandatory. Every concrete local binding in this subset is immutable for assignment purposes.
+The concrete form maps to one ordinary local declaration under `local-bindings.md`. The explicit type and initializer are mandatory in both forms.
+
+Without `MutableModifier`, the declaration establishes an immutable binding. With `MutableModifier`, it establishes a mutable binding under the assignment-mutability classification owned by `local-bindings.md`. `mut` does not create a second declaration category, a reference/memory value, or a distinct storage identity.
 
 Initializer lookup, owned-value production, transfer, availability, and the point at which the new local enters scope are determined by `local-bindings.md` and `function-execution.md`.
 
-This subset has no mutable-local spelling, uninitialized local, inferred local type, pattern binding, destructuring local, or assignment/reinitialization form.
+This subset has no uninitialized local, inferred local type, pattern binding, destructuring local, or mutable-parameter spelling.
+
+## Whole-binding assignment statements
+
+```text
+AssignmentStatement = UserIdentifier "=" Value ";"
+```
+
+The target identifier is resolved using the unqualified function-body lookup precedence from `local-bindings.md`. The selected entity MUST be one represented parameter/local binding and MUST satisfy the assignment-mutability and availability rules defined there. Lookup does not bypass a selected local or same-module entity merely because that entity is an invalid assignment target.
+
+The RHS is exactly the existing `Value` form below. It MUST produce one owned source value whose source type is exactly equal to the target binding's declared source type.
+
+Assignment is a statement and produces no source value. It does not introduce Unit/Void or participate in `Value` grammar.
+
+RHS evaluation, source-first old-value replacement cleanup, value transfer, successful target availability, straight-line sequencing, and fault/divergence consequences are owned by `function-execution.md`.
+
+This form targets only the complete selected binding. There is no field/member assignment, destructuring assignment, compound assignment, qualified assignment target, pointer/reference assignment, or general place/lvalue grammar in this subset.
 
 ## Direct calls
 
@@ -212,7 +232,7 @@ This subset has no indirect call, function-value call, method call, named argume
 CallStatement = DirectCall ";"
 ```
 
-A direct call used as a body statement is language-valid only when its resolved callable signature specifies no result value. A result-bearing direct call cannot be used as a statement under this grammar because this subset defines no arbitrary produced-value discard relation.
+A direct call used as a body statement is language-valid only when its resolved callable signature specifies no result value. A result-bearing direct call cannot be used as a statement because this subset defines no arbitrary produced-value discard relation.
 
 A valid no-result call statement produces no source value to discard.
 
@@ -251,7 +271,7 @@ For the represented unqualified function-body identifier forms, lookup first app
 
 After lookup selects an entity, the consuming syntactic context validates its category. The lookup MUST NOT skip the selected entity to find another binding of a context-preferred category.
 
-Consequently, when a parameter or local binding has the same lexical key as a module-level function, an unqualified direct-call spelling with that key resolves to the function-local binding and is invalid as a direct call rather than silently bypassing the local binding.
+Consequently, when a parameter or local binding has the same lexical key as a module-level function, an unqualified direct-call spelling with that key resolves to the function-local binding and is invalid as a direct call rather than silently bypassing the local binding. For an assignment target, a selected parameter/local binding is validated for assignment mutability; when no local binding exists and same-module lookup selects a module declaration, that selected entity is invalid as an assignment target rather than being bypassed.
 
 Imported modules are not searched by this unqualified lookup relation.
 
@@ -272,14 +292,15 @@ The two-part qualification syntax does not create general member access, nested 
 This revision does not define:
 
 - numeric, boolean, string, byte, or character literal syntax or literal typing;
-- arithmetic, comparison, or other operator forms;
+- arithmetic, comparison, logical, compound-assignment, or other operator forms;
 - grouping or general expression grammar;
-- assignment/replacement operations or mutable-binding syntax;
+- assignment expressions, assignment-as-value, or general place/lvalue syntax beyond the represented whole-binding statement;
+- uninitialized locals, type inference, or mutable parameters;
 - nested blocks, branches, loops, patterns, or general control flow;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
-- record construction, member access, or destructuring;
+- record construction, member access, field assignment, or destructuring;
 - positive record duplicability-selection syntax;
-- references, borrow syntax, or lifetime syntax;
+- references, borrow syntax, source interior mutability, raw-pointer assignment, or lifetime syntax;
 - indirect calls, function values, or closures;
 - generics, traits, or coherence;
 - const/static forms;
