@@ -178,7 +178,10 @@ fn partial_child_cleanup_emits_exact_projected_frontier_in_source_order() {
 
     assert_eq!(
         drop_places(f),
-        vec![Place::local(LocalId(0)).field(2), Place::local(LocalId(0)).field(1)]
+        vec![
+            Place::local(LocalId(0)).field(2),
+            Place::local(LocalId(0)).field(1)
+        ]
     );
     assert!(
         drop_places(f)
