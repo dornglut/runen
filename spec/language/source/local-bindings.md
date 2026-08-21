@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for function-local binding identity, abstract lexical scopes and function-local lookup precedence, binding assignment mutability, binding availability, and ordinary whole-binding owned-value use.
+This document owns the represented source semantics for function-local binding identity, abstract lexical scopes and function-local lookup precedence, binding assignment mutability, binding availability, ordinary whole-binding owned-value use, and whole-binding assignment legality and post-assignment availability.
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
 
-Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer execution interaction, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local-initializer and assignment execution interaction, assignment replacement ordering, lexical-scope and activation cleanup, direct return, recursion, divergence, defined-fault propagation, and straight-line body execution are owned by [Source function execution](function-execution.md). The represented concrete parameter/local/value/call/assignment spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
 This document does not define general expression evaluation, references, patterns, traits, ABI, or an implementation representation.
 
@@ -45,9 +45,9 @@ Uninitialized ordinary local declarations are not represented by this revision.
 
 The initializer is resolved and typed in the lexical environment that exists before the new binding is introduced. The new binding enters scope only after the declaration's initialization boundary. Therefore the new binding is not available for self-reference from its own initializer.
 
-The concrete `let` form in `concrete-syntax.md` supplies an explicit source type and initializer and establishes an immutable ordinary local declaration under these rules.
+The concrete `let` forms in `concrete-syntax.md` supply an explicit source type and initializer. `let name: Type = Value;` establishes an immutable ordinary local declaration, while `let mut name: Type = Value;` establishes a mutable ordinary local declaration under these rules.
 
-This revision does not define type inference or a mutable/uninitialized local form. `function-execution.md` owns represented initializer value production, transfer, and abnormal-completion interaction for the currently accepted owned value producers.
+This revision does not define type inference or an uninitialized local form. `function-execution.md` owns represented initializer value production, transfer, and abnormal-completion interaction for the currently accepted owned value producers.
 
 ## Abstract lexical scopes
 
@@ -71,7 +71,7 @@ Consequently:
 
 - a local cannot shadow a parameter;
 - a nested local cannot shadow an enclosing local;
-- two sequential locals in the same continuing lexical scope cannot reuse one key; and
+- two sequential locals in the same continuing lexical scope cannot reuse a key; and
 - disjoint sibling lexical scopes MAY independently introduce the same key because their binding scopes do not overlap.
 
 This prohibition applies only inside the function-local value-binding domain.
@@ -88,7 +88,7 @@ Only when no active parameter/local binding resolves the key does lookup fall th
 
 Lookup MUST NOT skip an active function-local binding merely because the consuming context would prefer a module-level entity of another category.
 
-The concrete whole-binding value uses and **unqualified** direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, an unqualified direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding.
+The concrete whole-binding value uses, whole-binding assignment targets, and **unqualified** direct-call target identifiers in `concrete-syntax.md` consume this precedence. Consequently, if a local binding has the same key as a module-level function, an unqualified direct-call spelling selects the local binding and is invalid as a direct call rather than bypassing that binding. Conversely, an assignment target whose key has no active local binding may select a same-module declaration, but that selected module entity is invalid as an assignment target rather than being bypassed to find another binding.
 
 Source-unit module aliases remain a distinct qualified-lookup mechanism owned by `names-modules.md`. They are not searched by unqualified function-body identifier lookup. The concrete `alias::member` direct-call target in `concrete-syntax.md` is explicitly qualified and resolves through that module-alias domain rather than this function-local lookup. Therefore an active local binding whose key equals the alias key does not block that syntactically qualified lookup.
 
@@ -105,9 +105,11 @@ Assignment mutability is a binding property independent of source type identity,
 
 Consuming an owned value from an immutable binding is permitted when the applicable owned-use rule permits the consumption. Immutability restricts later assignment or reinitialization; it does not require the binding to retain ownership forever.
 
-The concrete parameter and `let` forms in `concrete-syntax.md` establish immutable bindings only. The abstract mutable classification remains represented here for later accepted assignment/reinitialization consumers; no concrete mutable-binding spelling exists in the current subset.
+The concrete parameter form in `concrete-syntax.md` establishes immutable parameter bindings. The concrete ordinary-local forms establish immutable bindings without `mut` and mutable bindings with `mut`. No concrete parameter-mutability form is represented by this revision.
 
-This revision defines the mutability classification only. It does not define replacement expression evaluation or an operation that mutates an available binding.
+Assignment to an immutable binding is language-invalid regardless of whether that binding is currently available or unavailable. Assignment to a mutable binding is permitted by this mutability rule subject to the target, type, availability-transition, and execution requirements below and in `function-execution.md`.
+
+Binding mutability does not by itself replace an available value or reinitialize an unavailable binding; replacement remains an explicit source assignment operation.
 
 ## Source binding availability
 
@@ -121,6 +123,8 @@ Availability is a source-validation fact. It is not Core `Live`, `Dead`, or Neve
 A parameter binding is available at represented function-body entry. `function-execution.md` owns how successful direct-call argument transfer establishes each parameter value before body entry.
 
 A represented ordinary local binding becomes available after its initializer establishes its initial source value. `function-execution.md` owns the currently represented initializer evaluation/transfer relation; future expression owners may add additional value producers without redefining availability.
+
+A successful represented assignment to a mutable binding establishes one replacement value and leaves the target binding available, regardless of whether the target was available or unavailable before the assignment began. `function-execution.md` owns when that availability transition occurs relative to RHS evaluation, replacement cleanup, and value transfer.
 
 A source operation that requires an owned value from a binding is valid only when that binding is **definitely available** at the operation's source program point.
 
@@ -142,15 +146,22 @@ This implicit duplicate-or-consume relation applies only to ordinary owned-value
 
 Partial field moves and member-level availability are not represented by this revision.
 
-## Reinitialization boundary
+## Whole-binding assignment and reinitialization
 
-An immutable binding that becomes unavailable through consumption cannot become available again under the represented binding model.
+A represented whole-binding assignment target MUST resolve through the function-local lookup relation above and MUST denote one represented parameter/local binding. The selected binding MUST be mutable. The assignment RHS MUST produce exactly one owned source value whose source type is exactly equal under `types.md` to the target binding's declared source type.
 
-A mutable unavailable binding is eligible for later legal reinitialization by an accepted source assignment/reinitialization operation. Such an operation must establish a new value before making the binding available again.
+A mutable target may be either available or unavailable when assignment begins:
 
-This revision does not define that operation, source-first replacement ordering, replacement of an already available value, assignment expression evaluation, or concrete assignment grammar.
+- when unavailable, successful assignment reinitializes the binding with the produced value;
+- when available, successful assignment replaces the binding's current owned value with the produced value.
 
-A mutable binding that is already available is not implicitly replaced merely because it is mutable.
+After the assignment value transfer completes successfully, the target binding is available and owns exactly the transferred replacement value.
+
+The target binding remains in scope during RHS evaluation. Any ordinary owned use of that binding while evaluating the RHS is therefore governed by the same duplicate-or-consume rule above. In particular, a non-duplicable self-use may make the target unavailable before assignment transfer, while a duplicable self-use leaves it available.
+
+This section owns assignment legality and the resulting source availability fact only. [Source function execution](function-execution.md) owns RHS evaluation, source-first replacement ordering, old-value cleanup selection, transfer, straight-line statement sequencing, and fault/divergence interaction.
+
+This revision defines no assignment through a field/member, borrow/reference, pointer, interior-mutability mechanism, destructuring target, pattern, or other place form.
 
 ## Scope termination and discard boundary
 
@@ -160,14 +171,15 @@ A binding that remains available when its lexical scope or function activation t
 
 This revision introduces no source `drop` ability, must-consume type class, custom destructor, or unused-value prohibition. A later source capability may define independently justified restrictions for its represented types without redefining owned-value duplicability.
 
-`function-execution.md` owns which still-available source bindings are selected for normal-return or defined-fault cleanup and their source ordering. Applicable [Core value and storage semantics](../core/value-storage.md) remains authoritative for structural destruction domains, stored-value lifetime endings, and Core storage cleanup. This document does not duplicate either owner's cleanup relation.
+`function-execution.md` owns which still-available source bindings are selected for normal-return, assignment replacement, or defined-fault cleanup and their source ordering. Applicable [Core value and storage semantics](../core/value-storage.md) remains authoritative for structural destruction domains, stored-value lifetime endings, and Core storage cleanup. This document does not duplicate either owner's cleanup relation.
 
-## Function, call, and fault boundary
+## Function, call, assignment, and fault boundary
 
-This document defines body-local binding facts and function-local lookup only. It does not redefine the direct execution relation owned by `function-execution.md`, including:
+This document defines body-local binding facts, function-local lookup, assignment target legality, and source availability consequences. It does not redefine the execution relation owned by `function-execution.md`, including:
 
 - function body execution;
 - direct-call argument evaluation and parameter ownership transfer;
+- assignment RHS evaluation, replacement cleanup, and transfer ordering;
 - result production and return transfer;
 - dynamic activation identity or recursion;
 - lexical-scope, caller, or callee cleanup sequencing; or
@@ -179,8 +191,8 @@ Indirect calls, function values, closures, references/pass modes, broader panic/
 
 This revision does not add or require a parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime representation, or backend representation.
 
-`concrete-syntax.md` provides one bounded concrete parameter/local/value/call subset. That syntax does not alter binding identity, scope, lookup, mutability, availability, or owned-use authority defined here.
+`concrete-syntax.md` provides one bounded concrete parameter/local/value/call/assignment subset. That syntax does not alter binding identity, scope, lookup, mutability, availability, or owned-use authority defined here.
 
 ## Further boundaries
 
-Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment/replacement operations, nested-block forms, literals, precedence, parser recovery, general expression typing, partial field moves, member access, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the concrete subset owned by `concrete-syntax.md`, this revision does not define type inference, assignment expressions or assignment-as-value, uninitialized locals, nested-block forms, literals, precedence, parser recovery, general expression typing, partial field moves, member access, field assignment, destructuring, patterns, references, borrow syntax, lifetime inference, closures/captures, generics, traits/coherence, methods, overload sets, explicit clone/copy/move operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
