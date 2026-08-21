@@ -82,7 +82,7 @@ This revision defines no documentation-comment category or documentation semanti
 
 The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above. `DecimalMagnitude` denotes one decimal magnitude token as defined above.
 
-Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role; represented statements use mandatory semicolons.
+Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role. Semicolons appear exactly where the productions below require them; `BlockStatement` has no trailing semicolon.
 
 ## Source units and items
 
@@ -178,18 +178,22 @@ The concrete function form attaches the following body to the same function enti
 
 ## Function bodies
 
-The represented body grammar has exactly the function root lexical scope established by `local-bindings.md`:
+The represented body grammar has the function root lexical scope established by `local-bindings.md` and admits child lexical scopes through `BlockStatement`:
 
 ```text
-Body          = "{" BodyStatement* ReturnStatement? "}"
-BodyStatement = LocalDeclaration | AssignmentStatement | CallStatement
+Body           = "{" BodyStatement* ReturnStatement? "}"
+BodyStatement  = LocalDeclaration
+               | AssignmentStatement
+               | CallStatement
+               | BlockStatement
+BlockStatement = "{" BodyStatement* "}"
 ```
 
-A represented return statement, when present, is terminal in this grammar. Source containing another body statement after a represented return does not match this body grammar.
+A represented return statement, when present, is terminal in the function-root grammar. Source containing another root body statement after that return does not match this body grammar.
 
-Nested block statements are not represented.
+Each `BlockStatement` maps to exactly one child lexical scope of its containing lexical scope under `local-bindings.md`. It is a statement, produces no source value, has no trailing semicolon, and may be empty or recursively nested. Its contents are exactly `BodyStatement*`; `ReturnStatement` remains outside `BodyStatement`, so a represented return cannot occur inside a nested block in this subset.
 
-Execution order and abnormal completion of the represented straight-line body are owned by `function-execution.md`.
+Execution order, normal lexical-scope cleanup, and abnormal completion of the represented root and nested statement sequences are owned by `function-execution.md`.
 
 ## Ordinary local declarations
 
@@ -315,7 +319,7 @@ This revision does not define:
 - grouping or general expression grammar;
 - assignment expressions, assignment-as-value, or general place/lvalue syntax beyond the represented whole-binding statement;
 - uninitialized locals, type inference, or mutable parameters;
-- nested blocks, branches, loops, patterns, or general control flow;
+- branches, loops, patterns, or general control flow;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - record construction, member access, field assignment, or destructuring;
 - positive record duplicability-selection syntax;
