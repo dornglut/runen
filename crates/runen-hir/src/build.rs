@@ -105,9 +105,9 @@ impl BindingState {
         let inserted = self.consumed_paths.insert(path.to_vec());
         debug_assert!(inserted);
         debug_assert!(self.consumed_paths.iter().all(|left| {
-            self.consumed_paths.iter().all(|right| {
-                left == right || !(left.starts_with(right) || right.starts_with(left))
-            })
+            self.consumed_paths
+                .iter()
+                .all(|right| left == right || !(left.starts_with(right) || right.starts_with(left)))
         }));
     }
 }
