@@ -127,7 +127,10 @@ fn composed_literal_consumers_preserve_existing_lowering_order_and_validate() {
         .collect::<Vec<_>>();
     assert_eq!(calls.len(), 1);
     assert_eq!(calls[0].0.len(), 1);
-    assert!(calls[0].1.is_some(), "result-bearing call keeps its destination");
+    assert!(
+        calls[0].1.is_some(),
+        "result-bearing call keeps its destination"
+    );
 
     let last_block = entry.body.blocks.last().expect("entry has a final block");
     assert!(matches!(
