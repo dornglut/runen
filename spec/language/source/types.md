@@ -6,7 +6,7 @@ This document owns the represented intrinsic scalar source type identities, repr
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), and applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md). It does not redefine those owners.
 
-The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Function-local binding mutability, availability, and ordinary owned-value use are owned by [Source function-local bindings](local-bindings.md). This document does not define literal typing, conversions, member lookup, or an implementation representation.
+The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Function-local binding mutability, availability, and ordinary owned-value use are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities and value domains defined here when it forms represented boolean and integer literal values. This document does not define literal materialization, conversions, member lookup, or an implementation representation.
 
 ## Intrinsic scalar source types
 
@@ -19,7 +19,7 @@ The following labels identify intrinsic source type identities. [Source concrete
 
 These intrinsic scalar type identities are language-level source types. Their existence and semantic value domains MUST NOT vary with physical target, backend, optimization level, host ABI, or direct hardware support.
 
-`Bool` has exactly two semantic values: true and false. This section does not define their source literal spellings, representation, layout, integer conversion, ordering, or bit pattern.
+`Bool` has exactly two semantic values: true and false. The represented source literal producer for those values is owned by `literals.md`; this section does not define its concrete spellings, representation, layout, integer conversion, ordering, or bit pattern.
 
 Each represented integer type consumes the fixed-width integer semantics owned by Core with the following width and signedness:
 
@@ -141,13 +141,15 @@ This capability consumes the conceptual distinction between consuming ownership 
 
 ## Literal and conversion boundary
 
-This document defines no source literal form or literal type.
+[Source literal semantics](literals.md) owns the represented boolean literal values and the required-type materialization of represented signed decimal integer literals into the fixed-width integer value domains defined here. This type foundation supplies those value domains; it does not redefine literal spelling, contextual materialization, representability diagnostics, or owned-value production.
 
-In particular, it does not define abstract or unbounded integer/float literal types, default literal types, suffixes, contextual literal typing, or compile-time-only numeric types.
+No source floating literal form or floating literal materialization relation is defined by this revision.
 
-This document also grants no implicit conversion, coercion, promotion, widening, narrowing, subtyping, or numeric defaulting relation between represented source types.
+This document defines no abstract or unbounded integer/float literal type, default literal type, literal suffix semantics, or compile-time-only numeric type. The context-typed integer-literal relation in `literals.md` does not add another source type.
 
-Those omissions do not prohibit a later accepted source operation from defining an explicit or implicit conversion. They prevent the bare type foundation from creating conversion behavior before an expression, literal, call, or other consumer owns it.
+This document also grants no implicit conversion, coercion, promotion, widening, narrowing, subtyping, or numeric defaulting relation between represented source types. Literal materialization is not such a conversion because the literal datum has no prior concrete source type.
+
+Those omissions do not prohibit a later accepted source operation from defining an explicit or implicit conversion. They prevent the bare type foundation from creating conversion behavior before an operation that actually consumes it owns that behavior.
 
 ## Callable and declaration boundary
 
@@ -173,6 +175,6 @@ Proving-kernel copyability or interior-mutability metadata is not source-languag
 
 ## Further boundaries
 
-The concrete intrinsic and record forms represented by `concrete-syntax.md` do not define literals, patterns, record construction, member access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
+The concrete intrinsic and record forms represented by `concrete-syntax.md` do not themselves define literal semantics, patterns, record construction, member access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation. Represented boolean and integer literal semantics are instead owned by `literals.md`.
 
 Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities and relations defined here.

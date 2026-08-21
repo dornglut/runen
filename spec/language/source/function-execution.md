@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for source function body attachment, straight-line body execution order, dynamic direct-call activations, direct-call argument and result ownership transfer, local initialization, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion and divergence, and defined-fault propagation through direct source calls.
 
-It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), and parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
+It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity and callable-signature structure from [Source callables](callables.md), source value type equality from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), and parameter/local binding identity, scope, lookup, assignment mutability, availability, ordinary whole-binding owned use, and assignment legality from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-The represented concrete function/body/value/call/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). This document owns their execution consequences where that grammar maps to the semantic operations defined here; it does not own concrete spelling or parser representation.
+The represented concrete function/body/value/call/assignment/return spellings and grammar are owned by [Source concrete syntax](concrete-syntax.md). Literal spelling, mathematical integer formation, required-type materialization, and representability are owned by `concrete-syntax.md` and `literals.md`. This document owns execution consequences where those forms map to the semantic operations defined here; it does not own concrete spelling, literal typing, or parser representation.
 
-This document does not define a universal expression taxonomy, literals, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
+This document does not define a universal expression taxonomy, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
 
 ## Source function bodies
 
@@ -50,18 +50,23 @@ An **owned value producer** for this execution relation is an applicable accepte
 
 The represented owned value producers sufficient for this revision are:
 
+- a source-valid boolean or materialized decimal integer literal from `literals.md`;
 - ordinary whole-binding owned-value use from `local-bindings.md`; and
 - a successful result-bearing direct call under this document.
 
-`concrete-syntax.md` exposes exactly those two producer forms in its current `Value` grammar. Future literal, operator, record-construction, conversion, member-access, or other expression owners MAY introduce additional owned value producers without redefining the execution relation in this document.
+`concrete-syntax.md` exposes exactly those three producer families in its current `Value` grammar. Future operator, record-construction, conversion, member-access, or other expression owners MAY introduce additional owned value producers without redefining the execution relation in this document.
 
 Unless another accepted source owner defines a distinct rule for its producer, a producer used where this document requires a value MUST finish evaluation before that value is transferred to the receiving binding or transient ownership position.
+
+Literal evaluation itself is effect-free, non-faulting, and non-diverging after source validation under `literals.md`. This execution owner only supplies the consuming position's required source type where contextual integer-literal materialization needs it and then transfers the resulting owned value under the ordinary rules below.
 
 ## Direct-call arguments
 
 A represented direct call has exactly one ordered argument operand for each callable-signature parameter slot. Argument count MUST match the callable signature exactly.
 
 Each argument evaluation MUST produce one owned source value whose source type is exactly equal under `types.md` to the corresponding parameter source type. This revision introduces no implicit conversion, coercion, widening, narrowing, subtyping, or numeric defaulting.
+
+The corresponding parameter source type is the required source type supplied to an argument producer whose canonical semantics require one. In particular, a represented decimal integer literal argument materializes under that parameter type through `literals.md`; this does not create a conversion or inference relation.
 
 Arguments are evaluated left to right in their ordered call/signature sequence.
 
@@ -92,6 +97,8 @@ Parameter slots in this represented direct-call relation are owned-value paramet
 
 When a represented ordinary local initializer evaluates an owned value producer, evaluation completes before the produced value is transferred into the local binding.
 
+The local binding's declared source type is the required source type supplied to an initializer producer whose canonical semantics require one. A represented decimal integer literal initializer therefore materializes under that declared type through `literals.md` before transfer.
+
 The produced value's source type MUST be exactly equal under `types.md` to the local binding's declared source type.
 
 After the transfer completes, the local binding becomes available under `local-bindings.md`. The transfer does not duplicate the produced value.
@@ -101,6 +108,8 @@ If initializer evaluation yields a defined fault or diverges, that local binding
 ## Whole-binding assignment and replacement
 
 A represented whole-binding assignment consumes the assignment target legality, mutability, declared type, RHS type requirement, and pre/post-assignment availability relation defined by `local-bindings.md`.
+
+The selected assignment target's declared source type is the required source type supplied to an RHS producer whose canonical semantics require one. A represented decimal integer literal RHS therefore materializes under that target type through `literals.md` before replacement execution.
 
 For a source-valid assignment, execution is **source-first** with respect to replacement:
 
@@ -186,7 +195,9 @@ This cleanup ordering is semantic and independent of physical stack layout, ABI 
 
 ## Normal return
 
-For a source function whose callable signature has one result type, a represented return MUST first evaluate exactly one owned value producer whose source type is exactly equal under `types.md` to that result type.
+For a source function whose callable signature has one result type, that result type is the required source type supplied to a return-value producer whose canonical semantics require one. A represented decimal integer literal return therefore materializes under the declared result type through `literals.md`.
+
+A represented return MUST first evaluate exactly one owned value producer whose source type is exactly equal under `types.md` to that result type.
 
 Result evaluation completes before any return-induced lexical-scope or activation cleanup.
 
@@ -250,16 +261,18 @@ Active caller and callee ownership state, together with any transient values ret
 
 Left-to-right argument evaluation, source-first assignment RHS evaluation, and concrete straight-line body execution fix relative source ordering for any effects that applicable future expression or operation owners make observable.
 
+Literal evaluation has no source-visible side effect under `literals.md`; adding literals to these positions therefore adds no competing effect-order relation.
+
 This revision does not define a source effect system, purity, effect inference, speculation legality, or general transformation rules.
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/call/assignment/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules.
+`concrete-syntax.md` owns the currently represented concrete record/function/type/local/value/literal/call/assignment/return grammar and its mapping to the semantic relations used here. This execution owner does not duplicate those spellings or punctuation rules. `literals.md` owns represented boolean and integer literal value/materialization semantics.
 
-General literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, record construction, member access, nested blocks, and other concrete source forms remain outside the represented execution relation.
+Floating and other unrepresented literals, arithmetic or comparison operators, assignment expressions or general assignment places, branches, loops, record construction, member access, nested blocks, and other concrete source forms remain outside the represented execution relation.
 
 No parser, lossless-syntax representation, typed HIR, Core MIR production lowering, runtime implementation, or backend implementation is added or required by this semantic owner.
 
 ## Further boundaries
 
-This revision does not define literal typing, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, field/member assignment, record construction, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
+This revision does not define literal spelling or materialization, floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/pattern control flow, field/member assignment, record construction, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/lossless syntax/HIR/Core MIR production code, or backend behavior.
