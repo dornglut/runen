@@ -8,4 +8,5 @@
 - [Callable signatures](callables.md)
 - [Function-local bindings](local-bindings.md)
 - [Field-value access](field-access.md)
+- [Patterns](patterns.md)
 - [Function execution](function-execution.md)
