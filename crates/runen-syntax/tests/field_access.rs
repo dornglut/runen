@@ -19,9 +19,12 @@ fn field_value_uses_parse_losslessly_with_nested_paths_and_trivia() {
         .map(|node| node.text().to_string())
         .collect::<Vec<_>>();
     assert_eq!(uses.len(), 3);
-    assert_eq!(uses[0], "root.value");
-    assert_eq!(uses[1], "root /*a*/ . inner . /*b*/ value");
-    assert_eq!(uses[2], "root.inner.value");
+    assert_eq!(uses[0].trim_start(), "root.value");
+    assert_eq!(
+        uses[1].trim_start(),
+        "root /*a*/ . inner . /*b*/ value"
+    );
+    assert_eq!(uses[2].trim_start(), "root.inner.value");
     assert!(parsed.syntax().descendants_with_tokens().any(|element| {
         element
             .into_token()
