@@ -113,8 +113,8 @@ fn rejects_duplicate_record_fields_and_containment_cycles() {
 #[test]
 fn resolves_signatures_and_rejects_duplicate_parameters() {
     let valid = parse("record Ticket {} fn f(a: I64, b: Ticket,) -> Ticket { return b; }");
-    let hir = build_typed_hir(&[unit(ModuleId::new(1), &valid)])
-        .expect("signature types must resolve");
+    let hir =
+        build_typed_hir(&[unit(ModuleId::new(1), &valid)]).expect("signature types must resolve");
     assert_eq!(hir.functions[0].parameters.len(), 2);
     assert_eq!(
         hir.functions[0].result,
@@ -273,12 +273,10 @@ fn return_and_fallthrough_match_result_structure() {
 #[test]
 fn direct_and_mutual_recursion_are_source_valid() {
     let direct = parse("fn f(x: I64) -> I64 { return f(x); }");
-    build_typed_hir(&[unit(ModuleId::new(1), &direct)])
-        .expect("direct recursion is source-valid");
+    build_typed_hir(&[unit(ModuleId::new(1), &direct)]).expect("direct recursion is source-valid");
 
     let mutual = parse("fn a(x: I64) -> I64 { return b(x); } fn b(x: I64) -> I64 { return a(x); }");
-    build_typed_hir(&[unit(ModuleId::new(1), &mutual)])
-        .expect("mutual recursion is source-valid");
+    build_typed_hir(&[unit(ModuleId::new(1), &mutual)]).expect("mutual recursion is source-valid");
 }
 
 #[test]
@@ -313,6 +311,12 @@ fn import_relations_require_one_target_and_forbid_duplicate_aliases_and_self_imp
         .expect_err("duplicate concrete aliases are invalid");
     assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::DuplicateImportAlias));
 
+    let duplicate_without_target = parse("import dep; import dep;");
+    let errors = build_typed_hir(&[unit(ModuleId::new(1), &duplicate_without_target)])
+        .expect_err("duplicate source aliases remain invalid even when target mapping is missing");
+    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::DuplicateImportAlias));
+    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::MissingImportTarget));
+
     let duplicate_targets = [
         ImportTarget::new("dep", ModuleId::new(2)).unwrap(),
         ImportTarget::new("dep", ModuleId::new(3)).unwrap(),
@@ -324,7 +328,8 @@ fn import_relations_require_one_target_and_forbid_duplicate_aliases_and_self_imp
         &duplicate_targets,
     )])
     .expect_err("one concrete alias must not have multiple supplied targets");
-    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::DuplicateImportTarget));
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::DuplicateImportTarget));
 
     let self_target = [ImportTarget::new("dep", ModuleId::new(1)).unwrap()];
     let errors = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &single, &self_target)])
@@ -362,7 +367,10 @@ fn distinct_aliases_may_target_one_module_and_resolve_one_nominal_record() {
         SourceUnit::new(ModuleId::new(1), &source, &imports),
     ])
     .expect("two aliases may resolve to the same target module");
-    assert_eq!(hir.functions[0].parameters[0].ty, hir.functions[0].result.unwrap());
+    assert_eq!(
+        hir.functions[0].parameters[0].ty,
+        hir.functions[0].result.unwrap()
+    );
 }
 
 #[test]
@@ -404,9 +412,22 @@ fn qualified_types_require_exported_records_and_work_in_all_current_type_positio
         SourceUnit::new(ModuleId::new(1), &source, &imports),
     ])
     .expect("qualified exported record must resolve in all represented type positions");
-    let ticket = hir.records.iter().find(|record| record.name == "Ticket").unwrap().id;
-    let holder = hir.records.iter().find(|record| record.name == "Holder").unwrap();
-    let function = hir.functions.iter().find(|function| function.name == "f").unwrap();
+    let ticket = hir
+        .records
+        .iter()
+        .find(|record| record.name == "Ticket")
+        .unwrap()
+        .id;
+    let holder = hir
+        .records
+        .iter()
+        .find(|record| record.name == "Holder")
+        .unwrap();
+    let function = hir
+        .functions
+        .iter()
+        .find(|function| function.name == "f")
+        .unwrap();
     assert_eq!(holder.fields[0].ty, Type::Record(ticket));
     assert_eq!(function.parameters[0].ty, Type::Record(ticket));
     assert_eq!(function.result, Some(Type::Record(ticket)));
@@ -428,23 +449,32 @@ fn qualified_calls_require_exported_functions_and_support_nested_values() {
     .expect_err("private target function must not be visible cross-module");
     assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::InaccessibleBinding));
 
-    let exported = parse(
-        "export fn sink(value: I64) {} export fn id(value: I64) -> I64 { return value; }",
-    );
-    let source = parse(
-        "import dep; fn f(x: I64) -> I64 { dep::sink(x); return dep::id(dep::id(x)); }",
-    );
+    let exported =
+        parse("export fn sink(value: I64) {} export fn id(value: I64) -> I64 { return value; }");
+    let source =
+        parse("import dep; fn f(x: I64) -> I64 { dep::sink(x); return dep::id(dep::id(x)); }");
     let hir = build_typed_hir(&[
         unit(ModuleId::new(2), &exported),
         SourceUnit::new(ModuleId::new(1), &source, &imports),
     ])
     .expect("exported qualified calls must resolve as statement and nested values");
-    let f = hir.functions.iter().find(|function| function.name == "f").unwrap();
+    let f = hir
+        .functions
+        .iter()
+        .find(|function| function.name == "f")
+        .unwrap();
     let Statement::Call { function, .. } = f.body.statements[0] else {
         panic!("expected qualified call statement");
     };
     assert_eq!(hir.function(function).name, "sink");
-    let returned = f.body.terminal_return.as_ref().unwrap().value.as_ref().unwrap();
+    let returned = f
+        .body
+        .terminal_return
+        .as_ref()
+        .unwrap()
+        .value
+        .as_ref()
+        .unwrap();
     let ValueKind::DirectCall { function, .. } = returned.kind else {
         panic!("expected qualified result call");
     };
@@ -504,22 +534,39 @@ fn exported_function_cannot_expose_same_module_private_record() {
 
 #[test]
 fn accessibility_is_retained_only_as_source_hir_intent() {
-    let source = parse("record Private {} export record Public {} fn local() {} export fn public() {}");
+    let source =
+        parse("record Private {} export record Public {} fn local() {} export fn public() {}");
     let hir = build_typed_hir(&[unit(ModuleId::new(1), &source)]).expect("source must validate");
     assert_eq!(
-        hir.records.iter().find(|record| record.name == "Private").unwrap().accessibility,
+        hir.records
+            .iter()
+            .find(|record| record.name == "Private")
+            .unwrap()
+            .accessibility,
         Accessibility::ModulePrivate
     );
     assert_eq!(
-        hir.records.iter().find(|record| record.name == "Public").unwrap().accessibility,
+        hir.records
+            .iter()
+            .find(|record| record.name == "Public")
+            .unwrap()
+            .accessibility,
         Accessibility::Exported
     );
     assert_eq!(
-        hir.functions.iter().find(|function| function.name == "local").unwrap().accessibility,
+        hir.functions
+            .iter()
+            .find(|function| function.name == "local")
+            .unwrap()
+            .accessibility,
         Accessibility::ModulePrivate
     );
     assert_eq!(
-        hir.functions.iter().find(|function| function.name == "public").unwrap().accessibility,
+        hir.functions
+            .iter()
+            .find(|function| function.name == "public")
+            .unwrap()
+            .accessibility,
         Accessibility::Exported
     );
 }
