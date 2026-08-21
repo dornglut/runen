@@ -106,11 +106,12 @@ For a source-valid assignment, execution is **source-first** with respect to rep
 
 1. evaluate the assignment RHS completely as the owned value producer required by the source-valid assignment relation;
 2. preserve every ownership and availability transition caused while evaluating that RHS;
-3. only after successful RHS value production, observe whether the target binding is then available;
-4. if the target is then available, clean its old owned value exactly once;
-5. if the target is then unavailable, there is no old target-owned value to clean;
-6. transfer the produced RHS value into the target binding without duplication; and
-7. make the target binding available as required by `local-bindings.md`.
+3. preserve the successfully produced owned RHS value outside the target's old-value cleanup set until replacement transfer completes;
+4. only after successful RHS value production, observe whether the target binding is then available;
+5. if the target is then available, clean its old owned value exactly once;
+6. if the target is then unavailable, there is no old target-owned value to clean;
+7. transfer the produced RHS value into the target binding without duplication; and
+8. make the target binding available as required by `local-bindings.md`.
 
 The assignment target remains in scope during RHS evaluation. Consequently, ordinary RHS use of the target follows the existing whole-binding owned-use relation rather than a special self-assignment rule.
 
