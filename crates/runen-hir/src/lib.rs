@@ -134,7 +134,7 @@ pub struct SourceLocation {
     pub range: TextRange,
 }
 
-/// Ordinary whole-binding ownership consequence made explicit in HIR.
+/// Resolved owned-value production consequence retained for lowering.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum OwnedUse {
     Duplicate,
@@ -218,14 +218,26 @@ pub enum ValueKind {
     FieldValueUse {
         binding: BindingId,
         fields: Vec<usize>,
+        ownership: OwnedUse,
     },
+}
+
+/// One source-selected remaining-ownership cleanup path for a binding.
+///
+/// `fields` contains resolved declaration-field indices. An empty field path
+/// denotes the complete binding value. This is resolved HIR structure, not a
+/// source place/lvalue abstraction or physical layout.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CleanupPath {
+    pub binding: BindingId,
+    pub fields: Vec<usize>,
 }
 
 /// One resolved nested lexical block and its validated normal-exit cleanup order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Block {
     pub statements: Vec<Statement>,
-    pub normal_cleanup: Vec<BindingId>,
+    pub normal_cleanup: Vec<CleanupPath>,
     pub location: SourceLocation,
 }
 
@@ -339,7 +351,7 @@ pub enum DiagnosticKind {
     MissingRecordInitializer,
     ExpectedRecordForFieldAccess,
     InaccessibleRecordField,
-    NonDuplicableFieldValue,
+    UnavailableFieldValue,
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
     MissingResultReturn,
