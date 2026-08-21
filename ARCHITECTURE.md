@@ -20,7 +20,15 @@ It consumes accepted source semantics from `spec/language/source/` and lossless 
 
 It may depend on `runen-syntax`. It MUST NOT infer module identity from filesystem/package conventions or source-unit order, and it MUST NOT own Core MIR lowering, Exec/Model IR, runtime execution, realization, or backend behavior.
 
-No existing Core, Exec, reference, or backend/proving package depends on `runen-hir` in the currently accepted architecture. Such a consumer edge requires its own accepted lowering/proving boundary.
+Core, Exec, reference, and backend/proving packages do not depend on `runen-hir`. Source-to-Core consumption belongs only to the dedicated lowering package below.
+
+### `crates/runen-core-lowering`
+
+Owns the implementation-only refinement from accepted `runen-hir` typed source structure to validated `runen-core-ir` programs for the currently represented source/Core subset.
+
+It consumes resolved source intent from `runen-hir` and the target proving representation and canonical validator from `runen-core-ir`. It does not own source or Core semantics, source validation, source entry-point selection, Core execution, Exec/Model lowering, realization, or backend behavior.
+
+Its production dependencies are `runen-hir` and `runen-core-ir`. It MUST NOT depend on `runen-reference`, runtime/platform services, a production backend, or filesystem/package discovery. Test-only construction of accepted HIR may use `runen-syntax` without making syntax a production lowering dependency.
 
 ### `crates/runen-core-ir`
 
@@ -65,16 +73,19 @@ Owns repository validation tooling and orchestration. It owns no Runen language 
 runen-syntax
       │
       ▼
- runen-hir
-
-runen-core-ir
-      │
-      ▼
-runen-reference
+ runen-hir ─────────────┐
+                        ▼
+              runen-core-lowering
+                        ▲
+                        │
+                 runen-core-ir
+                        │
+                        ▼
+                runen-reference
 
 runen-exec-oracle
 
 repository tooling is orthogonal
 ```
 
-`runen-hir` depends only on `runen-syntax` among Runen packages in the currently accepted source-frontend architecture. `runen-exec-oracle` remains independent of the source/HIR and Core/reference dependency chains.
+`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` remains a consumer only of validated Core programs, and `runen-exec-oracle` remains independent of the source/HIR and Core/reference/lowering chains.

@@ -47,6 +47,15 @@ name = "runen-core-ir"
 version = "0.0.0"
 
 [[package]]
+name = "runen-core-lowering"
+version = "0.0.0"
+dependencies = [
+ "runen-core-ir",
+ "runen-hir",
+ "runen-syntax",
+]
+
+[[package]]
 name = "runen-exec-oracle"
 version = "0.0.0"
 
