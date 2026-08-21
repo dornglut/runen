@@ -290,6 +290,7 @@ fn collect_imports(
     let mut result = Vec::with_capacity(units.len());
 
     for (unit_index, unit) in units.iter().enumerate() {
+        let mut seen_aliases = BTreeSet::<String>::new();
         let mut aliases = BTreeMap::<String, ModuleId>::new();
         let root = unit.parse.syntax();
         for import in root
@@ -301,7 +302,7 @@ fn collect_imports(
             let import_location = location(unit_index, &import);
             let mut valid = true;
 
-            if aliases.contains_key(&alias) {
+            if !seen_aliases.insert(alias.clone()) {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::DuplicateImportAlias,
                     location: import_location,
@@ -320,10 +321,7 @@ fn collect_imports(
                 valid = false;
             }
 
-            let mut targets = unit
-                .imports
-                .iter()
-                .filter(|target| target.alias() == alias);
+            let mut targets = unit.imports.iter().filter(|target| target.alias() == alias);
             let target = targets.next();
             match (target, targets.next()) {
                 (None, _) => {
