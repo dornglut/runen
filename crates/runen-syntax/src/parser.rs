@@ -248,7 +248,7 @@ impl Parser<'_> {
                     self.parse_return_statement();
                     returned = true;
                 }
-                Some(SyntaxKind::Ident) => self.parse_call_statement(),
+                Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
                     self.recover_one();
@@ -267,9 +267,41 @@ impl Parser<'_> {
     fn parse_local_declaration(&mut self) {
         self.builder.start_node(SyntaxKind::LocalDeclaration.into());
         self.expect(SyntaxKind::KwLet, ExpectedSyntax::Item);
+        self.eat(SyntaxKind::KwMut);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
         self.parse_type();
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        self.parse_value();
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_identifier_statement(&mut self) {
+        match self.peek_nontrivia(1) {
+            Some(SyntaxKind::Eq) => self.parse_assignment_statement(),
+            Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_call_statement(),
+            _ => {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
+                self.recover_until(&[
+                    SyntaxKind::Semicolon,
+                    SyntaxKind::RBrace,
+                    SyntaxKind::KwLet,
+                    SyntaxKind::KwReturn,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
+                    SyntaxKind::KwFn,
+                    SyntaxKind::KwRecord,
+                ]);
+                self.eat(SyntaxKind::Semicolon);
+            }
+        }
+    }
+
+    fn parse_assignment_statement(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::AssignmentStatement.into());
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
         self.parse_value();
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
