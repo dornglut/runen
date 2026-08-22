@@ -160,6 +160,7 @@ pub enum LiteralValue {
 pub struct Field {
     pub name: String,
     pub ty: Type,
+    pub accessibility: Accessibility,
     pub location: SourceLocation,
 }
 
@@ -405,6 +406,7 @@ pub enum DiagnosticKind {
     InaccessibleBinding,
     ExpectedRecordType,
     PrivateTypeInExportedSignature,
+    PrivateTypeInExportedField,
     DuplicateRecordField,
     RecordContainmentCycle,
     DuplicateParameter,

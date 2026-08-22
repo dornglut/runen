@@ -781,3 +781,189 @@ fn duplicable_field_values_require_exact_consumer_types() {
             >= 5
     );
 }
+
+#[test]
+fn exported_foreign_fields_are_accessible_without_exposing_private_siblings() {
+    let foreign = parse("export record Foreign { export value: I8, hidden: I8 }");
+    let good = parse("import ext; fn f(root: ext::Foreign) -> I8 { return root.value; }");
+    let bad = parse("import ext; fn f(root: ext::Foreign) -> I8 { return root.hidden; }");
+    let missing = parse("import ext; fn f(root: ext::Foreign) -> I8 { return root.missing; }");
+    let foreign_module = ModuleId::new(1);
+    let local_module = ModuleId::new(2);
+    let ext = [ImportTarget::new("ext", foreign_module).expect("valid alias")];
+
+    let hir = build_typed_hir(&[
+        SourceUnit::new(foreign_module, &foreign, &[]),
+        SourceUnit::new(local_module, &good, &ext),
+    ])
+    .expect("exported foreign field must be directly accessible");
+    let f = function(&hir, "f");
+    let (receiver, fields, ownership) = binding_receiver(returned_value(f));
+    assert!(matches!(receiver, FieldValueReceiver::Binding { .. }));
+    assert_eq!(fields, &[0]);
+    assert_eq!(ownership, OwnedUse::Duplicate);
+
+    let private_diagnostics = build_typed_hir(&[
+        SourceUnit::new(foreign_module, &foreign, &[]),
+        SourceUnit::new(local_module, &bad, &ext),
+    ])
+    .expect_err("private sibling must remain inaccessible");
+    assert!(has_kind(
+        &private_diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+
+    let missing_diagnostics = build_typed_hir(&[
+        SourceUnit::new(foreign_module, &foreign, &[]),
+        SourceUnit::new(local_module, &missing, &ext),
+    ])
+    .expect_err("unknown field must remain distinct from inaccessible field");
+    assert!(has_kind(
+        &missing_diagnostics,
+        DiagnosticKind::UnknownRecordField
+    ));
+    assert!(!has_kind(
+        &missing_diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+}
+
+#[test]
+fn nested_field_access_rechecks_the_current_record_module_at_each_step() {
+    let home_module = ModuleId::new(1);
+    let foreign_module = ModuleId::new(2);
+    let home = parse(
+        "import ext; export record Local { private: I8, foreign: ext::Foreign } \
+         fn into_foreign(root: Local) -> I8 { return root.foreign.value; } \
+         fn back_home(root: ext::Wrapper) -> I8 { return root.local.private; }",
+    );
+    let foreign = parse(
+        "import home; export record Foreign { export value: I8 } \
+         export record Wrapper { export local: home::Local }",
+    );
+    let home_imports = [ImportTarget::new("ext", foreign_module).expect("valid alias")];
+    let foreign_imports = [ImportTarget::new("home", home_module).expect("valid alias")];
+
+    let hir = build_typed_hir(&[
+        SourceUnit::new(home_module, &home, &home_imports),
+        SourceUnit::new(foreign_module, &foreign, &foreign_imports),
+    ])
+    .expect("selector access must be recomputed from each current record module");
+
+    let ValueKind::FieldValueUse { fields, .. } =
+        &returned_value(function(&hir, "into_foreign")).kind
+    else {
+        panic!("expected nested field-value use");
+    };
+    assert_eq!(fields, &[1, 0]);
+
+    let ValueKind::FieldValueUse { fields, .. } = &returned_value(function(&hir, "back_home")).kind
+    else {
+        panic!("expected nested field-value use");
+    };
+    assert_eq!(fields, &[0, 0]);
+}
+
+#[test]
+fn qualified_producer_field_access_preserves_transactional_argument_ownership() {
+    let foreign_module = ModuleId::new(1);
+    let local_module = ModuleId::new(2);
+    let private = parse(
+        "export record Token {} export record Foreign { value: I8 } \
+         export fn make(token: Token) -> Foreign { return Foreign { value: 1 }; }",
+    );
+    let exported = parse(
+        "export record Token {} export record Foreign { export value: I8 } \
+         export fn make(token: Token) -> Foreign { return Foreign { value: 1 }; }",
+    );
+    let local = parse(
+        "import ext; fn sink(token: ext::Token) {} \
+         fn f(token: ext::Token) { let value: I8 = ext::make(token).value; sink(token); }",
+    );
+    let ext = [ImportTarget::new("ext", foreign_module).expect("valid alias")];
+
+    let rejected = build_typed_hir(&[
+        SourceUnit::new(foreign_module, &private, &[]),
+        SourceUnit::new(local_module, &local, &ext),
+    ])
+    .expect_err("private selector must reject before receiver argument ownership commits");
+    assert!(has_kind(&rejected, DiagnosticKind::InaccessibleRecordField));
+    assert!(!has_kind(&rejected, DiagnosticKind::UnavailableBinding));
+
+    let accepted_then_consumed = build_typed_hir(&[
+        SourceUnit::new(foreign_module, &exported, &[]),
+        SourceUnit::new(local_module, &local, &ext),
+    ])
+    .expect_err("accessible selector must commit the call argument consumption");
+    assert!(has_kind(
+        &accepted_then_consumed,
+        DiagnosticKind::UnavailableBinding
+    ));
+    assert!(!has_kind(
+        &accepted_then_consumed,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+}
+
+#[test]
+fn qualified_producer_exported_bool_field_composes_with_conditionals() {
+    let foreign = parse(
+        "export record Flag { export ready: Bool } \
+         export fn make() -> Flag { return Flag { ready: true }; }",
+    );
+    let local = parse("import ext; fn f() { if ext::make().ready {} }");
+    let foreign_module = ModuleId::new(1);
+    let ext = [ImportTarget::new("ext", foreign_module).expect("valid alias")];
+    let hir = build_typed_hir(&[
+        SourceUnit::new(foreign_module, &foreign, &[]),
+        SourceUnit::new(ModuleId::new(2), &local, &ext),
+    ])
+    .expect("exported Bool field from qualified producer must remain a conditional value");
+
+    let Statement::If { condition, .. } = &function(&hir, "f").body.statements[0] else {
+        panic!("expected conditional");
+    };
+    let ValueKind::FieldValueUse {
+        receiver,
+        fields,
+        ownership,
+    } = &condition.kind
+    else {
+        panic!("expected producer field condition");
+    };
+    let FieldValueReceiver::Producer { cleanup, .. } = receiver else {
+        panic!("expected qualified call producer");
+    };
+    assert_eq!(condition.ty, Type::Intrinsic(IntrinsicType::Bool));
+    assert_eq!(fields, &[0]);
+    assert_eq!(*ownership, OwnedUse::Duplicate);
+    assert_eq!(cleanup.paths, vec![Vec::<usize>::new()]);
+}
+
+#[test]
+fn exported_foreign_record_field_keeps_existing_consume_semantics() {
+    let foreign = parse(
+        "export record Child {} export record Outer { export child: Child, export count: I8 }",
+    );
+    let local = parse(
+        "import ext; fn child(root: ext::Outer) -> ext::Child { return root.child; } \
+         fn count(root: ext::Outer) -> I8 { return root.count; }",
+    );
+    let foreign_module = ModuleId::new(1);
+    let ext = [ImportTarget::new("ext", foreign_module).expect("valid alias")];
+    let hir = build_typed_hir(&[
+        SourceUnit::new(foreign_module, &foreign, &[]),
+        SourceUnit::new(ModuleId::new(2), &local, &ext),
+    ])
+    .expect("foreign exported fields must preserve existing ownership classification");
+
+    let (_, child_fields, child_ownership) =
+        binding_receiver(returned_value(function(&hir, "child")));
+    assert_eq!(child_fields, &[0]);
+    assert_eq!(child_ownership, OwnedUse::Consume);
+
+    let (_, count_fields, count_ownership) =
+        binding_receiver(returned_value(function(&hir, "count")));
+    assert_eq!(count_fields, &[1]);
+    assert_eq!(count_ownership, OwnedUse::Duplicate);
+}

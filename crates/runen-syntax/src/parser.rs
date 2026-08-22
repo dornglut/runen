@@ -84,13 +84,15 @@ impl Parser<'_> {
         self.bump_trivia();
         let mut missing_close = false;
         while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
-            if self.at_any(TOP_LEVEL_STARTERS) {
+            let exported_field =
+                self.at(SyntaxKind::KwExport) && self.peek_nontrivia(1) == Some(SyntaxKind::Ident);
+            if self.at_any(TOP_LEVEL_STARTERS) && !exported_field {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
                 missing_close = true;
                 break;
             }
 
-            if self.at(SyntaxKind::Ident) {
+            if self.at(SyntaxKind::Ident) || exported_field {
                 self.parse_record_field();
                 if self.eat(SyntaxKind::Comma) {
                     self.bump_trivia();
@@ -123,6 +125,7 @@ impl Parser<'_> {
 
     fn parse_record_field(&mut self) {
         self.builder.start_node(SyntaxKind::RecordField.into());
+        self.eat(SyntaxKind::KwExport);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
         self.parse_type();

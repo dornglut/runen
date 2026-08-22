@@ -591,3 +591,80 @@ fn extra_import_target_mapping_has_no_source_lookup_effect() {
     build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &source, &extra)])
         .expect("undeclared context mapping must be source-semantically inert");
 }
+
+#[test]
+fn field_accessibility_is_retained_independently_from_record_accessibility() {
+    let source = parse(
+        "record PrivateBox { export open: I8, closed: I8 } \
+         export record PublicBox { private: I8, export public: I8 }",
+    );
+    let hir = build_typed_hir(&[unit(ModuleId::new(1), &source)]).expect("source must validate");
+
+    let private = hir
+        .records
+        .iter()
+        .find(|record| record.name == "PrivateBox")
+        .unwrap();
+    assert_eq!(private.accessibility, Accessibility::ModulePrivate);
+    assert_eq!(private.fields[0].accessibility, Accessibility::Exported);
+    assert_eq!(
+        private.fields[1].accessibility,
+        Accessibility::ModulePrivate
+    );
+
+    let public = hir
+        .records
+        .iter()
+        .find(|record| record.name == "PublicBox")
+        .unwrap();
+    assert_eq!(public.accessibility, Accessibility::Exported);
+    assert_eq!(public.fields[0].accessibility, Accessibility::ModulePrivate);
+    assert_eq!(public.fields[1].accessibility, Accessibility::Exported);
+}
+
+#[test]
+fn exported_field_direct_type_rule_is_bounded_and_order_independent() {
+    let valid = parse(
+        "record Secret {} export record PublicInner { hidden: Secret } \
+         export record Outer { export inner: PublicInner, private: Secret } \
+         record PrivateOuter { export secret: Secret }",
+    );
+    build_typed_hir(&[unit(ModuleId::new(1), &valid)])
+        .expect("only the direct type of an externally exposed field is constrained");
+
+    for source in [
+        "record Secret {} export record Outer { export secret: Secret }",
+        "export record Outer { export secret: Secret } record Secret {}",
+    ] {
+        let parsed = parse(source);
+        let diagnostics = build_typed_hir(&[unit(ModuleId::new(1), &parsed)])
+            .expect_err("exported field must not expose a private same-module record type");
+        assert!(has_diagnostic(&diagnostics, |kind| kind
+            == DiagnosticKind::PrivateTypeInExportedField));
+    }
+}
+
+#[test]
+fn exported_field_qualified_type_reuses_existing_cross_module_type_access() {
+    let target = parse("export record Ticket {} record Hidden {}");
+    let valid = parse("import dep; export record Holder { export ticket: dep::Ticket }");
+    let invalid = parse("import dep; export record Holder { export hidden: dep::Hidden }");
+    let target_module = ModuleId::new(2);
+    let imports = [ImportTarget::new("dep", target_module).unwrap()];
+
+    build_typed_hir(&[
+        unit(target_module, &target),
+        SourceUnit::new(ModuleId::new(1), &valid, &imports),
+    ])
+    .expect("exported foreign nominal field type must remain valid");
+
+    let diagnostics = build_typed_hir(&[
+        unit(target_module, &target),
+        SourceUnit::new(ModuleId::new(1), &invalid, &imports),
+    ])
+    .expect_err("private foreign nominal field type remains inaccessible");
+    assert!(has_diagnostic(&diagnostics, |kind| kind
+        == DiagnosticKind::InaccessibleBinding));
+    assert!(!has_diagnostic(&diagnostics, |kind| kind
+        == DiagnosticKind::PrivateTypeInExportedField));
+}
