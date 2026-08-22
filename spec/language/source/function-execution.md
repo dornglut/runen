@@ -227,7 +227,7 @@ For a producer-backed category:
 9. only after transient cleanup completes, establish all pattern-introduced bindings in the containing lexical scope together; and
 10. only then may the next body statement begin.
 
-A qualified direct call, qualified record construction, or field-value producer returning a foreign nominal record follows exactly this sequence when its result type equals the already resolved qualified top pattern record type. Pattern-head qualification adds no producer, transient, ownership transition, fault path, divergence path, or cleanup phase.
+Any accepted producer-backed scrutinee follows exactly this sequence when its result type equals the already resolved top pattern record type. Whether the producer target or receiver, the pattern head, both, or neither use represented qualification does not add a producer, transient, ownership transition, fault path, divergence path, or cleanup phase.
 
 The pattern scrutinee transient is not a local binding and does not participate in lexical/activation cleanup after step 8. A field-receiver transient internal to the producer is a separate earlier transient and likewise never participates in pattern-transient cleanup.
 
