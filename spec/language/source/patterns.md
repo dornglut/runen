@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for recursive irrefutable exhaustive named-field record patterns: same-module nominal pattern-head selection, recursive field structure, binding-leaf order and production, scrutinee-category selection, direct binding-root ownership consequences, and producer-backed pattern-scrutinee transient ownership/cleanup.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), and direct same-module record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration completion from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration completion from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The represented concrete pattern and scrutinee spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define refutable patterns, `match`, alternatives, guards, shorthand/rest/wildcards, tuple/array/enum patterns, destructuring assignment, references or borrow binding modes, arbitrary general expressions, a general source place/lvalue abstraction, cross-module field visibility, or an implementation representation.
+This document does not define refutable patterns, `match`, alternatives, guards, shorthand/rest/wildcards, tuple/array/enum patterns, destructuring assignment, references or borrow binding modes, arbitrary general expressions, a general source place/lvalue abstraction, field accessibility, cross-module pattern-head syntax, or an implementation representation.
 
 ## Represented record-destructuring declaration
 
@@ -90,11 +90,11 @@ Field presentation order is not field lookup priority. Nominal record declaratio
 
 Every selected pattern field, including fields selected inside nested nodes, independently consumes the direct field-accessibility relation from `field-access.md`.
 
-For the currently represented record declaration form, direct fields are module-private. Therefore recursive pattern selection may open only record nodes whose fields are directly accessible to the containing function.
+Every represented record-pattern node head remains a same-module lookup. Therefore the nominal record opened by each represented pattern node is declared in the same source module as the containing function, and direct access to its fields is permitted by the same-module branch of `field-access.md` regardless of whether an individual field is module-private or exported.
 
-A same-module outer record may have a field whose type is a foreign exported record. The accessible outer field may be bound as one complete binding leaf. That foreign record cannot be recursively opened under this revision: every nested pattern head is same-module-only, and direct selection of the foreign record's fields is independently prohibited by the current module-private field-accessibility relation.
+A same-module outer record may have a field whose type is a foreign exported record. The accessible outer field may be bound as one complete binding leaf. That foreign record still cannot be recursively opened under this revision because every nested pattern head is unqualified and same-module-only, and exact nominal type equality prevents a different same-module record head from standing in for the foreign type.
 
-This relation does not introduce field-visibility syntax or broaden construction/field access across modules.
+Field export therefore does not broaden represented record-pattern head selection or create a cross-module pattern form. A future qualified-pattern delivery may consume the same direct field-accessibility relation without redefining it.
 
 ## Binding leaves and structural paths
 
@@ -347,7 +347,7 @@ Lowering MUST NOT reconstruct pattern exhaustiveness, binding-leaf order, source
 
 The explicit field-target form permits later pattern categories to extend the right side of a field entry without changing the accepted binding-leaf or nested-record spellings.
 
-This revision does not define shorthand field binding, `_`, rest/omission, tuple/array/enum patterns, literals, alternatives, guards, refutable patterns, `match`, `if let`, loops, reference/borrow binding modes, mutable pattern bindings, destructuring assignment, arbitrary pattern scrutinees, general expressions/grouping, qualified pattern heads, cross-module field visibility, or field visibility modifiers.
+This revision does not define shorthand field binding, `_`, rest/omission, tuple/array/enum patterns, literals, alternatives, guards, refutable patterns, `match`, `if let`, loops, reference/borrow binding modes, mutable pattern bindings, destructuring assignment, arbitrary pattern scrutinees, general expressions/grouping, qualified/cross-module pattern heads, or pattern-specific visibility modifiers.
 
 Later features must extend rather than reinterpret the direct-root and producer-backed recursive semantics accepted here.
 

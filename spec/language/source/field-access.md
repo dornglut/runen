@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for bounded dot field-path selection, the current direct record-field accessibility relation, binding-root and producer-backed field receiver categories, final-path duplicate-or-consume value production, producer-receiver transient ownership and remaining-frontier selection, and production of one owned field value.
+This document owns the represented source semantics for bounded dot field-path selection, direct record-field accessibility, binding-root and producer-backed field receiver categories, final-path duplicate-or-consume value production, producer-receiver transient ownership and remaining-frontier selection, and production of one owned field value.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module identity and qualified/unqualified module lookup from [Source names and modules](names-modules.md), nominal record/field identity, field source types, source type equality, and owned-value duplicability from [Source type foundation](types.md), function signatures and result presence from [Source callables](callables.md), structural source paths and path availability/consumption/frontiers from [Source structural ownership](structural-ownership.md), and function-local binding lookup/lifecycle from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module identity plus module binding accessibility and qualified/unqualified module lookup from [Source names and modules](names-modules.md), nominal record/field identity, field source types, source type equality, and owned-value duplicability from [Source type foundation](types.md), function signatures and result presence from [Source callables](callables.md), structural source paths and path availability/consumption/frontiers from [Source structural ownership](structural-ownership.md), and function-local binding lookup/lifecycle from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
 
-The represented `.` spelling, binding-root/producer-receiver grammar, direct-call form, record-construction form, and receiving positions are owned by [Source concrete syntax](concrete-syntax.md). Evaluation of a producer receiver, dynamic field-receiver transient lifetime, transient cleanup sequencing, and transfer of a successfully produced field result into a local, assignment RHS, direct-call argument, return result, record-construction initializer, conditional, or producer-backed record-pattern scrutinee are owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct field-accessibility relation defined here at every record-pattern field it selects and may receive a completed field-value result as a producer-backed scrutinee; pattern structure, exhaustiveness, binding introduction, and pattern ownership consequences remain owned there.
+The represented `.` spelling, binding-root/producer-receiver grammar, record-field `export` modifier, direct-call form, record-construction form, and receiving positions are owned by [Source concrete syntax](concrete-syntax.md). Evaluation of a producer receiver, dynamic field-receiver transient lifetime, transient cleanup sequencing, and transfer of a successfully produced field result into a local, assignment RHS, direct-call argument, return result, record-construction initializer, conditional, or producer-backed record-pattern scrutinee are owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct field-accessibility relation defined here at every record-pattern field it selects and may receive a completed field-value result as a producer-backed scrutinee; pattern structure, exhaustiveness, binding introduction, and pattern ownership consequences remain owned there.
 
-This document does not define structural ownership mathematics, a general member/postfix system, place/lvalue grammar, field assignment, partial-field reinitialization, reference/borrow operation, general pattern semantics, physical layout, or implementation representation.
+This document does not define structural ownership mathematics, a general member/postfix system, place/lvalue grammar, field assignment, partial-field reinitialization, reference/borrow operation, general pattern semantics, physical layout, ABI/linkage visibility, or implementation representation.
 
 ## Represented operation
 
@@ -91,8 +91,8 @@ Let the receiver have source type `T0`. Let the field selectors, in source order
 For each selector `fi`:
 
 1. the current source type `Ti` MUST be one nominal record type under `types.md`;
-2. the record declaration defining `Ti` MUST permit direct field access to the containing function under the accessibility relation below;
-3. `fi` selects exactly the unique declared field of that nominal record whose lexical field key equals `fi`;
+2. `fi` selects exactly the unique declared field of that nominal record whose lexical field key equals `fi`;
+3. that selected field MUST permit direct access from the containing function under the accessibility relation below;
 4. the selected field's declared source type becomes `Ti+1`;
 5. the selected source field identity extends the operation's structural source path under `structural-ownership.md`; and
 6. if another selector follows, selection continues from `Ti+1`.
@@ -109,19 +109,45 @@ For a producer receiver, static path selection occurs before dynamic receiver ev
 
 ## Direct record-field accessibility
 
-The represented concrete record declaration has no field-level accessibility modifier. Under the current **direct record-field accessibility** relation, every represented record field is module-private.
+Every represented record field has one source-semantic **direct accessibility** class:
 
-A source operation that explicitly consumes this relation may directly select a field only when the record declaration containing that field belongs to the same source module as the function containing the operation.
+- **module-private**; or
+- **exported**.
 
-Every represented field-value use consumes this relation independently at every selector step, regardless of receiver category. A path may select a field of a same-module record whose field type is a record defined in another module, but a later selector cannot enter that foreign record under this revision.
+For the represented record-field grammar in `concrete-syntax.md`, absence of the field-position `export` modifier establishes module-private accessibility and presence of that modifier establishes exported accessibility.
 
-A qualified direct-call receiver may legally call an exported function from another module. If that function's result is an exported foreign record, the record type can be the receiver result type but its fields remain inaccessible to the caller under the current module-private direct field relation. Exporting the record type does not export its fields.
+Field accessibility is not a module declaration binding and does not place the field in the module declaration namespace. It is not inferred from identifier spelling, record declaration order, field type, physical symbol visibility, linkage, ABI metadata, layout, or backend representation.
 
-The represented recursive record pattern in `patterns.md` consumes the same relation independently for every selected field at every pattern depth. A same-module outer field whose type is a foreign exported record may therefore be bound as one complete leaf, but a nested pattern cannot directly open that foreign record while its fields remain module-private.
+For a source operation in a function belonging to source module `C`, directly selecting field `f` of nominal record `R` declared in source module `M` is permitted exactly as follows:
 
-Module-level accessibility of the record type itself remains owned by `names-modules.md` and is independent of this field-accessibility rule. An exported record may be nameable in another module while its fields remain unavailable to direct field access or record-pattern selection there.
+- when `C == M`, the field is directly accessible regardless of the module-binding accessibility of `R` or the direct accessibility class of `f`;
+- when `C != M`, direct access requires both the module binding of `R` to be exported under `names-modules.md` **and** `f` to have exported direct accessibility.
 
-This field accessibility has no ABI, linkage, layout, serialization, reflection, or confidentiality meaning. This revision defines no public/exported/package/friend field modifier. A later accepted field-accessibility mechanism may broaden the direct-access domain without changing the same-module cases defined here.
+Every represented field-value use applies this relation independently at every selector step, regardless of receiver category. Exporting a nominal record binding does not export any field, and exporting one field does not export any sibling field.
+
+A selector path may cross source-module boundaries more than once. At each step, accessibility is determined from the source module that defines the **current nominal record** and the accessibility class of the **selected field**, relative to the module containing the field-value operation. It is not determined once from the root receiver's module.
+
+Consequently, a same-module record may expose a field whose type is an exported record from another module; a later selector may enter that foreign record only when the foreign record binding and the selected foreign field are both exported. If a later selected field has a record type from the caller's own module, subsequent selectors on that type again use the same-module branch of this relation.
+
+A qualified direct-call receiver may legally call an exported function from another module. If that function returns an exported foreign record, a selector on that result is permitted exactly when the selected field is exported. The call target/result resolution remains owned by `names-modules.md` and `callables.md`; this field relation does not create qualified field names or another lookup domain.
+
+### Exported-field declared-type accessibility
+
+When an exported nominal record binding has a field with exported direct accessibility, that field is part of the record's externally accessible source interface. Its **direct declared source type** MUST therefore be source-accessible outside the defining module:
+
+- an intrinsic source type is source-accessible for this rule;
+- a nominal record type defined in another source module is source-accessible only through the already required exported qualified type lookup that made the field declaration valid; and
+- a nominal record type defined in the same source module MUST itself have an exported module binding.
+
+This requirement examines only the field's direct declared source type. It does not recursively require fields contained by an exported nominal field type to be exported, does not recursively inspect that type's field graph for accessibility, and does not alter nominal type identity or direct-containment semantics.
+
+An exported field inside a module-private containing record is permitted. Because the containing record binding fails the foreign-access requirement above, that field does not by itself make the record externally traversable and therefore does not create an externally exposed field-type surface under this rule.
+
+The represented recursive record pattern in `patterns.md` consumes this same field-accessibility relation independently for every selected field. Its record-pattern heads remain unqualified and same-module-only, so every record node it can currently open satisfies the same-module branch regardless of that field's accessibility modifier. Field export does not add qualified pattern heads.
+
+Record construction remains a separate same-module operation under `concrete-syntax.md` and `function-execution.md`. Exported field accessibility does not by itself permit foreign record construction or define a constructor-initializer accessibility relation.
+
+This field accessibility has no ABI, linkage, layout, serialization, reflection, runtime publication, or confidentiality meaning. This revision defines no package, friend, protected, getter/setter, method, associated-item, or re-export accessibility mechanism.
 
 ## Binding-root final-path availability
 
@@ -259,13 +285,17 @@ It does not establish:
 
 ## Concrete and implementation boundary
 
-`concrete-syntax.md` owns the represented `.` token and exact binding-root/producer-backed field-value grammar. This document does not define parser recovery, syntax-tree nodes, diagnostics, HIR representation, Core field indices, or backend behavior.
+`concrete-syntax.md` owns the represented `.` token, exact binding-root/producer-backed field-value grammar, and record-field `export` spelling. This document does not define parser recovery, syntax-tree nodes, diagnostics, HIR representation, Core field indices, or backend behavior.
 
-A faithful implementation MUST retain enough source-selected information to refine the accepted operation without re-running source ownership semantics. At minimum the retained information must distinguish binding-root from producer-backed receiver, retain a validated producer for a producer receiver, retain the exact receiver type, complete resolved field path, final result type, duplicate-or-consume consequence, and for a producer receiver the canonical remaining-frontier cleanup paths, together with the source location of the complete field-value operation.
+A faithful implementation MUST retain each resolved record field's source-selected direct accessibility in declaration metadata so source validation can apply this relation without consulting Core or backend visibility. Successful field-value-use HIR need not duplicate a per-use accessibility flag once the exact nominal path has been resolved and admitted.
+
+A faithful implementation MUST retain enough source-selected information to refine the accepted operation without re-running source ownership semantics. At minimum the retained field-value information must distinguish binding-root from producer-backed receiver, retain a validated producer for a producer receiver, retain the exact receiver type, complete resolved field path, final result type, duplicate-or-consume consequence, and for a producer receiver the canonical remaining-frontier cleanup paths, together with the source location of the complete field-value operation.
 
 Implementation storage/recursion may use indirection. That representation does not create a source general expression tree, place, lvalue, synthetic binding, or hidden receiver identity.
 
 Existing Core structural projections, `Copy`/`Move`, call continuations, partial initialization, and `Drop` are suitable refinement targets only after source validation has selected the receiver category, path, accessibility, ownership consequence, and producer-receiver cleanup frontier.
+
+Source field accessibility is fully discharged before Core lowering. Core types, fields, and projections need no source-module or visibility metadata, and Core validation MUST NOT reconstruct source accessibility.
 
 For a producer receiver, faithful lowering may materialize the existing receiver producer result in Core storage, project the retained path, preserve the selected result through `Copy` or `Move`, and then lower only the HIR-retained/source-selected remaining frontier. Core liveness/path state MUST NOT be inspected to choose source duplicate/consume or cleanup.
 
@@ -275,4 +305,4 @@ Cleanup ordering and transfer into the surrounding consumer are sequenced by `fu
 
 ## Further boundaries
 
-This revision does not define field assignment or partial-field reinitialization; arbitrary value/expression receivers beyond the bounded direct-call/record-construction receiver set; a general postfix/member or expression grammar; cross-module field access or field visibility modifiers; methods/associated items; references/borrowing/lifetimes; refutable/rest/shorthand patterns; positive record duplicability-selection syntax; general operators/conversions; floating literal formation; loops/backedges or new control-flow joins; custom destructors; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.
+This revision does not define field assignment or partial-field reinitialization; arbitrary value/expression receivers beyond the bounded direct-call/record-construction receiver set; a general postfix/member or expression grammar; package/friend/protected field accessibility; re-exports; qualified record construction; qualified/cross-module record-pattern heads; methods/associated items; references/borrowing/lifetimes; refutable/rest/shorthand patterns; positive record duplicability-selection syntax; general operators/conversions; floating literal formation; loops/backedges or new control-flow joins; custom destructors; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.
