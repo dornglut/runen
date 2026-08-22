@@ -112,7 +112,7 @@ When those conditions hold, the qualified lookup resolves to that target binding
 
 An unqualified lookup MUST NOT search imported modules merely because they are aliased in the source unit. This revision defines no selective direct imports, wildcard or glob imports, dot imports, re-exports, implicit preludes, transitive import visibility, or imported-member precedence rules.
 
-The concrete `a::m` form in `concrete-syntax.md` maps exactly to this lookup relation. `::` does not by itself define arbitrary member access, nested module paths, associated-item lookup, or another name-resolution domain. The consuming concrete type or direct-call context validates the category of the resolved binding after this lookup; qualified lookup does not skip an inaccessible or wrong-category binding.
+The concrete `a::m` form in `concrete-syntax.md` maps exactly to this lookup relation. `::` does not by itself define arbitrary member access, nested module paths, associated-item lookup, or another name-resolution domain. The consuming concrete type, direct-call, or record-construction-target context validates the category of the resolved binding after this lookup; qualified lookup does not skip an inaccessible or wrong-category binding.
 
 Module aliases themselves are not exported module-level bindings under this revision and therefore do not re-export their target modules or target bindings.
 
