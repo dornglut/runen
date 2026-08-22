@@ -198,7 +198,7 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
         RecordPatternScrutinee::Producer {
             value: runen_hir::Value {
                 kind: ValueKind::FieldValueUse {
-                    fields: ref path,
+                    fields: path,
                     ownership: OwnedUse::Consume,
                     ..
                 },
