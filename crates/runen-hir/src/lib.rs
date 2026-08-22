@@ -273,7 +273,7 @@ pub struct Block {
     pub location: SourceLocation,
 }
 
-/// Straight-line body statement represented by the current source subset.
+/// One resolved body statement represented by the current source subset.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Statement {
     Local {
@@ -301,6 +301,12 @@ pub enum Statement {
         location: SourceLocation,
     },
     Block(Block),
+    If {
+        condition: Value,
+        then_block: Block,
+        else_block: Option<Block>,
+        location: SourceLocation,
+    },
 }
 
 /// Terminal represented return, when concrete source contains one.
@@ -395,6 +401,7 @@ pub enum DiagnosticKind {
     UnavailableFieldValue,
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
+    ConditionalOwnershipMismatch,
     MissingResultReturn,
     ExpectedResultValue,
     UnexpectedResultValue,

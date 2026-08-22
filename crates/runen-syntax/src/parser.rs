@@ -248,6 +248,7 @@ impl Parser<'_> {
                     self.parse_return_statement();
                     returned = true;
                 }
+                Some(SyntaxKind::KwIf) => self.parse_if_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
@@ -266,6 +267,10 @@ impl Parser<'_> {
     }
 
     fn parse_block_statement(&mut self) {
+        self.parse_block_statement_with_else_boundary(false);
+    }
+
+    fn parse_block_statement_with_else_boundary(&mut self, stop_at_else: bool) {
         self.builder.start_node(SyntaxKind::BlockStatement.into());
         if !self.expect(SyntaxKind::LBrace, ExpectedSyntax::LeftBrace) {
             self.builder.finish_node();
@@ -275,6 +280,11 @@ impl Parser<'_> {
         self.bump_trivia();
         let mut missing_close = false;
         while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
+            if stop_at_else && self.at(SyntaxKind::KwElse) {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
+                missing_close = true;
+                break;
+            }
             if self.at_any(TOP_LEVEL_STARTERS) {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
                 missing_close = true;
@@ -283,6 +293,7 @@ impl Parser<'_> {
 
             match self.current() {
                 Some(SyntaxKind::KwLet) => self.parse_let_statement(),
+                Some(SyntaxKind::KwIf) => self.parse_if_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(SyntaxKind::KwReturn) => self.recover_nested_return(),
@@ -301,6 +312,60 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
+    fn parse_if_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::IfStatement.into());
+        self.expect(SyntaxKind::KwIf, ExpectedSyntax::Statement);
+        self.parse_conditional_value();
+        self.parse_block_statement_with_else_boundary(true);
+        if self.eat(SyntaxKind::KwElse) {
+            self.parse_block_statement();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_conditional_value(&mut self) {
+        if self.at(SyntaxKind::Ident) {
+            match self.peek_nontrivia(1) {
+                Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_direct_call(),
+                Some(SyntaxKind::Dot) => self.parse_field_value_use(),
+                _ => {
+                    self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                    self.bump();
+                    self.builder.finish_node();
+                }
+            }
+            return;
+        }
+
+        if matches!(
+            self.current(),
+            Some(
+                SyntaxKind::KwTrue
+                    | SyntaxKind::KwFalse
+                    | SyntaxKind::DecimalMagnitude
+                    | SyntaxKind::Minus
+            )
+        ) {
+            self.parse_value();
+            return;
+        }
+
+        self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
+        if self.current().is_some()
+            && !self.at_any(&[
+                SyntaxKind::LBrace,
+                SyntaxKind::RBrace,
+                SyntaxKind::KwElse,
+                SyntaxKind::KwLet,
+                SyntaxKind::KwIf,
+                SyntaxKind::KwReturn,
+            ])
+            && !self.at_any(TOP_LEVEL_STARTERS)
+        {
+            self.recover_one();
+        }
+    }
+
     fn recover_nested_return(&mut self) {
         self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
         self.builder.start_node(SyntaxKind::ErrorNode.into());
@@ -310,6 +375,8 @@ impl Parser<'_> {
             && !self.at(SyntaxKind::RBrace)
             && !self.at(SyntaxKind::LBrace)
             && !self.at(SyntaxKind::KwLet)
+            && !self.at(SyntaxKind::KwIf)
+            && !self.at(SyntaxKind::KwElse)
             && !self.at(SyntaxKind::KwReturn)
             && !self.at_any(TOP_LEVEL_STARTERS)
         {
@@ -369,6 +436,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::Semicolon)
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwIf)
+                || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
             {
@@ -393,6 +462,8 @@ impl Parser<'_> {
                         SyntaxKind::Semicolon,
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
+                        SyntaxKind::KwIf,
+                        SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
                         SyntaxKind::KwExport,
@@ -411,6 +482,8 @@ impl Parser<'_> {
                     SyntaxKind::Semicolon,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwIf,
+                    SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
                     SyntaxKind::KwExport,
@@ -470,6 +543,8 @@ impl Parser<'_> {
                     SyntaxKind::RBrace,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwIf,
+                    SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
                     SyntaxKind::KwExport,
@@ -563,6 +638,8 @@ impl Parser<'_> {
                         SyntaxKind::RBrace,
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
+                        SyntaxKind::KwIf,
+                        SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
                         SyntaxKind::KwExport,
@@ -601,6 +678,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::Semicolon)
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwIf)
+                || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
             {
@@ -631,6 +710,8 @@ impl Parser<'_> {
                         SyntaxKind::Semicolon,
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
+                        SyntaxKind::KwIf,
+                        SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
                         SyntaxKind::KwExport,
@@ -649,6 +730,8 @@ impl Parser<'_> {
                     SyntaxKind::Semicolon,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwIf,
+                    SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
                     SyntaxKind::KwExport,
@@ -688,6 +771,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::RBrace)
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwIf)
+                || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
             {
@@ -711,6 +796,8 @@ impl Parser<'_> {
                     SyntaxKind::RBrace,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwIf,
+                    SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
                     SyntaxKind::KwExport,

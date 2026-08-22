@@ -90,6 +90,9 @@ pub enum SyntaxKind {
     RecordDestructuringDeclaration,
     RecordPatternField,
     RecordPattern,
+    KwIf,
+    KwElse,
+    IfStatement,
 }
 
 impl SyntaxKind {
@@ -208,6 +211,9 @@ impl Language for RunenLanguage {
             65 => SyntaxKind::RecordDestructuringDeclaration,
             66 => SyntaxKind::RecordPatternField,
             67 => SyntaxKind::RecordPattern,
+            68 => SyntaxKind::KwIf,
+            69 => SyntaxKind::KwElse,
+            70 => SyntaxKind::IfStatement,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -387,6 +393,8 @@ pub(crate) fn reserved_identifier_kind(key: &str) -> Option<SyntaxKind> {
         "let" => Some(SyntaxKind::KwLet),
         "mut" => Some(SyntaxKind::KwMut),
         "return" => Some(SyntaxKind::KwReturn),
+        "if" => Some(SyntaxKind::KwIf),
+        "else" => Some(SyntaxKind::KwElse),
         "import" => Some(SyntaxKind::KwImport),
         "export" => Some(SyntaxKind::KwExport),
         "true" => Some(SyntaxKind::KwTrue),

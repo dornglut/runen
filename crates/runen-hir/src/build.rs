@@ -64,7 +64,7 @@ struct FunctionHeader {
     location: SourceLocation,
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct StructuralOwnershipState {
     consumed_paths: BTreeSet<Vec<usize>>,
 }
@@ -833,6 +833,18 @@ fn validate_body(
                 next_binding,
                 diagnostics,
             )),
+            SyntaxKind::IfStatement => {
+                if let Some(statement) = validate_if(
+                    header,
+                    &node,
+                    &context,
+                    &mut bindings,
+                    next_binding,
+                    diagnostics,
+                ) {
+                    statements.push(statement);
+                }
+            }
             SyntaxKind::ReturnStatement => {
                 terminal_return = Some(validate_return(
                     header,
@@ -908,6 +920,9 @@ fn validate_block(
                 next_binding,
                 diagnostics,
             )),
+            SyntaxKind::IfStatement => {
+                validate_if(header, &child, context, bindings, next_binding, diagnostics)
+            }
             _ => {
                 unreachable!("syntax-clean nested block contains only represented body statements")
             }
@@ -925,7 +940,10 @@ fn validate_block(
                             .map(|binding| (binding.name.clone(), binding.binding)),
                     );
                 }
-                Statement::Assignment { .. } | Statement::Call { .. } | Statement::Block(_) => {}
+                Statement::Assignment { .. }
+                | Statement::Call { .. }
+                | Statement::Block(_)
+                | Statement::If { .. } => {}
             }
             statements.push(statement);
         }
@@ -955,6 +973,106 @@ fn validate_block(
     Statement::Block(Block {
         statements,
         normal_cleanup,
+        location: location(header.unit, node),
+    })
+}
+
+fn validate_if(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let mut post_condition = bindings.clone();
+    let condition_node = value_child(node);
+    let condition = validate_value(
+        header,
+        &condition_node,
+        Type::Intrinsic(IntrinsicType::Bool),
+        context,
+        &mut post_condition,
+        diagnostics,
+    )?;
+
+    let mut blocks = node
+        .children()
+        .filter(|child| child.kind() == SyntaxKind::BlockStatement);
+    let then_node = blocks
+        .next()
+        .expect("syntax-clean conditional contains a then block");
+    let else_node = blocks.next();
+    debug_assert!(blocks.next().is_none());
+
+    let mut then_bindings = post_condition.clone();
+    let then_diagnostics = diagnostics.len();
+    let then_statement = validate_block(
+        header,
+        &then_node,
+        context,
+        &mut then_bindings,
+        next_binding,
+        diagnostics,
+    );
+    let then_valid = diagnostics.len() == then_diagnostics;
+    let Statement::Block(then_block) = then_statement else {
+        unreachable!("block validation returns one block statement");
+    };
+
+    let mut else_bindings = post_condition.clone();
+    let (else_block, else_valid) = if let Some(else_node) = else_node {
+        let else_diagnostics = diagnostics.len();
+        let else_statement = validate_block(
+            header,
+            &else_node,
+            context,
+            &mut else_bindings,
+            next_binding,
+            diagnostics,
+        );
+        let else_valid = diagnostics.len() == else_diagnostics;
+        let Statement::Block(else_block) = else_statement else {
+            unreachable!("block validation returns one block statement");
+        };
+        (Some(else_block), else_valid)
+    } else {
+        (None, true)
+    };
+
+    if !then_valid || !else_valid {
+        return None;
+    }
+
+    let equal = post_condition.values().all(|enclosing| {
+        let then_state = then_bindings
+            .values()
+            .find(|state| state.id == enclosing.id)
+            .expect("then outcome retains every enclosing binding identity");
+        let else_state = else_bindings
+            .values()
+            .find(|state| state.id == enclosing.id)
+            .expect("false outcome retains every enclosing binding identity");
+        debug_assert_eq!(then_state.ty, enclosing.ty);
+        debug_assert_eq!(else_state.ty, enclosing.ty);
+        debug_assert_eq!(then_state.mutability, enclosing.mutability);
+        debug_assert_eq!(else_state.mutability, enclosing.mutability);
+        then_state.ownership == else_state.ownership
+    });
+
+    if !equal {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ConditionalOwnershipMismatch,
+            location: location(header.unit, node),
+        });
+        return None;
+    }
+
+    *bindings = then_bindings;
+    Some(Statement::If {
+        condition,
+        then_block,
+        else_block,
         location: location(header.unit, node),
     })
 }

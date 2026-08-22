@@ -277,6 +277,16 @@ impl<'a> FunctionLowerer<'a> {
                     }
                 }
                 hir::Statement::Block(block) => self.register_source_locals(&block.statements)?,
+                hir::Statement::If {
+                    then_block,
+                    else_block,
+                    ..
+                } => {
+                    self.register_source_locals(&then_block.statements)?;
+                    if let Some(else_block) = else_block {
+                        self.register_source_locals(&else_block.statements)?;
+                    }
+                }
                 hir::Statement::Assignment { .. } | hir::Statement::Call { .. } => {}
             }
         }
@@ -366,21 +376,74 @@ impl<'a> FunctionLowerer<'a> {
                 } => {
                     self.lower_call(*function, arguments, None)?;
                 }
-                hir::Statement::Block(block) => {
-                    self.lower_statements(&block.statements)?;
-                    for cleanup in &block.normal_cleanup {
-                        let place = self.binding_place(cleanup.binding, &cleanup.fields)?;
-                        let root_ty = self.local_type(place.local)?;
-                        let ty = self.types.project_type(root_ty, &place.projections)?;
-                        if self.types.has_scalar_leaf(ty)? {
-                            self.push_statement(core::Statement::Drop {
-                                place: place.into(),
-                            });
-                        }
-                    }
-                }
+                hir::Statement::Block(block) => self.lower_block(block)?,
+                hir::Statement::If {
+                    condition,
+                    then_block,
+                    else_block,
+                    ..
+                } => self.lower_if(condition, then_block, else_block.as_ref())?,
             }
         }
+        Ok(())
+    }
+
+    fn lower_block(&mut self, block: &hir::Block) -> Result<(), LoweringError> {
+        self.lower_statements(&block.statements)?;
+        for cleanup in &block.normal_cleanup {
+            let place = self.binding_place(cleanup.binding, &cleanup.fields)?;
+            let root_ty = self.local_type(place.local)?;
+            let ty = self.types.project_type(root_ty, &place.projections)?;
+            if self.types.has_scalar_leaf(ty)? {
+                self.push_statement(core::Statement::Drop {
+                    place: place.into(),
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn lower_if(
+        &mut self,
+        condition: &hir::Value,
+        then_block: &hir::Block,
+        else_block: Option<&hir::Block>,
+    ) -> Result<(), LoweringError> {
+        let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+        if condition.ty != bool_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "conditional condition type is not Bool",
+            ));
+        }
+
+        let condition_local = self.lower_value(condition)?;
+        if self.local_type(condition_local)? != self.types.get(bool_ty)? {
+            return Err(LoweringError::InvalidHirInvariant(
+                "lowered conditional condition temporary is not Bool",
+            ));
+        }
+
+        let then_target = self.new_block()?;
+        let else_target = else_block.map(|_| self.new_block()).transpose()?;
+        let join_target = self.new_block()?;
+
+        self.terminate_current(core::Terminator::Branch {
+            condition: core::Operand::Move(core::Place::local(condition_local).into()),
+            true_target: then_target,
+            false_target: else_target.unwrap_or(join_target),
+        })?;
+
+        self.current = then_target.0 as usize;
+        self.lower_block(then_block)?;
+        self.terminate_current(core::Terminator::Goto(join_target))?;
+
+        if let (Some(else_target), Some(else_block)) = (else_target, else_block) {
+            self.current = else_target.0 as usize;
+            self.lower_block(else_block)?;
+            self.terminate_current(core::Terminator::Goto(join_target))?;
+        }
+
+        self.current = join_target.0 as usize;
         Ok(())
     }
 
