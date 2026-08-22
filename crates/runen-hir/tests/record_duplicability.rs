@@ -48,8 +48,14 @@ fn retains_independent_record_classifications_and_type_query() {
     )
     .expect("valid selected and unselected records");
 
-    assert_eq!(record(&hir, "Plain").duplicability, Duplicability::NonDuplicable);
-    assert_eq!(record(&hir, "Point").duplicability, Duplicability::Duplicable);
+    assert_eq!(
+        record(&hir, "Plain").duplicability,
+        Duplicability::NonDuplicable
+    );
+    assert_eq!(
+        record(&hir, "Point").duplicability,
+        Duplicability::Duplicable
+    );
     assert_eq!(
         record(&hir, "SelectedEmpty").duplicability,
         Duplicability::Duplicable
@@ -58,12 +64,18 @@ fn retains_independent_record_classifications_and_type_query() {
         record(&hir, "PlainEmpty").duplicability,
         Duplicability::NonDuplicable
     );
-    assert_eq!(record(&hir, "Child").duplicability, Duplicability::Duplicable);
+    assert_eq!(
+        record(&hir, "Child").duplicability,
+        Duplicability::Duplicable
+    );
     assert_eq!(
         record(&hir, "Parent").duplicability,
         Duplicability::NonDuplicable
     );
-    assert_eq!(record(&hir, "Public").duplicability, Duplicability::Duplicable);
+    assert_eq!(
+        record(&hir, "Public").duplicability,
+        Duplicability::Duplicable
+    );
 
     assert!(hir.type_is_duplicable(Type::Intrinsic(runen_hir::IntrinsicType::I64)));
     assert!(hir.type_is_duplicable(Type::Record(record(&hir, "Point").id)));
@@ -308,5 +320,8 @@ fn selected_record_use_preserves_conditional_ownership_state() {
     .expect("selected record duplication leaves both conditional outcomes available");
 
     assert_eq!(function(&hir, "f").body.statements.len(), 2);
-    assert!(matches!(function(&hir, "f").body.statements[0], Statement::If { .. }));
+    assert!(matches!(
+        function(&hir, "f").body.statements[0],
+        Statement::If { .. }
+    ));
 }
