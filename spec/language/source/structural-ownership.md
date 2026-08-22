@@ -39,7 +39,7 @@ For every structurally valid path `p`, define `type(p)` as the represented sourc
 
 Structural paths use source-semantic nominal record and field identity. They are not identifier spellings, parser nodes, compiler field indices, Core projections, byte offsets, addresses, physical storage regions, or ABI layout.
 
-A path `a` is an **ancestor** of path `b` exactly when `a` is a proper prefix of `b`. Paths are **structurally disjoint** exactly when neither path is equal to nor an ancestor of the other.
+A path `a` is an **ancestor** of path `b` exactly when `a` is a proper prefix of `b`. Two paths are **structurally disjoint** exactly when they are unequal and neither is an ancestor of the other.
 
 The empty path is therefore an ancestor of every non-empty path.
 
@@ -47,7 +47,7 @@ The empty path is therefore an ancestor of every non-empty path.
 
 Each structural owned-value root has one finite **consumed-path set** containing structurally valid paths rooted at that value.
 
-The consumed-path set MUST be prefix-free: no two distinct members may be equal, ancestor/descendant, or otherwise prefix-comparable.
+The consumed-path set MUST be prefix-free: no two members are ancestor/descendant or otherwise prefix-comparable.
 
 An empty consumed-path set denotes complete initial ownership of the root value. The relation does not imply that every root is always initialized with that state; the applicable lifecycle owner establishes when one complete owned value begins. `local-bindings.md` and `patterns.md` define the represented initial-state boundaries that consume this relation.
 
@@ -136,7 +136,7 @@ The recursive frontier relation yields these general consequences without a seco
 - when the consumed-path set is empty, the complete-root frontier contains exactly `[]`;
 - when one or more nested paths are consumed, the frontier contains exactly the maximal still-owned disjoint subvalues reached by recursively descending partially available ancestors in reverse record declaration order;
 - when the complete root path `[]` is consumed, the frontier is empty;
-- when separate exhaustive operations consume every direct or nested owned leaf without consuming `[]` itself, the complete-root frontier may nevertheless be empty; an empty frontier does not imply or synthesize a whole-root consumption event.
+- when separate exhaustive operations consume every structurally owned subvalue below the root without consuming `[]` itself, the complete-root frontier may nevertheless be empty; an empty frontier does not imply or synthesize a whole-root consumption event.
 
 Pattern presentation order, source lexical declaration order, and execution order do not replace record structural declaration order for recursive frontier selection.
 
