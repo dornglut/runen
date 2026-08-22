@@ -6,185 +6,198 @@ This document owns the represented intrinsic scalar source type identities, repr
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), and applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md). It does not redefine those owners.
 
-The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Function-local binding mutability, structural availability, remaining ownership, and ordinary whole-binding owned-value use are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities and value domains defined here when it forms represented boolean and integer literal values. [Source field-value access](field-access.md) consumes nominal record/field identity, field source types, source type equality, and owned-value duplicability from this document when it selects a represented field value and determines whether producing that selected value may duplicate it or must consume it. [Source patterns](patterns.md) consumes nominal record identity, direct field identity and field source types, exact source type equality, structural field order, and owned-value duplicability when it validates and produces binding-rooted exhaustive record-pattern bindings. This document does not define literal materialization, field-access execution/accessibility, pattern lookup/ownership, structural availability, conversions, general member lookup, or an implementation representation.
+The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Structural source paths, structural ownership state, availability, and remaining frontiers are owned by [Source structural ownership](structural-ownership.md). Function-local binding identity, mutability, lifecycle, lookup, ordinary whole-binding owned use, and assignment are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities/value domains defined here. [Source field-value access](field-access.md) consumes nominal record/field identity, field source types, source type equality, and owned-value duplicability. [Source patterns](patterns.md) consumes nominal record/field identity, exact source type equality, structural field order, and duplicability for recursive exhaustive record-pattern validation and binding-leaf production. This document does not define literal materialization, structural ownership state, field-access execution/accessibility, pattern lookup/ownership, conversions, general member lookup, or an implementation representation.
 
 ## Intrinsic scalar source types
 
-The following labels identify intrinsic source type identities. [Source concrete syntax](concrete-syntax.md) uses these exact labels as the concrete spellings for its represented intrinsic type forms; the semantic type identities and value domains remain owned here.
+The following labels identify intrinsic source type identities. [Source concrete syntax](concrete-syntax.md) uses these exact labels as the represented intrinsic type spellings; semantic type identities and value domains remain owned here.
 
 - `Bool`;
 - signed fixed-width integer types `I8`, `I16`, `I32`, and `I64`;
 - unsigned fixed-width integer types `U8`, `U16`, `U32`, and `U64`;
 - binary floating types `F16`, `F32`, and `F64`.
 
-These intrinsic scalar type identities are language-level source types. Their existence and semantic value domains MUST NOT vary with physical target, backend, optimization level, host ABI, or direct hardware support.
+These intrinsic scalar identities are language-level source types. Their existence/value domains MUST NOT vary with physical target, backend, optimization level, host ABI, or direct hardware support.
 
-`Bool` has exactly two semantic values: true and false. The represented source literal producer for those values is owned by `literals.md`; this section does not define its concrete spellings, representation, layout, integer conversion, ordering, or bit pattern.
+`Bool` has exactly two semantic values: true and false. The represented source literal producer for those values is owned by `literals.md`; this section does not define concrete spelling, representation, layout, integer conversion, ordering, or bit pattern.
 
-Each represented integer type consumes the fixed-width integer semantics owned by Core with the following width and signedness:
+Each represented integer type consumes the fixed-width integer semantics owned by Core:
 
-- `I8`, `I16`, `I32`, `I64` are signed types of width 8, 16, 32, and 64 respectively;
-- `U8`, `U16`, `U32`, `U64` are unsigned types of width 8, 16, 32, and 64 respectively.
+- `I8`, `I16`, `I32`, `I64` are signed widths 8, 16, 32, and 64;
+- `U8`, `U16`, `U32`, `U64` are unsigned widths 8, 16, 32, and 64.
 
 The corresponding mathematical value domains and applicable overflow-operation contracts are those defined by the Core integer owner. Source type identity does not imply two's-complement storage, byte order, alignment, ABI representation, or another physical encoding.
 
-Each represented floating source type consumes the binary floating semantics owned by Core with the following semantic format parameters:
+Each represented floating source type consumes Core binary floating semantics with these semantic format parameters:
 
 - `F16`: `p = 11`, `emin = -14`, `emax = 15`;
 - `F32`: `p = 24`, `emin = -126`, `emax = 127`;
 - `F64`: `p = 53`, `emin = -1022`, `emax = 1023`.
 
-These parameters establish the applicable semantic binary floating value format, including the special-value domain governed by the Core floating owner. They do not prescribe physical IEEE storage bits or ABI layout.
+These establish the applicable semantic binary floating value format, including the special-value domain governed by the Core floating owner. They do not prescribe physical IEEE storage bits or ABI layout.
 
-A floating source type identity does not itself select `standard`, `reproducible`, or `fast`. The existing numeric-contract authority, defaulting, refinement, and operation-specific rules remain controlling.
+A floating source type identity does not itself select `standard`, `reproducible`, or `fast`. Existing numeric-contract authority/defaulting/refinement remains controlling.
 
-A realization that lacks direct native support for one of these intrinsic types MUST preserve every applicable accepted semantic contract through an otherwise legal realization, including emulation or applicable environment admission/rejection where required. Lack of direct support is not permission to change the source type's value domain or make source-language validity target-defined.
+A realization lacking direct native support for one represented intrinsic type MUST preserve every applicable accepted semantic contract through a legal realization, including emulation or applicable environment admission/rejection. Lack of hardware support is not permission to change the source type's value domain or make source validity target-defined.
 
 ## Deliberately absent intrinsic types
 
 This revision does not define intrinsic source type identities for:
 
-- target-sized pointer- or address-width integers;
+- target-sized pointer/address-width integers;
 - 128-bit or arbitrary-bit-width integers;
 - extended, 128-bit, bfloat, decimal, or other floating formats;
 - complex numbers, vectors, or matrices;
 - character, string, or byte-sequence types;
 - raw pointers, safe references, slices, arrays, tuples, enums, unions, function types, or other composite/indirection forms.
 
-Their absence from this source foundation does not narrow the parameterized semantic relations already defined by their applicable non-source owners. A later source-language revision may add a source type identity when an accepted consumer requires it.
+Their absence from this source foundation does not narrow parameterized semantic relations already defined by applicable non-source owners. A later source revision may add a type identity when an accepted consumer requires it.
 
 ## Represented source type equality
 
 For the represented source type set:
 
-- two intrinsic scalar source types are the same type exactly when they are the same intrinsic type identity;
-- two nominal record source types are the same type exactly when they originate from the same record declaration identity;
-- an intrinsic scalar source type and a nominal record source type are never the same type.
+- two intrinsic scalar source types are equal exactly when they are the same intrinsic identity;
+- two nominal record source types are equal exactly when they originate from the same record declaration identity;
+- an intrinsic scalar source type and a nominal record source type are never equal.
 
-Two distinct record declarations do not define the same source type merely because their fields have equal keys, equal field types, or equal structural order.
+Two distinct record declarations do not define the same source type merely because their fields have equal keys/types/order.
 
-This type-equality relation does not define subtyping, coercion, conversion, layout compatibility, ABI compatibility, trait conformance, or representation equivalence.
+This relation does not define subtyping, coercion, conversion, layout compatibility, ABI compatibility, trait conformance, or representation equivalence.
 
-The represented record pattern in `patterns.md` consumes this relation directly: its root binding must have exactly the nominal record type selected by the pattern head. Structural similarity is not pattern compatibility.
+Recursive record patterns consume this relation directly:
+
+- a direct-root binding or producer result must have exactly the nominal record type selected by the top pattern head; and
+- every nested record-pattern head must have exactly the nominal record type of the field in which that nested pattern occurs.
+
+Structural similarity is never pattern compatibility.
 
 ## Nominal record type declarations
 
-A **record type declaration** is a module-level source declaration that introduces one module binding under `names-modules.md`.
+A **record type declaration** is a module-level source declaration that introduces exactly one module binding under `names-modules.md`.
 
-That binding denotes one nominal record source type. The source type identity is the identity of the record declaration/binding itself. Distinct record declarations therefore denote distinct source types.
+That binding denotes one nominal record source type. Type identity is the identity of the record declaration/binding itself. Distinct record declarations therefore denote distinct source types.
 
-The binding's module-private or exported accessibility is determined only by `names-modules.md`; this document does not redefine accessibility.
+The binding's module-private/exported accessibility is determined only by `names-modules.md`.
 
-The represented `record` form in `concrete-syntax.md` establishes one such declaration and maps its concrete field sequence to the structure defined below. Without the concrete `export` modifier that declaration is module-private; with the modifier it is exported under `names-modules.md`. Other future declaration forms may establish the same semantic declaration category only through their accepted mapping.
+The represented `record` form in `concrete-syntax.md` establishes one such declaration and maps its concrete field sequence to the structure below. Absence/presence of concrete `export` establishes module-private/exported accessibility respectively.
 
-A record declaration contains one finite ordered sequence of fields. The sequence MAY be empty.
+A record declaration contains one finite ordered field sequence, which MAY be empty.
 
 Each field has exactly:
 
 - one lexical identifier key governed by `lexical.md`; and
 - one represented source value type.
 
-Field lexical identifier keys MUST be unique within one record declaration.
+Field lexical keys MUST be unique within one record declaration.
 
-Field identity is scoped by the containing record type. Fields with the same lexical identifier key in distinct record types are distinct fields.
+Field identity is scoped by the containing record type. Fields with the same lexical key in distinct record types are distinct fields.
 
 For this revision, a record field type is either:
 
-- one intrinsic scalar source type defined by this document; or
-- one nominal record source type whose record binding is legally resolvable for the declaring source unit under the same-module or qualified cross-module relations in `names-modules.md`.
+- one intrinsic scalar source type defined here; or
+- one nominal record source type whose record binding is legally resolvable for the declaring source unit under same-module or qualified cross-module lookup from `names-modules.md`.
 
-The ordered field sequence is semantic structural order for the source record value shape. It MAY be consumed where another accepted semantic owner requires structural field order. It does not define physical field order, byte offsets, padding, alignment, ABI layout, stable representation, or address arithmetic.
+The ordered field sequence is semantic structural order for the source record value shape. It MAY be consumed where another accepted owner needs structural order. It does not define physical field order, byte offsets, padding, alignment, ABI layout, stable representation, or address arithmetic.
 
-A value of a represented record source type contains exactly one field value of the declared field type for every field in the declaration. This source value shape does not create a separate physical layout contract.
+A value of a represented record type contains exactly one field value of the declared type for every field in the declaration. This source value shape creates no physical layout contract.
 
-`local-bindings.md` may consume record field identity and structural order to define source structural paths and remaining ownership. `field-access.md` may consume a field's lexical key, containing nominal record identity, declared source type, and duplicability to select and produce a represented field value. `patterns.md` may consume the same nominal field identities and field source types to validate exhaustive named-field coverage and produce pattern-introduced binding values. Pattern source presentation order is not record structural field order and does not modify this declaration sequence. Structural availability, direct field accessibility, field-value ownership transitions, and pattern ownership transitions are owned by those documents rather than by the type declaration itself.
+`structural-ownership.md` consumes record field identity/type/order to define structurally valid source paths and recursive remaining-ownership frontiers. `local-bindings.md` instantiates that relation for bindings. `field-access.md` consumes field lexical key, containing nominal record identity, declared type, and duplicability to select/produce a field value. `patterns.md` consumes nominal field identities/types to validate recursive exhaustive coverage and retain binding-leaf structural paths. Pattern presentation order never changes this declaration's structural field order.
 
 ## Direct record containment
 
 For represented record types, define a **direct-containment edge** `A -> B` exactly when record type `A` has a field whose source type is record type `B`.
 
-The finite directed graph consisting of represented record types and all such direct-containment edges MUST be acyclic.
+The finite graph consisting of represented record types and all such edges MUST be acyclic.
 
-This requirement applies because every represented field type in this revision is either scalar or direct structural record containment; no accepted source pointer, reference, or other indirection type exists in this source type set.
+This requirement applies because every represented field type is scalar or direct structural record containment; no accepted source pointer/reference/other indirection type exists in this source type set.
 
-The rule does not prohibit a later recursive nominal type when every recursive cycle passes through an accepted source type whose canonical semantics establish indirection rather than direct structural containment. That later owner must define the applicable well-formedness relation explicitly.
+The rule does not prohibit a later recursive nominal type when every cycle passes through an accepted indirection type whose canonical semantics establish indirection rather than structural containment. That later owner must define the applicable well-formedness relation explicitly.
 
 ## Owned-value duplicability
 
-Every source value type represented by this revision has one source-semantic **owned-value duplicability** classification: **duplicable** or **non-duplicable**.
+Every represented source value type has one source-semantic **owned-value duplicability** classification: **duplicable** or **non-duplicable**.
 
-Duplicability means only that another accepted source operation may, when its own semantics explicitly use this capability, produce another owned value that preserves the source semantic value under the accepted value semantics of that type without consuming the source value.
+Duplicability means only that another accepted source operation may, when its own semantics explicitly consume this capability, produce another owned value preserving the source semantic value without consuming the source value.
 
-Duplicability does not define or require a source equality or comparison relation. It does not mean bitwise copying and does not imply shared storage identity, shared stored-value lifetime, aliasing, physical representation equality, ABI passing, or a particular realization strategy.
+Duplicability does not define/require source equality/comparison. It does not mean bitwise copy and does not imply shared storage identity/lifetime, aliasing, physical representation equality, ABI passing, or a particular realization strategy.
 
-The represented intrinsic scalar source types are duplicable: `Bool`, every represented signed and unsigned fixed-width integer type, and `F16`, `F32`, and `F64`.
+The represented intrinsic scalar source types are duplicable: `Bool`, every represented signed/unsigned fixed-width integer type, and `F16/F32/F64`.
 
-For floating values, duplication preserves the source semantic floating value governed by the applicable floating contracts. It does not define floating comparison equality and does not create additional NaN representation, payload, sign, or canonicalization guarantees beyond existing authority.
+For floating values, duplication preserves the semantic floating value under applicable floating contracts and adds no NaN representation/payload/sign/canonicalization guarantees.
 
-Each nominal record declaration has one abstract source-semantic **duplicable selection**. A nominal record declaration may select duplicability only when every field source type is duplicable. A record declaration that does not select duplicability is non-duplicable even when every field source type is duplicable.
+Each nominal record declaration has one abstract source-semantic **duplicable selection**. A record may select duplicability only when every field source type is duplicable. A record that does not select duplicability is non-duplicable even if every field type is duplicable.
 
-The concrete record form in `concrete-syntax.md` makes no positive duplicable selection. A nominal record declaration introduced by that form is therefore non-duplicable under the no-selection rule above.
+The concrete record form in `concrete-syntax.md` makes no positive duplicable selection, so a record introduced by that form is non-duplicable under the no-selection rule.
 
 This revision defines no concrete positive duplicability-selection syntax or trait mechanism.
 
-Distinct nominal record declarations make the selection independently. Equal field keys, field types, or structural order do not transfer the selection between nominal types, and the selection does not alter nominal type identity or field structure.
+Distinct nominal record declarations make the selection independently. Equal field shape does not transfer the selection, and selection does not alter nominal identity or field structure.
 
-Duplicating a value of a duplicable nominal record type produces another owned record value by preserving each field's source semantic value through that field type's accepted duplicability capability. The original record value is not consumed.
+Duplicating a value of a duplicable nominal record type produces another owned record value by preserving every field's semantic value through that field type's duplicability capability. The original record value is not consumed.
 
-The nominal selection is a conservative source ownership-policy choice. Structural field shape alone does not silently grant non-consuming duplication to a nominal type. This revision does not claim that represented records already model unique resources, capabilities, handles, or custom destruction.
+The nominal selection is a conservative source ownership-policy choice. Structural shape alone does not silently grant duplication. This revision does not claim represented records already model unique resources/capabilities/handles/custom destruction.
 
-**Non-duplicable** means only that the non-consuming owned-value duplication capability defined here is unavailable. It does not prohibit ownership transfer/consumption of the value, and it does not prohibit a future explicit cloning, copy-construction, conversion, factory, deserialization, or other operation from producing another value under that operation's independently accepted semantics.
+**Non-duplicable** means only that this non-consuming owned duplication capability is unavailable. It does not prohibit ownership transfer/consumption or a future explicit clone/copy-construction/conversion/factory/deserialization operation from independently producing another value.
 
-Ordinary whole-binding owned use of this capability, including when a whole-binding use duplicates or consumes its complete binding value, is owned by `local-bindings.md`. Represented field-value use consumes this capability through `field-access.md` for its final selected field type: a fully available duplicable selected field may be duplicated without consumption, while a fully available non-duplicable selected field is transferred/consumed by that operation. Represented binding-rooted record destructuring consumes the same capability through `patterns.md` independently for each selected direct field: a duplicable field initializes its pattern binding non-consumingly, while a non-duplicable field transfers exactly that field subvalue. Structural source availability and the resulting ancestor/disjoint-path consequences are owned by `local-bindings.md`, not by the duplicability classification itself.
+Ordinary whole-binding use consumes this capability through `local-bindings.md`. Binding-rooted field-value use consumes it through `field-access.md` for the final selected field path. Recursive record patterns consume it through `patterns.md` independently for every binding leaf: a duplicable leaf produces a non-consuming duplicate from its complete structural path, while a non-duplicable leaf transfers/consumes exactly that complete path. Structural path availability and resulting ancestor/disjoint consequences are owned by `structural-ownership.md`, not by the duplicability classification.
 
-This section does not define other expression contexts, field assignment or partial reinitialization, parameter passing, result transfer, calls, pattern syntax, or any explicit cloning/copy-construction operation.
+This section does not define parameter passing, calls/results, field assignment/reinitialization, pattern syntax, or explicit clone/copy construction.
 
-Duplicability is source semantics independent of any future `Copy`-like trait spelling. A later trait or generic mechanism may expose, derive, or constrain this capability only if its canonical semantics preserve the classification defined here; this revision introduces no trait membership.
+Duplicability is source semantics independent of any future `Copy`-like trait spelling. A later trait/generic mechanism may expose/derive/constrain this capability only if its canonical semantics preserve this classification; this revision introduces no trait membership.
 
-No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial source ownership rather than silently changing either property.
+No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial structural ownership.
 
-This capability consumes the conceptual distinction between consuming ownership transfer and non-consuming duplication already present in Core semantics, but the current proving-MIR copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
+This capability consumes the conceptual distinction between ownership transfer and non-consuming duplication already present in Core, but Core copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
 
 ## Literal and conversion boundary
 
-[Source literal semantics](literals.md) owns the represented boolean literal values and the required-type materialization of represented signed decimal integer literals into the fixed-width integer value domains defined here. This type foundation supplies those value domains; it does not redefine literal spelling, contextual materialization, representability diagnostics, or owned-value production.
+[Source literal semantics](literals.md) owns represented boolean literal values and required-type materialization of signed decimal integer literals into the fixed-width domains defined here. This type foundation supplies value domains; it does not redefine literal spelling, contextual materialization, representability diagnostics, or owned-value production.
 
-No source floating literal form or floating literal materialization relation is defined by this revision.
+No source floating literal form/materialization relation is defined by this revision.
 
-This document defines no abstract or unbounded integer/float literal type, default literal type, literal suffix semantics, or compile-time-only numeric type. The context-typed integer-literal relation in `literals.md` does not add another source type.
+This document defines no abstract/unbounded integer/float literal type, default literal type, literal suffix semantics, or compile-time-only numeric type. Context-typed integer literal materialization adds no source type.
 
-This document also grants no implicit conversion, coercion, promotion, widening, narrowing, subtyping, or numeric defaulting relation between represented source types. Literal materialization is not such a conversion because the literal datum has no prior concrete source type.
+This document grants no implicit conversion/coercion/promotion/widening/narrowing/subtyping/numeric defaulting relation between represented source types. Literal materialization is not conversion because the literal datum has no prior concrete source type.
 
-Those omissions do not prohibit a later accepted source operation from defining an explicit or implicit conversion. They prevent the bare type foundation from creating conversion behavior before an operation that actually consumes it owns that behavior.
+Those omissions do not prohibit a later accepted operation from defining conversion. They prevent the type foundation from creating conversion behavior before an operation owns it.
 
 ## Callable and declaration boundary
 
-This document defines the represented nominal record-type declaration and binding only. Represented source function entities and callable signatures are owned by [Source callables](callables.md); they are not redefined here.
+This document defines the represented nominal record-type declaration/binding only. Source function entities/callable signatures are owned by [Source callables](callables.md).
 
-This document does not define constants, statics, variables, type aliases, opaque types, traits, or another module-level declaration category beyond its record-type concern.
+This document does not define constants, statics, variables, type aliases, opaque types, traits, or another module-level declaration category beyond records.
 
-Those declarations require independently owned source semantics rather than being inferred from the current proving MIR.
+Those declarations require independently owned source semantics rather than inference from current proving MIR.
 
-## Local-binding, field-access, and pattern boundary
+## Structural ownership, bindings, field access, and patterns
 
-Function-local binding identity, assignment mutability, structural availability, remaining ownership, lexical lookup, and ordinary whole-binding duplicate-or-consume behavior are owned by `local-bindings.md`; they are not source type properties.
+`structural-ownership.md` is the sole source owner for structural source paths, structural ownership state, path availability/consumption requirements, and recursive remaining frontiers. Those facts are not type properties.
 
-Represented binding-rooted field-value selection and its direct field accessibility, final-path availability requirement, and duplicate-or-consume ownership consequence are owned by `field-access.md`. Represented binding-rooted exhaustive record-pattern selection, binding introduction, source ordering, and per-field ownership consequence are owned by `patterns.md`. This type owner supplies nominal record/field identity, field source types, source type equality, structural field order, and duplicability only.
+`local-bindings.md` owns binding identity, assignment mutability, lexical lookup/scope, binding lifecycle around structural ownership, ordinary whole-binding duplicate-or-consume use, and assignment legality/reset.
 
-The represented source type identity, record shape, and owned-value duplicability classification do not by themselves determine:
+`field-access.md` owns binding-rooted field selection, direct field accessibility, final-path availability requirement, and duplicate-or-consume field-value production.
 
-- structural path availability or source ownership state;
-- field assignment or partial-field reinitialization;
+`patterns.md` owns recursive exhaustive record-pattern selection, binding-leaf introduction/order, direct-root leaf production, and producer-transient leaf ownership/cleanup selection.
+
+This type owner supplies nominal record/field identity, field types, source type equality, structural field order, and owned-value duplicability only.
+
+The represented type identity, record shape, and duplicability classification do not by themselves determine:
+
+- structural path availability or ownership state;
+- field assignment/partial-field reinitialization;
 - interior mutability;
 - broader cross-module field visibility;
-- pattern scope, shadowing, matching, or control flow;
-- method, associated-item, trait, extension, or overload lookup;
-- custom destruction or destructor bodies.
+- pattern scope/shadowing/matching/control flow;
+- method/associated-item/trait/extension/overload lookup;
+- custom destruction/destructor bodies.
 
-Proving-kernel copyability, path-state, scalar-liveness, or interior-mutability metadata is not source-language authority for those concerns.
+Proving-kernel copyability, path state, scalar liveness, or interior-mutability metadata is not source-language authority for those concerns.
 
 ## Further boundaries
 
-The concrete intrinsic and record forms represented by `concrete-syntax.md` do not themselves define literal semantics, additional/refutable/nested patterns, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation. Represented boolean and integer literal semantics are instead owned by `literals.md`; represented binding-rooted field-value access is owned by `field-access.md`; represented binding-rooted exhaustive record destructuring is owned by `patterns.md`; structural binding availability is owned by `local-bindings.md`.
+The concrete intrinsic/record forms do not themselves define literal semantics, additional refutable/rest/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
 
-Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities and relations defined here.
+Represented boolean/integer literal semantics are owned by `literals.md`; structural ownership by `structural-ownership.md`; binding-rooted field-value access by `field-access.md`; and recursive exhaustive record destructuring by `patterns.md`.
+
+Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities/relations defined here.
