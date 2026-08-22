@@ -295,20 +295,24 @@ impl<'a> FunctionLowerer<'a> {
 
     fn lower(mut self) -> Result<core::Function, LoweringError> {
         let body = self.function.body.clone();
-        self.lower_statements(&body.statements)?;
+        let sequence_normal = self.lower_statements(&body.statements)?;
+        Self::validate_sequence_completion(
+            sequence_normal,
+            body.terminal_return.as_ref(),
+            body.has_normal_continuation,
+        )?;
 
-        let terminator = match body.terminal_return.as_ref() {
-            Some(hir::Return {
-                value: Some(value), ..
-            }) => {
-                let result = self.lower_value(value)?;
-                core::Terminator::Return(Some(core::Operand::Move(
-                    core::Place::local(result).into(),
-                )))
-            }
-            Some(hir::Return { value: None, .. }) | None => core::Terminator::Return(None),
-        };
-        self.terminate_current(terminator)?;
+        if self.function.result.is_some() && body.has_normal_continuation {
+            return Err(LoweringError::InvalidHirInvariant(
+                "result-bearing HIR body has normal continuation",
+            ));
+        }
+
+        if let Some(returned) = body.terminal_return.as_ref() {
+            self.lower_return(returned)?;
+        } else if body.has_normal_continuation {
+            self.terminate_current(core::Terminator::Return(None))?;
+        }
 
         let result = self
             .function
@@ -340,8 +344,15 @@ impl<'a> FunctionLowerer<'a> {
         })
     }
 
-    fn lower_statements(&mut self, statements: &[hir::Statement]) -> Result<(), LoweringError> {
+    fn lower_statements(&mut self, statements: &[hir::Statement]) -> Result<bool, LoweringError> {
+        let mut has_normal_continuation = true;
         for statement in statements {
+            if !has_normal_continuation {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "HIR statement follows a no-normal-continuation statement",
+                ));
+            }
+
             match statement {
                 hir::Statement::Local {
                     binding,
@@ -384,12 +395,85 @@ impl<'a> FunctionLowerer<'a> {
                     ..
                 } => self.lower_if(condition, then_block, else_block.as_ref())?,
             }
+
+            has_normal_continuation = Self::statement_has_normal_continuation(statement);
+        }
+        Ok(has_normal_continuation)
+    }
+
+    fn statement_has_normal_continuation(statement: &hir::Statement) -> bool {
+        match statement {
+            hir::Statement::Block(block) => block.has_normal_continuation,
+            hir::Statement::If {
+                then_block,
+                else_block,
+                ..
+            } => else_block.as_ref().is_none_or(|else_block| {
+                then_block.has_normal_continuation || else_block.has_normal_continuation
+            }),
+            hir::Statement::Local { .. }
+            | hir::Statement::RecordDestructure { .. }
+            | hir::Statement::Assignment { .. }
+            | hir::Statement::Call { .. } => true,
+        }
+    }
+
+    fn validate_sequence_completion(
+        sequence_normal: bool,
+        terminal_return: Option<&hir::Return>,
+        retained_normal: bool,
+    ) -> Result<(), LoweringError> {
+        match terminal_return {
+            Some(_) if !sequence_normal => Err(LoweringError::InvalidHirInvariant(
+                "HIR terminal return follows a no-normal-continuation statement",
+            )),
+            Some(_) if retained_normal => Err(LoweringError::InvalidHirInvariant(
+                "HIR terminal return retains normal continuation",
+            )),
+            Some(_) => Ok(()),
+            None if sequence_normal != retained_normal => Err(LoweringError::InvalidHirInvariant(
+                "HIR retained continuation disagrees with its statement sequence",
+            )),
+            None => Ok(()),
+        }
+    }
+
+    fn lower_return(&mut self, returned: &hir::Return) -> Result<(), LoweringError> {
+        let terminator = match returned.value.as_ref() {
+            Some(value) => {
+                let result = self.lower_value(value)?;
+                core::Terminator::Return(Some(core::Operand::Move(
+                    core::Place::local(result).into(),
+                )))
+            }
+            None => core::Terminator::Return(None),
+        };
+        self.terminate_current(terminator)
+    }
+
+    fn lower_block(&mut self, block: &hir::Block) -> Result<(), LoweringError> {
+        if !block.has_normal_continuation && !block.normal_cleanup.is_empty() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "no-normal HIR block retains normal cleanup",
+            ));
+        }
+
+        let sequence_normal = self.lower_statements(&block.statements)?;
+        Self::validate_sequence_completion(
+            sequence_normal,
+            block.terminal_return.as_ref(),
+            block.has_normal_continuation,
+        )?;
+
+        if let Some(returned) = block.terminal_return.as_ref() {
+            self.lower_return(returned)?;
+        } else if block.has_normal_continuation {
+            self.lower_normal_cleanup(block)?;
         }
         Ok(())
     }
 
-    fn lower_block(&mut self, block: &hir::Block) -> Result<(), LoweringError> {
-        self.lower_statements(&block.statements)?;
+    fn lower_normal_cleanup(&mut self, block: &hir::Block) -> Result<(), LoweringError> {
         for cleanup in &block.normal_cleanup {
             let place = self.binding_place(cleanup.binding, &cleanup.fields)?;
             let root_ty = self.local_type(place.local)?;
@@ -423,27 +507,105 @@ impl<'a> FunctionLowerer<'a> {
             ));
         }
 
+        let then_normal = then_block.has_normal_continuation;
+        let else_normal = else_block.is_none_or(|block| block.has_normal_continuation);
+        let normal_outcomes = usize::from(then_normal) + usize::from(else_normal);
         let then_target = self.new_block()?;
         let else_target = else_block.map(|_| self.new_block()).transpose()?;
-        let join_target = self.new_block()?;
 
-        self.terminate_current(core::Terminator::Branch {
-            condition: core::Operand::Move(core::Place::local(condition_local).into()),
-            true_target: then_target,
-            false_target: else_target.unwrap_or(join_target),
-        })?;
+        match normal_outcomes {
+            2 => {
+                let join_target = self.new_block()?;
+                self.terminate_current(core::Terminator::Branch {
+                    condition: core::Operand::Move(core::Place::local(condition_local).into()),
+                    true_target: then_target,
+                    false_target: else_target.unwrap_or(join_target),
+                })?;
 
-        self.current = then_target.0 as usize;
-        self.lower_block(then_block)?;
-        self.terminate_current(core::Terminator::Goto(join_target))?;
+                self.current = then_target.0 as usize;
+                self.lower_block(then_block)?;
+                self.terminate_current(core::Terminator::Goto(join_target))?;
 
-        if let (Some(else_target), Some(else_block)) = (else_target, else_block) {
-            self.current = else_target.0 as usize;
-            self.lower_block(else_block)?;
-            self.terminate_current(core::Terminator::Goto(join_target))?;
+                if let (Some(else_target), Some(else_block)) = (else_target, else_block) {
+                    self.current = else_target.0 as usize;
+                    self.lower_block(else_block)?;
+                    self.terminate_current(core::Terminator::Goto(join_target))?;
+                }
+
+                self.current = join_target.0 as usize;
+            }
+            1 => {
+                let normal_target = if else_block.is_none() {
+                    if then_normal {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "omitted else cannot remove the false normal outcome",
+                        ));
+                    }
+                    Some(self.new_block()?)
+                } else {
+                    None
+                };
+                let false_target = else_target.or(normal_target).ok_or(
+                    LoweringError::InvalidHirInvariant(
+                        "conditional has no false target for its retained outcome",
+                    ),
+                )?;
+                self.terminate_current(core::Terminator::Branch {
+                    condition: core::Operand::Move(core::Place::local(condition_local).into()),
+                    true_target: then_target,
+                    false_target,
+                })?;
+
+                let mut continuation = normal_target;
+
+                self.current = then_target.0 as usize;
+                self.lower_block(then_block)?;
+                if then_normal {
+                    continuation = Some(core::BasicBlockId(index_u32(
+                        self.current,
+                        "Core basic block identity",
+                    )?));
+                }
+
+                if let (Some(else_target), Some(else_block)) = (else_target, else_block) {
+                    self.current = else_target.0 as usize;
+                    self.lower_block(else_block)?;
+                    if else_normal {
+                        continuation = Some(core::BasicBlockId(index_u32(
+                            self.current,
+                            "Core basic block identity",
+                        )?));
+                    }
+                }
+
+                self.current = continuation
+                    .ok_or(LoweringError::InvalidHirInvariant(
+                        "one-normal conditional lost its sole normal continuation",
+                    ))?
+                    .0 as usize;
+            }
+            0 => {
+                let else_target = else_target.ok_or(LoweringError::InvalidHirInvariant(
+                    "zero-normal conditional cannot omit else",
+                ))?;
+                let else_block = else_block.ok_or(LoweringError::InvalidHirInvariant(
+                    "zero-normal conditional cannot omit else",
+                ))?;
+                self.terminate_current(core::Terminator::Branch {
+                    condition: core::Operand::Move(core::Place::local(condition_local).into()),
+                    true_target: then_target,
+                    false_target: else_target,
+                })?;
+
+                self.current = then_target.0 as usize;
+                self.lower_block(then_block)?;
+
+                self.current = else_target.0 as usize;
+                self.lower_block(else_block)?;
+            }
+            _ => unreachable!("binary conditional has at most two normal outcomes"),
         }
 
-        self.current = join_target.0 as usize;
         Ok(())
     }
 
