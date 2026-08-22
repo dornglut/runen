@@ -128,13 +128,19 @@ The represented intrinsic scalar source types are duplicable: `Bool`, every repr
 
 For floating values, duplication preserves the semantic floating value under applicable floating contracts. It does not define floating comparison equality and adds no NaN representation, payload, sign, or canonicalization guarantees beyond existing authority.
 
-Each nominal record declaration has one abstract source-semantic **duplicable selection**. A record may select duplicability only when every field source type is duplicable. A record that does not select duplicability is non-duplicable even if every field type is duplicable.
+Each nominal record declaration has one source-semantic **duplicable selection**. A record may select duplicability only when every field source type is duplicable. A record that does not select duplicability is non-duplicable even if every field type is duplicable.
 
-The concrete record form in `concrete-syntax.md` makes no positive duplicable selection, so a record introduced by that form is non-duplicable under the no-selection rule.
+The concrete record form in `concrete-syntax.md` provides one optional record-specific `copy` selection. Presence of that selection makes the nominal record perform the positive duplicable selection above. Absence makes no positive selection and therefore leaves the record non-duplicable under the no-selection rule.
 
-This revision defines no concrete positive duplicability-selection syntax or trait mechanism.
+Selection validity is determined from the resolved source types of all direct fields and is independent of declaration order. For a nominal-record field, that field type is duplicable only when the referenced nominal record itself has a valid positive duplicable selection. Because the represented direct-containment graph is finite and acyclic, this recursively determines eligibility for every selected record without introducing a cyclic capability definition.
 
-Distinct nominal record declarations make the selection independently. Equal field shape does not transfer the selection, and selection does not alter nominal identity or field structure.
+A selected record with no fields is duplicable: every field source type is duplicable vacuously. An unselected zero-field record remains non-duplicable because structural eligibility does not itself make the positive selection.
+
+Every nominal record selects independently. A record containing only intrinsic or positively selected duplicable record fields does not become duplicable unless it also makes its own positive selection. Likewise, a selected record containing any unselected nominal-record field is source-invalid even when that field's lower structural representation could otherwise be copied.
+
+Record-binding accessibility and direct record-field accessibility are independent of duplicability. After a field source type has legally resolved under the existing name/type rules, the field contributes to duplicability eligibility only through that source type's duplicability classification; module-private/exported status does not grant or deny the capability.
+
+Distinct nominal record declarations make the selection independently. Equal field shape does not transfer the selection, and selection does not alter nominal identity, field identity, field type, structural field order, direct-containment edges, source type equality, or accessibility.
 
 Duplicating a value of a duplicable nominal record type produces another owned record value by preserving every field's semantic value through that field type's duplicability capability. The original record value is not consumed.
 
@@ -150,7 +156,7 @@ Duplicability is source semantics independent of any future `Copy`-like trait sp
 
 No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial structural ownership rather than silently changing either property.
 
-This capability reflects the conceptual distinction between ownership transfer and non-consuming duplication already present in Core semantics, but Core copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
+This capability reflects the conceptual distinction between ownership transfer and non-consuming duplication already present in Core semantics, but Core copyability representation is not source-language authority. A lower representation may be structurally copyable even when a source record made no positive duplicable selection; that lower fact MUST NOT grant source duplicability. This revision defines no direct source-to-MIR lowering rule or Core semantic change.
 
 ## Literal and conversion boundary
 
