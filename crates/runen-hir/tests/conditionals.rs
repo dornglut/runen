@@ -296,7 +296,7 @@ fn branch_dependent_runtime_values_are_valid_when_ownership_state_is_equal() {
 
 #[test]
 fn omitted_else_uses_unchanged_post_condition_state() {
-    build("fn f(flag: Bool, value: I64) { if flag { let copy: I64 = value; } }")
+    build("fn f(flag: Bool, value: I64) { if flag { let duplicate: I64 = value; } }")
         .expect("duplicable then-arm use matches omitted false outcome state");
 
     let errors = build(
