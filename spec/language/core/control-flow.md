@@ -2,9 +2,9 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented Core semantics for finite function-body basic blocks, activation entry into a body, statement-order progression at the control-flow level, unconditional intra-activation transfer, exact-`Bool` conditional branching, control-flow-graph path-state validity, and cyclic intra-activation execution.
+This document owns the represented Core semantics for finite function-body basic blocks, activation entry into a body, statement-order progression at the control-flow level, unconditional intra-activation transfer, scalar-`Bool` conditional branching, control-flow-graph path-state validity, and cyclic intra-activation execution.
 
-It consumes local storage, stored-value lifetime, operand ownership transfer/copy, assignment, destruction domains, and termination cleanup from [Core value and storage semantics](value-storage.md); loan/access authority from [Core borrowing](borrowing.md); raw-pointer operand behavior from [Core pointers and provenance](pointers.md); unsafe-operation outcomes and undefined-behavior separation from [Core unsafe semantics](unsafe.md); direct-call activation, caller suspension, result transfer, normal return, and call fault propagation from [Core functions and direct calls](functions.md); and defined-fault classification from [Core faults](faults.md). It does not redefine those owners.
+It consumes Core values and value/type compatibility, local storage, stored-value lifetime, operand ownership transfer/copy, assignment, destruction domains, and termination cleanup from [Core value and storage semantics](value-storage.md); loan/access authority from [Core borrowing](borrowing.md); raw-pointer operand behavior from [Core pointers and provenance](pointers.md); unsafe-operation outcomes and undefined-behavior separation from [Core unsafe semantics](unsafe.md); direct-call activation, caller suspension, result transfer, normal return, and call fault propagation from [Core functions and direct calls](functions.md); and defined-fault classification from [Core faults](faults.md). It does not redefine those owners.
 
 The represented Core data model and validator may use numeric block identifiers, vectors, worklists, hashes, or other implementation structures. Those representations are not Core program values or source-language semantics.
 
@@ -80,7 +80,7 @@ When a block reaches `Goto(target)` with a defined continuation:
 
 The target MAY be the same basic block as the current block. Unconditional edges MAY participate in a control-flow cycle.
 
-## Exact-Bool conditional branch
+## Bool-kind conditional branch
 
 The represented conditional intra-activation terminator is one branch with:
 
@@ -102,14 +102,16 @@ This spelling is explanatory only. A conforming implementation may represent the
 
 Both targets MUST identify existing basic blocks in the same function body. The two targets MAY identify the same block.
 
-The condition operand MUST produce exactly one value of the represented Core scalar type `Bool`. No other Core type is admitted as a branch condition.
+The condition operand's resolved Core type MUST be a scalar type whose scalar kind is `Bool`. The branch contract does not designate or require one globally distinguished Bool type identity. No condition whose resolved type has another scalar kind or structural aggregate kind is admitted.
+
+The two semantic Bool values consumed by this branch relation are owned by [Core value and storage semantics](value-storage.md).
 
 A branch executes in this order:
 
 1. after all statements in the current block complete with a defined continuation, evaluate `condition` exactly once under its existing operand semantics;
 2. preserve every state consequence of that operand evaluation;
-3. if the produced semantic Bool value is `true`, enter `true_target` in the same activation with the resulting state;
-4. if the produced semantic Bool value is `false`, enter `false_target` in the same activation with the resulting state.
+3. if the produced Bool value is `true`, enter `true_target` in the same activation with the resulting state;
+4. if the produced Bool value is `false`, enter `false_target` in the same activation with the resulting state.
 
 The branch operation itself performs no additional read, move, copy, write, destruction, cleanup, borrow, pointer operation, fault selection, or hidden storage transition.
 
@@ -128,9 +130,9 @@ Concrete Core execution and Core path-state validation have distinct responsibil
 
 ### Runtime execution
 
-A concrete defined execution observes exactly one semantic Bool condition value and therefore takes exactly one branch target as defined above.
+A concrete defined execution observes exactly one of the two semantic Bool condition values owned by `value-storage.md` and therefore takes exactly one branch target as defined above.
 
-There is no unknown, symbolic, three-valued, or validation-only Bool in the Core runtime value domain established by this document.
+This control-flow relation introduces no unknown, symbolic, three-valued, or validation-only Bool value.
 
 ### Path-state validation
 
@@ -142,7 +144,7 @@ After validating the condition operand's type and applying the condition operand
 
 This is an intentional validation over-approximation. It does not redefine concrete branch execution and does not assert that both targets execute in one activation.
 
-Core validation therefore does not require constant evaluation, constant propagation, symbolic execution, or general value analysis merely to prune a branch edge. In particular, a branch whose condition operand is the constant semantic value `true` still contributes both branch edges to path-state validation unless another accepted transformation has removed the false edge before the program is validated.
+Core validation therefore does not require constant evaluation, constant propagation, symbolic execution, or general value analysis merely to prune a branch edge. In particular, a branch whose condition operand is the constant Bool value `true` still contributes both branch edges to path-state validation unless another accepted transformation has removed the false edge before the program is validated.
 
 ## CFG-reachable validation states
 
@@ -182,7 +184,7 @@ Every represented basic block MUST satisfy applicable static structural/type rul
 
 - valid local, loan, place, projection, function, type, and block identities;
 - valid operand and destination type structure;
-- exact branch-condition `Bool` typing; and
+- a branch condition whose resolved type has scalar kind `Bool`; and
 - valid terminator targets.
 
 A structurally valid basic block with no CFG path from the entry validation state need not be executed by path-state validation merely because it is present in the body.
@@ -202,7 +204,7 @@ A concrete execution that continues indefinitely through such a cycle **diverges
 Divergence:
 
 - does not become a defined `Fault` merely because an implementation or test harness has run for a long time;
-- does not implicitly perform function termination cleanup;
+- does not implicitly perform function termination cleanup under the storage relation in `value-storage.md`;
 - does not end local storage extents merely because the same basic block is revisited; and
 - does not introduce an implicit iteration or execution-step limit.
 
@@ -241,11 +243,11 @@ Concrete execution follows only the state produced by the branch actually taken.
 
 ## Determinism
 
-For one fixed validated Core program and one fixed concrete activation state, unconditional transfer and exact-Bool branch selection are deterministic.
+For one fixed validated Core program and one fixed concrete activation state, unconditional transfer and Bool-kind branch selection are deterministic.
 
 `Goto` has one successor.
 
-`Branch` evaluates its condition once and selects exactly the target corresponding to the resulting semantic Bool value.
+`Branch` evaluates its condition once and selects exactly the target corresponding to the resulting Bool value.
 
 The validator's deliberate propagation over both branch edges is an assurance relation, not nondeterministic Core execution.
 
@@ -253,7 +255,7 @@ The validator's deliberate propagation over both branch edges is an assurance re
 
 This document defines no Rust enum, parser, serializer, vector layout, worklist algorithm, hash key, reference-machine data structure, or backend branch instruction.
 
-A canonical implementation may represent control flow with block indices and may validate CFG-reachable states with a finite worklist over complete block/storage/loan validation states. It may retain the current value-erased abstraction for ordinary non-pointer scalars because this control-flow validity relation does not require Bool constant propagation.
+A canonical implementation may represent control flow with block indices and may validate CFG-reachable states with a finite worklist over complete block/storage/loan validation states. It may retain a value-erased abstraction for ordinary non-pointer scalars because this control-flow validity relation does not require Bool constant propagation.
 
 An implementation MUST NOT use its traversal order, host recursion behavior, hash iteration order, optimizer constant folding, or backend branch behavior as semantic authority.
 
@@ -263,7 +265,7 @@ This revision does not define:
 
 - source-language `if`, loops, `match`, catch/recovery, labels, `break`, or `continue`;
 - source structural-ownership joins, definite source availability, source drop elaboration, or source cleanup flags;
-- general Core comparison or predicate operators;
+- general Core comparison, logical, or predicate operators;
 - Core constant-evaluation or constant-propagation semantics;
 - exception/unwind edges beyond already accepted defined-fault propagation;
 - custom destruction;
