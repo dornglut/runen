@@ -69,7 +69,10 @@ fn exported_record_fields_are_lossless_and_bounded() {
         .collect::<Vec<_>>();
     assert_eq!(fields.len(), 3);
     assert_eq!(fields[0].text().to_string(), "private: I8");
-    assert_eq!(fields[1].text().to_string(), "/* field */ export public: dep::Ticket");
+    assert_eq!(
+        fields[1].text().to_string(),
+        "/* field */ export public: dep::Ticket"
+    );
     assert_eq!(fields[2].text().to_string(), " export ready: Bool");
 
     let field_exports = fields
