@@ -173,6 +173,77 @@ impl TypeMap {
             }
         }
     }
+
+    fn remaining_frontier_after_consumed_path(
+        &self,
+        root: core::TypeId,
+        consumed: &[usize],
+    ) -> Result<Vec<Vec<usize>>, LoweringError> {
+        if consumed.is_empty() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "field-value use has empty field path",
+            ));
+        }
+
+        let mut frontier = Vec::new();
+        let mut path = Vec::new();
+        self.append_remaining_frontier_after_consumed_path(
+            root,
+            consumed,
+            0,
+            &mut path,
+            &mut frontier,
+        )?;
+        Ok(frontier)
+    }
+
+    fn append_remaining_frontier_after_consumed_path(
+        &self,
+        ty: core::TypeId,
+        consumed: &[usize],
+        depth: usize,
+        path: &mut Vec<usize>,
+        frontier: &mut Vec<Vec<usize>>,
+    ) -> Result<(), LoweringError> {
+        if depth == consumed.len() {
+            return Ok(());
+        }
+
+        let definition = self
+            .types
+            .get(ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "lowered Core type is absent from the type table",
+            ))?;
+        let core::TypeKind::Struct(fields) = &definition.kind else {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR structural path does not match lowered Core type shape",
+            ));
+        };
+        let selected = consumed[depth];
+        if selected >= fields.len() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR structural path does not match lowered Core type shape",
+            ));
+        }
+
+        for (field_index, field) in fields.iter().enumerate().rev() {
+            path.push(field_index);
+            if field_index == selected {
+                self.append_remaining_frontier_after_consumed_path(
+                    field.ty,
+                    consumed,
+                    depth + 1,
+                    path,
+                    frontier,
+                )?;
+            } else {
+                frontier.push(path.clone());
+            }
+            path.pop();
+        }
+        Ok(())
+    }
 }
 
 const INTRINSICS: [(hir::IntrinsicType, core::ScalarType, &str); 12] = [
@@ -823,6 +894,16 @@ impl<'a> FunctionLowerer<'a> {
                     ));
                 }
 
+                let expected_ownership = match value.ty {
+                    hir::Type::Intrinsic(_) => hir::OwnedUse::Duplicate,
+                    hir::Type::Record(_) => hir::OwnedUse::Consume,
+                };
+                if *ownership != expected_ownership {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "field-value ownership does not match retained result duplicability",
+                    ));
+                }
+
                 let retained_result_ty = self.types.get(value.ty)?;
                 let (source_local, source_ty, producer_cleanup) = match receiver {
                     hir::FieldValueReceiver::Binding { binding, ty } => {
@@ -839,6 +920,15 @@ impl<'a> FunctionLowerer<'a> {
                         value: producer,
                         cleanup,
                     } => {
+                        if !matches!(
+                            &producer.kind,
+                            hir::ValueKind::DirectCall { .. }
+                                | hir::ValueKind::RecordConstruction { .. }
+                        ) {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "field-value producer receiver has unrepresented producer category",
+                            ));
+                        }
                         let source_ty = self.types.get(producer.ty)?;
                         let source_local = self.lower_value(producer)?;
                         if self.local_type(source_local)? != source_ty {
@@ -874,6 +964,14 @@ impl<'a> FunctionLowerer<'a> {
                             }) {
                                 return Err(LoweringError::InvalidHirInvariant(
                                     "consumed field receiver path overlaps retained cleanup frontier",
+                                ));
+                            }
+                            let expected = self
+                                .types
+                                .remaining_frontier_after_consumed_path(source_ty, fields)?;
+                            if cleanup.paths.as_slice() != expected.as_slice() {
+                                return Err(LoweringError::InvalidHirInvariant(
+                                    "consuming field receiver cleanup does not match canonical remaining frontier",
                                 ));
                             }
                         }
