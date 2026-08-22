@@ -6,6 +6,7 @@
 - [Type foundation](types.md)
 - [Literal semantics](literals.md)
 - [Callable signatures](callables.md)
+- [Structural ownership](structural-ownership.md)
 - [Function-local bindings](local-bindings.md)
 - [Field-value access](field-access.md)
 - [Patterns](patterns.md)
