@@ -179,7 +179,7 @@ fn qualified_target_preserves_lookup_failure_partition() {
 
     let private_target = cross_module(
         "record Pair { export left: I8 }",
-        "import dep; fn f() { let value: dep::Pair = dep::Pair { left: 1 }; }",
+        "import dep; fn f() { let value: I8 = dep::Pair { left: 1 }; }",
     )
     .expect_err("private foreign target must reject before construction");
     assert!(
