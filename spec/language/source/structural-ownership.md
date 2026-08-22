@@ -17,7 +17,7 @@ A **structural owned-value root** consists of:
 - exactly one represented source value type, the **root type**; and
 - exactly one structural ownership state defined below.
 
-A structural owned-value root is semantic ownership of one complete source value. The relation does not require the root to have a lexical identifier, source binding identity, physical address, storage identity, HIR local, Core local, or another source-observable identity.
+A structural owned-value root is a source-semantic ownership domain over the structural subvalues of one value whose complete source type is the root type. When established with an empty consumed-path set it owns the complete root value; later valid consumption may leave only a proper subset of structural subvalues owned, or no remaining owned subvalue. The relation does not require the root to have a lexical identifier, source binding identity, physical address, storage identity, HIR local, Core local, or another source-observable identity.
 
 Represented parameter/local bindings instantiate persistent structural owned-value roots through `local-bindings.md`. A successful producer-backed record-pattern scrutinee instantiates one non-binding transient structural owned-value root through `patterns.md` and `function-execution.md`.
 
@@ -106,7 +106,7 @@ When another accepted source owner has selected a non-consuming owned-value dupl
 
 Successful duplicate production leaves the consumed-path set unchanged.
 
-This document does not define which source types are duplicable or what preserves their semantic value. [Source type foundation](types.md) owns represented owned-value duplicability, and the operation-specific owner determines whether it consumes that capability.
+This document does not define which source types are duplicable or what preserves their semantic value. [Source type foundation](types.md) owns represented owned-value duplicability, and the operation-specific owner determines whether and how that capability applies.
 
 A non-consuming duplicate of one path does not make an unavailable or partially available path available and does not change ownership of any ancestor, descendant, or sibling path.
 
