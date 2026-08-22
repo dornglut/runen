@@ -99,6 +99,51 @@ fn direct_call_and_field_conditions_retain_existing_value_forms() {
 }
 
 #[test]
+fn condition_producer_ownership_is_applied_before_arm_validation() {
+    let errors = build(
+        "record Ticket {} \
+         fn predicate(value: Ticket) -> Bool { return true; } \
+         fn sink(value: Ticket) {} \
+         fn f(value: Ticket) { \
+             if predicate(value) { sink(value); } else {} \
+         }",
+    )
+    .expect_err("condition consumption must be visible to both arm validators");
+
+    assert!(has_diagnostic(&errors, DiagnosticKind::UnavailableBinding));
+    assert!(
+        !has_diagnostic(&errors, DiagnosticKind::ConditionalOwnershipMismatch),
+        "an invalid arm must not be followed by a synthetic join mismatch"
+    );
+}
+
+#[test]
+fn failed_condition_does_not_commit_partial_condition_ownership() {
+    let errors = build(
+        "record Ticket {} \
+         fn wrong(value: Ticket) -> I64 { return 1; } \
+         fn sink(value: Ticket) {} \
+         fn f(value: Ticket) { \
+             if wrong(value) {} \
+             sink(value); \
+         }",
+    )
+    .expect_err("non-Bool condition result must reject");
+
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Intrinsic(IntrinsicType::Bool),
+            found: Type::Intrinsic(IntrinsicType::I64),
+        }
+    ));
+    assert!(
+        !has_diagnostic(&errors, DiagnosticKind::UnavailableBinding),
+        "failed condition validation must not leak speculative argument consumption"
+    );
+}
+
+#[test]
 fn literal_true_does_not_prune_invalid_false_outcome() {
     let errors = build("fn f() { if true {} else { missing(); } }")
         .expect_err("literal true must not exempt the false arm from validation");
@@ -283,12 +328,13 @@ fn rejected_join_does_not_commit_speculative_arm_ownership() {
 }
 
 #[test]
-fn invalid_arm_suppresses_secondary_join_mismatch_diagnostic() {
+fn invalid_arm_suppresses_secondary_join_mismatch_and_does_not_commit() {
     let errors = build(
         "record Ticket {} \
          fn sink(value: Ticket) {} \
          fn f(flag: Bool, value: Ticket) { \
              if flag { sink(value); missing(); } else {} \
+             sink(value); \
          }",
     )
     .expect_err("invalid arm must fail source validation");
@@ -297,6 +343,10 @@ fn invalid_arm_suppresses_secondary_join_mismatch_diagnostic() {
     assert!(
         !has_diagnostic(&errors, DiagnosticKind::ConditionalOwnershipMismatch),
         "join comparison requires two valid normal outcomes"
+    );
+    assert!(
+        !has_diagnostic(&errors, DiagnosticKind::UnavailableBinding),
+        "invalid arm validation must not leak speculative ownership into later validation"
     );
 }
 
