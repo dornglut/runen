@@ -2,13 +2,15 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, straight-line body and nested-block execution order, dynamic direct-call activations, direct-call argument/result ownership transfer, record-construction field evaluation and transient assembly, ordinary local initialization, recursive record-destructuring declaration completion including producer-backed scrutinee evaluation and transient cleanup, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion/divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, body and nested-block statement sequencing, dynamic direct-call activations, direct-call argument/result ownership transfer, record-construction field evaluation and transient assembly, ordinary local initialization, recursive record-destructuring declaration completion including producer-backed scrutinee evaluation and transient cleanup, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion/divergence, and defined-fault propagation through direct source calls.
 
 It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity/callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), structural ownership state and remaining frontiers from [Source structural ownership](structural-ownership.md), parameter/local identity, scope, lookup, assignment mutability, whole-binding use, and assignment legality from [Source function-local bindings](local-bindings.md), binding-rooted field-value production from [Source field-value access](field-access.md), and recursive exhaustive record-pattern structure, scrutinee category, binding-leaf order, per-leaf ownership consequences, and producer transient frontier selection from [Source patterns](patterns.md). It does not redefine those owners.
 
-The represented concrete function/body/block/value/call/record-construction/field-value/record-destructuring/assignment/return grammar is owned by [Source concrete syntax](concrete-syntax.md).
+[Source control flow](control-flow.md) consumes this document's owned-value producer execution, nested-block execution, lexical cleanup, defined-fault propagation, and divergence relations when defining represented statement-level conditionals and their definite normal successor. This document does not redefine conditional selection or conditional ownership joins.
 
-This document does not define structural ownership mathematics, universal expressions, operators, general control flow, references, closures, traits, ABI, or an implementation representation.
+The represented concrete function/body/block/value/call/record-construction/field-value/record-destructuring/assignment/conditional/return grammar is owned by [Source concrete syntax](concrete-syntax.md).
+
+This document does not define structural ownership mathematics, universal expressions, operators, conditional selection or joins, other general control flow, references, closures, traits, ABI, or an implementation representation.
 
 ## Source function bodies
 
@@ -57,6 +59,8 @@ The represented producer families are:
 - a source-valid binding-rooted field-value use under `field-access.md`.
 
 `concrete-syntax.md` exposes exactly those five families in `Value`. A record-destructuring declaration is not another `Value` producer: `patterns.md` owns its grouped production of zero or more binding-leaf values. A producer-backed record-pattern scrutinee reuses one existing producer family in a pattern-specific receiving position.
+
+`control-flow.md` reuses a concrete subset of these existing producer families in its `ConditionalValue` receiving position. That use does not create a sixth producer family or alter any producer execution semantics here.
 
 Future operator, conversion, or other expression owners MAY introduce additional owned value producers without redefining the receiving relations in this document.
 
@@ -236,11 +240,11 @@ Core structural destruction/storage mechanics remain owned by Core; this source 
 
 This revision defines no field/place assignment, partial-field reinitialization, compound assignment, assignment expression, borrow/reference assignment, source interior mutability, raw-pointer assignment, or destructuring assignment.
 
-## Straight-line body and nested-block execution
+## Body and nested-block statement sequencing
 
 For the root function body and each represented `BlockStatement`, the applicable `BodyStatement` sequence executes strictly in concrete source order.
 
-Root-body execution begins with its first statement after successful parameter transfer. A nested block begins when its statement is reached. A later statement begins only after the preceding statement completes normally.
+Root-body execution begins with its first statement after successful parameter transfer. A nested block begins when its statement is reached. A later statement begins only after the preceding statement completes normally. When the preceding statement is one represented `IfStatement`, normal completion includes the definite normal successor established by `control-flow.md`.
 
 For an ordinary local declaration:
 
@@ -266,6 +270,8 @@ For a nested block:
 
 A block statement produces no source value and introduces no Unit/Void value.
 
+For a represented conditional statement, condition evaluation, selected-arm execution, explicit-arm scope composition, and definite normal ownership at its successor are owned by `control-flow.md`. This sequencing relation consumes only its normal completion before beginning the next containing body statement.
+
 If a body statement yields a defined fault, later statements do not execute and the active function activation follows fault cleanup/propagation. A nested block exiting this way does not also perform independent normal cleanup; its child scope participates exactly once in fault cleanup.
 
 If a body statement diverges, later statements do not execute and no termination/child-scope cleanup occurs merely because execution continues.
@@ -274,7 +280,7 @@ A root terminal return begins only after all preceding root body statements comp
 
 A represented no-result root body reaching its closing boundary without a terminal return performs normal no-result completion.
 
-This straight-line relation introduces no branch, loop, early/nonterminal return, unreachable-statement semantics, short-circuiting, catch, defer, refutable match, or other multi-path control transfer.
+This sequencing relation introduces no loop, early/nonterminal return, unreachable-statement weakening, short-circuit operator, catch, defer, refutable match, or other multi-path control transfer beyond consuming the normal completion of the represented conditional owner.
 
 ## Source cleanup
 
@@ -332,7 +338,7 @@ For a no-result function, represented `return;` performs the same scope/paramete
 
 Reaching the normal end of a represented no-result function body is equivalent to normal no-result completion.
 
-A result-bearing represented body MUST NOT have a reachable normal end without a result. The current concrete grammar enforces this with a terminal value return. A later control-flow owner MUST preserve that requirement.
+A result-bearing represented body MUST NOT have a reachable normal end without a result. The current concrete grammar enforces this with a terminal value return. The represented conditional relation does not alter that requirement because it introduces no nested/early return; future non-normal control-flow forms MUST preserve the applicable result-bearing completion requirement.
 
 No Unit/Void source value is introduced by no-result completion.
 
@@ -373,7 +379,7 @@ A producer-backed recursive record-destructuring declaration owns one pattern sc
 
 A direct binding-root record pattern has no independently owned scrutinee transient; its accepted leaf productions initialize final pattern bindings directly.
 
-This revision defines no general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented record construction, direct-call argument/result transfer, assignment transfer, and producer-backed record destructuring are owned here.
+This revision defines no general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented record construction, direct-call argument/result transfer, assignment transfer, and producer-backed record destructuring are owned here. The successful Bool condition transient used by represented conditional selection is owned and ended by `control-flow.md` after this document's existing producer relation yields it.
 
 ## Divergence
 
@@ -381,13 +387,15 @@ If a record-construction initializer diverges, the construction remains suspende
 
 If a directly called callee diverges, the caller remains suspended at that call and performs no return/fault cleanup merely because time passes.
 
-Active caller/callee ownership state and any suspended producer transients persist subject to operations already completed. The same applies when a diverging call is an assignment RHS or producer-backed record-pattern scrutinee. There is no implicit source execution-step budget.
+Active caller/callee ownership state and any suspended producer transients persist subject to operations already completed. The same applies when a diverging call is an assignment RHS, producer-backed record-pattern scrutinee, or represented conditional value. There is no implicit source execution-step budget.
 
 A direct binding-root record-destructuring operation has no divergence point after validation. A producer-backed operation may diverge only while evaluating its existing producer; after producer success, leaf production and transient completion are non-diverging.
 
 ## Effects boundary
 
-Left-to-right constructor evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, producer-before-pattern evaluation, **depth-first pattern binding-leaf source order**, and concrete straight-line body/block execution fix relative source ordering for any effects that future accepted operation owners make observable.
+Left-to-right constructor evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, producer-before-pattern evaluation, **depth-first pattern binding-leaf source order**, and concrete body/block statement sequencing fix relative source ordering for any effects that future accepted operation owners make observable.
+
+For a represented conditional, `control-flow.md` owns condition-producer-before-selected-arm ordering and consumes the producer/effect ordering defined here; this execution owner does not add speculation or arm-reordering authority.
 
 Literal evaluation has no source-visible side effect under `literals.md`; adding literals to represented ordinary value positions therefore adds no competing effect-order relation.
 
@@ -401,11 +409,11 @@ This revision defines no source effect system, purity, effect inference, specula
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns represented concrete grammar. `literals.md` owns boolean/integer materialization. `structural-ownership.md` owns structural paths/state/availability/frontiers. `field-access.md` owns binding-rooted field selection/accessibility and final-field duplicate-or-consume production. `patterns.md` owns recursive record-pattern structure, binding-leaf facts/order, direct-root ownership production, producer-transient ownership transitions, and transient frontier selection. `local-bindings.md` owns binding identity/scope/lookup/mutability/lifecycle and whole-binding use/assignment legality.
+`concrete-syntax.md` owns represented concrete grammar. `literals.md` owns boolean/integer materialization. `structural-ownership.md` owns structural paths/state/availability/frontiers. `field-access.md` owns binding-rooted field selection/accessibility and final-field duplicate-or-consume production. `patterns.md` owns recursive record-pattern structure, binding-leaf facts/order, direct-root ownership production, producer-transient ownership transitions, and transient frontier selection. `local-bindings.md` owns binding identity/scope/lookup/mutability/lifecycle and whole-binding use/assignment legality. `control-flow.md` owns represented conditional selection, arm validation, and definite normal conditional ownership.
 
-Floating literals, operators, general expressions, arbitrary assignment places, branches/loops, arbitrary-receiver members, refutable/rest/shorthand pattern categories, additional producer-backed scrutinee families, and other source forms remain outside this execution relation.
+Floating literals, operators, general expressions, arbitrary assignment places, loops, early/nonterminal return, arbitrary-receiver members, refutable/rest/shorthand pattern categories, additional producer-backed scrutinee families, and other source forms remain outside this execution relation.
 
-The represented construction, recursive pattern, and partial-ownership cleanup relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements through accepted Core semantics rather than use Core representation behavior as source authority.
+The represented construction, recursive pattern, partial-ownership cleanup, and existing producer execution relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements and the separately owned conditional requirements through accepted Core semantics rather than use Core representation behavior as source authority.
 
 After source validation, duplicating field use may refine to projected Core `Copy`, consuming field use to projected `Move`, and whole-binding replacement to source-first Core `Assign`. A direct-root recursive pattern binding leaf may refine to a mapped source local initialized in depth-first leaf order by projected `Copy`/`Move` from the mapped source root using the retained full leaf path. A producer-backed pattern may lower its existing producer to one compiler result temporary, initialize mapped pattern locals by projected `Copy`/`Move` from retained leaf paths, and refine the retained source transient frontier through projected/aggregate Core destruction.
 
@@ -417,4 +425,4 @@ No parser, lossless syntax, typed HIR, Core MIR production lowering, runtime, or
 
 ## Further boundaries
 
-This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, branch/loop/refutable-match control flow, field assignment/partial-field reinitialization, arbitrary-receiver member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified/cross-module construction or pattern heads, field visibility modifiers, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
+This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, conditional expressions, unequal-state/path-dependent conditional joins, early/nonterminal return, loops, refutable-match control flow, field assignment/partial-field reinitialization, arbitrary-receiver member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified/cross-module construction or pattern heads, field visibility modifiers, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
