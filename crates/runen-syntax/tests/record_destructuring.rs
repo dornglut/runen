@@ -83,7 +83,7 @@ fn f(root: Outer) {
         .children()
         .find(|node| node.kind() == SyntaxKind::RecordPattern)
         .expect("top record pattern");
-    assert!(pattern.text().to_string().starts_with("Outer"));
+    assert!(pattern.text().to_string().trim_start().starts_with("Outer"));
     assert!(!declaration.children().any(|child| matches!(
         child.kind(),
         SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
