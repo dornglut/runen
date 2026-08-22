@@ -442,3 +442,214 @@ fn intra_activation_raw_pointer_ub_remains_an_ub_boundary() {
         UndefinedBehaviorKind::RawReadTargetNotLive { .. }
     ));
 }
+
+fn branch(condition: Operand, true_target: u32, false_target: u32) -> Terminator {
+    Terminator::Branch {
+        condition,
+        true_target: BasicBlockId(true_target),
+        false_target: BasicBlockId(false_target),
+    }
+}
+
+fn execute_constant_branch(condition: bool) -> runen_reference::ExecutionReport {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let function = Function {
+        name: "branch_result".into(),
+        parameters: Vec::new(),
+        result: Some(i64_ty),
+        body: body(
+            Vec::new(),
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    branch(Operand::Constant(Value::Bool(condition)), 1, 2),
+                ),
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Return(Some(Operand::Constant(Value::I64(11)))),
+                ),
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Return(Some(Operand::Constant(Value::I64(22)))),
+                ),
+            ],
+        ),
+    };
+    let validated = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect("valid constant Branch program");
+    Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect("defined Branch execution")
+}
+
+#[test]
+fn runtime_branch_selects_exactly_the_concrete_bool_edge() {
+    let true_report = execute_constant_branch(true);
+    assert_eq!(true_report.terminal, TerminalStatus::Returned);
+    assert_eq!(true_report.result, Some(Value::I64(11)));
+
+    let false_report = execute_constant_branch(false);
+    assert_eq!(false_report.terminal, TerminalStatus::Returned);
+    assert_eq!(false_report.result, Some(Value::I64(22)));
+}
+
+fn execute_stored_bool_branch(copy: bool) -> runen_reference::ExecutionReport {
+    let mut types = TypeTable::new();
+    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
+    let condition = Place::local(LocalId(0));
+    let operand = if copy {
+        Operand::Copy(condition.clone().into())
+    } else {
+        Operand::Move(condition.clone().into())
+    };
+    let function = Function {
+        name: "stored_condition".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("condition", bool_ty, false)],
+            vec![
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: condition,
+                        src: Operand::Constant(Value::Bool(true)),
+                    }],
+                    branch(operand, 1, 2),
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        ),
+    };
+    let validated = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect("valid stored-Bool Branch program");
+    Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect("defined stored-Bool Branch execution")
+}
+
+#[test]
+fn runtime_branch_move_and_copy_conditions_are_evaluated_exactly_once() {
+    let moved = execute_stored_bool_branch(false);
+    assert_eq!(
+        moved
+            .verification_events
+            .iter()
+            .filter(|event| matches!(event.kind, VerificationEventKind::Move(_)))
+            .count(),
+        1
+    );
+    assert_eq!(
+        moved
+            .verification_events
+            .iter()
+            .filter(|event| matches!(event.kind, VerificationEventKind::Copy(_)))
+            .count(),
+        0
+    );
+
+    let copied = execute_stored_bool_branch(true);
+    assert_eq!(
+        copied
+            .verification_events
+            .iter()
+            .filter(|event| matches!(event.kind, VerificationEventKind::Copy(_)))
+            .count(),
+        1
+    );
+    assert_eq!(
+        copied
+            .verification_events
+            .iter()
+            .filter(|event| matches!(event.kind, VerificationEventKind::Move(_)))
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn runtime_branch_condition_ub_reaches_neither_successor() {
+    let mut types = TypeTable::new();
+    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
+    let bool_ptr = types.push(TypeDef::raw_pointer("BoolPtr", bool_ty));
+    let tracked_ty = types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
+    let condition = Place::local(LocalId(0));
+    let pointer = Place::local(LocalId(1));
+    let marker = Place::local(LocalId(2));
+    let function = Function {
+        name: "ub_condition".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![
+                LocalDecl::new("condition", bool_ty, false),
+                LocalDecl::new("pointer", bool_ptr, false),
+                LocalDecl::new("marker", tracked_ty, false),
+            ],
+            vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: condition.clone(),
+                            src: Operand::Constant(Value::Bool(true)),
+                        },
+                        Statement::Init {
+                            dst: pointer.clone(),
+                            src: Operand::AddressOf(condition.clone().into()),
+                        },
+                        Statement::Drop {
+                            place: condition.into(),
+                        },
+                    ],
+                    branch(Operand::RawMove(pointer.into()), 1, 2),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: marker.clone(),
+                        src: Operand::Constant(Value::TrackedFixture(1)),
+                    }],
+                    Terminator::Return(None),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: marker.clone(),
+                        src: Operand::Constant(Value::TrackedFixture(2)),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        ),
+    };
+    let validated = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect("unsafe condition failure is valid MIR with no defined Branch successor");
+    let error = Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect_err("RawMove through dead Bool target is UB");
+
+    assert!(matches!(
+        error.kind,
+        UndefinedBehaviorKind::RawMoveTargetNotLive { .. }
+    ));
+    assert!(!error.verification_events.iter().any(|event| {
+        matches!(
+            event.kind,
+            VerificationEventKind::Write {
+                ref place,
+                kind: VerificationWriteKind::Init,
+            } if *place == marker
+        )
+    }));
+}

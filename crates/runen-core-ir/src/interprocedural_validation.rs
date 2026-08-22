@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 use crate::interprocedural::{Body, Function, Program, Terminator};
 use crate::{
@@ -50,6 +50,7 @@ pub enum MirValidationErrorKind {
     TypeMismatch {
         expected: TypeId,
     },
+    BranchConditionNotBool,
     CopyOfNonCopy(TypeId),
     RawReadRequiresPointer(TypeId),
     RawMoveRequiresPointer(TypeId),
@@ -291,6 +292,15 @@ fn validate_static_terminator(
     let body = &function.body;
     match terminator {
         Terminator::Goto(target) => require_target(body, *target, point),
+        Terminator::Branch {
+            condition,
+            true_target,
+            false_target,
+        } => {
+            require_target(body, *true_target, point)?;
+            require_target(body, *false_target, point)?;
+            validate_branch_condition(&program.types, body, condition, point)
+        }
         Terminator::Fault(_) => Ok(()),
         Terminator::Return(value) => match (function.result, value) {
             (None, None) => Ok(()),
@@ -365,6 +375,62 @@ fn require_target(
             MirValidationErrorKind::InvalidTargetBlock(target),
         ))
     }
+}
+
+fn validate_branch_condition(
+    types: &TypeTable,
+    body: &Body,
+    operand: &Operand,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    let bool_valued = match operand {
+        Operand::Constant(Value::Bool(_)) => true,
+        Operand::Constant(_) => false,
+        Operand::Move(src) => {
+            let actual = access_type(types, body, src, point)?;
+            is_bool_type(types, actual)
+        }
+        Operand::Copy(src) => {
+            let actual = access_type(types, body, src, point)?;
+            if !types.is_copy(actual) {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::CopyOfNonCopy(actual),
+                ));
+            }
+            is_bool_type(types, actual)
+        }
+        Operand::RawMove(pointer) => {
+            let pointer_ty = access_type(types, body, pointer, point)?;
+            let Some(pointee) = types.raw_pointer_pointee(pointer_ty) else {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::RawMoveRequiresPointer(pointer_ty),
+                ));
+            };
+            is_bool_type(types, pointee)
+        }
+        Operand::AddressOf(src) => {
+            access_type(types, body, src, point)?;
+            false
+        }
+    };
+
+    if bool_valued {
+        Ok(())
+    } else {
+        Err(point_error(
+            point,
+            MirValidationErrorKind::BranchConditionNotBool,
+        ))
+    }
+}
+
+fn is_bool_type(types: &TypeTable, ty: TypeId) -> bool {
+    matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(ScalarType::Bool))
+    )
 }
 
 fn validate_static_statement(
@@ -728,6 +794,13 @@ enum AccessRequirement {
     Exclusive,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ValidationState {
+    current: BasicBlockId,
+    locals: Vec<ObjectState>,
+    active_loans: Vec<Option<ActiveLoan>>,
+}
+
 fn validate_path_state(
     program: &Program,
     function_id: FunctionId,
@@ -755,15 +828,20 @@ fn validate_path_state(
         );
     }
 
-    let mut active_loans = vec![None; body.loans.len()];
-    let mut current = body.entry;
+    let initial = ValidationState {
+        current: body.entry,
+        locals,
+        active_loans: vec![None; body.loans.len()],
+    };
+    let mut worklist = VecDeque::from([initial]);
     let mut seen = HashSet::new();
 
-    loop {
-        if !seen.insert((current, locals.clone(), active_loans.clone())) {
-            return Ok(());
+    'worklist: while let Some(mut state) = worklist.pop_front() {
+        if !seen.insert(state.clone()) {
+            continue;
         }
 
+        let current = state.current;
         let block = body
             .block(current)
             .expect("structurally validated Core MIR reaches only known blocks");
@@ -778,14 +856,14 @@ fn validate_path_state(
                 validate_state_statement(
                     types,
                     body,
-                    &mut locals,
-                    &mut active_loans,
+                    &mut state.locals,
+                    &mut state.active_loans,
                     statement,
                     &point,
                 )?,
                 DefinedStep::NoDefinedContinuation
             ) {
-                return Ok(());
+                continue 'worklist;
             }
         }
 
@@ -795,25 +873,52 @@ fn validate_path_state(
             statement: None,
         };
         match &block.terminator {
-            Terminator::Goto(target) => current = *target,
-            Terminator::Fault(_) => return Ok(()),
+            Terminator::Goto(target) => {
+                state.current = *target;
+                worklist.push_back(state);
+            }
+            Terminator::Branch {
+                condition,
+                true_target,
+                false_target,
+            } => {
+                if matches!(
+                    validate_operand_state(
+                        types,
+                        body,
+                        &mut state.locals,
+                        &state.active_loans,
+                        condition,
+                        &point,
+                    )?,
+                    DefinedStep::NoDefinedContinuation
+                ) {
+                    continue 'worklist;
+                }
+
+                let mut false_state = state.clone();
+                state.current = *true_target;
+                false_state.current = *false_target;
+                worklist.push_back(state);
+                worklist.push_back(false_state);
+            }
+            Terminator::Fault(_) => {}
             Terminator::Return(value) => {
                 if let Some(value) = value
                     && matches!(
                         validate_operand_state(
                             types,
                             body,
-                            &mut locals,
-                            &active_loans,
+                            &mut state.locals,
+                            &state.active_loans,
                             value,
                             &point,
                         )?,
                         DefinedStep::NoDefinedContinuation
                     )
                 {
-                    return Ok(());
+                    continue 'worklist;
                 }
-                return Ok(());
             }
             Terminator::Call {
                 function: target_function,
@@ -823,12 +928,12 @@ fn validate_path_state(
             } => {
                 if let Some(destination) = destination {
                     authorize_direct_access(
-                        &active_loans,
+                        &state.active_loans,
                         destination,
                         AccessRequirement::Exclusive,
                         &point,
                     )?;
-                    if !place_state(&locals, destination).all_never_initialized() {
+                    if !place_state(&state.locals, destination).all_never_initialized() {
                         return Err(point_error(
                             &point,
                             MirValidationErrorKind::CallResultRequiresNeverInitialized(
@@ -843,14 +948,14 @@ fn validate_path_state(
                         validate_operand_state(
                             types,
                             body,
-                            &mut locals,
-                            &active_loans,
+                            &mut state.locals,
+                            &state.active_loans,
                             argument,
                             &point,
                         )?,
                         DefinedStep::NoDefinedContinuation
                     ) {
-                        return Ok(());
+                        continue 'worklist;
                     }
                 }
 
@@ -864,14 +969,17 @@ fn validate_path_state(
                     write_validation_value(
                         types,
                         result_ty,
-                        place_state_mut(&mut locals, destination),
+                        place_state_mut(&mut state.locals, destination),
                         value,
                     );
                 }
-                current = *target;
+                state.current = *target;
+                worklist.push_back(state);
             }
         }
     }
+
+    Ok(())
 }
 
 fn validate_state_statement(

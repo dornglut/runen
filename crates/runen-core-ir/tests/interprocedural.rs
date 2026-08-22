@@ -663,3 +663,636 @@ fn ordinary_source_scalar_tags_are_copyable_without_value_carriers() {
         assert!(types.is_call_transfer_safe(ty));
     }
 }
+
+fn branch(condition: Operand, true_target: u32, false_target: u32) -> Terminator {
+    Terminator::Branch {
+        condition,
+        true_target: BasicBlockId(true_target),
+        false_target: BasicBlockId(false_target),
+    }
+}
+
+#[test]
+fn branch_validates_targets_and_bool_valued_operand_shape() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+
+    let valid = Function {
+        name: "valid".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            Vec::new(),
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    branch(Operand::Constant(Value::Bool(true)), 1, 1),
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        ),
+    };
+    validate_program(Program {
+        types: types.clone(),
+        functions: vec![valid],
+    })
+    .expect("Bool constant with equal valid targets is branch-admissible without a Bool TypeId");
+
+    let invalid_target = Function {
+        name: "invalid_target".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(
+                Vec::new(),
+                branch(Operand::Constant(Value::Bool(true)), 0, 9),
+            )],
+        ),
+    };
+    let error = validate_program(Program {
+        types: types.clone(),
+        functions: vec![invalid_target],
+    })
+    .expect_err("both Branch targets must exist");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::InvalidTargetBlock(BasicBlockId(9))
+    );
+
+    let non_bool = Function {
+        name: "non_bool".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(
+                Vec::new(),
+                branch(Operand::Constant(Value::I64(1)), 0, 0),
+            )],
+        ),
+    };
+    let error = validate_program(Program {
+        types: types.clone(),
+        functions: vec![non_bool],
+    })
+    .expect_err("non-Bool constant is not branch-admissible");
+    assert_eq!(error.kind, MirValidationErrorKind::BranchConditionNotBool);
+
+    let bad_access = Function {
+        name: "bad_access".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("value", i64_ty, false)],
+            vec![BasicBlock::new(
+                Vec::new(),
+                branch(Operand::AddressOf(Place::local(LocalId(9)).into()), 0, 0),
+            )],
+        ),
+    };
+    let error = validate_program(Program {
+        types,
+        functions: vec![bad_access],
+    })
+    .expect_err("malformed AddressOf access fails before Branch Bool admission");
+    assert_eq!(error.kind, MirValidationErrorKind::InvalidLocal(LocalId(9)));
+}
+
+#[test]
+fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
+    let mut types = TypeTable::new();
+    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let tracked_ty = types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
+    let bool_ptr = types.push(TypeDef::raw_pointer("BoolPtr", bool_ty));
+    let i64_ptr = types.push(TypeDef::raw_pointer("I64Ptr", i64_ty));
+
+    let copy_bool = Function {
+        name: "copy_bool".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("condition", bool_ty, false)],
+            vec![
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: Place::local(LocalId(0)),
+                        src: Operand::Constant(Value::Bool(true)),
+                    }],
+                    branch(Operand::Copy(Place::local(LocalId(0)).into()), 1, 2),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: Place::local(LocalId(0)).into(),
+                    }],
+                    Terminator::Return(None),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: Place::local(LocalId(0)).into(),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        ),
+    };
+    validate_program(Program {
+        types: types.clone(),
+        functions: vec![copy_bool],
+    })
+    .expect("Bool Copy leaves the source live on both validation successors");
+
+    let move_non_bool = Function {
+        name: "move_non_bool".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("value", i64_ty, false)],
+            vec![BasicBlock::new(
+                Vec::new(),
+                branch(Operand::Move(Place::local(LocalId(0)).into()), 0, 0),
+            )],
+        ),
+    };
+    let error = validate_program(Program {
+        types: types.clone(),
+        functions: vec![move_non_bool],
+    })
+    .expect_err("non-Bool Move is not branch-admissible");
+    assert_eq!(error.kind, MirValidationErrorKind::BranchConditionNotBool);
+
+    let copy_noncopy = Function {
+        name: "copy_noncopy".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("value", tracked_ty, false)],
+            vec![BasicBlock::new(
+                Vec::new(),
+                branch(Operand::Copy(Place::local(LocalId(0)).into()), 0, 0),
+            )],
+        ),
+    };
+    let error = validate_program(Program {
+        types: types.clone(),
+        functions: vec![copy_noncopy],
+    })
+    .expect_err("existing CopyOfNonCopy diagnostic precedes Branch admission");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::CopyOfNonCopy(tracked_ty)
+    );
+
+    let raw_bool = Function {
+        name: "raw_bool".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![
+                LocalDecl::new("condition", bool_ty, false),
+                LocalDecl::new("pointer", bool_ptr, false),
+            ],
+            vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: Place::local(LocalId(0)),
+                            src: Operand::Constant(Value::Bool(true)),
+                        },
+                        Statement::Init {
+                            dst: Place::local(LocalId(1)),
+                            src: Operand::AddressOf(Place::local(LocalId(0)).into()),
+                        },
+                    ],
+                    branch(Operand::RawMove(Place::local(LocalId(1)).into()), 1, 1),
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        ),
+    };
+    validate_program(Program {
+        types: types.clone(),
+        functions: vec![raw_bool],
+    })
+    .expect("RawMove through Bool pointee is branch-admissible");
+
+    let raw_i64 = Function {
+        name: "raw_i64".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("pointer", i64_ptr, false)],
+            vec![BasicBlock::new(
+                Vec::new(),
+                branch(Operand::RawMove(Place::local(LocalId(0)).into()), 0, 0),
+            )],
+        ),
+    };
+    let error = validate_program(Program {
+        types,
+        functions: vec![raw_i64],
+    })
+    .expect_err("RawMove through non-Bool pointee is not branch-admissible");
+    assert_eq!(error.kind, MirValidationErrorKind::BranchConditionNotBool);
+}
+
+#[test]
+fn branch_move_effect_is_propagated_to_both_validation_edges() {
+    let mut types = TypeTable::new();
+    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
+    let condition = Place::local(LocalId(0));
+    let function = Function {
+        name: "move_condition".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("condition", bool_ty, false)],
+            vec![
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: condition.clone(),
+                        src: Operand::Constant(Value::Bool(true)),
+                    }],
+                    branch(Operand::Move(condition.clone().into()), 1, 2),
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: condition.clone().into(),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        ),
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect_err("false validation edge observes the Branch Move consumption");
+    assert!(matches!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(ref place) if *place == condition
+    ));
+}
+
+#[test]
+fn constant_branches_validate_both_cfg_edges_without_value_pruning() {
+    for condition in [true, false] {
+        let (types, i64_ty) = scalar_program_types();
+        let unread = Place::local(LocalId(0));
+        let invalid_target = if condition { 2 } else { 1 };
+        let function = Function {
+            name: "constant_branch".into(),
+            parameters: Vec::new(),
+            result: None,
+            body: body(
+                vec![LocalDecl::new("uninitialized", i64_ty, false)],
+                vec![
+                    BasicBlock::new(
+                        Vec::new(),
+                        branch(Operand::Constant(Value::Bool(condition)), 1, 2),
+                    ),
+                    BasicBlock::new(
+                        if invalid_target == 1 {
+                            vec![Statement::Read {
+                                src: unread.clone().into(),
+                            }]
+                        } else {
+                            Vec::new()
+                        },
+                        Terminator::Return(None),
+                    ),
+                    BasicBlock::new(
+                        if invalid_target == 2 {
+                            vec![Statement::Read {
+                                src: unread.clone().into(),
+                            }]
+                        } else {
+                            Vec::new()
+                        },
+                        Terminator::Return(None),
+                    ),
+                ],
+            ),
+        };
+
+        let error = validate_program(Program {
+            types,
+            functions: vec![function],
+        })
+        .expect_err("constant Branch does not prune its opposite validation edge");
+        assert!(matches!(
+            error.kind,
+            MirValidationErrorKind::UseOfUninitialized(ref place) if *place == unread
+        ));
+    }
+}
+
+#[test]
+fn branch_join_keeps_distinct_partial_initialization_states() {
+    let (types, i64_ty) = scalar_program_types();
+    let value = Place::local(LocalId(0));
+    let function = Function {
+        name: "partial_join".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("value", i64_ty, false)],
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    branch(Operand::Constant(Value::Bool(true)), 1, 2),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::I64(1)),
+                    }],
+                    Terminator::Goto(BasicBlockId(3)),
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Goto(BasicBlockId(3))),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: value.clone().into(),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        ),
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect_err("join operation must be valid under every incoming initialization state");
+    assert!(matches!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(ref place) if *place == value
+    ));
+}
+
+#[test]
+fn branch_join_keeps_distinct_active_loan_states() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let value = Place::local(LocalId(0));
+    let function = Function {
+        name: "loan_join".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: Body {
+            locals: vec![LocalDecl::new("value", i64_ty, true)],
+            loans: vec![LoanDecl::new("shared", i64_ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::I64(1)),
+                    }],
+                    branch(Operand::Constant(Value::Bool(true)), 1, 2),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Borrow {
+                        loan: LoanId(0),
+                        kind: BorrowKind::Shared,
+                        src: value.clone().into(),
+                    }],
+                    Terminator::Goto(BasicBlockId(3)),
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Goto(BasicBlockId(3))),
+                BasicBlock::new(
+                    vec![Statement::Assign {
+                        dst: value.clone().into(),
+                        src: Operand::Constant(Value::I64(2)),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        },
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect_err("join retains the incoming active-loan distinction");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::DirectAccessConflict {
+            place: value,
+            loan: LoanId(0),
+        }
+    );
+}
+
+#[test]
+fn branch_join_keeps_raw_pointer_targets_and_no_continuation_is_path_local() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let ptr_ty = types.push(TypeDef::raw_pointer("Ptr", i64_ty));
+    let a = Place::local(LocalId(0));
+    let b = Place::local(LocalId(1));
+    let pa = Place::local(LocalId(2));
+    let pb = Place::local(LocalId(3));
+    let selected = Place::local(LocalId(4));
+    let marker = Place::local(LocalId(5));
+
+    let function = Function {
+        name: "pointer_join".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: Body {
+            locals: vec![
+                LocalDecl::new("a", i64_ty, false),
+                LocalDecl::new("b", i64_ty, false),
+                LocalDecl::new("pa", ptr_ty, false),
+                LocalDecl::new("pb", ptr_ty, false),
+                LocalDecl::new("selected", ptr_ty, false),
+                LocalDecl::new("marker", i64_ty, false),
+            ],
+            loans: vec![LoanDecl::new("exclusive_a", i64_ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: a.clone(),
+                            src: Operand::Constant(Value::I64(1)),
+                        },
+                        Statement::Init {
+                            dst: b.clone(),
+                            src: Operand::Constant(Value::I64(2)),
+                        },
+                        Statement::Init {
+                            dst: pa.clone(),
+                            src: Operand::AddressOf(a.clone().into()),
+                        },
+                        Statement::Init {
+                            dst: pb.clone(),
+                            src: Operand::AddressOf(b.clone().into()),
+                        },
+                        Statement::Borrow {
+                            loan: LoanId(0),
+                            kind: BorrowKind::Exclusive,
+                            src: a.clone().into(),
+                        },
+                    ],
+                    branch(Operand::Constant(Value::Bool(true)), 1, 2),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: selected.clone(),
+                        src: Operand::Move(pa.into()),
+                    }],
+                    Terminator::Goto(BasicBlockId(3)),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: selected.clone(),
+                        src: Operand::Move(pb.into()),
+                    }],
+                    Terminator::Goto(BasicBlockId(3)),
+                ),
+                BasicBlock::new(
+                    vec![
+                        Statement::RawRead {
+                            pointer: selected.into(),
+                        },
+                        Statement::Read {
+                            src: marker.clone().into(),
+                        },
+                    ],
+                    Terminator::Return(None),
+                ),
+            ],
+        },
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect_err("the b-target path continues past RawRead and validates the marker read");
+    assert!(matches!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(ref place) if *place == marker
+    ));
+}
+
+#[test]
+fn branch_condition_ub_creates_no_successor_work_item() {
+    let mut types = TypeTable::new();
+    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
+    let bool_ptr = types.push(TypeDef::raw_pointer("BoolPtr", bool_ty));
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let condition = Place::local(LocalId(0));
+    let pointer = Place::local(LocalId(1));
+    let marker = Place::local(LocalId(2));
+    let function = Function {
+        name: "ub_condition".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![
+                LocalDecl::new("condition", bool_ty, false),
+                LocalDecl::new("pointer", bool_ptr, false),
+                LocalDecl::new("marker", i64_ty, false),
+            ],
+            vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: condition.clone(),
+                            src: Operand::Constant(Value::Bool(true)),
+                        },
+                        Statement::Init {
+                            dst: pointer.clone(),
+                            src: Operand::AddressOf(condition.clone().into()),
+                        },
+                        Statement::Drop {
+                            place: condition.into(),
+                        },
+                    ],
+                    branch(Operand::RawMove(pointer.into()), 1, 2),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: marker.clone().into(),
+                    }],
+                    Terminator::Return(None),
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read { src: marker.into() }],
+                    Terminator::Return(None),
+                ),
+            ],
+        ),
+    };
+
+    validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect("unsafe no-defined-continuation Branch condition reaches neither successor");
+}
+
+#[test]
+fn disconnected_invalid_branch_is_still_statically_rejected() {
+    let types = TypeTable::new();
+    let function = Function {
+        name: "disconnected".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            Vec::new(),
+            vec![
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                BasicBlock::new(
+                    Vec::new(),
+                    branch(Operand::Constant(Value::Bool(true)), 9, 9),
+                ),
+            ],
+        ),
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect_err("static validation covers disconnected Branch blocks");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::InvalidTargetBlock(BasicBlockId(9))
+    );
+}
+
+#[test]
+fn branch_and_goto_cycles_deduplicate_complete_validation_states() {
+    let types = TypeTable::new();
+    let function = Function {
+        name: "cycle".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            Vec::new(),
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    branch(Operand::Constant(Value::Bool(true)), 0, 1),
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Goto(BasicBlockId(0))),
+            ],
+        ),
+    };
+
+    validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect("repeated identical complete CFG states terminate validation exploration");
+}

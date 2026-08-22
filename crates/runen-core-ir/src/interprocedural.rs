@@ -9,6 +9,11 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Terminator {
     Goto(BasicBlockId),
+    Branch {
+        condition: Operand,
+        true_target: BasicBlockId,
+        false_target: BasicBlockId,
+    },
     Call {
         function: FunctionId,
         arguments: Vec<Operand>,
