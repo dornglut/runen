@@ -91,6 +91,53 @@ fn f(root: Outer) {
 }
 
 #[test]
+fn qualified_top_and_nested_pattern_heads_reuse_qualified_module_member_losslessly() {
+    let source = r#"
+import dep;
+fn f(root: dep::Outer) {
+    let dep /* top */ :: Outer {
+        child: dep /* nested */ :: Inner { value: item },
+        leaf: leaf,
+    } = root;
+}
+"#;
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let declaration = parsed
+        .syntax()
+        .descendants()
+        .find(|node| node.kind() == SyntaxKind::RecordDestructuringDeclaration)
+        .expect("qualified record destructuring declaration");
+    let top = declaration
+        .children()
+        .find(|node| node.kind() == SyntaxKind::RecordPattern)
+        .expect("top qualified pattern");
+    assert!(
+        top.children()
+            .any(|node| node.kind() == SyntaxKind::QualifiedModuleMember)
+    );
+    let nested = top
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::RecordPattern)
+        .nth(1)
+        .expect("nested qualified pattern");
+    assert!(
+        nested
+            .children()
+            .any(|node| node.kind() == SyntaxKind::QualifiedModuleMember)
+    );
+    assert_eq!(
+        top.descendants()
+            .filter(|node| node.kind() == SyntaxKind::RecordPattern)
+            .count(),
+        2
+    );
+}
+
+#[test]
 fn producer_backed_scrutinees_reuse_existing_nodes_while_bare_root_stays_direct() {
     let source = r#"
 import api;
@@ -202,7 +249,7 @@ fn excluded_pattern_extensions_and_scrutinees_are_not_silently_accepted() {
     for source in [
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left } = root; }",
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left: value, .. } = root; }",
-        "record Pair { left: I8 } fn f(root: Pair) { let other::Pair { left: value } = root; }",
+        "record Pair { left: I8 } fn f(root: Pair) { let Pair { left: dep::value } = root; }",
         "record Pair { left: I8 } fn f() { let Pair { left: value } = true; }",
         "record Pair { left: I8 } fn f() { let Pair { left: value } = 1; }",
         "record Pair { left: I8 } fn f() { let Pair { left: value } = other::root; }",
@@ -240,6 +287,27 @@ fn malformed_pattern_field_recovers_to_following_field_and_statement() {
 #[test]
 fn malformed_nested_pattern_preserves_following_statement_and_top_level_boundary() {
     let source = "record Leaf { value: I8 } record Outer { leaf: Leaf, count: I8 } fn f(root: Outer) { let Outer { leaf: Leaf { value: item = root; let later: I8 = 2; } record Next {}";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
+    );
+    let root = parsed.syntax();
+    assert!(root.descendants().any(|node| {
+        node.kind() == SyntaxKind::LocalDeclaration && node.text().to_string().contains("later")
+    }));
+    assert!(root.descendants().any(|node| {
+        node.kind() == SyntaxKind::RecordDefinition && node.text().to_string().contains("Next")
+    }));
+}
+
+#[test]
+fn malformed_qualified_nested_pattern_preserves_following_statement_and_top_level_boundary() {
+    let source = "import dep; fn f(root: dep::Outer) { let dep::Outer { child: dep::Inner { value: item = root; let later: I8 = 2; } record Next {}";
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);

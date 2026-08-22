@@ -1281,37 +1281,67 @@ fn validate_record_pattern_node(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<RecordId> {
     debug_assert_eq!(node.kind(), SyntaxKind::RecordPattern);
-    let head_token = direct_token(node, SyntaxKind::Ident);
-    let head_name = key(&head_token);
-    let head_location = SourceLocation {
-        unit: header.unit,
-        range: head_token.text_range(),
-    };
 
-    let record = match context
-        .modules
-        .get(&header.module)
-        .and_then(|module| module.namespace.get(&head_name))
-        .copied()
-        .map(|entity| entity.entity)
+    let (record, head_location) = if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        Some(EntityId::Record(record)) => record,
-        Some(EntityId::Function(_)) => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::ExpectedRecordType,
-                location: head_location,
-            });
+        let head_location = location(header.unit, &qualified);
+        let Some(entity) = resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        ) else {
             validation.valid = false;
             return None;
-        }
-        None => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::UnresolvedName,
-                location: head_location,
-            });
-            validation.valid = false;
-            return None;
-        }
+        };
+        let record = match entity {
+            EntityId::Record(record) => record,
+            EntityId::Function(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRecordType,
+                    location: head_location,
+                });
+                validation.valid = false;
+                return None;
+            }
+        };
+        (record, head_location)
+    } else {
+        let head_token = direct_token(node, SyntaxKind::Ident);
+        let head_name = key(&head_token);
+        let head_location = SourceLocation {
+            unit: header.unit,
+            range: head_token.text_range(),
+        };
+        let record = match context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&head_name))
+            .copied()
+            .map(|entity| entity.entity)
+        {
+            Some(EntityId::Record(record)) => record,
+            Some(EntityId::Function(_)) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRecordType,
+                    location: head_location,
+                });
+                validation.valid = false;
+                return None;
+            }
+            None => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnresolvedName,
+                    location: head_location,
+                });
+                validation.valid = false;
+                return None;
+            }
+        };
+        (record, head_location)
     };
 
     let record_ty = Type::Record(record);
@@ -1362,7 +1392,7 @@ fn validate_record_pattern_node(
             validation.valid = false;
         }
 
-        if record_decl.module != header.module {
+        if !record_field_is_accessible(header.module, record_decl, field) {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InaccessibleRecordField,
                 location: field_location,

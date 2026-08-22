@@ -409,9 +409,13 @@ impl Parser<'_> {
 
     fn parse_let_statement(&mut self) {
         debug_assert!(self.at(SyntaxKind::KwLet));
-        if self.peek_nontrivia(1) == Some(SyntaxKind::Ident)
-            && self.peek_nontrivia(2) == Some(SyntaxKind::LBrace)
-        {
+        let unqualified_pattern = self.peek_nontrivia(1) == Some(SyntaxKind::Ident)
+            && self.peek_nontrivia(2) == Some(SyntaxKind::LBrace);
+        let qualified_pattern = self.peek_nontrivia(1) == Some(SyntaxKind::Ident)
+            && self.peek_nontrivia(2) == Some(SyntaxKind::ColonColon)
+            && self.peek_nontrivia(3) == Some(SyntaxKind::Ident)
+            && self.peek_nontrivia(4) == Some(SyntaxKind::LBrace);
+        if unqualified_pattern || qualified_pattern {
             self.parse_record_destructuring_declaration();
         } else {
             self.parse_local_declaration();
@@ -444,7 +448,11 @@ impl Parser<'_> {
 
     fn parse_record_pattern(&mut self) {
         self.builder.start_node(SyntaxKind::RecordPattern.into());
-        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
+            self.parse_qualified_module_member();
+        } else {
+            self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        }
         if !self.expect(SyntaxKind::LBrace, ExpectedSyntax::LeftBrace) {
             self.builder.finish_node();
             return;
@@ -528,10 +536,14 @@ impl Parser<'_> {
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
         if self.at(SyntaxKind::Ident) {
-            if self.peek_nontrivia(1) == Some(SyntaxKind::LBrace) {
-                self.parse_record_pattern();
-            } else {
-                self.bump();
+            match self.peek_nontrivia(1) {
+                Some(SyntaxKind::LBrace) => self.parse_record_pattern(),
+                Some(SyntaxKind::ColonColon)
+                    if self.qualified_member_follower() == Some(SyntaxKind::LBrace) =>
+                {
+                    self.parse_record_pattern();
+                }
+                _ => self.bump(),
             }
         } else {
             self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));

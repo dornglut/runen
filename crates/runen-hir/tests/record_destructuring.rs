@@ -519,8 +519,8 @@ fn zero_leaf_nonduplicable_leaf_consumption_is_retained_at_full_nested_path() {
 }
 
 #[test]
-fn foreign_record_may_be_bound_whole_but_not_recursively_opened() {
-    let foreign = parse("export record Foreign { value: I8 }");
+fn foreign_record_may_be_bound_whole_and_only_qualified_head_opens_it() {
+    let foreign = parse("export record Foreign { export value: I8 }");
     let whole = parse(
         "import dep; record Outer { foreign: dep::Foreign } \
          fn f(root: Outer) { let Outer { foreign: whole } = root; }",
@@ -534,17 +534,362 @@ fn foreign_record_may_be_bound_whole_but_not_recursively_opened() {
     ])
     .expect("foreign record field may be bound whole");
 
-    let opened = parse(
+    let unqualified = parse(
         "import dep; record Outer { foreign: dep::Foreign } \
          fn f(root: Outer) { let Outer { foreign: Foreign { value: item } } = root; }",
     );
-    assert!(opened.errors().is_empty());
+    assert!(unqualified.errors().is_empty());
     let diagnostics = build_typed_hir(&[
         SourceUnit::new(ModuleId::new(2), &foreign, &[]),
-        SourceUnit::new(ModuleId::new(1), &opened, &imports),
+        SourceUnit::new(ModuleId::new(1), &unqualified, &imports),
     ])
-    .expect_err("foreign record cannot be recursively opened");
+    .expect_err("unqualified nested head remains same-module lookup");
     assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
+
+    let qualified = parse(
+        "import dep; record Outer { foreign: dep::Foreign } \
+         fn f(root: Outer) -> I8 { \
+             let Outer { foreign: dep::Foreign { value: item } } = root; \
+             return item; \
+         }",
+    );
+    assert!(qualified.errors().is_empty());
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &foreign, &[]),
+        SourceUnit::new(ModuleId::new(1), &qualified, &imports),
+    ])
+    .expect("qualified nested head opens exported foreign record");
+}
+
+#[test]
+fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
+    let foreign = parse(
+        "export record Foreign { export value: I8 } \
+         export fn make() -> Foreign { return Foreign { value: 1 }; }",
+    );
+    let caller = parse(
+        "import dep; \
+         record Holder { foreign: dep::Foreign } \
+         fn direct(root: dep::Foreign, dep: I8, Foreign: I8) -> I8 { \
+             let dep::Foreign { value: item } = root; return item; \
+         } \
+         fn call() -> I8 { \
+             let dep::Foreign { value: item } = dep::make(); return item; \
+         } \
+         fn construct() -> I8 { \
+             let dep::Foreign { value: item } = dep::Foreign { value: 2 }; return item; \
+         } \
+         fn field(root: Holder) -> I8 { \
+             let dep::Foreign { value: item } = root.foreign; return item; \
+         }",
+    );
+    assert!(foreign.errors().is_empty(), "{:?}", foreign.errors());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    let hir = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &foreign, &[]),
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+    ])
+    .expect("qualified patterns compose with all existing scrutinee categories");
+    let foreign_id = hir
+        .records
+        .iter()
+        .find(|record| record.name == "Foreign")
+        .expect("foreign record")
+        .id;
+
+    for name in ["direct", "call", "construct", "field"] {
+        let Statement::RecordDestructure {
+            record, bindings, ..
+        } = &function(&hir, name).body.statements[0]
+        else {
+            panic!("expected record destructuring in {name}");
+        };
+        assert_eq!(*record, foreign_id);
+        assert_eq!(bindings.len(), 1);
+        assert_eq!(bindings[0].fields, vec![0]);
+        assert_eq!(bindings[0].ty, Type::Intrinsic(IntrinsicType::I8));
+        assert_eq!(bindings[0].ownership, OwnedUse::Duplicate);
+    }
+
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &function(&hir, "direct").body.statements[0]
+    else {
+        panic!("direct pattern");
+    };
+    assert!(matches!(scrutinee, RecordPatternScrutinee::DirectRoot(_)));
+
+    for (name, expected) in [
+        ("call", "call"),
+        ("construct", "construction"),
+        ("field", "field"),
+    ] {
+        let Statement::RecordDestructure { scrutinee, .. } =
+            &function(&hir, name).body.statements[0]
+        else {
+            panic!("producer pattern");
+        };
+        let RecordPatternScrutinee::Producer { value, .. } = scrutinee else {
+            panic!("expected producer scrutinee");
+        };
+        assert!(
+            matches!(
+                (&value.kind, expected),
+                (ValueKind::DirectCall { .. }, "call")
+                    | (ValueKind::RecordConstruction { .. }, "construction")
+                    | (ValueKind::FieldValueUse { .. }, "field")
+            ),
+            "unexpected producer kind for {name}: {:?}",
+            value.kind
+        );
+    }
+}
+
+#[test]
+fn qualified_pattern_head_lookup_preserves_existing_diagnostic_partition() {
+    let target = parse(
+        "record Private { export value: I8 } \
+         export fn Wrong() {}",
+    );
+    let caller = parse(
+        "import dep; record Local { value: I8 } \
+         fn private(root: Local) { let dep::Private { value: item } = root; } \
+         fn wrong(root: Local, dep: I8) { let dep::Wrong {} = root; } \
+         fn missing_alias(root: Local) { let nope::Missing {} = root; } \
+         fn missing_member(root: Local) { let dep::Missing {} = root; }",
+    );
+    assert!(target.errors().is_empty());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &target, &[]),
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+    ])
+    .expect_err("qualified head lookup failures must reject");
+
+    assert!(has_kind(&diagnostics, DiagnosticKind::InaccessibleBinding));
+    assert!(has_kind(&diagnostics, DiagnosticKind::ExpectedRecordType));
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
+}
+
+#[test]
+fn qualified_top_and_nested_heads_require_exact_nominal_identity() {
+    let target = parse(
+        "export record A { export value: I8 } \
+         export record B { export value: I8 }",
+    );
+    let caller = parse(
+        "import dep; \
+         record Outer { inner: dep::A } \
+         fn top(root: dep::B) { let dep::A { value: item } = root; } \
+         fn nested(root: Outer) { \
+             let Outer { inner: dep::B { value: item } } = root; \
+         }",
+    );
+    assert!(target.errors().is_empty());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &target, &[]),
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+    ])
+    .expect_err("structurally equal foreign records remain nominally distinct");
+    assert!(
+        diagnostics
+            .iter()
+            .filter(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
+            .count()
+            >= 2,
+        "{diagnostics:?}"
+    );
+}
+
+#[test]
+fn qualified_foreign_pattern_fields_use_direct_accessibility_after_identity_resolution() {
+    let mixed = parse("export record Foreign { private: I8, export public: I8 }");
+    let caller = parse(
+        "import dep; fn f(root: dep::Foreign) { \
+             let dep::Foreign { private: hidden, public: shown } = root; \
+         }",
+    );
+    assert!(mixed.errors().is_empty());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &mixed, &[]),
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+    ])
+    .expect_err("private foreign field must remain inaccessible");
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+
+    let omitted = parse(
+        "import dep; fn f(root: dep::Foreign) { \
+             let dep::Foreign { public: shown } = root; \
+         }",
+    );
+    assert!(omitted.errors().is_empty());
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &mixed, &[]),
+        SourceUnit::new(ModuleId::new(1), &omitted, &imports),
+    ])
+    .expect_err("omitting private foreign field remains non-exhaustive");
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::MissingRecordPatternField
+    ));
+    assert!(!has_kind(
+        &diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+
+    let public_only = parse("export record PublicOnly { export public: I8 }");
+    let unknown = parse(
+        "import dep; fn f(root: dep::PublicOnly) { \
+             let dep::PublicOnly { missing: bad, public: shown } = root; \
+         }",
+    );
+    assert!(public_only.errors().is_empty());
+    assert!(unknown.errors().is_empty());
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &public_only, &[]),
+        SourceUnit::new(ModuleId::new(1), &unknown, &imports),
+    ])
+    .expect_err("unknown foreign field must reject");
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnknownRecordField));
+    assert!(!has_kind(
+        &diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+
+    let empty = parse("export record Empty {}");
+    let empty_caller = parse("import dep; fn f(root: dep::Empty) { let dep::Empty {} = root; }");
+    assert!(empty.errors().is_empty());
+    assert!(empty_caller.errors().is_empty());
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &empty, &[]),
+        SourceUnit::new(ModuleId::new(1), &empty_caller, &imports),
+    ])
+    .expect("zero-field exported foreign pattern requires no field access");
+}
+
+#[test]
+fn recursive_qualified_patterns_recompute_accessibility_at_each_module_transition() {
+    let foreign = parse("export record Foreign { export value: I8 }");
+    let local_to_foreign = parse(
+        "import dep; record Outer { foreign: dep::Foreign } \
+         fn f(root: Outer) -> I8 { \
+             let Outer { foreign: dep::Foreign { value: item } } = root; \
+             return item; \
+         }",
+    );
+    assert!(foreign.errors().is_empty());
+    assert!(local_to_foreign.errors().is_empty());
+    let dep_import = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &foreign, &[]),
+        SourceUnit::new(ModuleId::new(1), &local_to_foreign, &dep_import),
+    ])
+    .expect("local to foreign nested pattern recomputes foreign accessibility");
+
+    let app = parse(
+        "import dep; export record Local { private: I8 } \
+         fn f(root: dep::Foreign) -> I8 { \
+             let dep::Foreign { local: Local { private: item } } = root; \
+             return item; \
+         }",
+    );
+    let dep = parse("import app; export record Foreign { export local: app::Local }");
+    assert!(app.errors().is_empty(), "{:?}", app.errors());
+    assert!(dep.errors().is_empty(), "{:?}", dep.errors());
+    let app_imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    let foreign_imports = [ImportTarget::new("app", ModuleId::new(1)).expect("valid alias")];
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &app, &app_imports),
+        SourceUnit::new(ModuleId::new(2), &dep, &foreign_imports),
+    ])
+    .expect("foreign to caller-module nested pattern resumes same-module private access");
+
+    let third = parse("export record Third { export value: I8 }");
+    let middle = parse("import third; export record Foreign { export third: third::Third }");
+    let caller = parse(
+        "import dep; import third; fn f(root: dep::Foreign) -> I8 { \
+             let dep::Foreign { third: third::Third { value: item } } = root; \
+             return item; \
+         }",
+    );
+    assert!(third.errors().is_empty());
+    assert!(middle.errors().is_empty());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let middle_imports = [ImportTarget::new("third", ModuleId::new(3)).expect("valid alias")];
+    let caller_imports = [
+        ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias"),
+        ImportTarget::new("third", ModuleId::new(3)).expect("valid alias"),
+    ];
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(3), &third, &[]),
+        SourceUnit::new(ModuleId::new(2), &middle, &middle_imports),
+        SourceUnit::new(ModuleId::new(1), &caller, &caller_imports),
+    ])
+    .expect("foreign to third-module nested pattern performs independent qualified lookup");
+}
+
+#[test]
+fn invalid_qualified_pattern_prevalidation_does_not_commit_producer_ownership() {
+    let target = parse(
+        "export record Token {} \
+         export record Foreign { private: I8, export token: Token } \
+         export fn make(token: Token) -> Foreign { \
+             return Foreign { private: 1, token: token }; \
+         }",
+    );
+    let caller = parse(
+        "import dep; fn take(value: dep::Token) {} \
+         fn f(token: dep::Token) { \
+             let dep::Foreign { private: bad, token: moved } = dep::make(token); \
+             take(token); \
+         }",
+    );
+    assert!(target.errors().is_empty());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &target, &[]),
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+    ])
+    .expect_err("inaccessible pattern field must reject before producer ownership commits");
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+    assert!(!has_kind(&diagnostics, DiagnosticKind::UnavailableBinding));
+}
+
+#[test]
+fn valid_qualified_producer_pattern_commits_existing_producer_ownership() {
+    let target = parse(
+        "export record Token {} \
+         export record Foreign { export value: I8 } \
+         export fn make(token: Token) -> Foreign { return Foreign { value: 1 }; }",
+    );
+    let caller = parse(
+        "import dep; fn take(value: dep::Token) {} \
+         fn f(token: dep::Token) { \
+             let dep::Foreign { value: copied } = dep::make(token); \
+             take(token); \
+         }",
+    );
+    assert!(target.errors().is_empty());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &target, &[]),
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+    ])
+    .expect_err("successful producer validation must commit argument ownership");
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnavailableBinding));
 }
 
 #[test]
