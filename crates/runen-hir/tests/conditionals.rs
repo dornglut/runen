@@ -40,7 +40,7 @@ fn conditional(
     else {
         panic!("expected conditional statement");
     };
-    (condition, then_block, else_block.as_ref())
+    (condition, then_block, else_block.as_deref())
 }
 
 #[test]
