@@ -121,10 +121,11 @@ pub enum Type {
     Record(RecordId),
 }
 
-impl Type {
-    pub(crate) const fn is_duplicable(self) -> bool {
-        matches!(self, Self::Intrinsic(_))
-    }
+/// Retained source-semantic owned-value duplicability for one nominal record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Duplicability {
+    NonDuplicable,
+    Duplicable,
 }
 
 /// Source location tied to the supplied-unit list for this compilation.
@@ -171,8 +172,16 @@ pub struct Record {
     pub module: ModuleId,
     pub name: String,
     pub accessibility: Accessibility,
+    pub duplicability: Duplicability,
     pub fields: Vec<Field>,
     pub location: SourceLocation,
+}
+
+pub(crate) fn type_is_duplicable_in_records(ty: Type, records: &[Record]) -> bool {
+    match ty {
+        Type::Intrinsic(_) => true,
+        Type::Record(record) => records[record.0].duplicability == Duplicability::Duplicable,
+    }
 }
 
 /// One resolved function parameter and body-local binding.
@@ -390,6 +399,12 @@ impl TypedCompilation {
     pub fn function(&self, id: FunctionId) -> &Function {
         &self.functions[id.0]
     }
+
+    /// Whether the represented source type has non-consuming owned-value duplication.
+    #[must_use]
+    pub fn type_is_duplicable(&self, ty: Type) -> bool {
+        type_is_duplicable_in_records(ty, &self.records)
+    }
 }
 
 /// Structured source-validation diagnostic category.
@@ -409,6 +424,7 @@ pub enum DiagnosticKind {
     PrivateTypeInExportedField,
     DuplicateRecordField,
     RecordContainmentCycle,
+    InvalidRecordDuplicabilitySelection,
     DuplicateParameter,
     LocalShadowing,
     ExpectedValueBinding,
