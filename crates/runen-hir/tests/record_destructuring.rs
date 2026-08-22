@@ -127,7 +127,8 @@ fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
         &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
     );
 
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "field").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &function(&hir, "field").body.statements[0]
     else {
         panic!("expected field-backed pattern");
     };
@@ -147,7 +148,8 @@ fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
         &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
     );
 
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "owned").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &function(&hir, "owned").body.statements[0]
     else {
         panic!("expected all-consumed pattern");
     };
@@ -159,8 +161,11 @@ fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
         }
     ));
 
-    let Statement::RecordDestructure { scrutinee, bindings, .. } =
-        &function(&hir, "empty").body.statements[0]
+    let Statement::RecordDestructure {
+        scrutinee,
+        bindings,
+        ..
+    } = &function(&hir, "empty").body.statements[0]
     else {
         panic!("expected zero-field producer-backed pattern");
     };
@@ -245,10 +250,7 @@ fn invalid_pattern_structure_does_not_validate_or_consume_producer() {
              take(root.token); \
          }",
     );
-    assert!(has_kind(
-        &diagnostics,
-        DiagnosticKind::UnknownRecordField
-    ));
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnknownRecordField));
     assert!(!has_kind(
         &diagnostics,
         DiagnosticKind::UnavailableFieldValue
