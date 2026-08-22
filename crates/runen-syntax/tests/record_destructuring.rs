@@ -29,6 +29,12 @@ fn f(empty: Empty, pair: Pair) {
             .count(),
         2
     );
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::RecordPattern)
+            .count(),
+        2
+    );
     let fields = root
         .descendants()
         .filter(|node| node.kind() == SyntaxKind::RecordPatternField)
@@ -37,6 +43,51 @@ fn f(empty: Empty, pair: Pair) {
     assert_eq!(fields.len(), 2);
     assert!(fields[0].trim_start().starts_with("right"));
     assert!(fields[1].contains("left"));
+}
+
+#[test]
+fn recursive_record_patterns_parse_losslessly_and_classify_targets_syntactically() {
+    let source = r#"
+record Leaf { value: I8, other: U8 }
+record Inner { leaf: Leaf, count: I8 }
+record Outer { tail: U8, inner: Inner }
+fn f(root: Outer) {
+    let Outer {
+        inner: Inner {
+            count: count,
+            leaf: Leaf {
+                other: other,
+                value: value,
+            },
+        },
+        tail: tail,
+    } = root;
+}
+"#;
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let root = parsed.syntax();
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::RecordPattern)
+            .count(),
+        3
+    );
+    let declaration = root
+        .descendants()
+        .find(|node| node.kind() == SyntaxKind::RecordDestructuringDeclaration)
+        .expect("record destructuring declaration");
+    let pattern = declaration
+        .children()
+        .find(|node| node.kind() == SyntaxKind::RecordPattern)
+        .expect("top record pattern");
+    assert!(pattern.text().to_string().trim_start().starts_with("Outer"));
+    assert!(!declaration.children().any(|child| matches!(
+        child.kind(),
+        SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+    )));
 }
 
 #[test]
@@ -124,7 +175,6 @@ fn excluded_pattern_extensions_and_scrutinees_are_not_silently_accepted() {
     for source in [
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left } = root; }",
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left: value, .. } = root; }",
-        "record Inner { value: I8 } record Outer { inner: Inner } fn f(root: Outer) { let Outer { inner: Inner { value: leaf } } = root; }",
         "record Pair { left: I8 } fn f(root: Pair) { let other::Pair { left: value } = root; }",
         "record Pair { left: I8 } fn f() { let Pair { left: value } = true; }",
         "record Pair { left: I8 } fn f() { let Pair { left: value } = 1; }",
@@ -157,6 +207,27 @@ fn malformed_pattern_field_recovers_to_following_field_and_statement() {
     );
     assert!(root.descendants().any(|node| {
         node.kind() == SyntaxKind::LocalDeclaration && node.text().to_string().contains("later")
+    }));
+}
+
+#[test]
+fn malformed_nested_pattern_preserves_following_statement_and_top_level_boundary() {
+    let source = "record Leaf { value: I8 } record Outer { leaf: Leaf, count: I8 } fn f(root: Outer) { let Outer { leaf: Leaf { value: item = root; let later: I8 = 2; } record Next {}";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
+    );
+    let root = parsed.syntax();
+    assert!(root.descendants().any(|node| {
+        node.kind() == SyntaxKind::LocalDeclaration && node.text().to_string().contains("later")
+    }));
+    assert!(root.descendants().any(|node| {
+        node.kind() == SyntaxKind::RecordDefinition && node.text().to_string().contains("Next")
     }));
 }
 

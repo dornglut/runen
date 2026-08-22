@@ -89,6 +89,7 @@ pub enum SyntaxKind {
     FieldValueUse,
     RecordDestructuringDeclaration,
     RecordPatternField,
+    RecordPattern,
 }
 
 impl SyntaxKind {
@@ -206,6 +207,7 @@ impl Language for RunenLanguage {
             64 => SyntaxKind::FieldValueUse,
             65 => SyntaxKind::RecordDestructuringDeclaration,
             66 => SyntaxKind::RecordPatternField,
+            67 => SyntaxKind::RecordPattern,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

@@ -64,12 +64,17 @@ struct FunctionHeader {
     location: SourceLocation,
 }
 
+#[derive(Debug, Clone, Default)]
+struct StructuralOwnershipState {
+    consumed_paths: BTreeSet<Vec<usize>>,
+}
+
 #[derive(Debug, Clone)]
 struct BindingState {
     id: BindingId,
     ty: Type,
     mutability: AssignmentMutability,
-    consumed_paths: BTreeSet<Vec<usize>>,
+    ownership: StructuralOwnershipState,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,7 +84,7 @@ enum PathAvailability {
     Unavailable,
 }
 
-impl BindingState {
+impl StructuralOwnershipState {
     fn path_availability(&self, path: &[usize]) -> PathAvailability {
         if self
             .consumed_paths
@@ -767,7 +772,7 @@ fn validate_body(
                 id: parameter.binding,
                 ty: parameter.ty,
                 mutability: AssignmentMutability::Immutable,
-                consumed_paths: BTreeSet::new(),
+                ownership: StructuralOwnershipState::default(),
             },
         );
     }
@@ -932,7 +937,7 @@ fn validate_block(
             .get(name)
             .expect("validated direct child binding remains active through block end");
         debug_assert_eq!(state.id, *binding);
-        for fields in remaining_ownership_frontier(state, context.records) {
+        for fields in remaining_ownership_frontier(state.ty, &state.ownership, context.records) {
             normal_cleanup.push(CleanupPath {
                 binding: *binding,
                 fields,
@@ -954,15 +959,19 @@ fn validate_block(
     })
 }
 
-fn remaining_ownership_frontier(state: &BindingState, records: &[Record]) -> Vec<Vec<usize>> {
+fn remaining_ownership_frontier(
+    ty: Type,
+    state: &StructuralOwnershipState,
+    records: &[Record],
+) -> Vec<Vec<usize>> {
     let mut frontier = Vec::new();
     let mut path = Vec::new();
-    append_remaining_ownership_frontier(state, state.ty, records, &mut path, &mut frontier);
+    append_remaining_ownership_frontier(state, ty, records, &mut path, &mut frontier);
     frontier
 }
 
 fn append_remaining_ownership_frontier(
-    state: &BindingState,
+    state: &StructuralOwnershipState,
     ty: Type,
     records: &[Record],
     path: &mut Vec<usize>,
@@ -1051,7 +1060,7 @@ fn validate_local(
             id: binding,
             ty,
             mutability,
-            consumed_paths: BTreeSet::new(),
+            ownership: StructuralOwnershipState::default(),
         },
     );
     Some(Statement::Local {
@@ -1064,37 +1073,45 @@ fn validate_local(
     })
 }
 
-fn validate_record_destructure(
+#[derive(Debug, Clone)]
+struct ResolvedPatternBinding {
+    fields: Vec<usize>,
+    name: String,
+    ty: Type,
+    location: SourceLocation,
+}
+
+#[derive(Debug)]
+struct PatternValidation {
+    valid: bool,
+    bindings: Vec<ResolvedPatternBinding>,
+    seen_binding_names: BTreeSet<String>,
+    active_binding_names: BTreeSet<String>,
+}
+
+impl PatternValidation {
+    fn new(active_bindings: &BTreeMap<String, BindingState>) -> Self {
+        Self {
+            valid: true,
+            bindings: Vec::new(),
+            seen_binding_names: BTreeSet::new(),
+            active_binding_names: active_bindings.keys().cloned().collect(),
+        }
+    }
+}
+
+fn validate_record_pattern_node(
     header: &FunctionHeader,
     node: &SyntaxNode,
+    expected: Option<Type>,
     context: &BodyResolutionContext<'_>,
-    bindings: &mut BTreeMap<String, BindingState>,
-    next_binding: &mut usize,
+    path: &mut Vec<usize>,
+    validation: &mut PatternValidation,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Statement> {
-    let direct_identifiers = node
-        .children_with_tokens()
-        .filter_map(|element| element.into_token())
-        .filter(|token| token.kind() == SyntaxKind::Ident)
-        .collect::<Vec<_>>();
-    let producer_node = node.children().find(|child| {
-        matches!(
-            child.kind(),
-            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
-        )
-    });
-    let (head_token, direct_root_token) = if producer_node.is_some() {
-        let [head_token] = direct_identifiers.as_slice() else {
-            unreachable!("syntax-clean producer-backed pattern has one direct head identifier");
-        };
-        (head_token, None)
-    } else {
-        let [head_token, root_token] = direct_identifiers.as_slice() else {
-            unreachable!("syntax-clean direct-root pattern has head and root identifiers");
-        };
-        (head_token, Some(root_token))
-    };
-    let head_name = key(head_token);
+) -> Option<RecordId> {
+    debug_assert_eq!(node.kind(), SyntaxKind::RecordPattern);
+    let head_token = direct_token(node, SyntaxKind::Ident);
+    let head_name = key(&head_token);
     let head_location = SourceLocation {
         unit: header.unit,
         range: head_token.text_range(),
@@ -1113,6 +1130,7 @@ fn validate_record_destructure(
                 kind: DiagnosticKind::ExpectedRecordType,
                 location: head_location,
             });
+            validation.valid = false;
             return None;
         }
         None => {
@@ -1120,14 +1138,163 @@ fn validate_record_destructure(
                 kind: DiagnosticKind::UnresolvedName,
                 location: head_location,
             });
+            validation.valid = false;
             return None;
         }
     };
+
+    let record_ty = Type::Record(record);
+    if let Some(expected) = expected
+        && expected != record_ty
+    {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected,
+                found: record_ty,
+            },
+            location: head_location,
+        });
+        validation.valid = false;
+    }
+
     let record_decl = &context.records[record.0];
-    debug_assert_eq!(record_decl.module, header.module);
+    let mut seen_fields = BTreeSet::<usize>::new();
+    for pattern_field in node
+        .children()
+        .filter(|child| child.kind() == SyntaxKind::RecordPatternField)
+    {
+        let field_token = direct_token(&pattern_field, SyntaxKind::Ident);
+        let field_name = key(&field_token);
+        let field_location = SourceLocation {
+            unit: header.unit,
+            range: field_token.text_range(),
+        };
+
+        let Some(field) = record_decl
+            .fields
+            .iter()
+            .position(|field| field.name == field_name)
+        else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnknownRecordField,
+                location: field_location,
+            });
+            validation.valid = false;
+            continue;
+        };
+
+        if !seen_fields.insert(field) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicateRecordPatternField,
+                location: field_location,
+            });
+            validation.valid = false;
+        }
+
+        if record_decl.module != header.module {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InaccessibleRecordField,
+                location: field_location,
+            });
+            validation.valid = false;
+        }
+
+        path.push(field);
+        if let Some(nested) = pattern_field
+            .children()
+            .find(|child| child.kind() == SyntaxKind::RecordPattern)
+        {
+            validate_record_pattern_node(
+                header,
+                &nested,
+                Some(record_decl.fields[field].ty),
+                context,
+                path,
+                validation,
+                diagnostics,
+            );
+        } else {
+            let identifiers = pattern_field
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .filter(|token| token.kind() == SyntaxKind::Ident)
+                .collect::<Vec<_>>();
+            let [_, binding_token] = identifiers.as_slice() else {
+                unreachable!("syntax-clean binding leaf has field and binding identifiers");
+            };
+            let binding_name = key(binding_token);
+            let binding_location = SourceLocation {
+                unit: header.unit,
+                range: binding_token.text_range(),
+            };
+            if !validation.seen_binding_names.insert(binding_name.clone()) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::DuplicatePatternBinding,
+                    location: binding_location,
+                });
+                validation.valid = false;
+            }
+            if validation.active_binding_names.contains(&binding_name) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::LocalShadowing,
+                    location: binding_location,
+                });
+                validation.valid = false;
+            }
+            validation.bindings.push(ResolvedPatternBinding {
+                fields: path.clone(),
+                name: binding_name,
+                ty: record_decl.fields[field].ty,
+                location: field_location,
+            });
+        }
+        path.pop();
+    }
+
+    if seen_fields.len() != record_decl.fields.len() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::MissingRecordPatternField,
+            location: location(header.unit, node),
+        });
+        validation.valid = false;
+    }
+
+    Some(record)
+}
+
+fn validate_record_destructure(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let pattern_node = direct_child(node, SyntaxKind::RecordPattern);
+    let producer_node = node.children().find(|child| {
+        matches!(
+            child.kind(),
+            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+        )
+    });
+    let direct_root_token = producer_node
+        .is_none()
+        .then(|| direct_token(node, SyntaxKind::Ident));
+
+    let mut validation = PatternValidation::new(bindings);
+    let mut path = Vec::new();
+    let record = validate_record_pattern_node(
+        header,
+        &pattern_node,
+        None,
+        context,
+        &mut path,
+        &mut validation,
+        diagnostics,
+    )?;
 
     let direct_root = direct_root_token.map(|root_token| {
-        let root_name = key(root_token);
+        let root_name = key(&root_token);
         let root_location = SourceLocation {
             unit: header.unit,
             range: root_token.text_range(),
@@ -1157,111 +1324,32 @@ fn validate_record_destructure(
         None
     };
 
-    let mut valid = true;
-    if let (Some(root_state), Some((_, root_location))) = (&root_state, &direct_root)
-        && root_state.ty != Type::Record(record)
-    {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected: Type::Record(record),
-                found: root_state.ty,
-            },
-            location: *root_location,
-        });
-        valid = false;
+    if let (Some(root_state), Some((_, root_location))) = (&root_state, &direct_root) {
+        if root_state.ty != Type::Record(record) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::TypeMismatch {
+                    expected: Type::Record(record),
+                    found: root_state.ty,
+                },
+                location: *root_location,
+            });
+            validation.valid = false;
+        } else {
+            for leaf in &validation.bindings {
+                if root_state.ownership.path_availability(&leaf.fields)
+                    != PathAvailability::FullyAvailable
+                {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::UnavailableFieldValue,
+                        location: leaf.location,
+                    });
+                    validation.valid = false;
+                }
+            }
+        }
     }
 
-    struct ResolvedPatternBinding {
-        field: usize,
-        name: String,
-    }
-
-    let mut seen_fields = BTreeSet::<usize>::new();
-    let mut seen_bindings = BTreeSet::<String>::new();
-    let mut resolved = Vec::<ResolvedPatternBinding>::new();
-
-    for pattern_field in node
-        .children()
-        .filter(|child| child.kind() == SyntaxKind::RecordPatternField)
-    {
-        let identifiers = pattern_field
-            .children_with_tokens()
-            .filter_map(|element| element.into_token())
-            .filter(|token| token.kind() == SyntaxKind::Ident)
-            .collect::<Vec<_>>();
-        let [field_token, binding_token] = identifiers.as_slice() else {
-            unreachable!("syntax-clean record pattern field has field and binding identifiers");
-        };
-        let field_name = key(field_token);
-        let binding_name = key(binding_token);
-        let field_location = SourceLocation {
-            unit: header.unit,
-            range: field_token.text_range(),
-        };
-        let binding_location = SourceLocation {
-            unit: header.unit,
-            range: binding_token.text_range(),
-        };
-
-        let Some(field) = record_decl
-            .fields
-            .iter()
-            .position(|field| field.name == field_name)
-        else {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::UnknownRecordField,
-                location: field_location,
-            });
-            valid = false;
-            continue;
-        };
-
-        if !seen_fields.insert(field) {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::DuplicateRecordPatternField,
-                location: field_location,
-            });
-            valid = false;
-        }
-        if !seen_bindings.insert(binding_name.clone()) {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::DuplicatePatternBinding,
-                location: binding_location,
-            });
-            valid = false;
-        }
-        if bindings.contains_key(&binding_name) {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::LocalShadowing,
-                location: binding_location,
-            });
-            valid = false;
-        }
-        if let Some(root_state) = &root_state
-            && root_state.path_availability(&[field]) != PathAvailability::FullyAvailable
-        {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::UnavailableFieldValue,
-                location: field_location,
-            });
-            valid = false;
-        }
-
-        resolved.push(ResolvedPatternBinding {
-            field,
-            name: binding_name,
-        });
-    }
-
-    if seen_fields.len() != record_decl.fields.len() {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::MissingRecordPatternField,
-            location: location(header.unit, node),
-        });
-        valid = false;
-    }
-
-    if !valid {
+    if !validation.valid {
         return None;
     }
 
@@ -1286,62 +1374,49 @@ fn validate_record_destructure(
         )?;
         *bindings = producer_bindings;
 
-        let cleanup = if record_decl.fields.is_empty()
-            || record_decl
-                .fields
-                .iter()
-                .all(|field| field.ty.is_duplicable())
-        {
-            RecordPatternTransientCleanup::Complete
-        } else {
-            let retained = record_decl
-                .fields
-                .iter()
-                .enumerate()
-                .rev()
-                .filter_map(|(field, declaration)| declaration.ty.is_duplicable().then_some(field))
-                .collect::<Vec<_>>();
-            if retained.is_empty() {
-                RecordPatternTransientCleanup::None
-            } else {
-                RecordPatternTransientCleanup::DirectFields(retained)
+        let mut transient = StructuralOwnershipState::default();
+        for leaf in &validation.bindings {
+            if !leaf.ty.is_duplicable() {
+                transient.consume_path(&leaf.fields);
             }
+        }
+        let cleanup = RecordPatternTransientCleanup {
+            paths: remaining_ownership_frontier(Type::Record(record), &transient, context.records),
         };
-
         RecordPatternScrutinee::Producer { value, cleanup }
     };
 
-    let mut pattern_bindings = Vec::with_capacity(resolved.len());
-    let mut new_states = Vec::with_capacity(resolved.len());
-    for resolved in resolved {
-        let field_decl = &record_decl.fields[resolved.field];
-        let ownership = if field_decl.ty.is_duplicable() {
+    let mut pattern_bindings = Vec::with_capacity(validation.bindings.len());
+    let mut new_states = Vec::with_capacity(validation.bindings.len());
+    for resolved in validation.bindings {
+        let ownership = if resolved.ty.is_duplicable() {
             OwnedUse::Duplicate
         } else {
             if let Some((root_name, _)) = &direct_root {
                 bindings
                     .get_mut(root_name)
                     .expect("validated pattern root remains in active binding scope")
-                    .consume_path(&[resolved.field]);
+                    .ownership
+                    .consume_path(&resolved.fields);
             }
             OwnedUse::Consume
         };
         let binding = BindingId(*next_binding);
         *next_binding += 1;
         pattern_bindings.push(RecordPatternBinding {
-            field: resolved.field,
+            fields: resolved.fields,
             binding,
             name: resolved.name.clone(),
-            ty: field_decl.ty,
+            ty: resolved.ty,
             ownership,
         });
         new_states.push((
             resolved.name,
             BindingState {
                 id: binding,
-                ty: field_decl.ty,
+                ty: resolved.ty,
                 mutability: AssignmentMutability::Immutable,
-                consumed_paths: BTreeSet::new(),
+                ownership: StructuralOwnershipState::default(),
             },
         ));
     }
@@ -1414,8 +1489,7 @@ fn validate_assignment(
     bindings
         .get_mut(&name)
         .expect("resolved assignment target remains in the active binding scope")
-        .consumed_paths
-        .clear();
+        .ownership = StructuralOwnershipState::default();
 
     Some(Statement::Assignment {
         target,
@@ -1527,7 +1601,7 @@ fn validate_value(
             let token = direct_token(node, SyntaxKind::Ident);
             let name = key(&token);
             if let Some(binding) = bindings.get_mut(&name) {
-                if binding.path_availability(&[]) != PathAvailability::FullyAvailable {
+                if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::UnavailableBinding,
                         location: value_location,
@@ -1547,7 +1621,7 @@ fn validate_value(
                 let ownership = if binding.ty.is_duplicable() {
                     OwnedUse::Duplicate
                 } else {
-                    binding.consume_path(&[]);
+                    binding.ownership.consume_path(&[]);
                     OwnedUse::Consume
                 };
                 return Some(Value {
@@ -1701,7 +1775,7 @@ fn validate_field_value_use(
     let binding = bindings
         .get(&root_name)
         .expect("resolved field-value root remains in active binding scope");
-    if binding.path_availability(&fields) != PathAvailability::FullyAvailable {
+    if binding.ownership.path_availability(&fields) != PathAvailability::FullyAvailable {
         let selector = selectors
             .last()
             .expect("syntax-clean field-value use has at least one selector");
@@ -1732,6 +1806,7 @@ fn validate_field_value_use(
         bindings
             .get_mut(&root_name)
             .expect("resolved field-value root remains in active binding scope")
+            .ownership
             .consume_path(&fields);
         OwnedUse::Consume
     };

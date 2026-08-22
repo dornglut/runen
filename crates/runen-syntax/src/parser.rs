@@ -347,6 +347,15 @@ impl Parser<'_> {
         self.builder
             .start_node(SyntaxKind::RecordDestructuringDeclaration.into());
         self.expect(SyntaxKind::KwLet, ExpectedSyntax::Item);
+        self.parse_record_pattern();
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        self.parse_record_pattern_scrutinee();
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_record_pattern(&mut self) {
+        self.builder.start_node(SyntaxKind::RecordPattern.into());
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         if !self.expect(SyntaxKind::LBrace, ExpectedSyntax::LeftBrace) {
             self.builder.finish_node();
@@ -416,9 +425,6 @@ impl Parser<'_> {
         if !missing_close {
             self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
         }
-        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
-        self.parse_record_pattern_scrutinee();
-        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
         self.builder.finish_node();
     }
 
@@ -427,7 +433,15 @@ impl Parser<'_> {
             .start_node(SyntaxKind::RecordPatternField.into());
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
-        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if self.at(SyntaxKind::Ident) {
+            if self.peek_nontrivia(1) == Some(SyntaxKind::LBrace) {
+                self.parse_record_pattern();
+            } else {
+                self.bump();
+            }
+        } else {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+        }
         self.builder.finish_node();
     }
 
