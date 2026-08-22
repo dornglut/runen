@@ -607,7 +607,10 @@ fn field_accessibility_is_retained_independently_from_record_accessibility() {
         .unwrap();
     assert_eq!(private.accessibility, Accessibility::ModulePrivate);
     assert_eq!(private.fields[0].accessibility, Accessibility::Exported);
-    assert_eq!(private.fields[1].accessibility, Accessibility::ModulePrivate);
+    assert_eq!(
+        private.fields[1].accessibility,
+        Accessibility::ModulePrivate
+    );
 
     let public = hir
         .records
@@ -660,7 +663,8 @@ fn exported_field_qualified_type_reuses_existing_cross_module_type_access() {
         SourceUnit::new(ModuleId::new(1), &invalid, &imports),
     ])
     .expect_err("private foreign nominal field type remains inaccessible");
-    assert!(has_diagnostic(&diagnostics, |kind| kind == DiagnosticKind::InaccessibleBinding));
+    assert!(has_diagnostic(&diagnostics, |kind| kind
+        == DiagnosticKind::InaccessibleBinding));
     assert!(!has_diagnostic(&diagnostics, |kind| kind
         == DiagnosticKind::PrivateTypeInExportedField));
 }
