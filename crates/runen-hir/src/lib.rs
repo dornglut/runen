@@ -199,34 +199,30 @@ pub struct RecordFieldValue {
     pub value: Value,
 }
 
-/// One resolved record-pattern leaf binding, retained in pattern source order.
+/// One resolved record-pattern leaf binding, retained in depth-first pattern source order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecordPatternBinding {
-    pub field: usize,
+    /// Complete resolved structural field path from the top pattern root.
+    pub fields: Vec<usize>,
     pub binding: BindingId,
     pub name: String,
     pub ty: Type,
     pub ownership: OwnedUse,
 }
 
-/// Source-selected remaining cleanup for one producer-backed record-pattern transient.
+/// Source-selected remaining cleanup paths for one producer-backed record-pattern transient.
 ///
-/// This is deliberately bounded to the accepted one-level exhaustive pattern. It
-/// is not a general transient place/path or structural-availability abstraction.
+/// Paths are retained in canonical structural cleanup order. An empty path denotes
+/// the complete transient value; an empty path list means no transient ownership remains.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum RecordPatternTransientCleanup {
-    /// Every direct field was transferred from the transient.
-    None,
-    /// The complete transient remains owned, including the zero-field case.
-    Complete,
-    /// Only these complete direct fields remain owned, in source-selected cleanup order.
-    DirectFields(Vec<usize>),
+pub struct RecordPatternTransientCleanup {
+    pub paths: Vec<Vec<usize>>,
 }
 
 /// Resolved scrutinee category for the represented exhaustive record pattern.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordPatternScrutinee {
-    /// Accepted bare binding root with direct per-field ownership semantics.
+    /// Accepted bare binding root with direct per-leaf ownership semantics.
     DirectRoot(BindingId),
     /// Existing value producer whose successful result is the pattern transient.
     Producer {
