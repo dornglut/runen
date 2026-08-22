@@ -317,6 +317,7 @@ At minimum retain:
 
 - the top nominal record identity;
 - direct-root versus producer-backed scrutinee category;
+- for a direct-root scrutinee, the resolved root binding identity;
 - for a producer-backed scrutinee, the validated typed producer;
 - all binding leaves in depth-first source order;
 - each binding leaf's complete resolved structural field path from the top root;
