@@ -70,7 +70,7 @@ The represented recursive record pattern in `patterns.md` consumes the same rela
 
 Module-level accessibility of the record type itself remains owned by `names-modules.md` and is independent of this field-accessibility rule. An exported record may be nameable in another module while its fields remain unavailable to direct field access or record-pattern selection there.
 
-This field accessibility has no ABI, linkage, layout, serialization, reflection, or confidentiality meaning. This revision defines no public/exported/package/friend field modifier.
+This field accessibility has no ABI, linkage, layout, serialization, reflection, or confidentiality meaning. This revision defines no public/exported/package/friend field modifier. A later accepted field-accessibility mechanism may broaden the direct-access domain without changing the same-module cases defined here.
 
 ## Final-path availability
 
