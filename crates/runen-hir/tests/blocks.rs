@@ -290,11 +290,13 @@ fn nested_result_return_satisfies_root_result_obligation() {
     let child = block(&f.body.statements[0]);
 
     assert!(!child.has_normal_continuation);
-    assert!(child
-        .terminal_return
-        .as_ref()
-        .and_then(|returned| returned.value.as_ref())
-        .is_some());
+    assert!(
+        child
+            .terminal_return
+            .as_ref()
+            .and_then(|returned| returned.value.as_ref())
+            .is_some()
+    );
     assert!(!f.body.has_normal_continuation);
 }
 
@@ -302,7 +304,10 @@ fn nested_result_return_satisfies_root_result_obligation() {
 fn nested_return_preserves_result_value_presence_rules() {
     let missing = build("fn f() -> I64 { { return; } }")
         .expect_err("result-bearing nested return requires a value");
-    assert!(has_diagnostic(&missing, DiagnosticKind::ExpectedResultValue));
+    assert!(has_diagnostic(
+        &missing,
+        DiagnosticKind::ExpectedResultValue
+    ));
 
     let unexpected = build("fn f() { { return 1; } }")
         .expect_err("no-result nested return cannot carry a value");
