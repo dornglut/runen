@@ -42,6 +42,105 @@ fn round_trips_import_export_and_qualified_forms_losslessly() {
 }
 
 #[test]
+fn exported_record_fields_are_lossless_and_bounded() {
+    let source = "export record Holder { private: I8, /* field */ export public: dep::Ticket, export ready: Bool }";
+    let parsed = parse(source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert_eq!(parsed.text(), source);
+
+    let root = parsed.syntax();
+    let record = root
+        .children()
+        .find(|node| node.kind() == SyntaxKind::RecordDefinition)
+        .expect("record definition");
+    assert_eq!(
+        record
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .filter(|token| token.kind() == SyntaxKind::KwExport)
+            .count(),
+        1,
+        "record export must remain distinct from field exports"
+    );
+
+    let fields = record
+        .children()
+        .filter(|node| node.kind() == SyntaxKind::RecordField)
+        .collect::<Vec<_>>();
+    assert_eq!(fields.len(), 3);
+    assert_eq!(fields[0].text().to_string(), "private: I8");
+    assert_eq!(fields[1].text().to_string(), "/* field */ export public: dep::Ticket");
+    assert_eq!(fields[2].text().to_string(), " export ready: Bool");
+
+    let field_exports = fields
+        .iter()
+        .map(|field| {
+            field
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .filter(|token| token.kind() == SyntaxKind::KwExport)
+                .count()
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(field_exports, vec![0, 1, 1]);
+
+    let qualified = fields[1]
+        .children()
+        .find(|node| node.kind() == SyntaxKind::TypeRef)
+        .and_then(|ty| {
+            ty.children()
+                .find(|node| node.kind() == SyntaxKind::QualifiedModuleMember)
+        });
+    assert!(qualified.is_some());
+}
+
+#[test]
+fn field_export_does_not_become_a_general_modifier() {
+    for source in [
+        "export import dep;",
+        "fn f() { export value; }",
+        "fn f() { let value: export = 1; }",
+        "fn f() -> export { return 1; }",
+    ] {
+        let parsed = parse(source);
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly clean: {source}"
+        );
+        assert_eq!(parsed.text(), source);
+    }
+}
+
+#[test]
+fn malformed_exported_field_recovers_without_swallowing_later_structure() {
+    let source = "record Broken { export first I8, next: I16 } export fn later() {}";
+    let parsed = parse(source);
+    assert!(!parsed.errors().is_empty());
+    assert_eq!(parsed.text(), source);
+
+    let root = parsed.syntax();
+    let record = root
+        .children()
+        .find(|node| node.kind() == SyntaxKind::RecordDefinition)
+        .expect("record definition retained");
+    assert_eq!(
+        record
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::RecordField)
+            .count(),
+        2,
+        "later field was swallowed"
+    );
+    assert!(root.children().any(|node| {
+        node.kind() == SyntaxKind::FunctionDefinition
+            && node
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .any(|token| token.kind() == SyntaxKind::KwExport)
+    }));
+}
+
+#[test]
 fn imports_only_and_trivia_only_units_are_clean() {
     for source in [
         "import a; import b;",
