@@ -6,7 +6,7 @@ This document owns the represented source-semantic relation for structural owned
 
 It consumes represented source type identity, nominal record identity, record field identity and source structural field order from [Source type foundation](types.md). It does not redefine those owners.
 
-[Source function-local bindings](local-bindings.md) instantiates this relation for each represented parameter/local binding and owns binding identity, lexical scope, lookup, assignment mutability, declaration lifecycle, ordinary whole-binding owned-value use, assignment legality, and reset points. [Source field-value access](field-access.md) consumes this relation for binding-rooted selected paths. [Source patterns](patterns.md) consumes this relation for direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding or transient ownership ends. [Source control flow](control-flow.md) consumes complete binding structural ownership states to establish definite represented conditional successors.
+[Source function-local bindings](local-bindings.md) instantiates this relation for each represented parameter/local binding and owns binding identity, lexical scope, lookup, assignment mutability, declaration lifecycle, ordinary whole-binding owned-value use, assignment legality, and reset points. [Source field-value access](field-access.md) consumes this relation for binding-rooted selected paths and for the structural ownership state/frontier of a producer-backed field-receiver transient. [Source patterns](patterns.md) consumes this relation for direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding or transient ownership ends. [Source control flow](control-flow.md) consumes complete binding structural ownership states to establish definite represented conditional successors.
 
 This document does not define lexical bindings, names, mutability, field lookup/accessibility, pattern syntax, source type duplicability selection, conditional selection, custom destruction, references/borrows, a source place/lvalue category, physical storage, layout, Core MIR liveness, or an implementation representation.
 
@@ -19,7 +19,7 @@ A **structural owned-value root** consists of:
 
 A structural owned-value root is a source-semantic ownership domain over the structural subvalues of one value whose complete source type is the root type. When established with an empty consumed-path set it owns the complete root value; later valid consumption may leave only a proper subset of structural subvalues owned, or no remaining owned subvalue. The relation does not require the root to have a lexical identifier, source binding identity, physical address, storage identity, HIR local, Core local, or another source-observable identity.
 
-Represented parameter/local bindings instantiate persistent structural owned-value roots through `local-bindings.md`. A successful producer-backed record-pattern scrutinee instantiates one non-binding transient structural owned-value root through `patterns.md` and `function-execution.md`.
+Represented parameter/local bindings instantiate persistent structural owned-value roots through `local-bindings.md`. A successful producer-backed field-value receiver instantiates one non-binding transient structural owned-value root through `field-access.md` and `function-execution.md`. A successful producer-backed record-pattern scrutinee instantiates one non-binding transient structural owned-value root through `patterns.md` and `function-execution.md`.
 
 The root relation itself does not decide how a value is produced, when a binding or transient begins or ends, or which source operation is permitted to use a path. Those are owned by the applicable consuming source operation.
 
@@ -49,7 +49,7 @@ Each structural owned-value root has one finite **consumed-path set** containing
 
 The consumed-path set MUST be prefix-free: no two members are ancestor/descendant or otherwise prefix-comparable.
 
-An empty consumed-path set denotes complete initial ownership of the root value. The relation does not imply that every root is always initialized with that state; the applicable lifecycle owner establishes when one complete owned value begins. `local-bindings.md` and `patterns.md` define the represented initial-state boundaries that consume this relation.
+An empty consumed-path set denotes complete initial ownership of the root value. The relation does not imply that every root is always initialized with that state; the applicable lifecycle owner establishes when one complete owned value begins. `local-bindings.md`, `field-access.md`, and `patterns.md` define the represented initial-state boundaries that consume this relation.
 
 Consumed paths are source-validation facts. They are not runtime moved-value flags, dynamic faults, Core liveness facts, physical destruction markers, storage occupancy, or implementation bookkeeping authority.
 
@@ -164,7 +164,7 @@ This structural owner does not define assignment or another replacement operatio
 
 A consuming owner may replace a structural root only when its own semantics explicitly authorize replacement. When such an owner establishes a new complete owned root value, it MAY establish a fresh empty consumed-path set as part of that owner's accepted lifecycle transition.
 
-`local-bindings.md` uses this boundary for successful whole-binding assignment/reinitialization. A pattern scrutinee transient is not replaceable under the represented pattern relation.
+`local-bindings.md` uses this boundary for successful whole-binding assignment/reinitialization. Field-receiver and pattern-scrutinee transients are not replaceable under their represented relations.
 
 ## Definite source validity and control flow
 
@@ -186,9 +186,11 @@ In particular, neither a consumed-path union nor another general control-flow jo
 
 Binding lifecycle establishes when that state begins, persists, resets, or ends. This owner supplies only the structural mathematics applied to that state.
 
-### Binding-rooted field-value access
+### Field-value access
 
-`field-access.md` resolves one non-empty structural path from a binding root, requires its final selected path to be fully available, and selects duplicate or consume according to the final field type's duplicability. Field lookup/accessibility and producer semantics remain owned there.
+For a binding-root receiver, `field-access.md` resolves one non-empty structural path from the selected binding root, requires its final selected path to be fully available, and selects duplicate or consume according to the final field type's duplicability. Field lookup/accessibility and producer semantics remain owned there.
+
+For a producer-backed receiver, successful receiver production establishes one non-binding field-receiver transient structural root with an empty consumed-path set. `field-access.md` applies the source-selected duplicate-or-consume consequence to its resolved path and selects the transient's remaining frontier through this document; `function-execution.md` owns the transient's dynamic ending and cleanup order.
 
 ### Record patterns
 

@@ -4,9 +4,9 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for statement-level conditional control flow: condition admission and selection, validation of both represented conditional outcomes, explicit arm lexical-scope composition, omitted-else behavior, normal-continuation composition, definite structural ownership at any normal conditional successor, and the source-to-Core conditional refinement boundary.
 
-It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); owned-value producers, producer evaluation, lexical-block execution, normal-continuation presence, return execution, cleanup, defined-fault propagation, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, and binding structural lifecycle from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); and represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md). Concrete `if`/`else` spelling and the represented conditional-value grammar are owned by [Source concrete syntax](concrete-syntax.md).
+It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); producer-backed field-value result typing and validation from [Source field-value access](field-access.md); owned-value producers, producer evaluation, lexical-block execution, normal-continuation presence, return execution, cleanup, defined-fault propagation, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, and binding structural lifecycle from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); and represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md). Concrete `if`/`else` spelling and the represented conditional-value grammar are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not redefine owned-value producer semantics, return execution, structural path/state mathematics, binding scope rules, lexical cleanup order, fault cleanup, Core path state, or concrete grammar.
+This document does not redefine owned-value producer semantics, field-receiver semantics, return execution, structural path/state mathematics, binding scope rules, lexical cleanup order, fault cleanup, Core path state, or concrete grammar.
 
 ## Represented conditional statement
 
@@ -30,7 +30,9 @@ The condition MUST produce exactly one owned source value whose source type is e
 
 No truthiness, implicit conversion, coercion, integer-to-Bool relation, structural conversion, or second Bool-like type is introduced.
 
-Concrete syntax deliberately excludes record construction from `ConditionalValue`; that grammar restriction is owned by `concrete-syntax.md`. This semantic owner does not infer conditional admissibility from parser lookahead.
+Concrete syntax deliberately excludes a **standalone** record construction from `ConditionalValue`; that grammar restriction is owned by `concrete-syntax.md`. A bounded producer-backed `FieldValueUse` whose receiver is a record construction remains a distinct admitted field-value producer because the mandatory selector is part of that complete field-value spelling. This semantic owner does not infer conditional admissibility from parser lookahead.
+
+An admitted producer-backed `FieldValueUse` condition MUST have final selected field type exactly `Bool` under `field-access.md`. That requirement applies to the complete field-value result; the internal direct-call or record-construction receiver retains its independently selected exact receiver type.
 
 A syntactically represented conditional value whose resolved/produced type is not exactly `Bool` is source-invalid.
 
@@ -40,6 +42,8 @@ Source validation of one represented conditional begins in the enclosing functio
 
 Validate the condition through its existing producer owner with exact required source type `Bool`.
 
+A producer-backed `FieldValueUse` condition consumes the field-value owner's existing validation transaction with exact required final type `Bool`; this conditional relation adds no separate receiver-validation or ownership-commit rule.
+
 During source validation, apply each semantic ownership consequence selected by that condition producer exactly once before conditional outcome state splitting.
 
 The resulting enclosing binding environment is the **post-condition environment**.
@@ -47,6 +51,8 @@ The resulting enclosing binding environment is the **post-condition environment*
 The explicit then arm and, when present, the explicit else arm are each source-validated from semantically identical copies of that same post-condition environment. When else is omitted, the false normal outcome is the unchanged post-condition environment as defined below.
 
 The successful condition result is one owned Bool transient held by the conditional operation for branch selection. That transient is not a function-local binding and is not a member of the post-condition environment. Any ownership consequences that condition production applied to pre-existing bindings are already reflected in the post-condition environment.
+
+For a producer-backed field-value condition, its producer-specific receiver transient lifecycle has already completed under `function-execution.md` before the successful Bool result is transferred into this distinct condition transient.
 
 ## Validation does not prune by Bool value
 
@@ -75,6 +81,8 @@ When execution reaches one represented conditional statement:
 6. when its Bool value is `false` and an explicit else arm exists, execute only that else arm; and
 7. when its Bool value is `false` and no explicit else arm exists, take the omitted-else normal false outcome defined below.
 
+A producer-backed field-value condition reaches step 3 only after its complete producer-specific field-receiver lifecycle has finished under `function-execution.md`; this conditional relation does not define a second receiver lifecycle.
+
 Conditional selection itself performs no additional binding read, move, duplicate, assignment, structural consumption, cleanup, call, fault selection, return, or hidden source state transition beyond ending ownership of the successful Bool condition transient used for selection.
 
 The represented condition is therefore evaluated once even though source validation considers both outcomes.
@@ -86,7 +94,7 @@ If condition evaluation yields one defined fault `F` before successful Bool prod
 - no explicit conditional arm begins;
 - no conditional normal successor is selected;
 - ownership transitions already completed during condition evaluation remain effective; and
-- the active activation follows the existing defined-fault cleanup and propagation relation from `function-execution.md` with the same fault `F`.
+- the active activation follows the existing producer/receiving cleanup and defined-fault propagation relations from `function-execution.md` with the same fault `F`.
 
 The conditional statement does not add a second fault cleanup boundary.
 
@@ -339,7 +347,7 @@ A faithful source-to-Core lowering MAY refine one source-valid represented condi
 
 After source validation has fixed the condition type, each arm's normal-continuation presence, and any required two-normal-outcome source ownership equality, a lowering may:
 
-1. lower the existing condition producer exactly once;
+1. lower the existing condition producer exactly once under that producer's accepted lowering relation;
 2. materialize its Bool result in a compiler-owned Core temporary when useful;
 3. consume that temporary once as the Core `Branch` condition operand;
 4. lower the then arm to one or more Core blocks;
@@ -352,7 +360,7 @@ After source validation has fixed the condition type, each arm's normal-continua
 
 The exact shape or number of Core blocks is not source-observable.
 
-A compiler temporary used for condition selection is not a source binding.
+A compiler temporary used for condition selection is not a source binding. Producer-internal temporaries remain governed by their producer's accepted lowering relation.
 
 A result-producing return whose producer is a direct call may first create the existing call continuation block and then terminate that continuation with Core `Return`; this does not create a second source continuation.
 
@@ -384,6 +392,6 @@ Validation of both represented outcomes is a static validity obligation, not run
 
 ## Further boundaries
 
-This revision does not define general expressions, grouping expressions, comparisons, logical operators, arithmetic operators, truthiness, coercions, record-construction conditions, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, match, refutable patterns, catch/recovery, labels, break, continue, source state lattices, path-dependent ownership after a two-normal-outcome join, automatic join cleanup, drop flags, custom destructors, must-consume policy, references, borrows, lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
+This revision does not define general expressions, grouping expressions, comparisons, logical operators, arithmetic operators, truthiness, coercions, standalone record-construction conditions, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, match, refutable patterns, catch/recovery, labels, break, continue, source state lattices, path-dependent ownership after a two-normal-outcome join, automatic join cleanup, drop flags, custom destructors, must-consume policy, references, borrows, lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
 
 Those concerns require their own accepted owners or later extensions and MUST NOT be inferred from the represented conditional relation here.
