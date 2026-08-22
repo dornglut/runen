@@ -109,6 +109,52 @@ fn identifier_followed_by_arm_block_is_not_record_construction() {
 }
 
 #[test]
+fn producer_backed_field_conditions_preserve_constructor_disambiguation() {
+    let source = "record Flag { ready: Bool } record Inner { ready: Bool } record Outer { inner: Inner } fn make() -> Flag { return Flag { ready: true }; } fn choose() { if make().ready {} if Flag { ready: true }.ready {} if Outer { inner: Inner { ready: true } }.inner.ready {} }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let conditions = parsed
+        .syntax()
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::IfStatement)
+        .collect::<Vec<_>>();
+    assert_eq!(conditions.len(), 3);
+
+    let field_uses = conditions
+        .iter()
+        .map(|condition| {
+            condition
+                .children()
+                .find(|node| node.kind() == SyntaxKind::FieldValueUse)
+                .expect("producer-backed condition field value")
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        field_uses[0]
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .count(),
+        1
+    );
+    assert_eq!(
+        field_uses[1]
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::RecordConstruction)
+            .count(),
+        1
+    );
+    assert_eq!(
+        field_uses[2]
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::RecordConstruction)
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn record_construction_shaped_condition_is_not_admitted() {
     let source = "fn bad() { if Flag { value: true } {} sink(); }";
     let parsed = parse(source);
