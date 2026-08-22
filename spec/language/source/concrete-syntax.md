@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including direct binding-root and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, producer-backed pattern scrutinee evaluation and transient cleanup, return, normal-continuation presence, cleanup, divergence, fault, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, zero/one/two normal-outcome composition, and definite normal ownership from [Source control flow](control-flow.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including direct binding-root and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, normal-continuation presence, cleanup, divergence, fault, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, zero/one/two normal-outcome composition, and definite normal ownership from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -56,7 +56,7 @@ The represented punctuation tokens are exactly:
 
 `->` and `::` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens and `->` is never tokenized as `-` followed by unrepresented `>` material.
 
-The standalone `-` punctuation token participates only in the represented negative decimal integer literal production below. It does not by itself define unary negation, subtraction, or another operator. The `.` punctuation token participates only in the represented `FieldValueUse` production below. It does not define floating-point literal spelling, general member access, a method call, field assignment, or another operator. This revision defines no standalone `>` token and no other punctuation or operator token.
+The standalone `-` punctuation token participates only in the represented negative decimal integer literal production below. It does not by itself define unary negation, subtraction, or another operator. The `.` punctuation token participates only in the represented `FieldValueUse` production below. It does not define floating-point literal spelling, a general member/postfix system, a method call, field assignment, or another operator. This revision defines no standalone `>` token and no other punctuation or operator token.
 
 ## Decimal magnitude tokens
 
@@ -139,7 +139,7 @@ The field sequence MAY be empty. A trailing comma is permitted.
 
 The concrete record form makes no positive owned-value duplicability selection. Its duplicability classification therefore follows the no-selection case defined by `types.md`.
 
-The represented record definition does not itself construct, access, or destructure a value. Record construction, binding-rooted field-value access, and represented record destructuring are represented separately below. Field assignment, partial-field reinitialization, methods, and duplicability-selection syntax are not represented.
+The represented record definition does not itself construct, access, or destructure a value. Record construction, represented field-value access, and represented record destructuring are represented separately below. Field assignment, partial-field reinitialization, methods, and duplicability-selection syntax are not represented.
 
 ## Type forms
 
@@ -217,15 +217,15 @@ ConditionalValue =
   | FieldValueUse
 ```
 
-`ConditionalValue` deliberately reuses every currently represented `Value` producer except `RecordConstruction`.
+`ConditionalValue` deliberately reuses every currently represented `Value` producer except a **standalone** `RecordConstruction`.
 
 This exclusion is part of normative concrete grammar. The existing record-construction form begins with `UserIdentifier "{"`; admitting unrestricted `Value` immediately after `if` would therefore make a spelling such as `if flag { ... }` collide with the record-construction token shape. Under the grammar above, the bare `flag` is one `IdentifierUse` conditional value and the following `{ ... }` begins the then `BlockStatement`. No semantic lookup, inferred type, or parser-only context rule is needed to choose that structure.
 
 A decimal integer literal remains syntactically represented as a `ConditionalValue`. Exact condition typing is owned by `control-flow.md`; a decimal integer therefore remains a syntax-valid conditional spelling but is source-invalid when it cannot produce the exact intrinsic `Bool` type. Concrete grammar does not encode that type error.
 
-A `DirectCall` conditional value retains both its represented unqualified and `alias::member(...)` target forms. A `FieldValueUse` retains its binding-rooted selector grammar. All lookup and producer rules remain owned by their existing semantic owners.
+A `DirectCall` conditional value retains both its represented unqualified and `alias::member(...)` target forms. A `FieldValueUse` may use either its binding-root or bounded producer-backed receiver grammar. All lookup, receiver-transient, and producer rules remain owned by their existing semantic owners.
 
-`RecordConstruction` is not a represented conditional-value spelling in this revision. This restriction does not remove record construction from ordinary `Value` positions or producer-backed record-pattern scrutinees.
+A standalone `RecordConstruction` is not a represented conditional-value spelling in this revision. A `ProducerFieldValueUse` whose receiver is a `RecordConstruction` is instead one distinct `FieldValueUse` and includes at least one mandatory `.` selector after the constructor's closing `}`. Consequently, a form such as `if Record { ready: true }.ready { ... }` does not make `if flag { ... }` ambiguous: the construction receiver is complete before the mandatory selector and the later then-arm block begins only after the complete `ConditionalValue`.
 
 The then arm is always one explicit `BlockStatement`. `else` is optional; when present it is followed by exactly one explicit `BlockStatement`. Each explicit arm therefore maps to one ordinary child lexical scope and may contain its own optional terminal `ReturnStatement`. The omitted-else false outcome and definite normal-successor composition are owned by `control-flow.md`; omission does not synthesize a concrete block or lexical scope.
 
@@ -283,17 +283,19 @@ A nested record-pattern target introduces no binding merely for naming its recor
 
 A `DirectRecordPatternRoot` is exactly one bare unqualified `UserIdentifier`. In this declaration position it maps to the accepted direct binding-root pattern relation, not to ordinary `IdentifierUse` value production. The grammar does not insert an implicit whole-record value use or scrutinee transient.
 
-A `ProducerBackedRecordPatternScrutinee` remains deliberately narrower than `Value`. It admits exactly one syntactically non-bare already-represented producer: a result-bearing `DirectCall`, a `RecordConstruction`, or a binding-rooted `FieldValueUse`. The top record-pattern head supplies the exact required nominal record type under `patterns.md` and `function-execution.md`.
+A `ProducerBackedRecordPatternScrutinee` remains deliberately narrower than `Value`. It admits exactly one syntactically non-bare already-represented producer: a result-bearing `DirectCall`, a `RecordConstruction`, or a `FieldValueUse`. The top record-pattern head supplies the exact required nominal record type under `patterns.md` and `function-execution.md`.
 
-The producer-backed alternatives reuse their existing concrete forms unchanged. A direct call may be unqualified or use the represented `alias::member(...)` target. Record construction remains same-module and named-field. Field-value use remains binding-rooted.
+The producer-backed alternatives reuse their existing concrete forms. A direct call may be unqualified or use the represented `alias::member(...)` target. Record construction remains same-module and named-field. Field-value use may be binding-rooted or use the bounded direct-call/record-construction producer receiver defined below.
 
-The top scrutinee alternatives are distinguishable from the bare direct root by their complete token shapes: a direct root ends after its `UserIdentifier`; a direct call continues with call syntax; a record construction continues with `{`; and a field-value use continues with one or more `.` selectors. Scrutinee category does not depend on semantic lookup or inferred type.
+When a producer-backed `FieldValueUse` is the scrutinee, its complete field-value operation ends before the resulting owned record enters the pattern-specific receiving relation. The field-receiver transient and the pattern scrutinee transient are therefore distinct sequential semantic objects under `field-access.md`, `patterns.md`, and `function-execution.md`.
+
+The top scrutinee alternatives remain classifiable from their complete token shapes without semantic lookup. A direct root ends after its `UserIdentifier`; a direct call has call syntax; a record construction has constructor syntax; and a field-value use contains one or more `.` selectors after either its binding root or its complete bounded producer receiver. Scrutinee category does not depend on inferred type.
 
 This recursive pattern form introduces no new reserved key or punctuation. It remains distinguished from `LocalDeclaration` after `let`: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form, while `UserIdentifier "{"` begins a record pattern.
 
-Boolean and decimal integer literals are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, general expression, qualified bare module member, or other `Value` form is admitted as a record-pattern scrutinee.
+Boolean and decimal integer literals are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, operator expression, conversion, arbitrary postfix/member expression, qualified bare module member, or other general `Value` form is admitted as a record-pattern scrutinee.
 
-Complete recursive pattern validation, binding-leaf ordering, producer evaluation ordering, transient structural ownership/cleanup, grouped binding establishment, and fault/divergence behavior are owned by `patterns.md`, `structural-ownership.md`, and `function-execution.md`.
+Complete recursive pattern validation, binding-leaf ordering, producer evaluation ordering, transient structural ownership/cleanup, grouped binding establishment, and fault/divergence behavior are owned by `patterns.md`, `field-access.md`, `structural-ownership.md`, and `function-execution.md`.
 
 This revision defines no `let mut Record { ... }`, shorthand field pattern, wildcard/ignore, rest/omission, tuple/array/enum pattern, literal/alternative/guard pattern, qualified record-pattern head, refutable pattern, destructuring assignment, reference-binding mode, or mutable pattern-binding modifier.
 
@@ -361,30 +363,43 @@ The selected declaration field's source type is the required source type for its
 
 The resulting record value has exactly the declaration-defined field/value shape from `types.md`, independent of initializer source order. Evaluation, transient ownership, defined-fault cleanup, divergence, and final ownership transfer into the selected fields are owned by `function-execution.md`.
 
-Because each initializer contains a `Value`, record construction composes recursively with another record construction as well as the other represented value producers.
+Because each initializer contains a `Value`, record construction composes recursively with another record construction as well as the other represented value producers, including a bounded producer-backed field-value use.
 
-This form defines no inferred or anonymous constructor target, positional field list, field-init shorthand, default field value, update/spread/base syntax, field-value access itself, field assignment, partial-field reinitialization, constructor/method body, or positive duplicability selection.
+A complete source-valid record construction may itself be the receiver of one or more field selectors under `FieldValueUse` below. The mandatory selector distinguishes that composite field-value producer from the bare construction producer.
 
-## Binding-rooted field-value access
+This form defines no inferred or anonymous constructor target, positional field list, field-init shorthand, default field value, update/spread/base syntax, field assignment, partial-field reinitialization, constructor/method body, or positive duplicability selection.
 
-The represented field-value form has this grammar:
+## Field-value access
+
+The represented field-value forms have this grammar:
 
 ```text
-FieldValueUse = UserIdentifier FieldSelector+
-FieldSelector = "." UserIdentifier
+FieldValueUse        = BindingFieldValueUse | ProducerFieldValueUse
+BindingFieldValueUse = UserIdentifier FieldSelector+
+ProducerFieldValueUse = FieldReceiverProducer FieldSelector+
+FieldReceiverProducer = DirectCall | RecordConstruction
+FieldSelector         = "." UserIdentifier
 ```
 
-The root `UserIdentifier` maps to the unqualified function-body lookup precedence owned by `local-bindings.md`. The sequence of `FieldSelector` entries supplies the lexical field keys consumed by `field-access.md` in source order.
+A `BindingFieldValueUse` root maps to the unqualified function-body lookup precedence owned by `local-bindings.md`. A `ProducerFieldValueUse` receiver is exactly one complete existing `DirectCall` or `RecordConstruction`. In both cases, the sequence of `FieldSelector` entries supplies the lexical field keys consumed by `field-access.md` in source order.
 
-At least one selector is required, so a bare `UserIdentifier` remains `IdentifierUse` in an ordinary `Value` position and remains the distinct direct binding-root scrutinee in a `RecordDestructuringDeclaration`.
+At least one selector is required after either receiver category. Consequently:
 
-`FieldValueUse` is binding-rooted. This grammar does not admit a record construction, direct call, parenthesized value, qualified module member, or another arbitrary value as its receiver.
+- a bare `UserIdentifier` remains `IdentifierUse` in an ordinary `Value` position and remains the distinct direct binding-root scrutinee in a `RecordDestructuringDeclaration`;
+- a bare `DirectCall` remains the existing direct-call producer; and
+- a bare `RecordConstruction` remains the existing construction producer.
 
-The exact field-path selection, same-module direct field accessibility, final-path structural-availability requirement, final-field duplicate-or-consume ownership consequence, and resulting source type are owned by `field-access.md` and `structural-ownership.md`. This grammar does not duplicate those relations.
+A producer-backed field receiver does not admit an arbitrary `Value`. Boolean/decimal literals, a bare `IdentifierUse` as an expression receiver, parenthesized/grouped values, general expressions, methods, references, places, or another universal postfix receiver category are not represented. A qualified call is available only because `QualifiedModuleMember` is already one `DirectCallTarget`; a qualified bare module member does not become a field receiver.
 
-The same concrete path form represents both cases: a source-valid duplicable final field is duplicated without consumption, while a source-valid non-duplicable final field is transferred/consumed. No second move/extract token is introduced by this revision.
+A selector chain such as `make().outer.inner` is one `ProducerFieldValueUse` with one complete receiver producer and one static selector sequence. It does not recursively reinterpret each intermediate field result as a new arbitrary expression receiver.
 
-The `.` token in this production has no decimal-literal, method, assignment, reference, place/lvalue, or general-member meaning.
+Because direct-call arguments and construction initializers contain `Value`, bounded producer-backed field-value uses may compose recursively inside those already represented positions. This recursion does not create grouping or operator precedence.
+
+Exact receiver result-type selection, same-module direct field accessibility, selector-path resolution, binding-root final-path availability, producer-receiver transient ownership, final-field duplicate-or-consume consequence, remaining-frontier selection, and resulting source type are owned by `field-access.md` and `structural-ownership.md`. This grammar does not duplicate those relations.
+
+The same `.` selector spelling represents both duplicate and consume outcomes. No second move/extract token is introduced.
+
+The `.` token in this production has no decimal-literal, method, assignment, reference, place/lvalue, general postfix/member, or other operator meaning.
 
 ## Value forms
 
@@ -402,15 +417,15 @@ The optional `-` in `DecimalIntegerLiteral` is part of this literal grammar only
 
 An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-bindings.md`. Its identifier is resolved using the function-local lookup precedence owned there. In this subset, the selected entity MUST be a parameter or ordinary local binding whose complete structural root is fully available under `structural-ownership.md`; another selected entity category does not become a value merely because the context requires one.
 
-A `DirectCall` may be used as a `Value` only when its callable signature specifies one result value. The successful call result is the owned value produced by `function-execution.md`. The same result-bearing concrete call form may also appear in the dedicated producer-backed record-pattern scrutinee position, where the top pattern head supplies the exact required record type.
+A `DirectCall` may be used as a `Value` only when its callable signature specifies one result value. The successful call result is the owned value produced by `function-execution.md`. The same result-bearing concrete call form may also appear as the receiver of a `ProducerFieldValueUse` or in the dedicated producer-backed record-pattern scrutinee position.
 
-A `RecordConstruction` maps to the same-module record-construction relation above and produces one owned record value under `function-execution.md`. Record construction is not a literal and does not add a general expression hierarchy. The same concrete construction form may also appear in the dedicated producer-backed record-pattern scrutinee position.
+A `RecordConstruction` maps to the same-module record-construction relation above and produces one owned record value under `function-execution.md`. Record construction is not a literal and does not add a general expression hierarchy. The same concrete construction form may also appear as the receiver of a `ProducerFieldValueUse` or in the dedicated producer-backed record-pattern scrutinee position.
 
-A `FieldValueUse` maps to the binding-rooted field-value relation above and produces one owned value under `field-access.md` when source-valid. It does not create a general member or place expression hierarchy. The same concrete field-value form may also appear in the dedicated producer-backed record-pattern scrutinee position when its exact result type is the nominal record selected by the top pattern head.
+A `FieldValueUse` maps to the bounded binding-root/producer-backed relation above and produces one owned value under `field-access.md` when source-valid. It does not create a general member, postfix, place, or expression hierarchy. The same concrete field-value form may also appear in the dedicated producer-backed record-pattern scrutinee position when its exact result type is the nominal record selected by the top pattern head, and in `ConditionalValue` when its exact result type is `Bool` under `control-flow.md`.
 
 A qualified module member without a direct-call argument list is not an `IdentifierUse` value and is not a record-pattern scrutinee under this subset. Module aliases and module-level declarations do not become source values.
 
-This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; arbitrary-receiver member access; assignment expression; block expression; closure; or other value form beyond the represented producers above.
+This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; arbitrary-receiver member/postfix access beyond the bounded field receiver categories above; assignment expression; block expression; closure; or other value form beyond the represented producers above.
 
 ## Returns and normal completion
 
@@ -436,9 +451,11 @@ Except for a `RecordConstruction` target and every `RecordPattern` head, whose s
 
 After lookup selects an entity, the consuming syntactic context validates its category. Lookup MUST NOT skip the selected entity to find another binding of a context-preferred category.
 
-Consequently, when a parameter/local binding has the same key as a module-level function, an unqualified direct-call spelling resolves to the local binding and is invalid as a direct call rather than bypassing it. For assignment, a selected parameter/local binding is validated for assignment mutability; when no local exists and same-module lookup selects a module declaration, that entity is invalid as an assignment target rather than bypassed. A `FieldValueUse` root and direct binding-root record-pattern scrutinee follow the same precedence and require a parameter/local binding under their owners.
+Consequently, when a parameter/local binding has the same key as a module-level function, an unqualified direct-call spelling resolves to the local binding and is invalid as a direct call rather than bypassing it. For assignment, a selected parameter/local binding is validated for assignment mutability; when no local exists and same-module lookup selects a module declaration, that entity is invalid as an assignment target rather than bypassed. A `BindingFieldValueUse` root and direct binding-root record-pattern scrutinee follow the same precedence and require a parameter/local binding under their owners.
 
-A producer-backed pattern scrutinee applies the lookup relation of its concrete producer before the pattern consumes the produced value: unqualified direct call uses ordinary function-body lookup, qualified direct call uses module-alias lookup, record construction uses same-module record lookup, and field-value use uses ordinary function-body lookup. Pattern-introduced bindings are not yet in scope during any of those lookups.
+A `ProducerFieldValueUse` applies the lookup relation of its complete receiver producer: unqualified direct call uses ordinary function-body lookup, qualified direct call uses module-alias lookup, and record construction uses same-module record lookup. The later field selectors do not cause a second root/name lookup; they consume nominal field identities under `field-access.md`.
+
+A producer-backed pattern scrutinee likewise applies the lookup relation of its concrete producer before the pattern consumes the produced value. When that producer is a `ProducerFieldValueUse`, its receiver lookup and complete field-value production occur before the resulting owned value enters the pattern transient relation. Pattern-introduced bindings are not yet in scope during any of those lookups.
 
 Record-construction targets and every recursive record-pattern head are explicit same-module declaration lookups. Active parameter/locals of equal key do not participate in those head/target lookups, and the selected module binding must be a record declaration.
 
@@ -454,7 +471,7 @@ After qualified lookup selects the target binding, the consuming type or direct-
 
 A parameter/local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local controls ordinary unqualified spelling but does not block syntactically qualified `alias::member`.
 
-The two-part qualification syntax does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, qualified record construction, or qualified record-pattern heads. A qualified direct call may appear as a producer-backed record-pattern scrutinee because that position reuses `DirectCall`; this does not make any record-pattern head qualified. Binding-rooted field-value access uses the distinct `.` form and semantics owned by `field-access.md`.
+The two-part qualification syntax does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, qualified record construction, or qualified record-pattern heads. A qualified direct call may appear as a producer-backed record-pattern scrutinee or as the receiver of a `ProducerFieldValueUse` because those positions reuse `DirectCall`; this does not make any record-pattern head, construction target, or field selector itself qualified.
 
 ## Deliberate boundaries
 
@@ -466,10 +483,10 @@ This revision does not define:
 - assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, destructuring assignment, or general place/lvalue syntax beyond represented whole-binding assignment;
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
 - conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch, labels, break, continue, or other control-transfer forms beyond represented statement-level `if` and terminal return;
-- record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and binding-rooted `FieldValueUse` producer-backed forms; in particular no literal, bare `IdentifierUse`-as-value, grouping, operator expression, conversion, or arbitrary general expression is admitted there;
+- record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal, bare `IdentifierUse`-as-value, grouping, operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction;
-- arbitrary-receiver member access, cross-module field access, field visibility modifiers, methods, or associated-item lookup;
+- arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; cross-module field access; field visibility modifiers; methods; or associated-item lookup;
 - qualified/cross-module record-pattern heads;
 - positive record duplicability-selection syntax;
 - references, borrow syntax or pattern binding modes, source interior mutability, raw-pointer assignment, or lifetime syntax;
