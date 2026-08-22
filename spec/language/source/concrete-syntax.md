@@ -119,7 +119,7 @@ The source spelling does not identify, name, discover, or derive the target sour
 
 Duplicate aliases, alias conflicts with declarations in the source unit's own module, and self-import are governed by `names-modules.md`. Distinct aliases in one source unit may target the same module, and the same alias key in different source units may target different modules when the compilation context supplies those relations.
 
-An external or build-system mapping for an alias key that has no corresponding concrete import declaration does not create a source alias and has no source lookup effect.
+An external or build-system mapping for an alias key that has no corresponding concrete import declaration does not create a source alias and has no source lookup effect under this document.
 
 This form defines no source-visible module path, package coordinate, dependency locator, filename, filesystem relation, or source-visible canonical module name.
 
