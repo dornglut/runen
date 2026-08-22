@@ -1265,7 +1265,7 @@ fn validate_record_destructure(
         return None;
     }
 
-    let scrutinee = if let Some((root_name, _)) = &direct_root {
+    let scrutinee = if direct_root.is_some() {
         RecordPatternScrutinee::DirectRoot(
             root_state
                 .as_ref()
@@ -1273,7 +1273,8 @@ fn validate_record_destructure(
                 .id,
         )
     } else {
-        let producer_node = producer_node.expect("syntax-clean producer-backed pattern has producer");
+        let producer_node =
+            producer_node.expect("syntax-clean producer-backed pattern has producer");
         let mut producer_bindings = bindings.clone();
         let value = validate_value(
             header,
@@ -1286,7 +1287,10 @@ fn validate_record_destructure(
         *bindings = producer_bindings;
 
         let cleanup = if record_decl.fields.is_empty()
-            || record_decl.fields.iter().all(|field| field.ty.is_duplicable())
+            || record_decl
+                .fields
+                .iter()
+                .all(|field| field.ty.is_duplicable())
         {
             RecordPatternTransientCleanup::Complete
         } else {
@@ -1295,9 +1299,7 @@ fn validate_record_destructure(
                 .iter()
                 .enumerate()
                 .rev()
-                .filter_map(|(field, declaration)| {
-                    declaration.ty.is_duplicable().then_some(field)
-                })
+                .filter_map(|(field, declaration)| declaration.ty.is_duplicable().then_some(field))
                 .collect::<Vec<_>>();
             if retained.is_empty() {
                 RecordPatternTransientCleanup::None
