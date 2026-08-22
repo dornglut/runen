@@ -82,7 +82,7 @@ For one producer-backed field-value use, execution is exactly:
 
 1. evaluate the retained receiver producer exactly once under its existing direct-call or record-construction semantics and its own exact receiver type;
 2. preserve every binding ownership transition caused while evaluating that receiver producer;
-3. if receiver evaluation yields a defined fault, establish no field-receiver transient and no selected field result; producer-internal cleanup and ordinary activation fault propagation remain controlling;
+3. if receiver evaluation yields a defined fault, establish no field-receiver transient and no selected field result; the field-value producer yields that same fault to its surrounding receiving relation, while receiver-producer internal cleanup and that receiving relation's existing cleanup/propagation remain controlling;
 4. if receiver evaluation diverges, establish no field-receiver transient and no selected field result, and perform no field-receiver cleanup merely because execution remains suspended;
 5. after successful receiver production, transfer the complete produced record value into one fully owned **field-receiver transient** whose structural ownership state begins complete;
 6. apply the source-selected final-field duplicate-or-consume consequence to the already resolved field path through the transient ownership facts owned by `field-access.md`;
@@ -214,7 +214,7 @@ For a producer-backed category:
 4. if producer evaluation faults or diverges, perform no pattern leaf production and establish no pattern scrutinee transient;
 5. on producer success, transfer the produced record into one fully owned pattern scrutinee transient whose structural ownership state begins complete;
 6. apply pattern-owned binding-leaf `Duplicate`/`Consume` productions in retained depth-first source order;
-7. after every leaf production, clean the transient's remaining structural ownership frontier selected by `patterns.md` through `structural-ownership.md` exactly once;
+7. after every binding leaf has been produced, clean the transient's remaining structural ownership frontier selected by `patterns.md` through `structural-ownership.md` exactly once;
 8. only after transient cleanup completes, establish all pattern-introduced bindings in the containing lexical scope together; and
 9. only then may the next body statement begin.
 
@@ -226,7 +226,7 @@ If producer evaluation yields a defined fault before pattern-transient establish
 
 - no pattern leaf production occurs;
 - no pattern binding enters scope;
-- producer-internal transient cleanup, including any field-receiver cleanup selected inside a producer-backed field-value use after its own receiver success, occurs exactly as in another receiving position;
+- producer-internal transient cleanup occurs exactly as in another receiving position; for a producer-backed field-value producer, a receiver fault establishes no field-receiver transient;
 - ownership transitions already completed by producer evaluation remain effective; and
 - the same fault continues through activation fault propagation.
 
