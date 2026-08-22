@@ -1868,13 +1868,8 @@ fn validate_field_value_use(
         debug_assert!(!identifiers.is_empty());
         let receiver_ty = match producer_node.kind() {
             SyntaxKind::DirectCall => {
-                let function = resolve_call_target(
-                    header,
-                    &producer_node,
-                    context,
-                    bindings,
-                    diagnostics,
-                )?;
+                let function =
+                    resolve_call_target(header, &producer_node, context, bindings, diagnostics)?;
                 let Some(result) = context.headers[function.0].result else {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::NoResultCallUsedAsValue,
@@ -1893,13 +1888,8 @@ fn validate_field_value_use(
             _ => unreachable!("producer-backed field receiver has accepted producer kind"),
         };
 
-        let (fields, final_ty) = resolve_field_path(
-            header,
-            &identifiers,
-            receiver_ty,
-            context,
-            diagnostics,
-        )?;
+        let (fields, final_ty) =
+            resolve_field_path(header, &identifiers, receiver_ty, context, diagnostics)?;
         if final_ty != required {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::TypeMismatch {
