@@ -1081,19 +1081,21 @@ struct ResolvedPatternBinding {
     location: SourceLocation,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct PatternValidation {
     valid: bool,
     bindings: Vec<ResolvedPatternBinding>,
     seen_binding_names: BTreeSet<String>,
+    active_binding_names: BTreeSet<String>,
 }
 
 impl PatternValidation {
-    fn new() -> Self {
+    fn new(active_bindings: &BTreeMap<String, BindingState>) -> Self {
         Self {
             valid: true,
             bindings: Vec::new(),
             seen_binding_names: BTreeSet::new(),
+            active_binding_names: active_bindings.keys().cloned().collect(),
         }
     }
 }
@@ -1103,7 +1105,6 @@ fn validate_record_pattern_node(
     node: &SyntaxNode,
     expected: Option<Type>,
     context: &BodyResolutionContext<'_>,
-    active_bindings: &BTreeMap<String, BindingState>,
     path: &mut Vec<usize>,
     validation: &mut PatternValidation,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1208,7 +1209,6 @@ fn validate_record_pattern_node(
                 &nested,
                 Some(record_decl.fields[field].ty),
                 context,
-                active_bindings,
                 path,
                 validation,
                 diagnostics,
@@ -1234,7 +1234,7 @@ fn validate_record_pattern_node(
                 });
                 validation.valid = false;
             }
-            if active_bindings.contains_key(&binding_name) {
+            if validation.active_binding_names.contains(&binding_name) {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::LocalShadowing,
                     location: binding_location,
@@ -1281,14 +1281,13 @@ fn validate_record_destructure(
         .is_none()
         .then(|| direct_token(node, SyntaxKind::Ident));
 
-    let mut validation = PatternValidation::new();
+    let mut validation = PatternValidation::new(bindings);
     let mut path = Vec::new();
     let record = validate_record_pattern_node(
         header,
         &pattern_node,
         None,
         context,
-        bindings,
         &mut path,
         &mut validation,
         diagnostics,
