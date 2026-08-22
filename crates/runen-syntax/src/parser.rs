@@ -84,8 +84,8 @@ impl Parser<'_> {
         self.bump_trivia();
         let mut missing_close = false;
         while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
-            let exported_field = self.at(SyntaxKind::KwExport)
-                && self.peek_nontrivia(1) == Some(SyntaxKind::Ident);
+            let exported_field =
+                self.at(SyntaxKind::KwExport) && self.peek_nontrivia(1) == Some(SyntaxKind::Ident);
             if self.at_any(TOP_LEVEL_STARTERS) && !exported_field {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
                 missing_close = true;
