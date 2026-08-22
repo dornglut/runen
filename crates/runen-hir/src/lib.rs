@@ -219,6 +219,30 @@ pub struct RecordPatternTransientCleanup {
     pub paths: Vec<Vec<usize>>,
 }
 
+/// Source-selected remaining cleanup paths for one producer-backed field receiver transient.
+///
+/// This is deliberately distinct from record-pattern transient cleanup. Paths are
+/// retained in canonical structural cleanup order. An empty path denotes the
+/// complete receiver value; an empty path list means no receiver ownership remains.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FieldReceiverTransientCleanup {
+    pub paths: Vec<Vec<usize>>,
+}
+
+/// Resolved receiver category for one represented field-value use.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FieldValueReceiver {
+    /// Existing function-local binding root. The exact receiver type is retained
+    /// so lowering does not need to re-run source type selection.
+    Binding { binding: BindingId, ty: Type },
+    /// One accepted producer whose successful result becomes a separate
+    /// field-receiver transient before field selection and cleanup.
+    Producer {
+        value: Box<Value>,
+        cleanup: FieldReceiverTransientCleanup,
+    },
+}
+
 /// Resolved scrutinee category for the represented exhaustive record pattern.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordPatternScrutinee {
@@ -248,7 +272,7 @@ pub enum ValueKind {
         fields: Vec<RecordFieldValue>,
     },
     FieldValueUse {
-        binding: BindingId,
+        receiver: FieldValueReceiver,
         fields: Vec<usize>,
         ownership: OwnedUse,
     },
