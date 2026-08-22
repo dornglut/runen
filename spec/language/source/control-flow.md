@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for statement-level conditional control flow: condition admission and selection, validation of both conditional arms, explicit arm lexical-scope composition, omitted-else behavior, definite structural ownership at a normal conditional successor, and the source-to-Core conditional refinement boundary.
+This document owns the represented source semantics for statement-level conditional control flow: condition admission and selection, validation of both conditional normal outcomes, explicit arm lexical-scope composition, omitted-else behavior, definite structural ownership at a normal conditional successor, and the source-to-Core conditional refinement boundary.
 
 It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); owned-value producers, producer evaluation, lexical-block execution, cleanup, defined-fault propagation, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, and binding structural lifecycle from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); and represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md). Concrete `if`/`else` spelling and the represented conditional-value grammar are owned by [Source concrete syntax](concrete-syntax.md).
 
@@ -40,24 +40,24 @@ Source validation of one represented conditional begins in the enclosing functio
 
 Validate the condition through its existing producer owner with exact required source type `Bool`.
 
-Every source ownership transition caused by validating/producing the condition is applied exactly once before conditional arm state splitting.
+During source validation, apply each semantic ownership consequence selected by that condition producer exactly once before conditional normal-outcome state splitting.
 
 The resulting enclosing binding environment is the **post-condition environment**.
 
-Both conditional arms are source-validated from semantically identical copies of that same post-condition environment.
+The explicit then arm and, when present, the explicit else arm are each source-validated from semantically identical copies of that same post-condition environment. When else is omitted, the false normal outcome is the unchanged post-condition environment as defined below.
 
-The condition value itself is not part of the enclosing binding environment unless its existing producer semantics operated on a binding. Its successful result is one owned Bool transient held by the conditional operation for branch selection.
+The successful condition result is one owned Bool transient held by the conditional operation for branch selection. That transient is not a function-local binding and is not a member of the post-condition environment. Any ownership consequences that condition production applied to pre-existing bindings are already reflected in the post-condition environment.
 
 ## Validation does not prune by Bool value
 
-Both normal conditional outcomes MUST be source-validated independently of the semantic Bool value that one concrete runtime execution may observe.
+Both normal conditional outcomes MUST be considered for source validity independently of the semantic Bool value that one concrete runtime execution may observe.
 
 In particular:
 
-- a condition spelled as the literal `true` does not exempt the false/else arm from source validation; and
+- a condition spelled as the literal `true` does not exempt the false normal outcome—explicit else arm or omitted-else outcome—from source validity; and
 - a condition spelled as the literal `false` does not exempt the then arm from source validation.
 
-This is a source-validity rule. It does not assert that both arms execute in one concrete activation and does not create an unknown or three-valued Bool.
+This is a source-validity rule. It does not assert that both outcomes execute in one concrete activation and does not create an unknown or three-valued Bool.
 
 This revision therefore does not require source constant propagation, constant folding, symbolic execution, unreachable-arm weakening, or a value lattice merely to validate a conditional statement.
 
@@ -75,13 +75,13 @@ When execution reaches one represented conditional statement:
 
 Conditional selection itself performs no additional binding read, move, duplicate, assignment, structural consumption, cleanup, call, fault selection, or hidden source state transition beyond ending ownership of the successful Bool condition transient used for selection.
 
-The represented condition is therefore evaluated once even when validation considered both arms.
+The represented condition is therefore evaluated once even though source validation considers both normal outcomes.
 
 ## Condition fault
 
 If condition evaluation yields one defined fault `F` before successful Bool production:
 
-- no then or else arm begins;
+- no explicit conditional arm begins;
 - no conditional normal join occurs;
 - ownership transitions already completed during condition evaluation remain effective; and
 - the active activation follows the existing defined-fault cleanup and propagation relation from `function-execution.md` with the same fault `F`.
@@ -92,7 +92,7 @@ The conditional statement does not add a second fault cleanup boundary.
 
 If condition evaluation diverges before successful Bool production:
 
-- no then or else arm begins;
+- no explicit conditional arm begins;
 - no conditional normal join occurs; and
 - no lexical-scope, activation, or conditional cleanup occurs merely because execution remains suspended.
 
@@ -168,7 +168,7 @@ Binding identity, declared type, and assignment-mutability classification are un
 
 ## Exact structural-ownership state equality
 
-For one represented enclosing binding, two normal arm outcomes have equal structural ownership state exactly when their prefix-free consumed-path sets under `structural-ownership.md` are equal.
+For one represented enclosing binding, two normal outcomes have equal structural ownership state exactly when their prefix-free consumed-path sets under `structural-ownership.md` are equal.
 
 A represented conditional has a valid normal successor only when **every** binding identity in `E` has equal structural ownership state on both normal outcomes.
 
@@ -177,7 +177,7 @@ When all enclosing binding states are equal:
 - that common state is the one definite structural ownership state of the binding at the normal continuation; and
 - subsequent source validation proceeds through the existing single-state binding relation in `local-bindings.md` and `structural-ownership.md`.
 
-When any enclosing binding has unequal normal arm states, the conditional statement is source-invalid at its normal join boundary. No normal post-conditional ownership state is established.
+When any enclosing binding has unequal normal outcome states, the conditional statement is source-invalid at its normal join boundary. No normal post-conditional ownership state is established.
 
 The equality requirement is semantic equality of source structural state. It is not equality of runtime scalar values, record values, Core local state, parser nodes, HIR data structures, compiler hashes, or physical storage.
 
@@ -251,7 +251,7 @@ This conditional relation does not derive a common state by:
 - inventing a maybe-owned state; or
 - consulting lower Core liveness.
 
-In particular, source-invalid unequal arm states are not made valid by silently cleaning additional owned subvalues on an arm that retained them.
+In particular, source-invalid unequal normal outcome states are not made valid by silently cleaning additional owned subvalues on an outcome that retained them.
 
 This avoids introducing path-specific source destruction timing as an implicit consequence of merely reaching a branch join.
 
@@ -267,7 +267,7 @@ Future source control-flow forms or later extensions may introduce additional ac
 
 A concrete source execution with condition value `true` executes only the then arm. A concrete source execution with condition value `false` executes only the false outcome.
 
-Source validation nevertheless validates both normal outcomes and applies the exact-state join requirement to both.
+Source validation nevertheless considers both normal outcomes and applies the exact-state join requirement to both.
 
 This difference between runtime selection and conservative source validation does not introduce nondeterministic source execution.
 
@@ -332,7 +332,7 @@ For one fixed source-valid represented program and one fixed activation state, c
 
 The condition producer has its existing deterministic or otherwise accepted source behavior. Once it yields one of the two semantic Bool values, exactly one runtime outcome is selected.
 
-Validation of both arms is a static validity obligation, not runtime nondeterminism.
+Validation of both normal outcomes is a static validity obligation, not runtime nondeterminism.
 
 ## Further boundaries
 
