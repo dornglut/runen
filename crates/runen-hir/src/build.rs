@@ -785,100 +785,116 @@ fn validate_body(
     };
     let mut statements = Vec::new();
     let mut terminal_return = None;
+    let mut has_normal_continuation = true;
+
     for node in header.body.children() {
-        match node.kind() {
-            SyntaxKind::LocalDeclaration => {
-                if let Some(statement) = validate_local(
-                    header,
-                    &node,
-                    &context,
-                    &mut bindings,
-                    next_binding,
-                    diagnostics,
-                ) {
-                    statements.push(statement);
-                }
-            }
-            SyntaxKind::RecordDestructuringDeclaration => {
-                if let Some(statement) = validate_record_destructure(
-                    header,
-                    &node,
-                    &context,
-                    &mut bindings,
-                    next_binding,
-                    diagnostics,
-                ) {
-                    statements.push(statement);
-                }
-            }
-            SyntaxKind::AssignmentStatement => {
-                if let Some(statement) =
-                    validate_assignment(header, &node, &context, &mut bindings, diagnostics)
-                {
-                    statements.push(statement);
-                }
-            }
-            SyntaxKind::CallStatement => {
-                if let Some(statement) =
-                    validate_call_statement(header, &node, &context, &mut bindings, diagnostics)
-                {
-                    statements.push(statement);
-                }
-            }
-            SyntaxKind::BlockStatement => statements.push(validate_block(
+        if !has_normal_continuation {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnreachableStatement,
+                location: location(header.unit, &node),
+            });
+            continue;
+        }
+
+        if node.kind() == SyntaxKind::ReturnStatement {
+            terminal_return = Some(validate_terminal_return(
                 header,
                 &node,
                 &context,
                 &mut bindings,
-                next_binding,
                 diagnostics,
-            )),
-            SyntaxKind::IfStatement => {
-                if let Some(statement) = validate_if(
-                    header,
-                    &node,
-                    &context,
-                    &mut bindings,
-                    next_binding,
-                    diagnostics,
-                ) {
-                    statements.push(statement);
-                }
-            }
-            SyntaxKind::ReturnStatement => {
-                terminal_return = Some(validate_return(
-                    header,
-                    &node,
-                    &context,
-                    &mut bindings,
-                    diagnostics,
-                ));
-            }
-            _ => unreachable!("syntax-clean body contains only represented body nodes"),
+            ));
+            has_normal_continuation = false;
+            continue;
+        }
+
+        if let Some(statement) = validate_body_statement(
+            header,
+            &node,
+            &context,
+            &mut bindings,
+            next_binding,
+            diagnostics,
+        ) {
+            has_normal_continuation = statement_has_normal_continuation(&statement);
+            statements.push(statement);
         }
     }
 
-    match (header.result, terminal_return.as_ref()) {
-        (Some(_), None) => diagnostics.push(Diagnostic {
+    if header.result.is_some() && has_normal_continuation {
+        diagnostics.push(Diagnostic {
             kind: DiagnosticKind::MissingResultReturn,
             location: header.location,
-        }),
-        (
-            Some(_),
-            Some(Return {
-                value: None,
-                location,
-            }),
-        ) => diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::ExpectedResultValue,
-            location: *location,
-        }),
-        _ => {}
+        });
     }
 
     Body {
         statements,
         terminal_return,
+        has_normal_continuation,
+    }
+}
+
+fn validate_body_statement(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    match node.kind() {
+        SyntaxKind::LocalDeclaration => {
+            validate_local(header, node, context, bindings, next_binding, diagnostics)
+        }
+        SyntaxKind::RecordDestructuringDeclaration => validate_record_destructure(
+            header,
+            node,
+            context,
+            bindings,
+            next_binding,
+            diagnostics,
+        ),
+        SyntaxKind::AssignmentStatement => {
+            validate_assignment(header, node, context, bindings, diagnostics)
+        }
+        SyntaxKind::CallStatement => {
+            validate_call_statement(header, node, context, bindings, diagnostics)
+        }
+        SyntaxKind::BlockStatement => Some(validate_block(
+            header,
+            node,
+            context,
+            bindings,
+            next_binding,
+            diagnostics,
+        )),
+        SyntaxKind::IfStatement => {
+            validate_if(header, node, context, bindings, next_binding, diagnostics)
+        }
+        SyntaxKind::ReturnStatement => {
+            unreachable!("terminal return is handled by its containing source sequence")
+        }
+        _ => unreachable!("syntax-clean sequence contains only represented body nodes"),
+    }
+}
+
+fn statement_has_normal_continuation(statement: &Statement) -> bool {
+    match statement {
+        Statement::Block(block) => block.has_normal_continuation,
+        Statement::If {
+            then_block,
+            else_block,
+            ..
+        } => else_block
+            .as_ref()
+            .is_none_or(|else_block| {
+                then_block.has_normal_continuation || else_block.has_normal_continuation
+            }),
+        Statement::Local { .. }
+        | Statement::RecordDestructure { .. }
+        | Statement::Assignment { .. }
+        | Statement::Call { .. } => true,
     }
 }
 
@@ -892,41 +908,38 @@ fn validate_block(
 ) -> Statement {
     let mut statements = Vec::new();
     let mut direct_bindings = Vec::<(String, BindingId)>::new();
+    let mut terminal_return = None;
+    let mut has_normal_continuation = true;
 
     for child in node.children() {
-        let statement = match child.kind() {
-            SyntaxKind::LocalDeclaration => {
-                validate_local(header, &child, context, bindings, next_binding, diagnostics)
-            }
-            SyntaxKind::RecordDestructuringDeclaration => validate_record_destructure(
+        if !has_normal_continuation {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnreachableStatement,
+                location: location(header.unit, &child),
+            });
+            continue;
+        }
+
+        if child.kind() == SyntaxKind::ReturnStatement {
+            terminal_return = Some(validate_terminal_return(
                 header,
                 &child,
                 context,
                 bindings,
-                next_binding,
                 diagnostics,
-            ),
-            SyntaxKind::AssignmentStatement => {
-                validate_assignment(header, &child, context, bindings, diagnostics)
-            }
-            SyntaxKind::CallStatement => {
-                validate_call_statement(header, &child, context, bindings, diagnostics)
-            }
-            SyntaxKind::BlockStatement => Some(validate_block(
-                header,
-                &child,
-                context,
-                bindings,
-                next_binding,
-                diagnostics,
-            )),
-            SyntaxKind::IfStatement => {
-                validate_if(header, &child, context, bindings, next_binding, diagnostics)
-            }
-            _ => {
-                unreachable!("syntax-clean nested block contains only represented body statements")
-            }
-        };
+            ));
+            has_normal_continuation = false;
+            continue;
+        }
+
+        let statement = validate_body_statement(
+            header,
+            &child,
+            context,
+            bindings,
+            next_binding,
+            diagnostics,
+        );
 
         if let Some(statement) = statement {
             match &statement {
@@ -945,21 +958,24 @@ fn validate_block(
                 | Statement::Block(_)
                 | Statement::If { .. } => {}
             }
+            has_normal_continuation = statement_has_normal_continuation(&statement);
             statements.push(statement);
         }
     }
 
     let mut normal_cleanup = Vec::new();
-    for (name, binding) in direct_bindings.iter().rev() {
-        let state = bindings
-            .get(name)
-            .expect("validated direct child binding remains active through block end");
-        debug_assert_eq!(state.id, *binding);
-        for fields in remaining_ownership_frontier(state.ty, &state.ownership, context.records) {
-            normal_cleanup.push(CleanupPath {
-                binding: *binding,
-                fields,
-            });
+    if has_normal_continuation {
+        for (name, binding) in direct_bindings.iter().rev() {
+            let state = bindings
+                .get(name)
+                .expect("validated direct child binding remains active through block end");
+            debug_assert_eq!(state.id, *binding);
+            for fields in remaining_ownership_frontier(state.ty, &state.ownership, context.records) {
+                normal_cleanup.push(CleanupPath {
+                    binding: *binding,
+                    fields,
+                });
+            }
         }
     }
 
@@ -972,7 +988,9 @@ fn validate_block(
 
     Statement::Block(Block {
         statements,
+        terminal_return,
         normal_cleanup,
+        has_normal_continuation,
         location: location(header.unit, node),
     })
 }
@@ -1044,31 +1062,43 @@ fn validate_if(
         return None;
     }
 
-    let equal = post_condition.values().all(|enclosing| {
-        let then_state = then_bindings
-            .values()
-            .find(|state| state.id == enclosing.id)
-            .expect("then outcome retains every enclosing binding identity");
-        let else_state = else_bindings
-            .values()
-            .find(|state| state.id == enclosing.id)
-            .expect("false outcome retains every enclosing binding identity");
-        debug_assert_eq!(then_state.ty, enclosing.ty);
-        debug_assert_eq!(else_state.ty, enclosing.ty);
-        debug_assert_eq!(then_state.mutability, enclosing.mutability);
-        debug_assert_eq!(else_state.mutability, enclosing.mutability);
-        then_state.ownership == else_state.ownership
-    });
+    let then_normal = then_block.has_normal_continuation;
+    let else_normal = else_block
+        .as_ref()
+        .is_none_or(|else_block| else_block.has_normal_continuation);
 
-    if !equal {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::ConditionalOwnershipMismatch,
-            location: location(header.unit, node),
-        });
-        return None;
+    match (then_normal, else_normal) {
+        (true, true) => {
+            let equal = post_condition.values().all(|enclosing| {
+                let then_state = then_bindings
+                    .values()
+                    .find(|state| state.id == enclosing.id)
+                    .expect("then outcome retains every enclosing binding identity");
+                let else_state = else_bindings
+                    .values()
+                    .find(|state| state.id == enclosing.id)
+                    .expect("false outcome retains every enclosing binding identity");
+                debug_assert_eq!(then_state.ty, enclosing.ty);
+                debug_assert_eq!(else_state.ty, enclosing.ty);
+                debug_assert_eq!(then_state.mutability, enclosing.mutability);
+                debug_assert_eq!(else_state.mutability, enclosing.mutability);
+                then_state.ownership == else_state.ownership
+            });
+
+            if !equal {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ConditionalOwnershipMismatch,
+                    location: location(header.unit, node),
+                });
+                return None;
+            }
+            *bindings = then_bindings;
+        }
+        (true, false) => *bindings = then_bindings,
+        (false, true) => *bindings = else_bindings,
+        (false, false) => {}
     }
 
-    *bindings = then_bindings;
     Some(Statement::If {
         condition,
         then_block,
@@ -1638,6 +1668,23 @@ fn validate_call_statement(
         arguments,
         location: location(header.unit, node),
     })
+}
+
+fn validate_terminal_return(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Return {
+    let returned = validate_return(header, node, context, bindings, diagnostics);
+    if header.result.is_some() && returned.value.is_none() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ExpectedResultValue,
+            location: returned.location,
+        });
+    }
+    returned
 }
 
 fn validate_return(
