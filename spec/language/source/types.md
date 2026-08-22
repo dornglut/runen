@@ -36,9 +36,9 @@ Each represented floating source type consumes Core binary floating semantics wi
 
 These establish the applicable semantic binary floating value format, including the special-value domain governed by the Core floating owner. They do not prescribe physical IEEE storage bits or ABI layout.
 
-A floating source type identity does not itself select `standard`, `reproducible`, or `fast`. Existing numeric-contract authority/defaulting/refinement remains controlling.
+A floating source type identity does not itself select `standard`, `reproducible`, or `fast`. The existing numeric-contract authority, defaulting, refinement, and operation-specific rules remain controlling.
 
-A realization lacking direct native support for one represented intrinsic type MUST preserve every applicable accepted semantic contract through a legal realization, including emulation or applicable environment admission/rejection. Lack of hardware support is not permission to change the source type's value domain or make source validity target-defined.
+A realization lacking direct native support for one represented intrinsic type MUST preserve every applicable accepted semantic contract through an otherwise legal realization, including emulation or applicable environment admission/rejection where required. Lack of hardware support is not permission to change the source type's value domain or make source validity target-defined.
 
 ## Deliberately absent intrinsic types
 
@@ -80,7 +80,7 @@ That binding denotes one nominal record source type. Type identity is the identi
 
 The binding's module-private/exported accessibility is determined only by `names-modules.md`.
 
-The represented `record` form in `concrete-syntax.md` establishes one such declaration and maps its concrete field sequence to the structure below. Absence/presence of concrete `export` establishes module-private/exported accessibility respectively.
+The represented `record` form in `concrete-syntax.md` establishes one such declaration and maps its concrete field sequence to the structure below. Absence/presence of concrete `export` establishes module-private/exported accessibility respectively. Other future declaration forms may establish the same semantic declaration category only through their accepted mapping.
 
 A record declaration contains one finite ordered field sequence, which MAY be empty.
 
@@ -118,13 +118,13 @@ The rule does not prohibit a later recursive nominal type when every cycle passe
 
 Every represented source value type has one source-semantic **owned-value duplicability** classification: **duplicable** or **non-duplicable**.
 
-Duplicability means only that another accepted source operation may, when its own semantics explicitly consume this capability, produce another owned value preserving the source semantic value without consuming the source value.
+Duplicability means only that another accepted source operation may, when its own semantics explicitly use this capability, produce another owned value preserving the source semantic value without consuming the source value.
 
-Duplicability does not define/require source equality/comparison. It does not mean bitwise copy and does not imply shared storage identity/lifetime, aliasing, physical representation equality, ABI passing, or a particular realization strategy.
+Duplicability does not define or require a source equality or comparison relation. It does not mean bitwise copying and does not imply shared storage identity, shared stored-value lifetime, aliasing, physical representation equality, ABI passing, or a particular realization strategy.
 
-The represented intrinsic scalar source types are duplicable: `Bool`, every represented signed/unsigned fixed-width integer type, and `F16/F32/F64`.
+The represented intrinsic scalar source types are duplicable: `Bool`, every represented signed/unsigned fixed-width integer type, and `F16`, `F32`, and `F64`.
 
-For floating values, duplication preserves the semantic floating value under applicable floating contracts and adds no NaN representation/payload/sign/canonicalization guarantees.
+For floating values, duplication preserves the semantic floating value under applicable floating contracts. It does not define floating comparison equality and adds no NaN representation, payload, sign, or canonicalization guarantees beyond existing authority.
 
 Each nominal record declaration has one abstract source-semantic **duplicable selection**. A record may select duplicability only when every field source type is duplicable. A record that does not select duplicability is non-duplicable even if every field type is duplicable.
 
@@ -136,19 +136,19 @@ Distinct nominal record declarations make the selection independently. Equal fie
 
 Duplicating a value of a duplicable nominal record type produces another owned record value by preserving every field's semantic value through that field type's duplicability capability. The original record value is not consumed.
 
-The nominal selection is a conservative source ownership-policy choice. Structural shape alone does not silently grant duplication. This revision does not claim represented records already model unique resources/capabilities/handles/custom destruction.
+The nominal selection is a conservative source ownership-policy choice. Structural shape alone does not silently grant duplication. This revision does not claim represented records already model unique resources, capabilities, handles, or custom destruction.
 
-**Non-duplicable** means only that this non-consuming owned duplication capability is unavailable. It does not prohibit ownership transfer/consumption or a future explicit clone/copy-construction/conversion/factory/deserialization operation from independently producing another value.
+**Non-duplicable** means only that this non-consuming owned duplication capability is unavailable. It does not prohibit ownership transfer/consumption or a future explicit clone, copy-construction, conversion, factory, deserialization, or other operation from independently producing another value.
 
 Ordinary whole-binding use consumes this capability through `local-bindings.md`. Binding-rooted field-value use consumes it through `field-access.md` for the final selected field path. Recursive record patterns consume it through `patterns.md` independently for every binding leaf: a duplicable leaf produces a non-consuming duplicate from its complete structural path, while a non-duplicable leaf transfers/consumes exactly that complete path. Structural path availability and resulting ancestor/disjoint consequences are owned by `structural-ownership.md`, not by the duplicability classification.
 
-This section does not define parameter passing, calls/results, field assignment/reinitialization, pattern syntax, or explicit clone/copy construction.
+This section does not define other expression contexts, field assignment or partial reinitialization, parameter passing, result transfer, calls, pattern syntax, or any explicit cloning/copy-construction operation.
 
 Duplicability is source semantics independent of any future `Copy`-like trait spelling. A later trait/generic mechanism may expose/derive/constrain this capability only if its canonical semantics preserve this classification; this revision introduces no trait membership.
 
-No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial structural ownership.
+No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial structural ownership rather than silently changing either property.
 
-This capability consumes the conceptual distinction between ownership transfer and non-consuming duplication already present in Core, but Core copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
+This capability consumes the conceptual distinction between ownership transfer and non-consuming duplication already present in Core semantics, but Core copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
 
 ## Literal and conversion boundary
 
@@ -160,7 +160,7 @@ This document defines no abstract/unbounded integer/float literal type, default 
 
 This document grants no implicit conversion/coercion/promotion/widening/narrowing/subtyping/numeric defaulting relation between represented source types. Literal materialization is not conversion because the literal datum has no prior concrete source type.
 
-Those omissions do not prohibit a later accepted operation from defining conversion. They prevent the type foundation from creating conversion behavior before an operation owns it.
+Those omissions do not prohibit a later accepted operation from defining an explicit or implicit conversion. They prevent the type foundation from creating conversion behavior before an operation owns it.
 
 ## Callable and declaration boundary
 
