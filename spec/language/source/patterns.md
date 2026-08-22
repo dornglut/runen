@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for recursive irrefutable exhaustive named-field record patterns: same-module nominal pattern-head selection, recursive field structure, binding-leaf order and production, scrutinee-category selection, direct binding-root ownership consequences, and producer-backed pattern-scrutinee transient ownership/cleanup.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration completion from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, record-construction completion, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration completion from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The represented concrete pattern and scrutinee spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
@@ -62,7 +62,7 @@ It resolves directly through the same-module declaration namespace owned by `nam
 
 Function-local value bindings do not participate in pattern-head lookup. A local binding whose key equals a record-pattern head therefore does not change which record declaration the head denotes.
 
-Qualified or cross-module pattern heads are not represented.
+Qualified or cross-module pattern heads are not represented. The existence of a qualified `RecordConstruction` producer does not broaden this head relation.
 
 For the top pattern node, the selected record type is the exact required scrutinee type.
 
@@ -94,7 +94,7 @@ Every represented record-pattern node head remains a same-module lookup. Therefo
 
 A same-module outer record may have a field whose type is a foreign exported record. The accessible outer field may be bound as one complete binding leaf. That foreign record still cannot be recursively opened under this revision because every nested pattern head is unqualified and same-module-only, and exact nominal type equality prevents a different same-module record head from standing in for the foreign type.
 
-Field export therefore does not broaden represented record-pattern head selection or create a cross-module pattern form. A future qualified-pattern delivery may consume the same direct field-accessibility relation without redefining it.
+Field export and qualified record construction therefore do not broaden represented record-pattern head selection or create a cross-module pattern form. A future qualified-pattern delivery may consume the same direct field-accessibility relation without redefining it.
 
 ## Binding leaves and structural paths
 
@@ -138,7 +138,9 @@ Before the declaration enters its ownership-production relation, validation esta
 
 A rejected recursive structure establishes no pattern binding and applies no pattern-owned ownership transition.
 
-For a producer-backed declaration, a structurally invalid pattern does not validate/evaluate the producer merely to discover a later pattern error.
+For a producer-backed declaration, a structurally invalid pattern does not validate/evaluate the producer merely to discover a later pattern error. Once the pattern is valid, its top nominal record type is the exact required type supplied to producer validation before producer execution begins.
+
+Because every represented top pattern head is same-module and source-module self-import is invalid, a qualified record construction necessarily selects a foreign nominal record. That foreign record type cannot equal the same-module top pattern type. Therefore a bare qualified construction in the producer-backed scrutinee category is rejected by exact producer-result typing before any constructor initializer is evaluated or commits ownership. This consequence does not require a duplicate same-module-only constructor grammar for pattern scrutinees.
 
 ## Pattern-introduced bindings
 
@@ -180,9 +182,11 @@ A producer-backed scrutinee is exactly one syntactically non-bare producer admit
 - a record construction; or
 - a field-value use, using either its binding-root or bounded producer-backed receiver form.
 
-The top pattern head's nominal record type is the exact required source type of the **complete scrutinee producer result**. Structural similarity to another record type is insufficient.
+`RecordConstruction` in this list is the one existing producer category and may use either its represented unqualified same-module target or its qualified cross-module target. This does not create a second pattern scrutinee category or a qualified pattern head.
 
-For a producer-backed field-value scrutinee, that top required type constrains the field-value operation's final selected field result. It does not constrain the field-value operation's internal direct-call or record-construction receiver, whose own exact receiver type remains selected and validated under `field-access.md`.
+The top pattern head's nominal record type is the exact required source type of the **complete scrutinee producer result**. Structural similarity to another record type is insufficient. Consequently a qualified construction of a foreign record fails this exact required-type relation under the current same-module pattern-head grammar before construction execution, as established above.
+
+For a producer-backed field-value scrutinee, that top required type constrains the field-value operation's final selected field result. It does not constrain the field-value operation's internal direct-call or record-construction receiver, whose own exact receiver type remains selected and validated under `field-access.md`. A qualified construction may therefore appear **inside** such a field-value receiver when its final selected field result has the same nominal record type as the same-module top pattern; the field receiver's own foreign record type is not the pattern scrutinee type.
 
 The producer is resolved/evaluated in the lexical environment that exists before any binding introduced by this pattern enters scope.
 
@@ -294,6 +298,8 @@ If complete producer evaluation yields a defined fault before the pattern transi
 
 If complete producer evaluation diverges, no pattern leaf production, pattern binding establishment, or pattern-transient cleanup occurs merely because execution remains suspended. Producer-owned transients remain governed by the producer's divergence relation. A producer-backed field-value scrutinee may diverge only while its retained receiver producer is still evaluating; after receiver success its field-selection and field-receiver cleanup tail is non-diverging under the current source model.
 
+A bare qualified foreign construction cannot reach either dynamic outcome in this pattern position because exact top-type validation rejects it before constructor execution. Qualification inside another accepted producer, such as a field-value receiver whose final result matches the top pattern type, follows that producer's ordinary fault/divergence relation.
+
 For source validation implementations, producer-backed validation must preserve this atomic source-validity boundary: failure after tentative consuming producer validation must not leave rejected-source ownership state committed. A nested producer-backed field-value use independently preserves its own transaction boundary under `field-access.md`; pattern validity does not merge those transactions into one ownership domain.
 
 ## Declaration completion
@@ -308,12 +314,13 @@ For a valid direct-root pattern declaration:
 For a valid producer-backed pattern declaration:
 
 1. complete recursive pattern structure and binding-leaf validation;
-2. evaluate the complete producer using the pre-pattern-binding lexical environment and the top nominal record type as the exact required type of its final result;
-3. if that producer is a producer-backed field-value use, finish its separate field-receiver transient lifecycle before this step yields the owned record result;
-4. transfer the produced record into the fully owned pattern scrutinee transient;
-5. produce every binding-leaf value in depth-first source order;
-6. clean the pattern transient's canonical remaining frontier exactly once; and
-7. establish all new bindings together.
+2. validate the complete producer using the pre-pattern-binding lexical environment and the top nominal record type as the exact required type of its final result;
+3. only after complete producer validation succeeds, evaluate that producer;
+4. if that producer is a producer-backed field-value use, finish its separate field-receiver transient lifecycle before this step yields the owned record result;
+5. transfer the produced record into the fully owned pattern scrutinee transient;
+6. produce every binding-leaf value in depth-first source order;
+7. clean the pattern transient's canonical remaining frontier exactly once; and
+8. establish all new bindings together.
 
 Only after the applicable sequence completes may the next body statement begin.
 
@@ -333,7 +340,7 @@ At minimum retain:
 - each leaf's source-selected duplicate-or-consume consequence; and
 - for producer-backed scrutinees, the final source-selected pattern-transient remaining cleanup frontier paths in canonical order.
 
-Compiler temporary identity is not source-semantic pattern identity.
+Compiler temporary identity is not source-semantic pattern identity. If the retained producer is a record construction, its own source validator may discard whether its target spelling was qualified after retaining the resolved nominal record identity and initializer facts; pattern HIR requires no duplicate qualification fact.
 
 The former one-level HIR boundary that retained only one direct field index per leaf and `None / Complete / DirectFields` transient cleanup is insufficient for recursive patterns and must not remain as parallel semantic authority.
 
@@ -349,7 +356,7 @@ The explicit field-target form permits later pattern categories to extend the ri
 
 This revision does not define shorthand field binding, `_`, rest/omission, tuple/array/enum patterns, literals, alternatives, guards, refutable patterns, `match`, `if let`, loops, reference/borrow binding modes, mutable pattern bindings, destructuring assignment, arbitrary pattern scrutinees, general expressions/grouping, qualified/cross-module pattern heads, or pattern-specific visibility modifiers.
 
-Later features must extend rather than reinterpret the direct-root and producer-backed recursive semantics accepted here.
+Later features must extend rather than reinterpret the direct-root and producer-backed recursive semantics accepted here. A future qualified-pattern delivery may make a foreign qualified construction directly usable as a matching scrutinee only by explicitly broadening pattern-head lookup and preserving exact nominal typing; this revision does not pre-authorize that step.
 
 ## Source/Core separation
 
@@ -357,6 +364,6 @@ Pattern ownership is source semantics over nominal record/field identities, stru
 
 A field-receiver transient used internally by a producer-backed field-value scrutinee is owned by the field-value operation, not by pattern semantics. Only the completed selected record result crosses into the pattern ownership relation.
 
-Core projections, path liveness, scalar copyability, destruction domains, compiler local numbering, physical offsets, and backend storage are not source pattern authority.
+Core projections, path liveness, scalar copyability, destruction domains, compiler local numbering, physical offsets, backend storage, and construction-target qualification are not source pattern authority.
 
 A faithful implementation may map retained resolved paths to lower projections only after source validation has selected every source-semantic fact above.
