@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including direct binding-root and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, normal-continuation presence, cleanup, divergence, fault, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, zero/one/two normal-outcome composition, and definite normal ownership from [Source control flow](control-flow.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, normal-continuation presence, cleanup, divergence, fault, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, zero/one/two normal-outcome composition, and definite normal ownership from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -264,7 +264,9 @@ This ordinary-local form has no uninitialized local, inferred local type, patter
 RecordDestructuringDeclaration =
     "let" RecordPattern "=" RecordPatternScrutinee ";"
 RecordPattern =
-    UserIdentifier "{" RecordPatternFields? "}"
+    RecordPatternHead "{" RecordPatternFields? "}"
+RecordPatternHead =
+    UserIdentifier | QualifiedModuleMember
 RecordPatternFields =
     RecordPatternField ("," RecordPatternField)* ","?
 RecordPatternField =
@@ -279,33 +281,37 @@ ProducerBackedRecordPatternScrutinee =
     DirectCall | RecordConstruction | FieldValueUse
 ```
 
-Every `RecordPattern` begins with one explicit nominal record-pattern head. Each `RecordPatternField` maps its first identifier to one selected declared field key. Its target is either one binding leaf identifier or another explicit nested `RecordPattern`.
+Every `RecordPattern` begins with one explicit nominal record-pattern head. The head is either one unqualified `UserIdentifier` or the existing two-part `QualifiedModuleMember`. Each `RecordPatternField` maps its first identifier to one selected declared field key. Its target is either one bare binding leaf identifier or another explicit nested `RecordPattern`.
 
-The field target is classified syntactically without semantic lookup: a bare `UserIdentifier` target is a binding leaf, while `UserIdentifier "{"` begins a nested record pattern. The grammar therefore remains lossless and unambiguous without type information.
+The field target is classified syntactically without semantic lookup: a bare `UserIdentifier` target is a binding leaf; `UserIdentifier "{"` begins an unqualified nested record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified nested record pattern. No field type inference or lookup is needed to select among those concrete shapes.
 
 Every record-pattern node MAY have an empty field sequence and MAY use a trailing comma. Pattern field presentation order is retained exactly. `patterns.md` defines the resulting recursive structure, exhaustive validation, depth-first binding-leaf source order, exact type/accessibility requirements, and ownership behavior.
 
-A nested record-pattern target introduces no binding merely for naming its record head. Only bare binding-leaf targets introduce function-local bindings under `local-bindings.md`.
+A nested record-pattern target introduces no binding merely for naming its record head. Only bare binding-leaf targets introduce function-local bindings under `local-bindings.md`. Qualification is therefore never a binding-leaf spelling.
 
-A `DirectRecordPatternRoot` is exactly one bare unqualified `UserIdentifier`. In this declaration position it maps to the accepted direct binding-root pattern relation, not to ordinary `IdentifierUse` value production. The grammar does not insert an implicit whole-record value use or scrutinee transient.
+An unqualified pattern head maps to the same-module record-declaration lookup owned by `patterns.md` and `names-modules.md`. A qualified `alias::Record` pattern head maps to the existing source-unit module-alias and exported qualified cross-module lookup relation in `names-modules.md`; the selected entity must be a nominal record. Function-local bindings do not participate in either pattern-head lookup.
+
+A `DirectRecordPatternRoot` is exactly one bare unqualified `UserIdentifier`. In this declaration position it maps to the accepted direct binding-root pattern relation, not to ordinary `IdentifierUse` value production. The grammar does not insert an implicit whole-record value use or scrutinee transient. Pattern-head qualification does not alter the direct-root scrutinee grammar.
 
 A `ProducerBackedRecordPatternScrutinee` remains deliberately narrower than `Value`. It admits exactly one syntactically non-bare already-represented producer: a result-bearing `DirectCall`, a `RecordConstruction`, or a `FieldValueUse`. The top record-pattern head supplies the exact required nominal record type under `patterns.md` and `function-execution.md`.
 
 The producer-backed alternatives reuse their existing concrete forms. A direct call may be unqualified or use the represented `alias::member(...)` target. A record construction may use its represented unqualified same-module target or qualified `alias::Record` target and remains named-field/exhaustive. Field-value use may be binding-rooted or use the bounded direct-call/record-construction producer receiver defined below.
 
-Broadening `RecordConstruction` does not broaden any `RecordPattern` head. Every represented pattern head remains one unqualified same-module record lookup. Therefore a bare qualified construction of a foreign nominal record cannot satisfy the exact top pattern-head type requirement under this revision: self-import is invalid, and a distinct same-module record head is not nominally equal to that foreign type. No duplicate same-module-only constructor grammar is introduced merely for the scrutinee position.
+A qualified construction may directly satisfy a qualified top record pattern when both qualified forms resolve to the same nominal record and their independent target/field-accessibility rules are source-valid. This is exact nominal producer typing, not a second pattern-scrutinee or construction category. Different record declarations remain unequal even when their fields are structurally equal.
 
 When a producer-backed `FieldValueUse` is the scrutinee, its complete field-value operation ends before the resulting owned record enters the pattern-specific receiving relation. The field-receiver transient and the pattern scrutinee transient are therefore distinct sequential semantic objects under `field-access.md`, `patterns.md`, and `function-execution.md`.
 
 The top scrutinee alternatives remain classifiable from their complete token shapes without semantic lookup. A direct root ends after its `UserIdentifier`; a direct call has call syntax; a record construction has constructor syntax; and a field-value use contains one or more `.` selectors after either its binding root or its complete bounded producer receiver. Scrutinee category does not depend on inferred type.
 
-This recursive pattern form introduces no new reserved key or punctuation. It remains distinguished from `LocalDeclaration` after `let`: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form, while `UserIdentifier "{"` begins a record pattern.
+This recursive pattern form introduces no new reserved key or punctuation. It remains distinguished from `LocalDeclaration` after `let` by concrete token shape: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form; `UserIdentifier "{"` begins an unqualified record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified record pattern. This classification uses bounded token lookahead only and does not consult module lookup or source types.
 
 Boolean and decimal integer literals are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, operator expression, conversion, arbitrary postfix/member expression, qualified bare module member, or other general `Value` form is admitted as a record-pattern scrutinee.
 
 Complete recursive pattern validation, binding-leaf ordering, producer evaluation ordering, transient structural ownership/cleanup, grouped binding establishment, and fault/divergence behavior are owned by `patterns.md`, `field-access.md`, `structural-ownership.md`, and `function-execution.md`.
 
-This revision defines no `let mut Record { ... }`, shorthand field pattern, wildcard/ignore, rest/omission, tuple/array/enum pattern, literal/alternative/guard pattern, qualified record-pattern head, refutable pattern, destructuring assignment, reference-binding mode, or mutable pattern-binding modifier.
+Pattern-head qualification is discharged by source validation. A faithful typed representation may retain the resolved top nominal record identity and complete leaf paths/types/ownership facts without retaining qualified versus unqualified head spelling or separate nested-head qualification facts.
+
+This revision defines no `let mut Record { ... }`, shorthand field pattern, wildcard/ignore, rest/omission, tuple/array/enum pattern, literal/alternative/guard pattern, qualified binding leaf, qualified field name, nested module path beyond the represented alias/member pair, refutable pattern, destructuring assignment, reference-binding mode, or mutable pattern-binding modifier.
 
 ## Whole-binding assignment statements
 
@@ -442,7 +448,7 @@ A `RecordConstruction` maps to the exhaustive record-construction relation above
 
 A `FieldValueUse` maps to the bounded binding-root/producer-backed relation above and produces one owned value under `field-access.md` when source-valid. It does not create a general member, postfix, place, or expression hierarchy. The same concrete field-value form may also appear in the dedicated producer-backed record-pattern scrutinee position when its exact result type is the nominal record selected by the top pattern head, and in `ConditionalValue` when its exact result type is `Bool` under `control-flow.md`.
 
-A qualified module member without a direct-call argument list or record-construction body is not an `IdentifierUse` value and is not a record-pattern scrutinee under this subset. Module aliases and module-level declarations do not become source values.
+A qualified module member without a direct-call argument list, record-construction body, or record-pattern body is not an `IdentifierUse` value and is not a record-pattern scrutinee under this subset. Module aliases and module-level declarations do not become source values.
 
 This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; arbitrary-receiver member/postfix access beyond the bounded field receiver categories above; assignment expression; block expression; closure; or other value form beyond the represented producers above.
 
@@ -466,7 +472,7 @@ This subset defines no tail-expression return, no return as a `BodyStatement`, a
 
 ## Unqualified lookup and category validation
 
-Except for an **unqualified** `RecordConstruction` target and every `RecordPattern` head, whose same-module record-declaration lookup is defined by their respective owners, represented unqualified function-body identifier forms first apply the function-local precedence defined by `local-bindings.md`. Only when no active parameter/local binding resolves the lexical key does lookup fall through to same-module lookup under `names-modules.md`.
+Except for an **unqualified** `RecordConstruction` target and an **unqualified** `RecordPatternHead`, whose same-module record-declaration lookup is defined by their respective owners, represented unqualified function-body identifier forms first apply the function-local precedence defined by `local-bindings.md`. Only when no active parameter/local binding resolves the lexical key does lookup fall through to same-module lookup under `names-modules.md`.
 
 After lookup selects an entity, the consuming syntactic context validates its category. Lookup MUST NOT skip the selected entity to find another binding of a context-preferred category.
 
@@ -476,9 +482,9 @@ A `ProducerFieldValueUse` applies the lookup relation of its complete receiver p
 
 A producer-backed pattern scrutinee likewise applies the lookup relation of its concrete producer before the pattern consumes the produced value. When that producer is a `ProducerFieldValueUse`, its receiver lookup and complete field-value production occur before the resulting owned value enters the pattern transient relation. Pattern-introduced bindings are not yet in scope during any of those lookups.
 
-Every unqualified record-construction target and every recursive record-pattern head is an explicit same-module declaration lookup. Active parameter/locals of equal key do not participate in those head/target lookups, and the selected module binding must be a record declaration. Qualified record-construction targets instead use only the represented source-unit module-alias lookup relation described below. Pattern heads remain unqualified and same-module-only.
+Every unqualified record-construction target and unqualified recursive record-pattern head is an explicit same-module declaration lookup. Active parameter/locals of equal key do not participate in those head/target lookups, and the selected module binding must be a record declaration. Qualified record-construction targets and qualified record-pattern heads instead use only the represented source-unit module-alias lookup relation described below.
 
-Imported modules are not searched by ordinary unqualified lookup or by represented pattern-head relations. They participate in construction only through an explicit qualified `alias::Record` target.
+Imported modules are not searched by ordinary unqualified lookup. They participate in construction and pattern-head lookup only through explicit qualified `alias::Record` forms.
 
 This rule does not introduce overload resolution or general separate type/value module namespaces.
 
@@ -486,11 +492,11 @@ This rule does not introduce overload resolution or general separate type/value 
 
 A concrete `alias::member` form is explicitly qualified. Its first identifier is interpreted only as a source-unit module alias under `names-modules.md`; it does not perform function-local or same-module declaration lookup. Its second identifier is resolved only in the aliased target module's declaration namespace under the exported-binding requirement owned by `names-modules.md`.
 
-After qualified lookup selects the target binding, the consuming type, direct-call, or record-construction context validates the entity category. Lookup MUST NOT skip a private or wrong-category target to search for another entity.
+After qualified lookup selects the target binding, the consuming type, direct-call, record-construction, or record-pattern-head context validates the entity category. Lookup MUST NOT skip a private or wrong-category target to search for another entity.
 
 A parameter/local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local controls ordinary unqualified spelling but does not block syntactically qualified `alias::member`.
 
-The two-part qualification syntax is reused only in the explicitly represented type, direct-call, and record-construction target positions. It does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, or qualified record-pattern heads. A qualified direct call may appear as a producer-backed record-pattern scrutinee or as the receiver of a `ProducerFieldValueUse`; a qualified record construction may likewise appear wherever the existing `RecordConstruction` producer category is admitted. Any resulting record value may then undergo ordinary `.` field selection through `field-access.md`. None of those compositions makes a record-pattern head or field selector itself a qualified module member.
+The two-part qualification syntax is reused only in the explicitly represented type, direct-call target, record-construction target, and record-pattern-head positions. It does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, qualified binding leaves, or qualified field names. A qualified direct call may appear as a producer-backed record-pattern scrutinee or as the receiver of a `ProducerFieldValueUse`; a qualified record construction may likewise appear wherever the existing `RecordConstruction` producer category is admitted. Any resulting record value may then undergo ordinary `.` field selection through `field-access.md`. A qualified record-pattern head uses the same lookup relation only to select its nominal record and does not turn its field selectors or binding leaves into qualified module members.
 
 ## Deliberate boundaries
 
@@ -503,10 +509,10 @@ This revision does not define:
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
 - conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch, labels, break, continue, or other control-transfer forms beyond represented statement-level `if` and terminal return;
 - record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal, bare `IdentifierUse`-as-value, grouping, operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
-- source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
+- source-visible module identities, dependency locators, package paths, nested module paths beyond the represented alias/member pair, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, method-based, or partial record construction, nor a constructor namespace or separate public-constructor capability;
 - arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; field accessibility beyond the represented module-private/exported direct relation; package/friend/protected accessibility; methods; properties; or associated-item lookup;
-- qualified/cross-module record-pattern heads;
+- qualified binding leaves or qualified field names inside record patterns;
 - positive record duplicability-selection syntax;
 - references, borrow syntax or pattern binding modes, source interior mutability, raw-pointer assignment, or lifetime syntax;
 - indirect calls, function values, or closures;
