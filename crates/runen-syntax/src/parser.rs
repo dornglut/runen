@@ -278,6 +278,7 @@ impl Parser<'_> {
         }
 
         self.bump_trivia();
+        let mut returned = false;
         let mut missing_close = false;
         while !self.at(SyntaxKind::RBrace) && self.current().is_some() {
             if stop_at_else && self.at(SyntaxKind::KwElse) {
@@ -291,12 +292,37 @@ impl Parser<'_> {
                 break;
             }
 
+            if returned {
+                self.error_here(SyntaxErrorKind::UnexpectedAfterReturn);
+                self.builder.start_node(SyntaxKind::ErrorNode.into());
+                while !self.at(SyntaxKind::RBrace)
+                    && !(stop_at_else && self.at(SyntaxKind::KwElse))
+                    && !self.at_any(TOP_LEVEL_STARTERS)
+                    && self.current().is_some()
+                {
+                    self.bump();
+                    self.bump_trivia();
+                }
+                self.builder.finish_node();
+                if stop_at_else && self.at(SyntaxKind::KwElse) {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
+                    missing_close = true;
+                } else if self.at_any(TOP_LEVEL_STARTERS) {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
+                    missing_close = true;
+                }
+                break;
+            }
+
             match self.current() {
                 Some(SyntaxKind::KwLet) => self.parse_let_statement(),
+                Some(SyntaxKind::KwReturn) => {
+                    self.parse_return_statement();
+                    returned = true;
+                }
                 Some(SyntaxKind::KwIf) => self.parse_if_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
-                Some(SyntaxKind::KwReturn) => self.recover_nested_return(),
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
                     self.recover_one();
@@ -364,26 +390,6 @@ impl Parser<'_> {
         {
             self.recover_one();
         }
-    }
-
-    fn recover_nested_return(&mut self) {
-        self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
-        self.builder.start_node(SyntaxKind::ErrorNode.into());
-        self.bump();
-        while self.current().is_some()
-            && !self.at(SyntaxKind::Semicolon)
-            && !self.at(SyntaxKind::RBrace)
-            && !self.at(SyntaxKind::LBrace)
-            && !self.at(SyntaxKind::KwLet)
-            && !self.at(SyntaxKind::KwIf)
-            && !self.at(SyntaxKind::KwElse)
-            && !self.at(SyntaxKind::KwReturn)
-            && !self.at_any(TOP_LEVEL_STARTERS)
-        {
-            self.bump();
-        }
-        self.eat(SyntaxKind::Semicolon);
-        self.builder.finish_node();
     }
 
     fn parse_let_statement(&mut self) {
