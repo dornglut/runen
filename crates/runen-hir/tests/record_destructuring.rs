@@ -599,11 +599,8 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
         .id;
 
     for name in ["direct", "call", "construct", "field"] {
-        let Statement::RecordDestructure {
-            record,
-            bindings,
-            ..
-        } = &function(&hir, name).body.statements[0]
+        let Statement::RecordDestructure { record, bindings, .. } =
+            &function(&hir, name).body.statements[0]
         else {
             panic!("expected record destructuring in {name}");
         };
@@ -614,7 +611,8 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
         assert_eq!(bindings[0].ownership, OwnedUse::Duplicate);
     }
 
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "direct").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &function(&hir, "direct").body.statements[0]
     else {
         panic!("direct pattern");
     };
@@ -625,7 +623,8 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
         ("construct", "construction"),
         ("field", "field"),
     ] {
-        let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, name).body.statements[0]
+        let Statement::RecordDestructure { scrutinee, .. } =
+            &function(&hir, name).body.statements[0]
         else {
             panic!("producer pattern");
         };
@@ -813,9 +812,7 @@ fn recursive_qualified_patterns_recompute_accessibility_at_each_module_transitio
     .expect("foreign to caller-module nested pattern resumes same-module private access");
 
     let third = parse("export record Third { export value: I8 }");
-    let middle = parse(
-        "import third; export record Foreign { export third: third::Third }",
-    );
+    let middle = parse("import third; export record Foreign { export third: third::Third }");
     let caller = parse(
         "import dep; import third; fn f(root: dep::Foreign) -> I8 { \
              let dep::Foreign { third: third::Third { value: item } } = root; \
