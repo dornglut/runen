@@ -50,7 +50,7 @@ fn drops(function: &CoreFunction) -> Vec<PlaceAccess> {
 }
 
 #[test]
-fn pattern_bindings_are_predeclared_in_source_order_and_lower_without_temporaries() {
+fn one_level_pattern_bindings_remain_predeclared_in_source_order_without_temporaries() {
     let lowered = lower_source(
         "record Token {} record Mixed { first: I8, token: Token, last: U8 } \
          fn f(root: Mixed) { let Mixed { last: z, token: moved, first: a } = root; }",
@@ -85,14 +85,30 @@ fn pattern_bindings_are_predeclared_in_source_order_and_lower_without_temporarie
 }
 
 #[test]
-fn projected_copy_and_move_follow_pattern_source_order_not_record_order() {
+fn recursive_direct_root_lowers_full_paths_in_depth_first_source_order_without_scrutinee_temp() {
     let lowered = lower_source(
-        "record Token { value: I8 } record Pair { left: Token, count: I8, right: Token } \
-         fn f(root: Pair) { \
-             let Pair { right: r, count: c, left: l } = root; \
+        "record Token { value: I8 } \
+         record Leaf { value: I8, token: Token } \
+         record Inner { leaf: Leaf, count: U8 } \
+         record Outer { tail: I8, inner: Inner } \
+         fn f(root: Outer) { \
+             let Outer { \
+                 inner: Inner { count: count, leaf: Leaf { token: moved, value: value } }, \
+                 tail: tail, \
+             } = root; \
          }",
     );
     let f = function(lowered.as_program(), "f");
+
+    assert_eq!(
+        f.body
+            .locals
+            .iter()
+            .map(|local| local.name.as_str())
+            .collect::<Vec<_>>(),
+        ["root", "count", "moved", "value", "tail"]
+    );
+    assert!(f.body.locals.iter().all(|local| !local.name.starts_with("$tmp")));
 
     let projections = f.body.blocks[0]
         .statements
@@ -109,101 +125,132 @@ fn projected_copy_and_move_follow_pattern_source_order_not_record_order() {
         .collect::<Vec<_>>();
     assert_eq!(
         projections,
-        vec![
+        [
+            vec![Projection::Field(1), Projection::Field(1)],
+            vec![
+                Projection::Field(1),
+                Projection::Field(0),
+                Projection::Field(1),
+            ],
+            vec![
+                Projection::Field(1),
+                Projection::Field(0),
+                Projection::Field(0),
+            ],
+            vec![Projection::Field(0)],
+        ]
+    );
+    assert!(matches!(
+        f.body.blocks[0].statements[1],
+        CoreStatement::Init {
+            src: Operand::Move(_),
+            ..
+        }
+    ));
+}
+
+#[test]
+fn producer_construction_keeps_source_locals_before_temporaries_and_drops_complete_all_dup_value() {
+    let lowered = lower_source(
+        "record Inner { left: I8, right: U8 } record Outer { inner: Inner, tail: I8 } \
+         fn f() { \
+             let Outer { inner: Inner { right: r, left: l }, tail: tail } = \
+                 Outer { inner: Inner { left: 1, right: 2 }, tail: 3 }; \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    let names = f
+        .body
+        .locals
+        .iter()
+        .map(|local| local.name.as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(&names[..3], ["r", "l", "tail"]);
+    assert!(names[3..].iter().all(|name| name.starts_with("$tmp")));
+    let cleanup = drops(f);
+    assert_eq!(cleanup.len(), 1);
+    let PlaceAccess::Direct(cleanup_root) = &cleanup[0] else {
+        panic!("expected direct cleanup place");
+    };
+    assert!(cleanup_root.projections.is_empty());
+}
+
+#[test]
+fn mixed_recursive_producer_cleanup_drops_retained_paths_in_canonical_hir_order() {
+    let lowered = lower_source(
+        "record Token { value: I8 } \
+         record Inner { a: I8, token: Token, b: U8 } \
+         record Outer { head: I8, inner: Inner, tail: U8 } \
+         fn f() { \
+             let Outer { \
+                 inner: Inner { token: moved, a: a, b: b }, \
+                 head: head, tail: tail, \
+             } = Outer { \
+                 head: 1, inner: Inner { a: 2, token: Token { value: 3 }, b: 4 }, tail: 5 \
+             }; \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let cleanup = drops(f);
+    assert_eq!(cleanup.len(), 4);
+    let paths = cleanup
+        .iter()
+        .map(|place| match place {
+            PlaceAccess::Direct(place) => place.projections.clone(),
+            _ => panic!("expected direct cleanup place"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        paths,
+        [
             vec![Projection::Field(2)],
-            vec![Projection::Field(1)],
+            vec![Projection::Field(1), Projection::Field(2)],
+            vec![Projection::Field(1), Projection::Field(0)],
             vec![Projection::Field(0)],
         ]
     );
 }
 
 #[test]
-fn producer_construction_keeps_source_locals_before_temporaries_and_drops_complete_all_dup_value() {
+fn all_transferred_recursive_producer_emits_no_transient_drop() {
     let lowered = lower_source(
-        "record Pair { left: I8, right: U8 } \
-         fn f() { let Pair { right: r, left: l } = Pair { left: 1, right: 2 }; }",
-    );
-    let f = function(lowered.as_program(), "f");
-
-    assert_eq!(
-        f.body
-            .locals
-            .iter()
-            .map(|local| local.name.as_str())
-            .collect::<Vec<_>>(),
-        ["r", "l", "$tmp0", "$tmp1", "$tmp2"]
-    );
-    assert_eq!(drops(f), vec![direct(Place::local(LocalId(4)))]);
-    assert!(f.body.blocks[0].statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::Init {
-            dst,
-            src: Operand::Copy(PlaceAccess::Direct(source)),
-        } if *dst == Place::local(LocalId(0)) && *source == Place::local(LocalId(4)).field(1)
-    )));
-    assert!(f.body.blocks[0].statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::Init {
-            dst,
-            src: Operand::Copy(PlaceAccess::Direct(source)),
-        } if *dst == Place::local(LocalId(1)) && *source == Place::local(LocalId(4)).field(0)
-    )));
-}
-
-#[test]
-fn mixed_producer_cleanup_drops_retained_direct_fields_in_hir_order() {
-    let lowered = lower_source(
-        "record Token { value: I8 } record Mixed { first: I8, token: Token, last: U8 } \
+        "record A { value: I8 } record B { value: I8 } record C { value: I8 } \
+         record Inner { b: B, c: C } record Outer { a: A, inner: Inner } \
          fn f() { \
-             let Mixed { token: moved, last: z, first: a } = \
-                 Mixed { first: 1, token: Token { value: 2 }, last: 3 }; \
-         }",
-    );
-    let f = function(lowered.as_program(), "f");
-    let cleanup = drops(f);
-    assert_eq!(cleanup.len(), 2);
-
-    let [PlaceAccess::Direct(first), PlaceAccess::Direct(second)] = cleanup.as_slice() else {
-        panic!("expected direct transient cleanup places");
-    };
-    assert_eq!(first.local, second.local);
-    assert_eq!(first.projections, vec![Projection::Field(2)]);
-    assert_eq!(second.projections, vec![Projection::Field(0)]);
-}
-
-#[test]
-fn all_transferred_producer_emits_no_transient_drop() {
-    let lowered = lower_source(
-        "record Token { value: I8 } record Pair { left: Token, right: Token } \
-         fn f() { \
-             let Pair { right: r, left: l } = \
-                 Pair { left: Token { value: 1 }, right: Token { value: 2 } }; \
+             let Outer { inner: Inner { c: c, b: b }, a: a } = \
+                 Outer { a: A { value: 1 }, inner: Inner { b: B { value: 2 }, c: C { value: 3 } } }; \
          }",
     );
     let f = function(lowered.as_program(), "f");
     assert!(drops(f).is_empty());
 
-    let moved_fields = f.body.blocks[0]
+    let moved_paths = f.body.blocks[0]
         .statements
         .iter()
         .filter_map(|statement| match statement {
             CoreStatement::Init {
                 src: Operand::Move(PlaceAccess::Direct(place)),
                 ..
-            } if place.projections.len() == 1 => Some(place.projections.clone()),
+            } if !place.projections.is_empty() => Some(place.projections.clone()),
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert!(moved_fields.contains(&vec![Projection::Field(1)]));
-    assert!(moved_fields.contains(&vec![Projection::Field(0)]));
+    assert!(moved_paths.iter().any(|path| path == &vec![Projection::Field(0)]));
+    assert!(moved_paths.iter().any(|path| {
+        path == &vec![Projection::Field(1), Projection::Field(0)]
+    }));
+    assert!(moved_paths.iter().any(|path| {
+        path == &vec![Projection::Field(1), Projection::Field(1)]
+    }));
 }
 
 #[test]
-fn direct_call_producer_uses_call_result_temporary_as_pattern_source() {
+fn direct_call_producer_uses_existing_call_result_temporary_as_recursive_pattern_source() {
     let lowered = lower_source(
-        "record Pair { left: I8, right: U8 } \
-         fn make() -> Pair { return Pair { left: 1, right: 2 }; } \
-         fn f() { let Pair { left: l, right: r } = make(); }",
+        "record Inner { left: I8, right: U8 } record Outer { inner: Inner, tail: I8 } \
+         fn make() -> Outer { return Outer { inner: Inner { left: 1, right: 2 }, tail: 3 }; } \
+         fn f() { let Outer { inner: Inner { left: l, right: r }, tail: tail } = make(); }",
     );
     let f = function(lowered.as_program(), "f");
 
@@ -224,11 +271,11 @@ fn direct_call_producer_uses_call_result_temporary_as_pattern_source() {
             CoreStatement::Init {
                 src: Operand::Copy(PlaceAccess::Direct(place)),
                 ..
-            } if place.projections.len() == 1 => Some(place.clone()),
+            } if !place.projections.is_empty() => Some(place.clone()),
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(pattern_sources.len(), 2);
+    assert_eq!(pattern_sources.len(), 3);
     assert!(
         pattern_sources
             .iter()
@@ -238,43 +285,9 @@ fn direct_call_producer_uses_call_result_temporary_as_pattern_source() {
 }
 
 #[test]
-fn field_value_producer_moves_source_field_into_one_pattern_temporary() {
-    let lowered = lower_source(
-        "record Pair { left: I8, right: U8 } record Outer { pair: Pair } \
-         fn f(root: Outer) { let Pair { left: l, right: r } = root.pair; }",
-    );
-    let f = function(lowered.as_program(), "f");
-
-    assert_eq!(
-        f.body
-            .locals
-            .iter()
-            .map(|local| local.name.as_str())
-            .collect::<Vec<_>>(),
-        ["root", "l", "r", "$tmp0"]
-    );
-    assert_eq!(
-        f.body.blocks[0].statements[0],
-        CoreStatement::Init {
-            dst: Place::local(LocalId(3)),
-            src: Operand::Move(direct(Place::local(LocalId(0)).field(0))),
-        }
-    );
-    assert!(f.body.blocks[0].statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::Init {
-            src: Operand::Copy(PlaceAccess::Direct(place)),
-            ..
-        } if place.local == LocalId(3) && place.projections == vec![Projection::Field(0)]
-    )));
-    assert_eq!(drops(f), vec![direct(Place::local(LocalId(3)))]);
-}
-
-#[test]
 fn zero_field_direct_pattern_emits_no_local_and_no_core_statement() {
     let lowered = lower_source("record Empty {} fn f(root: Empty) { let Empty {} = root; }");
     let f = function(lowered.as_program(), "f");
-
     assert_eq!(f.body.locals.len(), 1);
     assert!(f.body.blocks[0].statements.is_empty());
 }
@@ -283,7 +296,6 @@ fn zero_field_direct_pattern_emits_no_local_and_no_core_statement() {
 fn zero_field_producer_keeps_source_ownership_but_erases_lower_vacuous_drop() {
     let lowered = lower_source("record Empty {} fn f() { let Empty {} = Empty {}; }");
     let f = function(lowered.as_program(), "f");
-
     assert_eq!(
         f.body
             .locals
@@ -294,79 +306,66 @@ fn zero_field_producer_keeps_source_ownership_but_erases_lower_vacuous_drop() {
     );
     assert!(drops(f).is_empty());
     assert_eq!(f.body.blocks[0].statements.len(), 1);
-    assert!(matches!(
-        f.body.blocks[0].statements[0],
-        CoreStatement::Init {
-            src: Operand::Constant(runen_core_ir::Value::Struct(ref fields)),
-            ..
-        } if fields.is_empty()
-    ));
 }
 
 #[test]
-fn zero_leaf_nonduplicable_field_still_lowers_as_projected_move() {
+fn nested_zero_leaf_nonduplicable_leaf_still_lowers_as_full_projected_move() {
     let lowered = lower_source(
-        "record Empty {} record Holder { empty: Empty } \
-         fn f(root: Holder) { let Holder { empty: moved } = root; }",
+        "record Empty {} record Inner { empty: Empty } record Outer { inner: Inner } \
+         fn f(root: Outer) { let Outer { inner: Inner { empty: moved } } = root; }",
     );
     let f = function(lowered.as_program(), "f");
-
     assert_eq!(
         f.body.blocks[0].statements,
         vec![CoreStatement::Init {
             dst: Place::local(LocalId(1)),
-            src: Operand::Move(direct(Place::local(LocalId(0)).field(0))),
+            src: Operand::Move(direct(
+                Place::local(LocalId(0)).field(0).field(0)
+            )),
         }]
     );
 }
 
 #[test]
-fn nested_pattern_cleanup_follows_reverse_source_binding_order() {
+fn nested_block_cleanup_follows_reverse_depth_first_binding_order() {
     let lowered = lower_source(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { { let Pair { right: second, left: first } = root; } }",
+        "record Inner { left: I8, right: U8 } record Outer { head: I8, inner: Inner } \
+         fn f(root: Outer) { \
+             { let Outer { inner: Inner { right: second, left: first }, head: head } = root; } \
+         }",
     );
     let f = function(lowered.as_program(), "f");
-
     assert_eq!(
         f.body
             .locals
             .iter()
             .map(|local| local.name.as_str())
             .collect::<Vec<_>>(),
-        ["root", "second", "first"]
+        ["root", "second", "first", "head"]
     );
+    let cleanup = drops(f);
     assert_eq!(
-        f.body.blocks[0].statements,
-        vec![
-            CoreStatement::Init {
-                dst: Place::local(LocalId(1)),
-                src: Operand::Copy(direct(Place::local(LocalId(0)).field(1))),
-            },
-            CoreStatement::Init {
-                dst: Place::local(LocalId(2)),
-                src: Operand::Copy(direct(Place::local(LocalId(0)).field(0))),
-            },
-            CoreStatement::Drop {
-                place: direct(Place::local(LocalId(2))),
-            },
-            CoreStatement::Drop {
-                place: direct(Place::local(LocalId(1))),
-            },
+        cleanup,
+        [
+            direct(Place::local(LocalId(3))),
+            direct(Place::local(LocalId(2))),
+            direct(Place::local(LocalId(1))),
         ]
     );
 }
 
 #[test]
-fn lowering_rejects_invalid_pattern_field_index() {
-    let mut compilation = hir("record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
+fn lowering_rejects_invalid_recursive_pattern_path() {
+    let mut compilation = hir(
+        "record Inner { value: I8 } record Outer { inner: Inner } \
+         fn f(root: Outer) { let Outer { inner: Inner { value: item } } = root; }",
+    );
     let Statement::RecordDestructure { bindings, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
         panic!("expected pattern statement");
     };
-    bindings[0].field = 99;
+    bindings[0].fields = vec![0, 99];
 
     assert_eq!(
         lower(&compilation),
@@ -377,9 +376,32 @@ fn lowering_rejects_invalid_pattern_field_index() {
 }
 
 #[test]
+fn lowering_rejects_overlapping_retained_binding_paths() {
+    let mut compilation = hir(
+        "record Inner { value: I8 } record Outer { inner: Inner, other: I8 } \
+         fn f(root: Outer) { let Outer { inner: Inner { value: item }, other: other } = root; }",
+    );
+    let Statement::RecordDestructure { bindings, .. } =
+        &mut compilation.functions[0].body.statements[0]
+    else {
+        panic!("expected pattern statement");
+    };
+    bindings[1].fields = vec![0];
+
+    assert_eq!(
+        lower(&compilation),
+        Err(LoweringError::InvalidHirInvariant(
+            "record destructuring binding paths are not structurally disjoint"
+        ))
+    );
+}
+
+#[test]
 fn lowering_rejects_pattern_record_root_identity_mismatch() {
-    let mut compilation = hir("record A { value: I8 } record B { value: I8 } \
-         fn f(root: A) { let A { value: extracted } = root; }");
+    let mut compilation = hir(
+        "record A { value: I8 } record B { value: I8 } \
+         fn f(root: A) { let A { value: extracted } = root; }",
+    );
     let other = compilation.records[1].id;
     let Statement::RecordDestructure { record, .. } =
         &mut compilation.functions[0].body.statements[0]
@@ -398,8 +420,10 @@ fn lowering_rejects_pattern_record_root_identity_mismatch() {
 
 #[test]
 fn lowering_rejects_producer_record_identity_mismatch() {
-    let mut compilation = hir("record A { value: I8 } record B { value: I8 } \
-         fn f() { let A { value: extracted } = A { value: 1 }; }");
+    let mut compilation = hir(
+        "record A { value: I8 } record B { value: I8 } \
+         fn f() { let A { value: extracted } = A { value: 1 }; }",
+    );
     let other = compilation.records[1].id;
     let Statement::RecordDestructure { record, .. } =
         &mut compilation.functions[0].body.statements[0]
@@ -418,8 +442,10 @@ fn lowering_rejects_producer_record_identity_mismatch() {
 
 #[test]
 fn lowering_rejects_retained_pattern_binding_type_mismatch() {
-    let mut compilation = hir("record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
+    let mut compilation = hir(
+        "record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { let Pair { left: a, right: b } = root; }",
+    );
     let Statement::RecordDestructure { bindings, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
@@ -437,8 +463,10 @@ fn lowering_rejects_retained_pattern_binding_type_mismatch() {
 
 #[test]
 fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicability() {
-    let mut compilation = hir("record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
+    let mut compilation = hir(
+        "record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { let Pair { left: a, right: b } = root; }",
+    );
     let Statement::RecordDestructure { bindings, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
@@ -447,7 +475,7 @@ fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicabil
     bindings[0].ownership = runen_hir::OwnedUse::Consume;
 
     let lowered = lower(&compilation)
-        .expect("lowering must refine retained ownership without re-running source duplicability");
+        .expect("lowering must refine retained ownership without source re-analysis");
     let f = function(lowered.as_program(), "f");
     assert_eq!(
         f.body.blocks[0].statements[0],
@@ -459,9 +487,14 @@ fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicabil
 }
 
 #[test]
-fn lowering_uses_retained_transient_cleanup_without_rederiving_source_frontier() {
-    let mut compilation = hir("record Pair { left: I8, right: U8 } \
-         fn f() { let Pair { left: a, right: b } = Pair { left: 1, right: 2 }; }");
+fn lowering_uses_retained_recursive_transient_cleanup_without_rederiving_frontier() {
+    let mut compilation = hir(
+        "record Inner { left: I8, right: U8 } record Outer { inner: Inner, tail: I8 } \
+         fn f() { \
+             let Outer { inner: Inner { left: a, right: b }, tail: tail } = \
+                 Outer { inner: Inner { left: 1, right: 2 }, tail: 3 }; \
+         }",
+    );
     let Statement::RecordDestructure { scrutinee, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
@@ -470,24 +503,38 @@ fn lowering_uses_retained_transient_cleanup_without_rederiving_source_frontier()
     let RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee else {
         panic!("expected producer-backed scrutinee");
     };
-    *cleanup = RecordPatternTransientCleanup::DirectFields(vec![0, 1]);
+    *cleanup = RecordPatternTransientCleanup {
+        paths: vec![vec![0, 1], vec![1]],
+    };
 
     let lowered = lower(&compilation)
-        .expect("lowering must consume retained transient cleanup without source re-analysis");
+        .expect("lowering must consume retained cleanup without source re-analysis");
     let f = function(lowered.as_program(), "f");
-    let cleanup = drops(f);
-    let [PlaceAccess::Direct(first), PlaceAccess::Direct(second)] = cleanup.as_slice() else {
-        panic!("expected retained projected cleanup");
-    };
-    assert_eq!(first.local, second.local);
-    assert_eq!(first.projections, vec![Projection::Field(0)]);
-    assert_eq!(second.projections, vec![Projection::Field(1)]);
+    let paths = drops(f)
+        .iter()
+        .map(|place| match place {
+            PlaceAccess::Direct(place) => place.projections.clone(),
+            _ => panic!("expected direct cleanup place"),
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        paths,
+        [
+            vec![Projection::Field(0), Projection::Field(1)],
+            vec![Projection::Field(1)],
+        ]
+    );
 }
 
 #[test]
-fn lowering_rejects_duplicate_retained_transient_cleanup_field() {
-    let mut compilation = hir("record Pair { left: I8, right: U8 } \
-         fn f() { let Pair { left: a, right: b } = Pair { left: 1, right: 2 }; }");
+fn lowering_rejects_overlapping_retained_transient_cleanup_paths() {
+    let mut compilation = hir(
+        "record Inner { left: I8, right: U8 } record Outer { inner: Inner, tail: I8 } \
+         fn f() { \
+             let Outer { inner: Inner { left: a, right: b }, tail: tail } = \
+                 Outer { inner: Inner { left: 1, right: 2 }, tail: 3 }; \
+         }",
+    );
     let Statement::RecordDestructure { scrutinee, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
@@ -496,12 +543,12 @@ fn lowering_rejects_duplicate_retained_transient_cleanup_field() {
     let RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee else {
         panic!("expected producer-backed scrutinee");
     };
-    *cleanup = RecordPatternTransientCleanup::DirectFields(vec![0, 0]);
+    cleanup.paths = vec![vec![0], vec![0, 1]];
 
     assert_eq!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
-            "record pattern transient cleanup contains duplicate field identity"
+            "record pattern transient cleanup paths are not structurally disjoint"
         ))
     );
 }
