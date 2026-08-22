@@ -370,11 +370,11 @@ fn lowering_rejects_normal_cleanup_on_no_normal_block() {
     let HirStatement::If { then_block, .. } = &mut f.body.statements[0] else {
         panic!("expected HIR conditional");
     };
-    let HirStatement::Local { binding, .. } = then_block.statements[0] else {
+    let HirStatement::Local { binding, .. } = &then_block.statements[0] else {
         panic!("expected then-arm local");
     };
     then_block.normal_cleanup.push(CleanupPath {
-        binding,
+        binding: *binding,
         fields: Vec::new(),
     });
 
