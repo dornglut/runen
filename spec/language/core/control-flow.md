@@ -102,9 +102,25 @@ This spelling is explanatory only. A conforming implementation may represent the
 
 Both targets MUST identify existing basic blocks in the same function body. The two targets MAY identify the same block.
 
-The condition operand's resolved Core type MUST be a scalar type whose scalar kind is `Bool`. The branch contract does not designate or require one globally distinguished Bool type identity. No condition whose resolved type has another scalar kind or structural aggregate kind is admitted.
+### Bool-valued condition operands
 
-The two semantic Bool values consumed by this branch relation are owned by [Core value and storage semantics](value-storage.md).
+The branch condition MUST be a **Bool-valued operand** under this bounded relation.
+
+A represented operand is Bool-valued exactly as follows:
+
+- a constant operand is Bool-valued exactly when its semantic constant is one of the two Bool values owned by [Core value and storage semantics](value-storage.md);
+- a direct or loan-relative `Move` operand is Bool-valued exactly when the selected place/access type is scalar and has scalar kind `Bool`;
+- a direct or loan-relative `Copy` operand is Bool-valued exactly when the selected place/access type is scalar and has scalar kind `Bool`;
+- a `RawMove` operand is Bool-valued exactly when the raw pointer's pointee type is scalar and has scalar kind `Bool`;
+- `AddressOf` is not Bool-valued because it produces a raw-pointer value.
+
+Every operand additionally remains subject to all of its existing type, copyability, access, liveness, pointer, unsafe, and other preconditions. This classification only states whether a successfully produced operand value is admissible as a branch condition.
+
+A future Core operand family is not branch-admissible merely because an implementation can coerce or inspect its value. Its accepted semantic/type owner must establish that the operand produces a Bool value before this Branch relation may consume it.
+
+The condition rule does not designate or require one globally distinguished Bool type identity. It also does not add a type identity to constant operands that currently have none.
+
+### Branch execution
 
 A branch executes in this order:
 
@@ -140,7 +156,7 @@ Program-level Core validation MUST establish operation state preconditions for e
 
 For validation purposes, a conditional branch contributes **both** of its target edges to that graph independently of the concrete Bool value that one runtime execution would observe.
 
-After validating the condition operand's type and applying the condition operand's existing validation-state effects, the resulting validation state is propagated to both branch targets.
+After validating that the condition operand is Bool-valued and applying the condition operand's existing validation-state effects, the resulting validation state is propagated to both branch targets.
 
 This is an intentional validation over-approximation. It does not redefine concrete branch execution and does not assert that both targets execute in one activation.
 
@@ -184,7 +200,7 @@ Every represented basic block MUST satisfy applicable static structural/type rul
 
 - valid local, loan, place, projection, function, type, and block identities;
 - valid operand and destination type structure;
-- a branch condition whose resolved type has scalar kind `Bool`; and
+- a Bool-valued branch condition under the bounded operand classification above; and
 - valid terminator targets.
 
 A structurally valid basic block with no CFG path from the entry validation state need not be executed by path-state validation merely because it is present in the body.
@@ -243,7 +259,7 @@ Concrete execution follows only the state produced by the branch actually taken.
 
 ## Determinism
 
-For one fixed validated Core program and one fixed concrete activation state, unconditional transfer and Bool-kind branch selection are deterministic.
+For one fixed validated Core program and one fixed concrete activation state, unconditional transfer and Bool-valued branch selection are deterministic.
 
 `Goto` has one successor.
 
@@ -267,6 +283,7 @@ This revision does not define:
 - source structural-ownership joins, definite source availability, source drop elaboration, or source cleanup flags;
 - general Core comparison, logical, or predicate operators;
 - Core constant-evaluation or constant-propagation semantics;
+- typed constant operands beyond the existing value/type-compatibility relation;
 - exception/unwind edges beyond already accepted defined-fault propagation;
 - custom destruction;
 - optimizer transformation legality or CFG canonicalization;
