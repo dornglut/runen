@@ -2,7 +2,9 @@ use runen_core_ir::{
     LocalId, Operand, PlaceAccess, Statement as CoreStatement, Terminator, ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Statement as HirStatement, Type, build_typed_hir};
+use runen_hir::{
+    IntrinsicType, ModuleId, SourceUnit, Statement as HirStatement, Type, build_typed_hir,
+};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -19,10 +21,7 @@ fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted HIR must lower to validated Core")
 }
 
-fn function<'a>(
-    program: &'a runen_core_ir::Program,
-    name: &str,
-) -> &'a runen_core_ir::Function {
+fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
     program
         .functions
         .iter()
@@ -51,7 +50,11 @@ fn branch_consumes_one_lowered_bool_condition_temporary() {
     };
 
     let condition_local = moved_local(condition).expect("Branch must move the Bool temporary");
-    assert!(f.body.locals[condition_local.0 as usize].name.starts_with("$tmp"));
+    assert!(
+        f.body.locals[condition_local.0 as usize]
+            .name
+            .starts_with("$tmp")
+    );
     assert_ne!(true_target, false_target);
     assert!(matches!(
         f.body.blocks[true_target.0 as usize].terminator,
@@ -65,9 +68,8 @@ fn branch_consumes_one_lowered_bool_condition_temporary() {
 
 #[test]
 fn direct_call_condition_reaches_branch_through_one_call_continuation() {
-    let lowered = lower_source(
-        "fn ready() -> Bool { return true; } fn f() { if ready() {} else {} }",
-    );
+    let lowered =
+        lower_source("fn ready() -> Bool { return true; } fn f() { if ready() {} else {} }");
     let f = function(lowered.as_program(), "f");
 
     let Terminator::Call { target, .. } = f.body.blocks[0].terminator else {
