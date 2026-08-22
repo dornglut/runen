@@ -260,7 +260,8 @@ fn returning_arm_has_no_normal_edge_and_sole_normal_arm_carries_following_source
         Terminator::Call { .. }
     ));
     assert!(
-        !f.body.blocks
+        !f.body
+            .blocks
             .iter()
             .any(|block| matches!(block.terminator, Terminator::Goto(_))),
         "one-normal conditional does not need a synthetic join edge"
@@ -318,12 +319,10 @@ fn two_returning_arms_create_no_join_or_synthetic_root_return() {
             .count(),
         2
     );
-    assert!(
-        !f.body
-            .blocks
-            .iter()
-            .any(|block| matches!(block.terminator, Terminator::Goto(_) | Terminator::Return(None)))
-    );
+    assert!(!f.body.blocks.iter().any(|block| matches!(
+        block.terminator,
+        Terminator::Goto(_) | Terminator::Return(None)
+    )));
 }
 
 #[test]
@@ -357,11 +356,9 @@ fn omitted_else_is_the_direct_normal_target_when_then_returns() {
 
 #[test]
 fn lowering_rejects_normal_cleanup_on_no_normal_block() {
-    let mut compilation = hir(
-        "fn f(flag: Bool) { \
+    let mut compilation = hir("fn f(flag: Bool) { \
              if flag { let child: I64 = 1; return; } else { return; } \
-         }",
-    );
+         }");
     let f = compilation
         .functions
         .iter_mut()
@@ -388,11 +385,9 @@ fn lowering_rejects_normal_cleanup_on_no_normal_block() {
 
 #[test]
 fn lowering_rejects_retained_continuation_that_disagrees_with_sequence() {
-    let mut compilation = hir(
-        "fn f(flag: Bool) { \
+    let mut compilation = hir("fn f(flag: Bool) { \
              if flag { return; } else { return; } \
-         }",
-    );
+         }");
     let f = compilation
         .functions
         .iter_mut()
