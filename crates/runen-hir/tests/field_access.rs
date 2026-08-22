@@ -850,13 +850,19 @@ fn nested_field_access_rechecks_the_current_record_module_at_each_step() {
     ])
     .expect("selector access must be recomputed from each current record module");
 
-    for name in ["into_foreign", "back_home"] {
-        let ValueKind::FieldValueUse { fields, .. } = &returned_value(function(&hir, name)).kind
-        else {
-            panic!("expected nested field-value use");
-        };
-        assert_eq!(fields, &[1, 0]);
-    }
+    let ValueKind::FieldValueUse { fields, .. } =
+        &returned_value(function(&hir, "into_foreign")).kind
+    else {
+        panic!("expected nested field-value use");
+    };
+    assert_eq!(fields, &[1, 0]);
+
+    let ValueKind::FieldValueUse { fields, .. } =
+        &returned_value(function(&hir, "back_home")).kind
+    else {
+        panic!("expected nested field-value use");
+    };
+    assert_eq!(fields, &[0, 0]);
 }
 
 #[test]
