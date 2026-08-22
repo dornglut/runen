@@ -74,6 +74,7 @@ impl Parser<'_> {
             self.expect(SyntaxKind::KwExport, ExpectedSyntax::Item);
         }
         self.expect(SyntaxKind::KwRecord, ExpectedSyntax::Item);
+        self.eat(SyntaxKind::KwCopy);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
 
         if !self.expect(SyntaxKind::LBrace, ExpectedSyntax::LeftBrace) {
