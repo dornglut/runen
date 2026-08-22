@@ -276,6 +276,26 @@ impl Machine {
                 Terminator::Goto(target) => {
                     self.frames[frame_index].current = target;
                 }
+                Terminator::Branch {
+                    condition,
+                    true_target,
+                    false_target,
+                } => {
+                    let value = match self.evaluate_operand(frame_index, &condition) {
+                        Ok(value) => value,
+                        Err(kind) => {
+                            return Err(UndefinedBehavior {
+                                kind,
+                                verification_events: self.verification_events,
+                            });
+                        }
+                    };
+                    self.frames[frame_index].current = match value {
+                        RuntimeValue::Bool(true) => true_target,
+                        RuntimeValue::Bool(false) => false_target,
+                        _ => unreachable!("validated Branch condition is Bool-valued"),
+                    };
+                }
                 Terminator::Call {
                     function,
                     arguments,
