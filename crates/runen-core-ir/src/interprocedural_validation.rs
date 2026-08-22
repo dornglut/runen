@@ -50,6 +50,7 @@ pub enum MirValidationErrorKind {
     TypeMismatch {
         expected: TypeId,
     },
+    BranchConditionNotBool,
     CopyOfNonCopy(TypeId),
     RawReadRequiresPointer(TypeId),
     RawMoveRequiresPointer(TypeId),
@@ -291,6 +292,15 @@ fn validate_static_terminator(
     let body = &function.body;
     match terminator {
         Terminator::Goto(target) => require_target(body, *target, point),
+        Terminator::Branch {
+            condition,
+            true_target,
+            false_target,
+        } => {
+            require_target(body, *true_target, point)?;
+            require_target(body, *false_target, point)?;
+            validate_branch_condition(&program.types, body, condition, point)
+        }
         Terminator::Fault(_) => Ok(()),
         Terminator::Return(value) => match (function.result, value) {
             (None, None) => Ok(()),
@@ -365,6 +375,62 @@ fn require_target(
             MirValidationErrorKind::InvalidTargetBlock(target),
         ))
     }
+}
+
+fn validate_branch_condition(
+    types: &TypeTable,
+    body: &Body,
+    operand: &Operand,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    let bool_valued = match operand {
+        Operand::Constant(Value::Bool(_)) => true,
+        Operand::Constant(_) => false,
+        Operand::Move(src) => {
+            let actual = access_type(types, body, src, point)?;
+            is_bool_type(types, actual)
+        }
+        Operand::Copy(src) => {
+            let actual = access_type(types, body, src, point)?;
+            if !types.is_copy(actual) {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::CopyOfNonCopy(actual),
+                ));
+            }
+            is_bool_type(types, actual)
+        }
+        Operand::RawMove(pointer) => {
+            let pointer_ty = access_type(types, body, pointer, point)?;
+            let Some(pointee) = types.raw_pointer_pointee(pointer_ty) else {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::RawMoveRequiresPointer(pointer_ty),
+                ));
+            };
+            is_bool_type(types, pointee)
+        }
+        Operand::AddressOf(src) => {
+            access_type(types, body, src, point)?;
+            false
+        }
+    };
+
+    if bool_valued {
+        Ok(())
+    } else {
+        Err(point_error(
+            point,
+            MirValidationErrorKind::BranchConditionNotBool,
+        ))
+    }
+}
+
+fn is_bool_type(types: &TypeTable, ty: TypeId) -> bool {
+    matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(ScalarType::Bool))
+    )
 }
 
 fn validate_static_statement(
@@ -542,7 +608,7 @@ fn require_interior_mutable_place(
 fn is_interior_mutable_place(types: &TypeTable, body: &Body, place: &Place) -> bool {
     let local = body
         .local(place.local)
-        .expect("validated local type is known");
+        .expect("validated place references a known containing local");
     let mut current = local.ty;
 
     if types
@@ -810,6 +876,31 @@ fn validate_path_state(
             Terminator::Goto(target) => {
                 state.current = *target;
                 worklist.push_back(state);
+            }
+            Terminator::Branch {
+                condition,
+                true_target,
+                false_target,
+            } => {
+                if matches!(
+                    validate_operand_state(
+                        types,
+                        body,
+                        &mut state.locals,
+                        &state.active_loans,
+                        condition,
+                        &point,
+                    )?,
+                    DefinedStep::NoDefinedContinuation
+                ) {
+                    continue 'worklist;
+                }
+
+                let mut false_state = state.clone();
+                state.current = *true_target;
+                false_state.current = *false_target;
+                worklist.push_back(state);
+                worklist.push_back(false_state);
             }
             Terminator::Fault(_) => {}
             Terminator::Return(value) => {
