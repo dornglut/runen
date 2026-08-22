@@ -430,6 +430,7 @@ fn resolve_records(
         {
             let name_token = direct_token(&field_node, SyntaxKind::Ident);
             let name = key(&name_token);
+            let accessibility = declaration_accessibility(&field_node);
             let field_location = location(record.unit, &field_node);
             if !field_names.insert(name.clone()) {
                 diagnostics.push(Diagnostic {
@@ -446,9 +447,18 @@ fn resolve_records(
                 imports,
                 diagnostics,
             ) {
+                validate_exported_field_type(
+                    record,
+                    accessibility,
+                    ty,
+                    syntax,
+                    &type_node,
+                    diagnostics,
+                );
                 fields.push(Field {
                     name,
                     ty,
+                    accessibility,
                     location: field_location,
                 });
             }
@@ -463,6 +473,31 @@ fn resolve_records(
         });
     }
     records
+}
+
+fn validate_exported_field_type(
+    containing: &RecordSyntax,
+    field_accessibility: Accessibility,
+    ty: Type,
+    records: &[RecordSyntax],
+    type_node: &SyntaxNode,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    if containing.accessibility != Accessibility::Exported
+        || field_accessibility != Accessibility::Exported
+    {
+        return;
+    }
+    let Type::Record(record) = ty else {
+        return;
+    };
+    let target = &records[record.0];
+    if target.module == containing.module && target.accessibility == Accessibility::ModulePrivate {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::PrivateTypeInExportedField,
+            location: location(containing.unit, type_node),
+        });
+    }
 }
 
 fn resolve_function_headers(
@@ -2046,14 +2081,6 @@ fn resolve_field_path(
             return None;
         };
         let record_decl = &context.records[record.0];
-        if record_decl.module != header.module {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::InaccessibleRecordField,
-                location: selector_location,
-            });
-            return None;
-        }
-
         let selector_name = key(selector);
         let Some(field) = record_decl
             .fields
@@ -2066,6 +2093,18 @@ fn resolve_field_path(
             });
             return None;
         };
+
+        if record_decl.module != header.module
+            && (record_decl.accessibility != Accessibility::Exported
+                || record_decl.fields[field].accessibility != Accessibility::Exported)
+        {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InaccessibleRecordField,
+                location: selector_location,
+            });
+            return None;
+        }
+
         fields.push(field);
         current = record_decl.fields[field].ty;
     }
