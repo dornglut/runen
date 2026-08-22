@@ -847,14 +847,9 @@ fn validate_body_statement(
         SyntaxKind::LocalDeclaration => {
             validate_local(header, node, context, bindings, next_binding, diagnostics)
         }
-        SyntaxKind::RecordDestructuringDeclaration => validate_record_destructure(
-            header,
-            node,
-            context,
-            bindings,
-            next_binding,
-            diagnostics,
-        ),
+        SyntaxKind::RecordDestructuringDeclaration => {
+            validate_record_destructure(header, node, context, bindings, next_binding, diagnostics)
+        }
         SyntaxKind::AssignmentStatement => {
             validate_assignment(header, node, context, bindings, diagnostics)
         }
@@ -886,11 +881,9 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
             then_block,
             else_block,
             ..
-        } => else_block
-            .as_ref()
-            .is_none_or(|else_block| {
-                then_block.has_normal_continuation || else_block.has_normal_continuation
-            }),
+        } => else_block.as_ref().is_none_or(|else_block| {
+            then_block.has_normal_continuation || else_block.has_normal_continuation
+        }),
         Statement::Local { .. }
         | Statement::RecordDestructure { .. }
         | Statement::Assignment { .. }
@@ -932,14 +925,8 @@ fn validate_block(
             continue;
         }
 
-        let statement = validate_body_statement(
-            header,
-            &child,
-            context,
-            bindings,
-            next_binding,
-            diagnostics,
-        );
+        let statement =
+            validate_body_statement(header, &child, context, bindings, next_binding, diagnostics);
 
         if let Some(statement) = statement {
             match &statement {
@@ -970,7 +957,8 @@ fn validate_block(
                 .get(name)
                 .expect("validated direct child binding remains active through block end");
             debug_assert_eq!(state.id, *binding);
-            for fields in remaining_ownership_frontier(state.ty, &state.ownership, context.records) {
+            for fields in remaining_ownership_frontier(state.ty, &state.ownership, context.records)
+            {
                 normal_cleanup.push(CleanupPath {
                     binding: *binding,
                     fields,
