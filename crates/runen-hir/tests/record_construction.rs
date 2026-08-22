@@ -501,7 +501,10 @@ fn qualified_construction_composes_with_current_value_consumers() {
 
     let all = function(&hir, "all");
     assert!(matches!(all.body.statements[0], Statement::Local { .. }));
-    assert!(matches!(all.body.statements[1], Statement::Assignment { .. }));
+    assert!(matches!(
+        all.body.statements[1],
+        Statement::Assignment { .. }
+    ));
     assert!(matches!(all.body.statements[2], Statement::Local { .. }));
     assert!(matches!(all.body.statements[3], Statement::Call { .. }));
     assert!(matches!(
@@ -664,7 +667,10 @@ fn qualified_construction_inside_field_producer_can_feed_same_module_pattern() {
     else {
         panic!("expected field-value scrutinee");
     };
-    let FieldValueReceiver::Producer { value: producer, .. } = receiver else {
+    let FieldValueReceiver::Producer {
+        value: producer, ..
+    } = receiver
+    else {
         panic!("expected construction producer receiver");
     };
     assert!(matches!(
