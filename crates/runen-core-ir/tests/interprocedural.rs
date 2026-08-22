@@ -685,7 +685,10 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         body: body(
             Vec::new(),
             vec![
-                BasicBlock::new(Vec::new(), branch(Operand::Constant(Value::Bool(true)), 1, 1)),
+                BasicBlock::new(
+                    Vec::new(),
+                    branch(Operand::Constant(Value::Bool(true)), 1, 1),
+                ),
                 BasicBlock::new(Vec::new(), Terminator::Return(None)),
             ],
         ),
@@ -745,11 +748,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![BasicBlock::new(
                 Vec::new(),
-                branch(
-                    Operand::AddressOf(Place::local(LocalId(9)).into()),
-                    0,
-                    0,
-                ),
+                branch(Operand::AddressOf(Place::local(LocalId(9)).into()), 0, 0),
             )],
         ),
     };
@@ -843,7 +842,10 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         functions: vec![copy_noncopy],
     })
     .expect_err("existing CopyOfNonCopy diagnostic precedes Branch admission");
-    assert_eq!(error.kind, MirValidationErrorKind::CopyOfNonCopy(tracked_ty));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::CopyOfNonCopy(tracked_ty)
+    );
 
     let raw_bool = Function {
         name: "raw_bool".into(),
@@ -891,7 +893,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     let error = validate_program(Program {
-        types,
+        types: types.clone(),
         functions: vec![raw_i64],
     })
     .expect_err("RawMove through non-Bool pointee is not branch-admissible");
@@ -1228,9 +1230,7 @@ fn branch_condition_ub_creates_no_successor_work_item() {
                     Terminator::Return(None),
                 ),
                 BasicBlock::new(
-                    vec![Statement::Read {
-                        src: marker.into(),
-                    }],
+                    vec![Statement::Read { src: marker.into() }],
                     Terminator::Return(None),
                 ),
             ],
