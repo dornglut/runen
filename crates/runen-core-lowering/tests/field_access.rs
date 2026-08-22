@@ -4,7 +4,7 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    FieldValueReceiver, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Type, ValueKind,
+    FieldValueReceiver, IntrinsicType, LiteralValue, ModuleId, OwnedUse, SourceUnit, Type, ValueKind,
     build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
@@ -210,12 +210,17 @@ fn producer_call_consuming_field_moves_result_then_cleans_only_remaining_frontie
             },
         ]
     );
-    assert!(!f.body.blocks[1].statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::Drop {
-            place: PlaceAccess::Direct(place),
-        } if place.projections == vec![Projection::Field(0)]
-    )));
+    assert!(
+        !f.body.blocks[1]
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Drop {
+                    place: PlaceAccess::Direct(place),
+                } if place.projections == vec![Projection::Field(0)]
+            ))
+    );
 }
 
 #[test]
@@ -352,10 +357,7 @@ fn producer_bool_field_cleanup_completes_before_existing_branch() {
     let Terminator::Branch { condition, .. } = &continuation.terminator else {
         panic!("existing conditional lowering must branch on selected field result");
     };
-    assert_eq!(
-        condition,
-        &Operand::Move(direct(Place::local(LocalId(1))))
-    );
+    assert_eq!(condition, &Operand::Move(direct(Place::local(LocalId(1)))));
 }
 
 #[test]
@@ -511,7 +513,54 @@ fn lowering_rejects_empty_resolved_field_path_as_invalid_hir() {
 }
 
 #[test]
-fn lowering_rejects_corrupted_producer_field_type_and_cleanup_invariants() {
+fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup_invariants() {
+    let mut wrong_ownership = hir(
+        "record Box { value: I8 } \
+         fn make() -> Box { return Box { value: 1 }; } \
+         fn f() -> I8 { return make().value; }",
+    );
+    let wrong_ownership_value = wrong_ownership.functions[1]
+        .body
+        .terminal_return
+        .as_mut()
+        .and_then(|returned| returned.value.as_mut())
+        .expect("returned field value");
+    let ValueKind::FieldValueUse { ownership, .. } = &mut wrong_ownership_value.kind else {
+        panic!("expected field-value use");
+    };
+    *ownership = OwnedUse::Consume;
+    assert_eq!(
+        lower(&wrong_ownership),
+        Err(LoweringError::InvalidHirInvariant(
+            "field-value ownership does not match retained result duplicability"
+        ))
+    );
+
+    let mut wrong_category = hir(
+        "record Box { value: I8 } \
+         fn make() -> Box { return Box { value: 1 }; } \
+         fn f() -> I8 { return make().value; }",
+    );
+    let wrong_category_value = wrong_category.functions[1]
+        .body
+        .terminal_return
+        .as_mut()
+        .and_then(|returned| returned.value.as_mut())
+        .expect("returned field value");
+    let ValueKind::FieldValueUse { receiver, .. } = &mut wrong_category_value.kind else {
+        panic!("expected producer field value");
+    };
+    let FieldValueReceiver::Producer { value: producer, .. } = receiver else {
+        panic!("expected producer receiver");
+    };
+    producer.kind = ValueKind::Literal(LiteralValue::I8(1));
+    assert_eq!(
+        lower(&wrong_category),
+        Err(LoweringError::InvalidHirInvariant(
+            "field-value producer receiver has unrepresented producer category"
+        ))
+    );
+
     let mut wrong_type = hir(
         "record Token { value: I8 } record Box { token: Token, tail: I8 } \
          fn make() -> Box { return Box { token: Token { value: 1 }, tail: 2 }; } \
@@ -523,7 +572,11 @@ fn lowering_rejects_corrupted_producer_field_type_and_cleanup_invariants() {
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
         .expect("returned field value");
+    let ValueKind::FieldValueUse { ownership, .. } = &mut wrong_type_value.kind else {
+        panic!("expected field-value use");
+    };
     wrong_type_value.ty = Type::Intrinsic(IntrinsicType::I8);
+    *ownership = OwnedUse::Duplicate;
     assert_eq!(
         lower(&wrong_type),
         Err(LoweringError::InvalidHirInvariant(
@@ -556,11 +609,34 @@ fn lowering_rejects_corrupted_producer_field_type_and_cleanup_invariants() {
         ))
     );
 
-    let mut incomplete_duplicate = hir(
-        "record Box { value: I8, tail: I8 } \
-         fn make() -> Box { return Box { value: 1, tail: 2 }; } \
-         fn f() -> I8 { return make().value; }",
+    let mut incomplete_consume = hir(
+        "record Token { value: I8 } record Box { token: Token, tail: I8 } \
+         fn make() -> Box { return Box { token: Token { value: 1 }, tail: 2 }; } \
+         fn f() -> Token { return make().token; }",
     );
+    let consume_value = incomplete_consume.functions[1]
+        .body
+        .terminal_return
+        .as_mut()
+        .and_then(|returned| returned.value.as_mut())
+        .expect("returned field value");
+    let ValueKind::FieldValueUse { receiver, .. } = &mut consume_value.kind else {
+        panic!("expected producer field value");
+    };
+    let FieldValueReceiver::Producer { cleanup, .. } = receiver else {
+        panic!("expected producer receiver");
+    };
+    cleanup.paths.clear();
+    assert_eq!(
+        lower(&incomplete_consume),
+        Err(LoweringError::InvalidHirInvariant(
+            "consuming field receiver cleanup does not match canonical remaining frontier"
+        ))
+    );
+
+    let mut incomplete_duplicate = hir("record Box { value: I8, tail: I8 } \
+         fn make() -> Box { return Box { value: 1, tail: 2 }; } \
+         fn f() -> I8 { return make().value; }");
     let duplicate_value = incomplete_duplicate.functions[1]
         .body
         .terminal_return
