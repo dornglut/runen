@@ -304,10 +304,9 @@ impl Parser<'_> {
                     self.bump_trivia();
                 }
                 self.builder.finish_node();
-                if stop_at_else && self.at(SyntaxKind::KwElse) {
-                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
-                    missing_close = true;
-                } else if self.at_any(TOP_LEVEL_STARTERS) {
+                if (stop_at_else && self.at(SyntaxKind::KwElse))
+                    || self.at_any(TOP_LEVEL_STARTERS)
+                {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
                     missing_close = true;
                 }
