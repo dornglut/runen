@@ -417,16 +417,23 @@ impl<'a> FunctionLowerer<'a> {
             }
         };
 
-        let mut seen_fields = BTreeSet::new();
+        let mut seen_paths = Vec::<Vec<usize>>::new();
         for binding in bindings {
-            if !seen_fields.insert(binding.field) {
+            if binding.fields.is_empty() {
                 return Err(LoweringError::InvalidHirInvariant(
-                    "record destructuring contains duplicate resolved field identity",
+                    "record destructuring binding has empty structural path",
                 ));
             }
+            if seen_paths.iter().any(|seen| {
+                binding.fields.starts_with(seen) || seen.starts_with(&binding.fields)
+            }) {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "record destructuring binding paths are not structurally disjoint",
+                ));
+            }
+            seen_paths.push(binding.fields.clone());
 
-            let field = index_u32(binding.field, "Core field projection")?;
-            let source = core::Place::local(source_local).field(field);
+            let source = self.local_place(source_local, &binding.fields)?;
             let projected_ty = self.types.project_type(expected_ty, &source.projections)?;
             let retained_ty = self.types.get(binding.ty)?;
             if projected_ty != retained_ty {
@@ -464,32 +471,24 @@ impl<'a> FunctionLowerer<'a> {
         source_ty: core::TypeId,
         cleanup: &hir::RecordPatternTransientCleanup,
     ) -> Result<(), LoweringError> {
-        match cleanup {
-            hir::RecordPatternTransientCleanup::None => {}
-            hir::RecordPatternTransientCleanup::Complete => {
-                if self.types.has_scalar_leaf(source_ty)? {
-                    self.push_statement(core::Statement::Drop {
-                        place: core::Place::local(source_local).into(),
-                    });
-                }
+        let mut seen_paths = Vec::<Vec<usize>>::new();
+        for path in &cleanup.paths {
+            if seen_paths
+                .iter()
+                .any(|seen| path.starts_with(seen) || seen.starts_with(path))
+            {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "record pattern transient cleanup paths are not structurally disjoint",
+                ));
             }
-            hir::RecordPatternTransientCleanup::DirectFields(fields) => {
-                let mut seen = BTreeSet::new();
-                for field in fields {
-                    if !seen.insert(*field) {
-                        return Err(LoweringError::InvalidHirInvariant(
-                            "record pattern transient cleanup contains duplicate field identity",
-                        ));
-                    }
-                    let place = core::Place::local(source_local)
-                        .field(index_u32(*field, "Core field projection")?);
-                    let field_ty = self.types.project_type(source_ty, &place.projections)?;
-                    if self.types.has_scalar_leaf(field_ty)? {
-                        self.push_statement(core::Statement::Drop {
-                            place: place.into(),
-                        });
-                    }
-                }
+            seen_paths.push(path.clone());
+
+            let place = self.local_place(source_local, path)?;
+            let ty = self.types.project_type(source_ty, &place.projections)?;
+            if self.types.has_scalar_leaf(ty)? {
+                self.push_statement(core::Statement::Drop {
+                    place: place.into(),
+                });
             }
         }
         Ok(())
@@ -680,6 +679,14 @@ impl<'a> FunctionLowerer<'a> {
         fields: &[usize],
     ) -> Result<core::Place, LoweringError> {
         let local = self.binding(binding)?;
+        self.local_place(local, fields)
+    }
+
+    fn local_place(
+        &self,
+        local: core::LocalId,
+        fields: &[usize],
+    ) -> Result<core::Place, LoweringError> {
         let mut place = core::Place::local(local);
         for field in fields {
             place = place.field(index_u32(*field, "Core field projection")?);
