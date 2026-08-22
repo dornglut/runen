@@ -417,7 +417,7 @@ impl Parser<'_> {
             self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
         }
         self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
-        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.parse_record_pattern_scrutinee();
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
         self.builder.finish_node();
     }
@@ -429,6 +429,20 @@ impl Parser<'_> {
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.builder.finish_node();
+    }
+
+    fn parse_record_pattern_scrutinee(&mut self) {
+        if !self.at(SyntaxKind::Ident) {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+            return;
+        }
+
+        match self.peek_nontrivia(1) {
+            Some(SyntaxKind::LBrace) => self.parse_record_construction(),
+            Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_direct_call(),
+            Some(SyntaxKind::Dot) => self.parse_field_value_use(),
+            _ => self.bump(),
+        }
     }
 
     fn parse_identifier_statement(&mut self) {

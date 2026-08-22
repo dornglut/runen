@@ -209,6 +209,32 @@ pub struct RecordPatternBinding {
     pub ownership: OwnedUse,
 }
 
+/// Source-selected remaining cleanup for one producer-backed record-pattern transient.
+///
+/// This is deliberately bounded to the accepted one-level exhaustive pattern. It
+/// is not a general transient place/path or structural-availability abstraction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordPatternTransientCleanup {
+    /// Every direct field was transferred from the transient.
+    None,
+    /// The complete transient remains owned, including the zero-field case.
+    Complete,
+    /// Only these complete direct fields remain owned, in source-selected cleanup order.
+    DirectFields(Vec<usize>),
+}
+
+/// Resolved scrutinee category for the represented exhaustive record pattern.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RecordPatternScrutinee {
+    /// Accepted bare binding root with direct per-field ownership semantics.
+    DirectRoot(BindingId),
+    /// Existing value producer whose successful result is the pattern transient.
+    Producer {
+        value: Value,
+        cleanup: RecordPatternTransientCleanup,
+    },
+}
+
 /// Resolved producer for one typed HIR value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
@@ -264,7 +290,7 @@ pub enum Statement {
     },
     RecordDestructure {
         record: RecordId,
-        root: BindingId,
+        scrutinee: RecordPatternScrutinee,
         bindings: Vec<RecordPatternBinding>,
         location: SourceLocation,
     },

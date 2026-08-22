@@ -5,8 +5,9 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 use crate::{
     Accessibility, AssignmentMutability, BindingId, Block, Body, CleanupPath, Diagnostic,
     DiagnosticKind, Field, Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId,
-    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, RecordPatternBinding, Return,
-    SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
+    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, RecordPatternBinding,
+    RecordPatternScrutinee, RecordPatternTransientCleanup, Return, SourceLocation, SourceUnit,
+    Statement, Type, TypedCompilation, Value, ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -1076,18 +1077,27 @@ fn validate_record_destructure(
         .filter_map(|element| element.into_token())
         .filter(|token| token.kind() == SyntaxKind::Ident)
         .collect::<Vec<_>>();
-    let [head_token, root_token] = direct_identifiers.as_slice() else {
-        unreachable!("syntax-clean record destructuring has head and root identifiers");
+    let producer_node = node.children().find(|child| {
+        matches!(
+            child.kind(),
+            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+        )
+    });
+    let (head_token, direct_root_token) = if producer_node.is_some() {
+        let [head_token] = direct_identifiers.as_slice() else {
+            unreachable!("syntax-clean producer-backed pattern has one direct head identifier");
+        };
+        (head_token, None)
+    } else {
+        let [head_token, root_token] = direct_identifiers.as_slice() else {
+            unreachable!("syntax-clean direct-root pattern has head and root identifiers");
+        };
+        (head_token, Some(root_token))
     };
     let head_name = key(head_token);
-    let root_name = key(root_token);
     let head_location = SourceLocation {
         unit: header.unit,
         range: head_token.text_range(),
-    };
-    let root_location = SourceLocation {
-        unit: header.unit,
-        range: root_token.text_range(),
     };
 
     let record = match context
@@ -1116,33 +1126,47 @@ fn validate_record_destructure(
     let record_decl = &context.records[record.0];
     debug_assert_eq!(record_decl.module, header.module);
 
-    let root_state = match bindings.get(&root_name).cloned() {
-        Some(binding) => binding,
-        None => {
-            let entity = context
-                .modules
-                .get(&header.module)
-                .and_then(|module| module.namespace.get(&root_name));
-            diagnostics.push(Diagnostic {
-                kind: if entity.is_some() {
-                    DiagnosticKind::ExpectedValueBinding
-                } else {
-                    DiagnosticKind::UnresolvedName
-                },
-                location: root_location,
-            });
-            return None;
+    let direct_root = direct_root_token.map(|root_token| {
+        let root_name = key(root_token);
+        let root_location = SourceLocation {
+            unit: header.unit,
+            range: root_token.text_range(),
+        };
+        (root_name, root_location)
+    });
+    let root_state = if let Some((root_name, root_location)) = &direct_root {
+        match bindings.get(root_name).cloned() {
+            Some(binding) => Some(binding),
+            None => {
+                let entity = context
+                    .modules
+                    .get(&header.module)
+                    .and_then(|module| module.namespace.get(root_name));
+                diagnostics.push(Diagnostic {
+                    kind: if entity.is_some() {
+                        DiagnosticKind::ExpectedValueBinding
+                    } else {
+                        DiagnosticKind::UnresolvedName
+                    },
+                    location: *root_location,
+                });
+                return None;
+            }
         }
+    } else {
+        None
     };
 
     let mut valid = true;
-    if root_state.ty != Type::Record(record) {
+    if let (Some(root_state), Some((_, root_location))) = (&root_state, &direct_root)
+        && root_state.ty != Type::Record(record)
+    {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::TypeMismatch {
                 expected: Type::Record(record),
                 found: root_state.ty,
             },
-            location: root_location,
+            location: *root_location,
         });
         valid = false;
     }
@@ -1213,7 +1237,9 @@ fn validate_record_destructure(
             });
             valid = false;
         }
-        if root_state.path_availability(&[field]) != PathAvailability::FullyAvailable {
+        if let Some(root_state) = &root_state
+            && root_state.path_availability(&[field]) != PathAvailability::FullyAvailable
+        {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::UnavailableFieldValue,
                 location: field_location,
@@ -1239,6 +1265,52 @@ fn validate_record_destructure(
         return None;
     }
 
+    let scrutinee = if direct_root.is_some() {
+        RecordPatternScrutinee::DirectRoot(
+            root_state
+                .as_ref()
+                .expect("validated direct-root pattern has root state")
+                .id,
+        )
+    } else {
+        let producer_node =
+            producer_node.expect("syntax-clean producer-backed pattern has producer");
+        let mut producer_bindings = bindings.clone();
+        let value = validate_value(
+            header,
+            &producer_node,
+            Type::Record(record),
+            context,
+            &mut producer_bindings,
+            diagnostics,
+        )?;
+        *bindings = producer_bindings;
+
+        let cleanup = if record_decl.fields.is_empty()
+            || record_decl
+                .fields
+                .iter()
+                .all(|field| field.ty.is_duplicable())
+        {
+            RecordPatternTransientCleanup::Complete
+        } else {
+            let retained = record_decl
+                .fields
+                .iter()
+                .enumerate()
+                .rev()
+                .filter_map(|(field, declaration)| declaration.ty.is_duplicable().then_some(field))
+                .collect::<Vec<_>>();
+            if retained.is_empty() {
+                RecordPatternTransientCleanup::None
+            } else {
+                RecordPatternTransientCleanup::DirectFields(retained)
+            }
+        };
+
+        RecordPatternScrutinee::Producer { value, cleanup }
+    };
+
     let mut pattern_bindings = Vec::with_capacity(resolved.len());
     let mut new_states = Vec::with_capacity(resolved.len());
     for resolved in resolved {
@@ -1246,10 +1318,12 @@ fn validate_record_destructure(
         let ownership = if field_decl.ty.is_duplicable() {
             OwnedUse::Duplicate
         } else {
-            bindings
-                .get_mut(&root_name)
-                .expect("validated pattern root remains in active binding scope")
-                .consume_path(&[resolved.field]);
+            if let Some((root_name, _)) = &direct_root {
+                bindings
+                    .get_mut(root_name)
+                    .expect("validated pattern root remains in active binding scope")
+                    .consume_path(&[resolved.field]);
+            }
             OwnedUse::Consume
         };
         let binding = BindingId(*next_binding);
@@ -1279,7 +1353,7 @@ fn validate_record_destructure(
 
     Some(Statement::RecordDestructure {
         record,
-        root: root_state.id,
+        scrutinee,
         bindings: pattern_bindings,
         location: location(header.unit, node),
     })

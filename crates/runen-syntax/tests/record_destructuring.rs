@@ -40,6 +40,64 @@ fn f(empty: Empty, pair: Pair) {
 }
 
 #[test]
+fn producer_backed_scrutinees_reuse_existing_nodes_while_bare_root_stays_direct() {
+    let source = r#"
+import api;
+record Token {}
+record Pair { left: I8, right: Token }
+record Outer { pair: Pair }
+fn make() -> Pair { return Pair { left: 1, right: Token {} }; }
+fn f(root: Pair, outer: Outer) {
+    let Pair { left: a, right: b } = root;
+    let Pair { left: c, right: d } = make();
+    let Pair { left: e, right: f } = Pair { left: 2, right: Token {} };
+    let Pair { left: g, right: h } = outer.pair;
+    let Pair { left: i, right: j } = api::make();
+}
+"#;
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let declarations = parsed
+        .syntax()
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::RecordDestructuringDeclaration)
+        .collect::<Vec<_>>();
+    assert_eq!(declarations.len(), 5);
+
+    assert!(!declarations[0].children().any(|child| matches!(
+        child.kind(),
+        SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+    )));
+    assert!(
+        declarations[1]
+            .children()
+            .any(|child| child.kind() == SyntaxKind::DirectCall)
+    );
+    assert!(
+        declarations[2]
+            .children()
+            .any(|child| child.kind() == SyntaxKind::RecordConstruction)
+    );
+    assert!(
+        declarations[3]
+            .children()
+            .any(|child| child.kind() == SyntaxKind::FieldValueUse)
+    );
+    let qualified_call = declarations[4]
+        .children()
+        .find(|child| child.kind() == SyntaxKind::DirectCall)
+        .expect("qualified producer call");
+    assert!(
+        qualified_call
+            .children()
+            .any(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    );
+}
+
+#[test]
 fn ordinary_local_forms_remain_distinct_and_unchanged() {
     let source = "fn f() { let value: I8 = 1; let mut other: U8 = 2; }";
     let parsed = parse(source);
@@ -62,13 +120,15 @@ fn ordinary_local_forms_remain_distinct_and_unchanged() {
 }
 
 #[test]
-fn excluded_pattern_extensions_are_not_silently_accepted() {
+fn excluded_pattern_extensions_and_scrutinees_are_not_silently_accepted() {
     for source in [
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left } = root; }",
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left: value, .. } = root; }",
         "record Inner { value: I8 } record Outer { inner: Inner } fn f(root: Outer) { let Outer { inner: Inner { value: leaf } } = root; }",
         "record Pair { left: I8 } fn f(root: Pair) { let other::Pair { left: value } = root; }",
-        "record Pair { left: I8 } fn make() -> Pair { return Pair { left: 1 }; } fn f(root: Pair) { let Pair { left: value } = make(); }",
+        "record Pair { left: I8 } fn f() { let Pair { left: value } = true; }",
+        "record Pair { left: I8 } fn f() { let Pair { left: value } = 1; }",
+        "record Pair { left: I8 } fn f() { let Pair { left: value } = other::root; }",
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
