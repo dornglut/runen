@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Statement, Type, TypedCompilation,
-    ValueKind, build_typed_hir,
+    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Statement, Type,
+    TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -24,7 +24,13 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
-fn conditional(statement: &Statement) -> (&runen_hir::Value, &runen_hir::Block, Option<&runen_hir::Block>) {
+fn conditional(
+    statement: &Statement,
+) -> (
+    &runen_hir::Value,
+    &runen_hir::Block,
+    Option<&runen_hir::Block>,
+) {
     let Statement::If {
         condition,
         then_block,
