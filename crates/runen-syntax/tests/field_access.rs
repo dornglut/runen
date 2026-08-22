@@ -112,6 +112,44 @@ fn producer_receiver_requires_selector_and_bare_producers_stay_bare() {
 }
 
 #[test]
+fn producer_field_values_compose_only_through_existing_nested_value_positions() {
+    let source = "record Box { value: I8 } record Holder { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn sink(value: I8) {} fn f() -> Holder { sink(make().value); return Holder { value: make().value }; }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let uses = parsed
+        .syntax()
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::FieldValueUse)
+        .collect::<Vec<_>>();
+    assert_eq!(uses.len(), 2);
+    assert!(uses.iter().all(|field_use| {
+        field_use
+            .children()
+            .filter(|child| child.kind() == SyntaxKind::DirectCall)
+            .count()
+            == 1
+    }));
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::ArgumentList)
+            .count(),
+        3
+    );
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::RecordInitializer)
+            .count(),
+        3
+    );
+}
+
+#[test]
 fn field_value_use_is_distinct_from_bare_identifier_use() {
     let parsed = parse("record Box { value: I8 } fn f(root: Box) -> I8 { return root.value; }");
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -128,6 +166,30 @@ fn field_value_use_is_distinct_from_bare_identifier_use() {
             .filter(|node| node.kind() == SyntaxKind::IdentifierUse)
             .count(),
         0
+    );
+}
+
+#[test]
+fn malformed_producer_selectors_do_not_swallow_enclosing_boundaries() {
+    let source = "record Box { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn sink(value: I8) {} fn f() { sink(make().); sink(Box { value: 1 }.); sink(1); } fn g() {}";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(!parsed.errors().is_empty());
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::FunctionDefinition)
+            .count(),
+        4
+    );
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::CallStatement)
+            .count(),
+        3
     );
 }
 
