@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including direct binding-root and producer-backed scrutinees, from [Source patterns](patterns.md); and direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, producer-backed pattern scrutinee evaluation and transient cleanup, return, cleanup, divergence, fault, and straight-line body/block execution semantics from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including direct binding-root and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, producer-backed pattern scrutinee evaluation and transient cleanup, return, cleanup, divergence, fault, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection and definite normal ownership joins from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -29,6 +29,8 @@ The represented concrete subset reserves exactly these lexical identifier keys:
 - `let`;
 - `mut`;
 - `return`;
+- `if`;
+- `else`;
 - `import`;
 - `export`;
 - `true`;
@@ -42,7 +44,7 @@ A **user identifier** is an identifier-form token under `lexical.md` whose lexic
 
 A reserved key is not legal where the grammar requires a user identifier. This revision reserves no other identifier key and defines no escaping mechanism for a reserved key.
 
-Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality. In particular, longer identifier-form tokens such as `mutable`, `trueish`, and `falsehood` are each one complete identifier token and are not split because they begin with a reserved key.
+Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality. In particular, longer identifier-form tokens such as `mutable`, `trueish`, `falsehood`, and `ifonly` are each one complete identifier token and are not split because they begin with a reserved key.
 
 ## Punctuation tokens
 
@@ -82,7 +84,7 @@ This revision defines no documentation-comment category or documentation semanti
 
 The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above. `DecimalMagnitude` denotes one decimal magnitude token as defined above.
 
-Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role. Semicolons are required exactly where a grammar production includes `;`; a represented `BlockStatement` terminates at its closing `}` and has no trailing semicolon.
+Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role. Semicolons are required exactly where a grammar production includes `;`; a represented `BlockStatement` or `IfStatement` terminates at its final closing `}` and has no trailing semicolon.
 
 ## Source units and items
 
@@ -178,7 +180,7 @@ The concrete function form attaches the following body to the same function enti
 
 ## Function bodies
 
-The represented body grammar delimits the function root lexical scope and admits recursively nested child lexical scopes through `BlockStatement`:
+The represented body grammar delimits the function root lexical scope and admits recursively nested child lexical scopes through `BlockStatement` and represented conditional arms:
 
 ```text
 Body           = "{" BodyStatement* ReturnStatement? "}"
@@ -187,6 +189,7 @@ BodyStatement  = LocalDeclaration
                | AssignmentStatement
                | CallStatement
                | BlockStatement
+               | IfStatement
 BlockStatement = "{" BodyStatement* "}"
 ```
 
@@ -194,9 +197,45 @@ A represented return statement, when present, is terminal at the function-root b
 
 A represented `BlockStatement` is statement-only and produces no source value. Its closing `}` is the complete statement terminator; no trailing semicolon is present. The enclosed sequence may be empty, and block statements may nest recursively because `BlockStatement` is itself a `BodyStatement`.
 
-Because `ReturnStatement` is not a `BodyStatement`, this block form does not admit a return inside a nested block. It does not create a block expression, tail value, Unit/Void value, label, branch, loop, break, continue, or catch form.
+Because `ReturnStatement` is not a `BodyStatement`, this block form does not admit a return inside a nested block. A block statement itself does not create a block expression, tail value, Unit/Void value, label, loop, break, continue, or catch form. Conditional selection is introduced only by `IfStatement` below.
 
-Each `BlockStatement` maps to exactly one child lexical scope under `local-bindings.md`. Execution order, normal child-scope cleanup, fault propagation, and divergence consequences are owned by `function-execution.md`.
+Each `BlockStatement` maps to exactly one child lexical scope under `local-bindings.md`. Execution order, normal child-scope cleanup, fault propagation, and divergence consequences are owned by `function-execution.md`. When a block is a conditional arm, `control-flow.md` owns its relationship to conditional selection and the definite normal join.
+
+## Conditional statements
+
+The represented statement-level conditional has this grammar:
+
+```text
+IfStatement =
+    "if" ConditionalValue BlockStatement ("else" BlockStatement)?
+
+ConditionalValue =
+    BooleanLiteral
+  | DecimalIntegerLiteral
+  | IdentifierUse
+  | DirectCall
+  | FieldValueUse
+```
+
+`ConditionalValue` deliberately reuses every currently represented `Value` producer except `RecordConstruction`.
+
+This exclusion is part of normative concrete grammar. The existing record-construction form begins with `UserIdentifier "{"`; admitting unrestricted `Value` immediately after `if` would therefore make a spelling such as `if flag { ... }` collide with the record-construction token shape. Under the grammar above, the bare `flag` is one `IdentifierUse` conditional value and the following `{ ... }` begins the then `BlockStatement`. No semantic lookup, inferred type, or parser-only context rule is needed to choose that structure.
+
+A decimal integer literal remains syntactically represented as a `ConditionalValue`. Exact condition typing is owned by `control-flow.md`; a decimal integer therefore remains a syntax-valid conditional spelling but is source-invalid when it cannot produce the exact intrinsic `Bool` type. Concrete grammar does not encode that type error.
+
+A `DirectCall` conditional value retains both its represented unqualified and `alias::member(...)` target forms. A `FieldValueUse` retains its binding-rooted selector grammar. All lookup and producer rules remain owned by their existing semantic owners.
+
+`RecordConstruction` is not a represented conditional-value spelling in this revision. This restriction does not remove record construction from ordinary `Value` positions or producer-backed record-pattern scrutinees.
+
+The then arm is always one explicit `BlockStatement`. `else` is optional; when present it is followed by exactly one explicit `BlockStatement`. Each explicit arm therefore maps to one ordinary child lexical scope. The omitted-else false outcome and definite enclosing ownership join are owned by `control-flow.md`; omission does not synthesize a concrete block or lexical scope.
+
+This revision defines no direct `else if` production. A nested conditional may instead occur as a `BodyStatement` inside an explicit else block, for example the abstract shape `else { if ... { ... } }`.
+
+An `IfStatement` produces no source value and has no trailing semicolon. It does not add a conditional expression, block value, Unit/Void value, pattern condition, guard, truthiness relation, comparison, or logical operator.
+
+`ReturnStatement` remains absent from `BodyStatement`; conditional arms therefore do not introduce nested or early return under this grammar.
+
+Runtime condition selection, condition producer ordering, arm validation, normal arm cleanup composition, fault/divergence behavior, and exact structural-ownership-state equality at the normal successor are owned by `control-flow.md`.
 
 ## Ordinary local declarations
 
@@ -207,7 +246,7 @@ MutableModifier  = "mut"
 
 The concrete form maps to one ordinary local declaration under `local-bindings.md`. The explicit type and initializer are mandatory in both forms.
 
-Without `MutableModifier`, the declaration establishes an immutable binding. With `MutableModifier`, it establishes a mutable binding under the assignment-mutability classification owned by `local-bindings.md`. `mut` does not create a second declaration category, a reference/memory value, or a distinct storage identity.
+Without `MutableModifier`, the declaration establishes an immutable binding. With `MutableModifier`, the declaration establishes a mutable binding under the assignment-mutability classification owned by `local-bindings.md`. `mut` does not create a second declaration category, a reference/memory value, or a distinct storage identity.
 
 Initializer lookup, owned-value production, transfer, the resulting initial structural ownership state, and the point at which the new local enters scope are determined by `local-bindings.md`, `structural-ownership.md`, and `function-execution.md`.
 
@@ -422,7 +461,7 @@ This revision does not define:
 - grouping or general expression grammar;
 - assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, destructuring assignment, or general place/lvalue syntax beyond represented whole-binding assignment;
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
-- branches, loops, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, or other multiple-path/control-transfer forms;
+- conditional expressions, direct `else if`, early/nested return, loops, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch, labels, break, continue, or other control-transfer forms beyond represented statement-level `if`;
 - record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and binding-rooted `FieldValueUse` producer-backed forms; in particular no literal, bare `IdentifierUse`-as-value, grouping, operator expression, conversion, or arbitrary general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction;
