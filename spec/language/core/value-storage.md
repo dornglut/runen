@@ -12,6 +12,10 @@ The shared/exclusive access authority required to reach storage while loans are 
 
 A semantic classification for values and places. This revision defines scalar or leaf types and closed structural aggregate types for the operations below.
 
+Every represented scalar type has one semantic **scalar kind** classifying its scalar value family. Scalar kind and the per-program type identity/type definition used to refer to one represented type are distinct facts; distinct represented type definitions MAY have the same scalar kind.
+
+This revision uses that distinction below for the `Bool` scalar kind. It does not by that fact enumerate, redefine, or unify the separately governed integer, floating, raw-pointer, or verification-fixture scalar semantics.
+
 A type may carry an **interior-mutable** semantic marker. The marker belongs to the proving-kernel type model; this revision does not define source syntax for declaring such a type.
 
 ### Local
