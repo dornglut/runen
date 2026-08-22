@@ -37,17 +37,30 @@ fn semicolon_after_block_is_not_part_of_the_block_statement() {
 }
 
 #[test]
-fn nested_return_remains_outside_nested_block_grammar() {
-    let parsed = parse("fn f() { { return; } }");
+fn parses_terminal_nested_returns_losslessly() {
+    let source = "fn f() { { return; } } fn g(x: I64) -> I64 { { return x; } }";
+    let parsed = parse(source);
 
-    assert_eq!(parsed.text(), "fn f() { { return; } }");
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert_eq!(count_kind(&parsed, SyntaxKind::BlockStatement), 2);
+    assert_eq!(count_kind(&parsed, SyntaxKind::ReturnStatement), 2);
+}
+
+#[test]
+fn material_after_nested_return_is_lossless_and_rejected() {
+    let source = "fn f() { { return; let x: I64 = 1; } }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
     assert!(
         parsed
             .errors()
             .iter()
-            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Statement) })
+            .any(|error| error.kind() == SyntaxErrorKind::UnexpectedAfterReturn)
     );
-    assert_eq!(count_kind(&parsed, SyntaxKind::ReturnStatement), 0);
+    assert_eq!(count_kind(&parsed, SyntaxKind::ReturnStatement), 1);
+    assert_eq!(count_kind(&parsed, SyntaxKind::LocalDeclaration), 0);
 }
 
 #[test]
@@ -81,6 +94,24 @@ fn missing_nested_and_root_closes_recover_to_next_top_level_item() {
 
     assert_eq!(parsed.text(), source);
     assert!(!parsed.errors().is_empty());
+    assert_eq!(
+        parsed
+            .syntax()
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::FunctionDefinition)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn nested_return_recovery_preserves_following_top_level_item() {
+    let source = "fn broken() { { return; fn ok() {}";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(!parsed.errors().is_empty());
+    assert_eq!(count_kind(&parsed, SyntaxKind::ReturnStatement), 1);
     assert_eq!(
         parsed
             .syntax()
