@@ -306,7 +306,7 @@ pub enum Statement {
     If {
         condition: Value,
         then_block: Block,
-        else_block: Option<Block>,
+        else_block: Option<Box<Block>>,
         location: SourceLocation,
     },
 }

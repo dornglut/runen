@@ -393,7 +393,7 @@ impl<'a> FunctionLowerer<'a> {
                     then_block,
                     else_block,
                     ..
-                } => self.lower_if(condition, then_block, else_block.as_ref())?,
+                } => self.lower_if(condition, then_block, else_block.as_deref())?,
             }
 
             has_normal_continuation = Self::statement_has_normal_continuation(statement);

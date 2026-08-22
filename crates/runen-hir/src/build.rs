@@ -1090,7 +1090,7 @@ fn validate_if(
     Some(Statement::If {
         condition,
         then_block,
-        else_block,
+        else_block: else_block.map(Box::new),
         location: location(header.unit, node),
     })
 }
