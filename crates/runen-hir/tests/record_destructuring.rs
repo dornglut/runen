@@ -599,8 +599,9 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
         .id;
 
     for name in ["direct", "call", "construct", "field"] {
-        let Statement::RecordDestructure { record, bindings, .. } =
-            &function(&hir, name).body.statements[0]
+        let Statement::RecordDestructure {
+            record, bindings, ..
+        } = &function(&hir, name).body.statements[0]
         else {
             panic!("expected record destructuring in {name}");
         };
