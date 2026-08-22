@@ -424,9 +424,10 @@ impl<'a> FunctionLowerer<'a> {
                     "record destructuring binding has empty structural path",
                 ));
             }
-            if seen_paths.iter().any(|seen| {
-                binding.fields.starts_with(seen) || seen.starts_with(&binding.fields)
-            }) {
+            if seen_paths
+                .iter()
+                .any(|seen| binding.fields.starts_with(seen) || seen.starts_with(&binding.fields))
+            {
                 return Err(LoweringError::InvalidHirInvariant(
                     "record destructuring binding paths are not structurally disjoint",
                 ));
