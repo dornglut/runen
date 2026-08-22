@@ -98,12 +98,15 @@ record Token {}
 record Pair { left: I8, right: Token }
 record Outer { pair: Pair }
 fn make() -> Pair { return Pair { left: 1, right: Token {} }; }
+fn make_outer() -> Outer { return Outer { pair: Pair { left: 3, right: Token {} } }; }
 fn f(root: Pair, outer: Outer) {
     let Pair { left: a, right: b } = root;
     let Pair { left: c, right: d } = make();
     let Pair { left: e, right: f } = Pair { left: 2, right: Token {} };
     let Pair { left: g, right: h } = outer.pair;
     let Pair { left: i, right: j } = api::make();
+    let Pair { left: k, right: l } = make_outer().pair;
+    let Pair { left: m, right: n } = Outer { pair: Pair { left: 4, right: Token {} } }.pair;
 }
 "#;
     let parsed = parse(source);
@@ -116,7 +119,7 @@ fn f(root: Pair, outer: Outer) {
         .descendants()
         .filter(|node| node.kind() == SyntaxKind::RecordDestructuringDeclaration)
         .collect::<Vec<_>>();
-    assert_eq!(declarations.len(), 5);
+    assert_eq!(declarations.len(), 7);
 
     assert!(!declarations[0].children().any(|child| matches!(
         child.kind(),
@@ -145,6 +148,30 @@ fn f(root: Pair, outer: Outer) {
         qualified_call
             .children()
             .any(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    );
+
+    let call_field = declarations[5]
+        .children()
+        .find(|child| child.kind() == SyntaxKind::FieldValueUse)
+        .expect("call-backed field scrutinee");
+    assert_eq!(
+        call_field
+            .children()
+            .filter(|child| child.kind() == SyntaxKind::DirectCall)
+            .count(),
+        1
+    );
+
+    let construction_field = declarations[6]
+        .children()
+        .find(|child| child.kind() == SyntaxKind::FieldValueUse)
+        .expect("construction-backed field scrutinee");
+    assert_eq!(
+        construction_field
+            .children()
+            .filter(|child| child.kind() == SyntaxKind::RecordConstruction)
+            .count(),
+        1
     );
 }
 
