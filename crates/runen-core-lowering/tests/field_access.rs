@@ -4,8 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    FieldValueReceiver, IntrinsicType, LiteralValue, ModuleId, OwnedUse, SourceUnit, Type, ValueKind,
-    build_typed_hir,
+    FieldValueReceiver, IntrinsicType, LiteralValue, ModuleId, OwnedUse, SourceUnit, Type,
+    ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -211,15 +211,12 @@ fn producer_call_consuming_field_moves_result_then_cleans_only_remaining_frontie
         ]
     );
     assert!(
-        !f.body.blocks[1]
-            .statements
-            .iter()
-            .any(|statement| matches!(
-                statement,
-                CoreStatement::Drop {
-                    place: PlaceAccess::Direct(place),
-                } if place.projections == vec![Projection::Field(0)]
-            ))
+        !f.body.blocks[1].statements.iter().any(|statement| matches!(
+            statement,
+            CoreStatement::Drop {
+                place: PlaceAccess::Direct(place),
+            } if place.projections == vec![Projection::Field(0)]
+        ))
     );
 }
 
@@ -514,11 +511,9 @@ fn lowering_rejects_empty_resolved_field_path_as_invalid_hir() {
 
 #[test]
 fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup_invariants() {
-    let mut wrong_ownership = hir(
-        "record Box { value: I8 } \
+    let mut wrong_ownership = hir("record Box { value: I8 } \
          fn make() -> Box { return Box { value: 1 }; } \
-         fn f() -> I8 { return make().value; }",
-    );
+         fn f() -> I8 { return make().value; }");
     let wrong_ownership_value = wrong_ownership.functions[1]
         .body
         .terminal_return
@@ -536,11 +531,9 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
         ))
     );
 
-    let mut wrong_category = hir(
-        "record Box { value: I8 } \
+    let mut wrong_category = hir("record Box { value: I8 } \
          fn make() -> Box { return Box { value: 1 }; } \
-         fn f() -> I8 { return make().value; }",
-    );
+         fn f() -> I8 { return make().value; }");
     let wrong_category_value = wrong_category.functions[1]
         .body
         .terminal_return
@@ -550,7 +543,10 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
     let ValueKind::FieldValueUse { receiver, .. } = &mut wrong_category_value.kind else {
         panic!("expected producer field value");
     };
-    let FieldValueReceiver::Producer { value: producer, .. } = receiver else {
+    let FieldValueReceiver::Producer {
+        value: producer, ..
+    } = receiver
+    else {
         panic!("expected producer receiver");
     };
     producer.kind = ValueKind::Literal(LiteralValue::I8(1));
