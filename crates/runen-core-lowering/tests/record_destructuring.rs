@@ -108,7 +108,12 @@ fn recursive_direct_root_lowers_full_paths_in_depth_first_source_order_without_s
             .collect::<Vec<_>>(),
         ["root", "count", "moved", "value", "tail"]
     );
-    assert!(f.body.locals.iter().all(|local| !local.name.starts_with("$tmp")));
+    assert!(
+        f.body
+            .locals
+            .iter()
+            .all(|local| !local.name.starts_with("$tmp"))
+    );
 
     let projections = f.body.blocks[0]
         .statements
@@ -236,13 +241,21 @@ fn all_transferred_recursive_producer_emits_no_transient_drop() {
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert!(moved_paths.iter().any(|path| path == &vec![Projection::Field(0)]));
-    assert!(moved_paths.iter().any(|path| {
-        path == &vec![Projection::Field(1), Projection::Field(0)]
-    }));
-    assert!(moved_paths.iter().any(|path| {
-        path == &vec![Projection::Field(1), Projection::Field(1)]
-    }));
+    assert!(
+        moved_paths
+            .iter()
+            .any(|path| path == &vec![Projection::Field(0)])
+    );
+    assert!(
+        moved_paths
+            .iter()
+            .any(|path| { path == &vec![Projection::Field(1), Projection::Field(0)] })
+    );
+    assert!(
+        moved_paths
+            .iter()
+            .any(|path| { path == &vec![Projection::Field(1), Projection::Field(1)] })
+    );
 }
 
 #[test]
@@ -319,9 +332,7 @@ fn nested_zero_leaf_nonduplicable_leaf_still_lowers_as_full_projected_move() {
         f.body.blocks[0].statements,
         vec![CoreStatement::Init {
             dst: Place::local(LocalId(1)),
-            src: Operand::Move(direct(
-                Place::local(LocalId(0)).field(0).field(0)
-            )),
+            src: Operand::Move(direct(Place::local(LocalId(0)).field(0).field(0))),
         }]
     );
 }
@@ -356,10 +367,8 @@ fn nested_block_cleanup_follows_reverse_depth_first_binding_order() {
 
 #[test]
 fn lowering_rejects_invalid_recursive_pattern_path() {
-    let mut compilation = hir(
-        "record Inner { value: I8 } record Outer { inner: Inner } \
-         fn f(root: Outer) { let Outer { inner: Inner { value: item } } = root; }",
-    );
+    let mut compilation = hir("record Inner { value: I8 } record Outer { inner: Inner } \
+         fn f(root: Outer) { let Outer { inner: Inner { value: item } } = root; }");
     let Statement::RecordDestructure { bindings, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
@@ -398,10 +407,8 @@ fn lowering_rejects_overlapping_retained_binding_paths() {
 
 #[test]
 fn lowering_rejects_pattern_record_root_identity_mismatch() {
-    let mut compilation = hir(
-        "record A { value: I8 } record B { value: I8 } \
-         fn f(root: A) { let A { value: extracted } = root; }",
-    );
+    let mut compilation = hir("record A { value: I8 } record B { value: I8 } \
+         fn f(root: A) { let A { value: extracted } = root; }");
     let other = compilation.records[1].id;
     let Statement::RecordDestructure { record, .. } =
         &mut compilation.functions[0].body.statements[0]
@@ -420,10 +427,8 @@ fn lowering_rejects_pattern_record_root_identity_mismatch() {
 
 #[test]
 fn lowering_rejects_producer_record_identity_mismatch() {
-    let mut compilation = hir(
-        "record A { value: I8 } record B { value: I8 } \
-         fn f() { let A { value: extracted } = A { value: 1 }; }",
-    );
+    let mut compilation = hir("record A { value: I8 } record B { value: I8 } \
+         fn f() { let A { value: extracted } = A { value: 1 }; }");
     let other = compilation.records[1].id;
     let Statement::RecordDestructure { record, .. } =
         &mut compilation.functions[0].body.statements[0]
@@ -442,10 +447,8 @@ fn lowering_rejects_producer_record_identity_mismatch() {
 
 #[test]
 fn lowering_rejects_retained_pattern_binding_type_mismatch() {
-    let mut compilation = hir(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }",
-    );
+    let mut compilation = hir("record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
     let Statement::RecordDestructure { bindings, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
@@ -463,10 +466,8 @@ fn lowering_rejects_retained_pattern_binding_type_mismatch() {
 
 #[test]
 fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicability() {
-    let mut compilation = hir(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { let Pair { left: a, right: b } = root; }",
-    );
+    let mut compilation = hir("record Pair { left: I8, right: U8 } \
+         fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
     let Statement::RecordDestructure { bindings, .. } =
         &mut compilation.functions[0].body.statements[0]
     else {
