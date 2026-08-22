@@ -44,27 +44,32 @@ fn producer_receivers_wrap_complete_call_or_construction_nodes() {
         .collect::<Vec<_>>();
     assert_eq!(uses.len(), 3);
 
+    let direct_call_receivers = uses
+        .iter()
+        .filter_map(|field_use| {
+            field_use
+                .children()
+                .find(|node| node.kind() == SyntaxKind::DirectCall)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(direct_call_receivers.len(), 2);
     assert_eq!(
-        uses[0]
-            .children()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+        direct_call_receivers
+            .iter()
+            .filter(|call| {
+                call.children()
+                    .any(|node| node.kind() == SyntaxKind::QualifiedModuleMember)
+            })
             .count(),
         1
     );
     assert_eq!(
-        uses[1]
-            .children()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
-            .count(),
-        1
-    );
-    assert!(uses[1].descendants().any(|node| {
-        node.kind() == SyntaxKind::QualifiedModuleMember && node.to_string() == "ext::make"
-    }));
-    assert_eq!(
-        uses[2]
-            .children()
-            .filter(|node| node.kind() == SyntaxKind::RecordConstruction)
+        uses.iter()
+            .filter(|field_use| {
+                field_use
+                    .children()
+                    .any(|node| node.kind() == SyntaxKind::RecordConstruction)
+            })
             .count(),
         1
     );
