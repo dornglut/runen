@@ -1,6 +1,6 @@
 use runen_hir::{
     DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
-    SourceUnit, Statement, Type, Value, ValueKind, build_typed_hir,
+    RecordPatternScrutinee, SourceUnit, Statement, Type, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, SyntaxKind, parse_source};
 
@@ -218,6 +218,22 @@ fn producer_nonduplicable_selection_retains_canonical_remaining_frontier() {
 }
 
 #[test]
+fn zero_leaf_receiver_cleanup_remains_retained_in_hir() {
+    let hir = build(
+        "record Token { value: I8 } record Empty {} record Box { token: Token, empty: Empty } \
+         fn make() -> Box { return Box { token: Token { value: 1 }, empty: Empty {} }; } \
+         fn f() -> Token { return make().token; }",
+    );
+    let ValueKind::FieldValueUse { receiver, .. } = &returned_value(function(&hir, "f")).kind else {
+        panic!("expected producer-backed field use");
+    };
+    let FieldValueReceiver::Producer { cleanup, .. } = receiver else {
+        panic!("expected producer receiver");
+    };
+    assert_eq!(cleanup.paths, vec![vec![1]]);
+}
+
+#[test]
 fn producer_field_location_is_the_complete_field_use() {
     let source = "record Box { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn f() -> I8 { return make().value; }";
     let parsed = parse(source);
@@ -263,6 +279,16 @@ fn producer_static_rejection_does_not_commit_receiver_consumption() {
         DiagnosticKind::UnavailableBinding
     ));
 
+    let non_record = errors(
+        "record Ticket {} fn make(ticket: Ticket) -> I8 { return 1; } fn sink(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { let bad: I8 = make(ticket).value; sink(ticket); }",
+    );
+    assert!(has_kind(
+        &non_record,
+        DiagnosticKind::ExpectedRecordForFieldAccess
+    ));
+    assert!(!has_kind(&non_record, DiagnosticKind::UnavailableBinding));
+
     let no_result = errors(
         "record Ticket {} fn make(ticket: Ticket) {} fn sink(ticket: Ticket) {} \
          fn f(ticket: Ticket) { let bad: I8 = make(ticket).value; sink(ticket); }",
@@ -275,6 +301,45 @@ fn producer_static_rejection_does_not_commit_receiver_consumption() {
 }
 
 #[test]
+fn construction_receiver_static_or_dynamic_rejection_rolls_back_initializer_consumption() {
+    let final_type = errors(
+        "record Ticket {} record Box { ticket: Ticket, value: I8 } fn sink(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { let bad: U8 = Box { ticket: ticket, value: 1 }.value; sink(ticket); }",
+    );
+    assert!(
+        final_type
+            .iter()
+            .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
+    assert!(!has_kind(&final_type, DiagnosticKind::UnavailableBinding));
+
+    let invalid_initializer = errors(
+        "record Ticket {} record Box { ticket: Ticket, value: I8 } fn sink(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { let bad: I8 = Box { ticket: ticket, value: missing }.value; sink(ticket); }",
+    );
+    assert!(has_kind(&invalid_initializer, DiagnosticKind::UnresolvedName));
+    assert!(!has_kind(
+        &invalid_initializer,
+        DiagnosticKind::UnavailableBinding
+    ));
+}
+
+#[test]
+fn successful_producer_receivers_commit_call_and_constructor_consumption() {
+    let diagnostics = errors(
+        "record Ticket {} record Box { ticket: Ticket, value: I8 } \
+         fn make(ticket: Ticket) -> Box { return Box { ticket: ticket, value: 1 }; } \
+         fn sink(ticket: Ticket) {} \
+         fn call_case(ticket: Ticket) { let value: I8 = make(ticket).value; sink(ticket); } \
+         fn construction_case(ticket: Ticket) { let value: I8 = Box { ticket: ticket, value: 1 }.value; sink(ticket); }",
+    );
+    assert_eq!(
+        count_kind(&diagnostics, DiagnosticKind::UnavailableBinding),
+        2
+    );
+}
+
+#[test]
 fn invalid_receiver_producer_does_not_commit_speculative_argument_consumption() {
     let diagnostics = errors(
         "record Ticket {} record Box { value: I8 } \
@@ -284,6 +349,79 @@ fn invalid_receiver_producer_does_not_commit_speculative_argument_consumption() 
     );
     assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
     assert!(!has_kind(&diagnostics, DiagnosticKind::UnavailableBinding));
+}
+
+#[test]
+fn producer_bool_field_composes_as_existing_conditional_value() {
+    let hir = build(
+        "record Flag { ready: Bool } \
+         fn make() -> Flag { return Flag { ready: true }; } \
+         fn f() { if make().ready {} }",
+    );
+    let Statement::If { condition, .. } = &function(&hir, "f").body.statements[0] else {
+        panic!("expected conditional");
+    };
+    assert_eq!(condition.ty, Type::Intrinsic(IntrinsicType::Bool));
+    let ValueKind::FieldValueUse {
+        receiver,
+        fields,
+        ownership,
+    } = &condition.kind
+    else {
+        panic!("expected field-value condition");
+    };
+    let FieldValueReceiver::Producer {
+        value: producer,
+        cleanup,
+    } = receiver
+    else {
+        panic!("expected producer receiver");
+    };
+    assert!(matches!(producer.kind, ValueKind::DirectCall { .. }));
+    assert_eq!(fields, &[0]);
+    assert_eq!(*ownership, OwnedUse::Duplicate);
+    assert_eq!(cleanup.paths, vec![Vec::<usize>::new()]);
+}
+
+#[test]
+fn producer_record_field_pattern_keeps_field_and_pattern_transients_distinct() {
+    let hir = build(
+        "record Token { value: I8 } record Inner { token: Token, count: I8 } \
+         record Outer { inner: Inner, pad: I8 } \
+         fn make() -> Outer { return Outer { inner: Inner { token: Token { value: 1 }, count: 2 }, pad: 3 }; } \
+         fn f() { let Inner { token: moved, count: copied } = make().inner; }",
+    );
+    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
+    else {
+        panic!("expected record destructuring");
+    };
+    let RecordPatternScrutinee::Producer {
+        value,
+        cleanup: pattern_cleanup,
+    } = scrutinee
+    else {
+        panic!("expected producer pattern scrutinee");
+    };
+    let ValueKind::FieldValueUse {
+        receiver,
+        fields,
+        ownership,
+    } = &value.kind
+    else {
+        panic!("expected producer-backed field scrutinee value");
+    };
+    let FieldValueReceiver::Producer {
+        value: producer,
+        cleanup: field_cleanup,
+    } = receiver
+    else {
+        panic!("expected producer field receiver");
+    };
+    assert!(matches!(producer.kind, ValueKind::DirectCall { .. }));
+    assert_eq!(fields, &[0]);
+    assert_eq!(*ownership, OwnedUse::Consume);
+    assert_eq!(field_cleanup.paths, vec![vec![1]]);
+    assert_eq!(pattern_cleanup.paths, vec![vec![1]]);
 }
 
 #[test]
