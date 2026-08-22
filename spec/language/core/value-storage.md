@@ -4,13 +4,17 @@ Status: **provisional normative; incomplete**
 
 This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, assignment, destruction domains, and cleanup.
 
-The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md).
+The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md).
 
 ## Terms
 
 ### Type
 
 A semantic classification for values and places. This revision defines scalar or leaf types and closed structural aggregate types for the operations below.
+
+Every represented scalar type has one semantic **scalar kind** classifying its scalar value family. Scalar kind and the per-program type identity/type definition used to refer to one represented type are distinct facts; distinct represented type definitions MAY have the same scalar kind.
+
+This revision uses that distinction below for the `Bool` scalar kind. It does not by that fact enumerate, redefine, or unify the separately governed integer, floating, raw-pointer, or verification-fixture scalar semantics.
 
 A type may carry an **interior-mutable** semantic marker. The marker belongs to the proving-kernel type model; this revision does not define source syntax for declaring such a type.
 
@@ -35,6 +39,12 @@ A place reached by projecting a field from an aggregate place.
 ### Value
 
 An initialized semantic datum whose structure is compatible with the type required by its use. The currently defined constant-value representation does not carry independent nominal type identity or dynamic raw-pointer provenance.
+
+Every represented Core scalar type whose scalar kind is `Bool` has exactly two semantic values: **`true`** and **`false`**.
+
+This two-value domain belongs to the Bool scalar kind; it does not designate or require one globally distinguished Bool type identity. Distinct represented type definitions may each have scalar kind `Bool` while using the same two semantic scalar values.
+
+The Bool values are not required physical bits, integers, source spellings, ABI representations, or layout encodings. This value definition introduces no truthiness, conversion, comparison, logical operation, ordering, or other Bool operation. An accepted consumer such as [Core control flow](control-flow.md) may select behavior from these two values without redefining their value domain.
 
 ### Assignment mutability
 
@@ -298,7 +308,7 @@ Defined `Fault` uses the same stored-value lifetime and destruction-domain rules
 
 When an applicable non-Core semantic contract defines termination of a represented Core function execution by a distinct cancellation outcome, that termination MUST use the same reverse-local cleanup order, then-current destruction-domain rules, and storage-extent ending rule above. This paragraph defines only the Core storage consequence once cancellation termination has already been selected by another canonical owner. It does not define cancellation request or observation, propagation, catch or unwind policy, custom destructor bodies, or source cancellation syntax, and it does not reclassify cancellation as a Core `Fault`.
 
-For a cyclic execution that diverges, no termination cleanup occurs merely because execution has run for a long time; there is no implicit step budget that ends storage extents.
+When [Core control flow](control-flow.md) selects a cyclic execution that diverges, no termination cleanup occurs merely because execution has run for a long time; there is no implicit step budget that ends storage extents.
 
 ## Determinism
 
@@ -310,8 +320,6 @@ The interior-mutability marker is static semantic type metadata. `InteriorAssign
 
 The semantics defined here do not depend on physical addresses, host destruction behavior, container iteration order, physical scheduling, or backend behavior.
 
-There is no implicit execution-step budget. Cyclic control flow may diverge.
-
 ## Separate semantic owners
 
 This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
@@ -320,4 +328,4 @@ Raw-pointer type/value formation and provenance derived from the storage-instanc
 
 This revision defines only proving-kernel interior-mutability capability and replacement semantics; it does not define source spelling, library abstractions, dynamic borrow guards, synchronization mechanisms, or which future public types expose that capability.
 
-Where this revision defines storage or lifetime facts that later borrowing, pointer access, validity, or concurrency concerns may depend on, their canonical owners govern the additional policy. In particular, a shared loan remaining active across an interior replacement implies stable structural storage identity for that continuing extent, but does not imply physical address stability, legal raw-pointer dereference, data-race freedom, or a first-class reference guarantee.
+Where this revision defines storage or lifetime facts that later borrowing, pointer access, validity, control-flow, or concurrency concerns may depend on, their canonical owners govern the additional policy. In particular, a shared loan remaining active across an interior replacement implies stable structural storage identity for that continuing extent, but does not imply physical address stability, legal raw-pointer dereference, data-race freedom, or a first-class reference guarantee.
