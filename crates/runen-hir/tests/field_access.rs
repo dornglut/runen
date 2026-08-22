@@ -224,7 +224,8 @@ fn zero_leaf_receiver_cleanup_remains_retained_in_hir() {
          fn make() -> Box { return Box { token: Token { value: 1 }, empty: Empty {} }; } \
          fn f() -> Token { return make().token; }",
     );
-    let ValueKind::FieldValueUse { receiver, .. } = &returned_value(function(&hir, "f")).kind else {
+    let ValueKind::FieldValueUse { receiver, .. } = &returned_value(function(&hir, "f")).kind
+    else {
         panic!("expected producer-backed field use");
     };
     let FieldValueReceiver::Producer { cleanup, .. } = receiver else {
@@ -317,7 +318,10 @@ fn construction_receiver_static_or_dynamic_rejection_rolls_back_initializer_cons
         "record Ticket {} record Box { ticket: Ticket, value: I8 } fn sink(ticket: Ticket) {} \
          fn f(ticket: Ticket) { let bad: I8 = Box { ticket: ticket, value: missing }.value; sink(ticket); }",
     );
-    assert!(has_kind(&invalid_initializer, DiagnosticKind::UnresolvedName));
+    assert!(has_kind(
+        &invalid_initializer,
+        DiagnosticKind::UnresolvedName
+    ));
     assert!(!has_kind(
         &invalid_initializer,
         DiagnosticKind::UnavailableBinding
