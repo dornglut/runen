@@ -1,5 +1,5 @@
 use runen_hir::{
-    AssignmentMutability, DiagnosticKind, IntrinsicType, ModuleId, OwnedUse,
+    AssignmentMutability, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
     RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit, Statement, Type, ValueKind,
     build_typed_hir,
 };
@@ -63,9 +63,9 @@ fn retains_resolved_pattern_facts_in_source_order() {
     assert_eq!(
         bindings
             .iter()
-            .map(|binding| binding.field)
+            .map(|binding| binding.fields.clone())
             .collect::<Vec<_>>(),
-        [2, 1, 0]
+        [vec![2], vec![1], vec![0]]
     );
     assert_eq!(
         bindings
@@ -80,13 +80,53 @@ fn retains_resolved_pattern_facts_in_source_order() {
     assert_eq!(bindings[0].ownership, OwnedUse::Duplicate);
     assert_eq!(bindings[1].ownership, OwnedUse::Consume);
     assert_eq!(bindings[2].ownership, OwnedUse::Duplicate);
-    assert_ne!(bindings[0].binding, bindings[1].binding);
-    assert_ne!(bindings[1].binding, bindings[2].binding);
-    assert_ne!(bindings[0].binding, bindings[2].binding);
 }
 
 #[test]
-fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
+fn recursive_pattern_retains_full_leaf_paths_in_depth_first_source_order() {
+    let hir = build(
+        "record Token {} \
+         record Leaf { value: I8, token: Token } \
+         record Inner { leaf: Leaf, count: U8 } \
+         record Outer { tail: I8, inner: Inner } \
+         fn f(root: Outer) { \
+             let Outer { \
+                 inner: Inner { \
+                     count: count, \
+                     leaf: Leaf { token: moved, value: value }, \
+                 }, \
+                 tail: tail, \
+             } = root; \
+         }",
+    );
+    let f = function(&hir, "f");
+    let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
+        panic!("expected recursive record destructuring");
+    };
+    assert_eq!(
+        bindings
+            .iter()
+            .map(|binding| binding.fields.clone())
+            .collect::<Vec<_>>(),
+        [vec![1, 1], vec![1, 0, 1], vec![1, 0, 0], vec![0]]
+    );
+    assert_eq!(
+        bindings
+            .iter()
+            .map(|binding| binding.name.as_str())
+            .collect::<Vec<_>>(),
+        ["count", "moved", "value", "tail"]
+    );
+    assert_eq!(bindings[1].ownership, OwnedUse::Consume);
+    assert!(
+        [0, 2, 3]
+            .into_iter()
+            .all(|index| bindings[index].ownership == OwnedUse::Duplicate)
+    );
+}
+
+#[test]
+fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
     let hir = build(
         "record Token {} \
          record Mixed { first: I8, token: Token, last: U8 } \
@@ -100,53 +140,72 @@ fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
          fn empty() { let Empty {} = Empty {}; }",
     );
 
+    for name in ["call", "construct", "field"] {
+        let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, name).body.statements[0]
+        else {
+            panic!("expected producer-backed pattern");
+        };
+        let RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee else {
+            panic!("expected producer-backed scrutinee");
+        };
+        assert_eq!(
+            cleanup,
+            &RecordPatternTransientCleanup {
+                paths: vec![vec![2], vec![0]],
+            }
+        );
+    }
+
     let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "call").body.statements[0]
     else {
         panic!("expected call-backed pattern");
     };
-    let RecordPatternScrutinee::Producer { value, cleanup } = scrutinee else {
-        panic!("expected producer-backed scrutinee");
-    };
-    assert!(matches!(value.kind, ValueKind::DirectCall { .. }));
-    assert_eq!(
-        cleanup,
-        &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
-    );
+    assert!(matches!(
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            value: runen_hir::Value {
+                kind: ValueKind::DirectCall { .. },
+                ..
+            },
+            ..
+        }
+    ));
 
     let Statement::RecordDestructure { scrutinee, .. } =
         &function(&hir, "construct").body.statements[0]
     else {
         panic!("expected construction-backed pattern");
     };
-    let RecordPatternScrutinee::Producer { value, cleanup } = scrutinee else {
-        panic!("expected producer-backed scrutinee");
-    };
-    assert!(matches!(value.kind, ValueKind::RecordConstruction { .. }));
-    assert_eq!(
-        cleanup,
-        &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
-    );
+    assert!(matches!(
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            value: runen_hir::Value {
+                kind: ValueKind::RecordConstruction { .. },
+                ..
+            },
+            ..
+        }
+    ));
 
     let Statement::RecordDestructure { scrutinee, .. } =
         &function(&hir, "field").body.statements[0]
     else {
         panic!("expected field-backed pattern");
     };
-    let RecordPatternScrutinee::Producer { value, cleanup } = scrutinee else {
-        panic!("expected producer-backed scrutinee");
-    };
     assert!(matches!(
-        value.kind,
-        ValueKind::FieldValueUse {
-            fields: ref path,
-            ownership: OwnedUse::Consume,
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            value: runen_hir::Value {
+                kind: ValueKind::FieldValueUse {
+                    fields: ref path,
+                    ownership: OwnedUse::Consume,
+                    ..
+                },
+                ..
+            },
             ..
         } if path == &[0]
     ));
-    assert_eq!(
-        cleanup,
-        &RecordPatternTransientCleanup::DirectFields(vec![2, 0])
-    );
 
     let Statement::RecordDestructure { scrutinee, .. } =
         &function(&hir, "owned").body.statements[0]
@@ -156,9 +215,9 @@ fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
     assert!(matches!(
         scrutinee,
         RecordPatternScrutinee::Producer {
-            cleanup: RecordPatternTransientCleanup::None,
+            cleanup: RecordPatternTransientCleanup { paths },
             ..
-        }
+        } if paths.is_empty()
     ));
 
     let Statement::RecordDestructure {
@@ -173,28 +232,83 @@ fn producer_backed_scrutinees_retain_typed_value_and_cleanup_facts() {
     assert!(matches!(
         scrutinee,
         RecordPatternScrutinee::Producer {
-            cleanup: RecordPatternTransientCleanup::Complete,
+            cleanup: RecordPatternTransientCleanup { paths },
             ..
-        }
+        } if paths == &[Vec::<usize>::new()]
     ));
 }
 
 #[test]
-fn all_duplicable_producer_backed_pattern_retains_complete_transient_cleanup() {
+fn recursive_producer_cleanup_is_maximal_recursive_frontier_in_reverse_structural_order() {
     let hir = build(
-        "record Pair { left: I8, right: U8 } \
-         fn f() { let Pair { right: r, left: l } = Pair { left: 1, right: 2 }; }",
+        "record Token { value: I8 } \
+         record Inner { a: I8, token: Token, b: U8 } \
+         record Outer { head: I8, inner: Inner, tail: U8 } \
+         fn f() { \
+             let Outer { \
+                 inner: Inner { token: moved, a: a, b: b }, \
+                 head: head, \
+                 tail: tail, \
+             } = Outer { \
+                 head: 1, \
+                 inner: Inner { a: 2, token: Token { value: 3 }, b: 4 }, \
+                 tail: 5, \
+             }; \
+         }",
     );
     let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
     else {
-        panic!("expected record destructuring statement");
+        panic!("expected recursive producer pattern");
+    };
+    let RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee else {
+        panic!("expected producer scrutinee");
+    };
+    assert_eq!(
+        cleanup.paths,
+        [vec![2], vec![1, 2], vec![1, 0], vec![0]]
+    );
+}
+
+#[test]
+fn recursive_producer_no_consume_keeps_complete_root_and_all_transferred_is_empty() {
+    let all_dup = build(
+        "record Inner { a: I8, b: U8 } record Outer { inner: Inner, tail: I8 } \
+         fn f() { \
+             let Outer { inner: Inner { b: b, a: a }, tail: tail } = \
+                 Outer { inner: Inner { a: 1, b: 2 }, tail: 3 }; \
+         }",
+    );
+    let Statement::RecordDestructure { scrutinee, .. } = &function(&all_dup, "f").body.statements[0]
+    else {
+        panic!("expected producer pattern");
     };
     assert!(matches!(
         scrutinee,
         RecordPatternScrutinee::Producer {
-            cleanup: RecordPatternTransientCleanup::Complete,
+            cleanup: RecordPatternTransientCleanup { paths },
             ..
-        }
+        } if paths == &[Vec::<usize>::new()]
+    ));
+
+    let all_moved = build(
+        "record A {} record B {} record C {} \
+         record Inner { b: B, c: C } record Outer { a: A, inner: Inner } \
+         fn f() { \
+             let Outer { inner: Inner { c: c, b: b }, a: a } = \
+                 Outer { a: A {}, inner: Inner { b: B {}, c: C {} } }; \
+         }",
+    );
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &function(&all_moved, "f").body.statements[0]
+    else {
+        panic!("expected producer pattern");
+    };
+    assert!(matches!(
+        scrutinee,
+        RecordPatternScrutinee::Producer {
+            cleanup: RecordPatternTransientCleanup { paths },
+            ..
+        } if paths.is_empty()
     ));
 }
 
@@ -240,13 +354,13 @@ fn producer_lookup_occurs_before_pattern_bindings_enter_scope() {
 }
 
 #[test]
-fn invalid_pattern_structure_does_not_validate_or_consume_producer() {
+fn invalid_recursive_structure_does_not_validate_or_consume_producer() {
     let diagnostics = errors(
-        "record Token {} record Pair { token: Token, count: I8 } \
-         fn make(token: Token, count: I8) -> Pair { return Pair { token: token, count: count }; } \
+        "record Token {} record Inner { token: Token, count: I8 } record Outer { inner: Inner } \
+         fn make(token: Token) -> Outer { return Outer { inner: Inner { token: token, count: 1 } }; } \
          fn take(value: Token) {} \
-         fn f(root: Pair) { \
-             let Pair { missing: bad, count: copied } = make(root.token, 1); \
+         fn f(root: Inner) { \
+             let Outer { inner: Inner { missing: bad, count: copied } } = make(root.token); \
              take(root.token); \
          }",
     );
@@ -292,28 +406,146 @@ fn successful_field_producer_commits_source_binding_transition() {
 }
 
 #[test]
-fn producer_result_must_match_pattern_nominal_type_and_have_a_result() {
-    let mismatch = errors(
-        "record A { value: I8 } record B { value: I8 } \
-         fn make() -> B { return B { value: 1 }; } \
-         fn f() { let A { value: extracted } = make(); }",
+fn nested_head_must_match_selected_nominal_type_exactly() {
+    let diagnostics = errors(
+        "record A { value: I8 } record B { value: I8 } record Outer { inner: A } \
+         fn f(root: Outer) { let Outer { inner: B { value: extracted } } = root; }",
     );
-    assert!(mismatch.iter().any(|diagnostic| matches!(
+    assert!(diagnostics.iter().any(|diagnostic| matches!(
         diagnostic.kind,
         DiagnosticKind::TypeMismatch {
             expected: Type::Record(_),
             found: Type::Record(_),
         }
     )));
+}
 
-    let no_result = errors(
-        "record A { value: I8 } fn make() {} \
-         fn f() { let A { value: extracted } = make(); }",
+#[test]
+fn recursive_unknown_duplicate_missing_and_binding_failures_are_atomic() {
+    for (source, required) in [
+        (
+            "record Token {} record Inner { token: Token, count: I8 } record Outer { inner: Inner } fn take(value: Token) {} \
+             fn f(root: Outer) { let Outer { inner: Inner { missing: bad, count: copied } } = root; take(root.inner.token); }",
+            DiagnosticKind::UnknownRecordField,
+        ),
+        (
+            "record Token {} record Inner { token: Token, count: I8 } record Outer { inner: Inner } fn take(value: Token) {} \
+             fn f(root: Outer) { let Outer { inner: Inner { token: one, token: two, count: copied } } = root; take(root.inner.token); }",
+            DiagnosticKind::DuplicateRecordPatternField,
+        ),
+        (
+            "record Token {} record Inner { token: Token, count: I8 } record Outer { inner: Inner } fn take(value: Token) {} \
+             fn f(root: Outer) { let Outer { inner: Inner { count: copied } } = root; take(root.inner.token); }",
+            DiagnosticKind::MissingRecordPatternField,
+        ),
+        (
+            "record Token {} record Inner { left: Token, right: Token } record Outer { inner: Inner } fn take(value: Token) {} \
+             fn f(root: Outer) { let Outer { inner: Inner { left: item, right: item } } = root; take(root.inner.left); }",
+            DiagnosticKind::DuplicatePatternBinding,
+        ),
+    ] {
+        let diagnostics = errors(source);
+        assert!(has_kind(&diagnostics, required), "{diagnostics:?}");
+        assert!(!has_kind(
+            &diagnostics,
+            DiagnosticKind::UnavailableFieldValue
+        ));
+    }
+
+    let shadow = errors(
+        "record Token {} record Inner { left: Token, right: Token } record Outer { inner: Inner } fn take(value: Token) {} \
+         fn f(root: Outer, item: I8) { let Outer { inner: Inner { left: item, right: other } } = root; take(root.inner.left); }",
     );
-    assert!(has_kind(
-        &no_result,
-        DiagnosticKind::NoResultCallUsedAsValue
-    ));
+    assert!(has_kind(&shadow, DiagnosticKind::LocalShadowing));
+    assert!(!has_kind(&shadow, DiagnosticKind::UnavailableFieldValue));
+}
+
+#[test]
+fn partially_available_intermediate_can_recurse_to_disjoint_leaf_and_zero_field_node() {
+    let hir = build(
+        "record Token {} record Inner { left: Token, right: Token } record Outer { inner: Inner, tail: I8 } \
+         fn take(value: Token) {} \
+         fn f(root: Outer) { \
+             take(root.inner.left); \
+             let Outer { \
+                 inner: Inner { left: Token {}, right: moved_right }, \
+                 tail: copied_tail, \
+             } = root; \
+         }",
+    );
+    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[1]
+    else {
+        panic!("expected recursive pattern");
+    };
+    assert_eq!(bindings.len(), 2);
+    assert_eq!(bindings[0].fields, vec![0, 1]);
+    assert_eq!(bindings[0].ownership, OwnedUse::Consume);
+    assert_eq!(bindings[1].fields, vec![1]);
+}
+
+#[test]
+fn unavailable_nested_leaf_rejects_before_any_new_pattern_transition() {
+    let diagnostics = errors(
+        "record Token {} record Inner { left: Token, right: Token } record Outer { inner: Inner, tail: I8 } \
+         fn take(value: Token) {} \
+         fn f(root: Outer) { \
+             take(root.inner.right); \
+             let Outer { inner: Inner { left: moved_left, right: moved_right }, tail: copied } = root; \
+             take(root.inner.left); \
+         }",
+    );
+    assert_eq!(
+        diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.kind == DiagnosticKind::UnavailableFieldValue)
+            .count(),
+        1,
+        "{diagnostics:?}"
+    );
+}
+
+#[test]
+fn zero_leaf_nonduplicable_leaf_consumption_is_retained_at_full_nested_path() {
+    let hir = build(
+        "record Empty {} record Inner { empty: Empty } record Outer { inner: Inner } \
+         fn f(root: Outer) { let Outer { inner: Inner { empty: moved } } = root; }",
+    );
+    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[0]
+    else {
+        panic!("expected recursive pattern");
+    };
+    assert_eq!(bindings.len(), 1);
+    assert_eq!(bindings[0].fields, vec![0, 0]);
+    assert_eq!(bindings[0].ownership, OwnedUse::Consume);
+}
+
+#[test]
+fn foreign_record_may_be_bound_whole_but_not_recursively_opened() {
+    let foreign = parse("export record Foreign { value: I8 }");
+    let whole = parse(
+        "import dep; record Outer { foreign: dep::Foreign } \
+         fn f(root: Outer) { let Outer { foreign: whole } = root; }",
+    );
+    assert!(foreign.errors().is_empty());
+    assert!(whole.errors().is_empty());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid alias")];
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &foreign, &[]),
+        SourceUnit::new(ModuleId::new(1), &whole, &imports),
+    ])
+    .expect("foreign record field may be bound whole");
+
+    let opened = parse(
+        "import dep; record Outer { foreign: dep::Foreign } \
+         fn f(root: Outer) { let Outer { foreign: Foreign { value: item } } = root; }",
+    );
+    assert!(opened.errors().is_empty());
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &foreign, &[]),
+        SourceUnit::new(ModuleId::new(1), &opened, &imports),
+    ])
+    .expect_err("foreign record cannot be recursively opened");
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
 }
 
 #[test]
@@ -365,16 +597,6 @@ fn mixed_pattern_consumes_exact_field_but_preserves_disjoint_field_access() {
             ..
         } if path == &[1]
     ));
-
-    let diagnostics = errors(
-        "record Token {} record Holder { token: Token, count: I8 } \
-         fn take(value: Holder) {} \
-         fn bad(root: Holder) { \
-             let Holder { token: moved, count: copied } = root; \
-             take(root); \
-         }",
-    );
-    assert!(has_kind(&diagnostics, DiagnosticKind::UnavailableBinding));
 }
 
 #[test]
@@ -389,73 +611,6 @@ fn mutable_partial_root_can_be_whole_replaced_after_pattern() {
              take(root); \
          }",
     );
-}
-
-#[test]
-fn immutable_root_can_transfer_field_ownership_but_remains_nonassignable() {
-    let diagnostics = errors(
-        "record Token {} record Holder { token: Token, count: I8 } \
-         fn f(root: Holder) { \
-             let Holder { token: moved, count: copied } = root; \
-             root = Holder { token: Token {}, count: 2 }; \
-         }",
-    );
-    assert!(has_kind(
-        &diagnostics,
-        DiagnosticKind::ImmutableAssignmentTarget
-    ));
-    assert!(!has_kind(
-        &diagnostics,
-        DiagnosticKind::UnavailableFieldValue
-    ));
-}
-
-#[test]
-fn structural_pattern_failures_are_atomic_and_do_not_consume_root() {
-    for (source, required) in [
-        (
-            "record Token {} record Holder { token: Token, count: I8 } fn take(value: Token) {} \
-             fn f(root: Holder) { let Holder { missing: bad, count: copied } = root; take(root.token); }",
-            DiagnosticKind::UnknownRecordField,
-        ),
-        (
-            "record Token {} record Holder { token: Token, count: I8 } fn take(value: Token) {} \
-             fn f(root: Holder) { let Holder { token: one, token: two, count: copied } = root; take(root.token); }",
-            DiagnosticKind::DuplicateRecordPatternField,
-        ),
-        (
-            "record Token {} record Holder { token: Token, count: I8 } fn take(value: Token) {} \
-             fn f(root: Holder) { let Holder { count: copied } = root; take(root.token); }",
-            DiagnosticKind::MissingRecordPatternField,
-        ),
-    ] {
-        let diagnostics = errors(source);
-        assert!(has_kind(&diagnostics, required), "{diagnostics:?}");
-        assert!(!has_kind(
-            &diagnostics,
-            DiagnosticKind::UnavailableFieldValue
-        ));
-    }
-}
-
-#[test]
-fn duplicate_pattern_bindings_and_active_shadowing_are_rejected_atomically() {
-    let duplicate = errors(
-        "record Token {} record Pair { left: Token, right: Token } fn take(value: Token) {} \
-         fn f(root: Pair) { let Pair { left: item, right: item } = root; take(root.left); }",
-    );
-    assert!(has_kind(
-        &duplicate,
-        DiagnosticKind::DuplicatePatternBinding
-    ));
-    assert!(!has_kind(&duplicate, DiagnosticKind::UnavailableFieldValue));
-
-    let shadow = errors(
-        "record Token {} record Pair { left: Token, right: Token } fn take(value: Token) {} \
-         fn f(root: Pair, item: I8) { let Pair { left: item, right: other } = root; take(root.left); }",
-    );
-    assert!(has_kind(&shadow, DiagnosticKind::LocalShadowing));
-    assert!(!has_kind(&shadow, DiagnosticKind::UnavailableFieldValue));
 }
 
 #[test]
@@ -500,55 +655,6 @@ fn root_type_must_match_selected_nominal_record_exactly() {
 }
 
 #[test]
-fn partially_consumed_selected_field_rejects_pattern_before_any_new_transition() {
-    let diagnostics = errors(
-        "record Token {} record Holder { token: Token, count: I8 } fn take(value: Token) {} \
-         fn f(root: Holder) { \
-             take(root.token); \
-             let Holder { count: copied, token: moved } = root; \
-         }",
-    );
-    assert!(has_kind(
-        &diagnostics,
-        DiagnosticKind::UnavailableFieldValue
-    ));
-}
-
-#[test]
-fn all_nonduplicable_fields_remain_independent_pattern_consumes() {
-    let hir = build(
-        "record Left {} record Right {} record Pair { left: Left, right: Right } \
-         fn f(root: Pair) { let Pair { right: moved_right, left: moved_left } = root; }",
-    );
-    let f = function(&hir, "f");
-    let Statement::RecordDestructure {
-        scrutinee,
-        bindings,
-        ..
-    } = &f.body.statements[0]
-    else {
-        panic!("expected record destructuring statement");
-    };
-
-    assert_eq!(
-        scrutinee,
-        &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-    );
-    assert_eq!(
-        bindings
-            .iter()
-            .map(|binding| binding.field)
-            .collect::<Vec<_>>(),
-        [1, 0]
-    );
-    assert!(
-        bindings
-            .iter()
-            .all(|binding| binding.ownership == OwnedUse::Consume)
-    );
-}
-
-#[test]
 fn zero_field_pattern_is_noop_and_zero_leaf_field_still_records_consumption() {
     let hir = build(
         "record Empty {} record Holder { empty: Empty } \
@@ -568,15 +674,16 @@ fn zero_field_pattern_is_noop_and_zero_leaf_field_still_records_consumption() {
     };
     assert_eq!(bindings.len(), 1);
     assert_eq!(bindings[0].ownership, OwnedUse::Consume);
+    assert_eq!(bindings[0].fields, vec![0]);
     assert_eq!(bindings[0].ty, Type::Record(hir.records[0].id));
 }
 
 #[test]
-fn nested_block_cleanup_uses_reverse_pattern_source_binding_order() {
+fn nested_block_cleanup_uses_reverse_depth_first_pattern_binding_order() {
     let hir = build(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { \
-             { let Pair { right: second, left: first } = root; } \
+        "record Inner { left: I8, right: U8 } record Outer { head: I8, inner: Inner } \
+         fn f(root: Outer) { \
+             { let Outer { inner: Inner { right: second, left: first }, head: head } = root; } \
          }",
     );
     let f = function(&hir, "f");
@@ -586,55 +693,23 @@ fn nested_block_cleanup_uses_reverse_pattern_source_binding_order() {
     let Statement::RecordDestructure { bindings, .. } = &block.statements[0] else {
         panic!("expected pattern statement");
     };
-    assert_eq!(bindings.len(), 2);
-    assert_eq!(block.normal_cleanup.len(), 2);
-    assert_eq!(block.normal_cleanup[0].binding, bindings[1].binding);
-    assert_eq!(block.normal_cleanup[1].binding, bindings[0].binding);
+    assert_eq!(
+        bindings
+            .iter()
+            .map(|binding| binding.name.as_str())
+            .collect::<Vec<_>>(),
+        ["second", "first", "head"]
+    );
+    assert_eq!(block.normal_cleanup.len(), 3);
+    assert_eq!(block.normal_cleanup[0].binding, bindings[2].binding);
+    assert_eq!(block.normal_cleanup[1].binding, bindings[1].binding);
+    assert_eq!(block.normal_cleanup[2].binding, bindings[0].binding);
     assert!(
         block
             .normal_cleanup
             .iter()
             .all(|cleanup| cleanup.fields.is_empty())
     );
-}
-
-#[test]
-fn nested_pattern_bindings_obey_child_scope_lookup() {
-    let hir = build(
-        "record Pair { left: I8, right: U8 } \
-         fn f(root: Pair) { \
-             { \
-                 let Pair { left: extracted, right: other } = root; \
-                 { let copied: I8 = extracted; } \
-             } \
-         }",
-    );
-    let f = function(&hir, "f");
-    let Statement::Block(outer) = &f.body.statements[0] else {
-        panic!("expected outer child block");
-    };
-    let Statement::RecordDestructure { bindings, .. } = &outer.statements[0] else {
-        panic!("expected pattern statement");
-    };
-    let Statement::Block(inner) = &outer.statements[1] else {
-        panic!("expected nested child block");
-    };
-    let Statement::Local { initializer, .. } = &inner.statements[0] else {
-        panic!("expected nested local");
-    };
-    assert!(matches!(
-        initializer.kind,
-        ValueKind::BindingUse { binding, .. } if binding == bindings[0].binding
-    ));
-
-    let diagnostics = errors(
-        "record Pair { left: I8, right: U8 } \
-         fn bad(root: Pair) { \
-             { let Pair { left: extracted, right: other } = root; } \
-             let copied: I8 = extracted; \
-         }",
-    );
-    assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
 }
 
 #[test]
