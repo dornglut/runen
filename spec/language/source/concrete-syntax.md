@@ -26,6 +26,7 @@ The represented concrete subset reserves exactly these lexical identifier keys:
 
 - `fn`;
 - `record`;
+- `copy`;
 - `let`;
 - `mut`;
 - `return`;
@@ -128,12 +129,17 @@ This form defines no source-visible module path, package coordinate, dependency 
 ## Record definitions
 
 ```text
-RecordDefinition = "record" UserIdentifier "{" RecordFields? "}"
-RecordFields     = RecordField ("," RecordField)* ","?
-RecordField      = ExportModifier? UserIdentifier ":" Type
+RecordDefinition              = "record" RecordDuplicabilitySelection? UserIdentifier "{" RecordFields? "}"
+RecordDuplicabilitySelection  = "copy"
+RecordFields                  = RecordField ("," RecordField)* ","?
+RecordField                   = ExportModifier? UserIdentifier ":" Type
 ```
 
 A represented record definition maps to exactly one nominal record declaration under `types.md` using the record name's lexical identifier key and the field sequence in concrete source order. Its module accessibility is determined by the enclosing optional `ExportModifier` as described above.
+
+The optional `RecordDuplicabilitySelection` is record-specific. When present, it maps exactly to the positive nominal-record duplicability selection owned by `types.md`; when absent, the declaration makes no positive selection. The concrete `copy` key has no meaning as a general declaration modifier, trait/protocol/derive/attribute form, value-copy/clone operation, representation directive, ABI promise, or bitwise-copy instruction. Because `copy` belongs to the global reserved-key set above, this revision introduces no contextual-keyword mechanism.
+
+Existing item-level `export` remains orthogonal to the record-specific selection and retains its existing position before `record`. Consequently `export record copy Name { ... }` is represented, while `copy record Name`, `export copy record Name`, and `record Name copy` are not represented forms.
 
 Each `RecordField` maps its identifier and `Type` to the field identity/type/order relation in `types.md`. Without the field-position `ExportModifier`, the field has **module-private** direct accessibility; with it, the field has **exported** direct accessibility under `field-access.md`.
 
@@ -143,9 +149,9 @@ A field-position `export` does not introduce a module declaration binding, ABI/l
 
 The field sequence MAY be empty. A trailing comma is permitted.
 
-The concrete record form makes no positive owned-value duplicability selection. Its duplicability classification therefore follows the no-selection case defined by `types.md`.
+Presence or absence of `RecordDuplicabilitySelection` supplies only the positive/no-selection fact consumed by `types.md`. Eligibility, including recursive nominal-field eligibility and the zero-field case, is owned by that type-semantic relation and is not inferred from parser shape or field accessibility.
 
-The represented record definition does not itself construct, access, or destructure a value. Record construction, represented field-value access, and represented record destructuring are represented separately below. Field assignment, partial-field reinitialization, methods, and duplicability-selection syntax are not represented.
+The represented record definition does not itself construct, access, destructure, duplicate, or clone a value. Record construction, represented field-value access, and represented record destructuring are represented separately below. Field assignment, partial-field reinitialization, methods, explicit copy/clone operations, and other duplicability-selection spellings are not represented.
 
 ## Type forms
 
@@ -513,7 +519,7 @@ This revision does not define:
 - inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, method-based, or partial record construction, nor a constructor namespace or separate public-constructor capability;
 - arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; field accessibility beyond the represented module-private/exported direct relation; package/friend/protected accessibility; methods; properties; or associated-item lookup;
 - qualified binding leaves or qualified field names inside record patterns;
-- positive record duplicability-selection syntax;
+- explicit copy/clone value operations, custom copy constructors, or duplicability-selection syntax beyond the record-specific `copy` selection;
 - references, borrow syntax or pattern binding modes, source interior mutability, raw-pointer assignment, or lifetime syntax;
 - indirect calls, function values, or closures;
 - generics, traits, or coherence;
