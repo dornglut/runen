@@ -216,9 +216,12 @@ fn malformed_nested_pattern_preserves_following_statement_and_top_level_boundary
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
+    );
     let root = parsed.syntax();
     assert!(root.descendants().any(|node| {
         node.kind() == SyntaxKind::LocalDeclaration && node.text().to_string().contains("later")
