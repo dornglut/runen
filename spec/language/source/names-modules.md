@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source module identity, module binding, module alias, visibility, and qualified cross-module lookup relations. It consumes lexical identifier keys from [Source lexical foundation](lexical.md) and does not redefine identifier formation or equivalence.
 
-Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). The represented concrete record/function accessibility, module-import alias, and two-part qualified module-member forms are owned by [Source concrete syntax](concrete-syntax.md). This document does not define member lookup, overload resolution, package discovery, or an implementation representation.
+Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). The represented concrete record/function accessibility, module-import alias, and two-part qualified module-member forms, including their use as record-pattern heads, are owned by [Source concrete syntax](concrete-syntax.md). This document does not define member lookup, overload resolution, package discovery, or an implementation representation.
 
 ## Source modules
 
@@ -36,7 +36,7 @@ Module-level bindings are available to module-level name resolution independentl
 
 A module-level binding is identified by its source module and binding identity, not by the original source spelling of its identifier. The namespace key is the lexical identifier key defined by `lexical.md`.
 
-For this foundation, name resolution first identifies one binding/entity. A consuming source-language rule then determines whether that resolved entity category is valid for the applicable type, value, declaration, call, or other semantic context. This document does not define separate module-level type and value namespaces or context-dependent searches across such namespaces.
+For this foundation, name resolution first identifies one binding/entity. A consuming source-language rule then determines whether that resolved entity category is valid for the applicable type, value, declaration, call, pattern-head, or other semantic context. This document does not define separate module-level type and value namespaces or context-dependent searches across such namespaces.
 
 Function-local parameter/local bindings are owned by `local-bindings.md` and do not become members of this module declaration namespace. This section also does not define fields, methods, associated items, generic parameters, pattern bindings, lifetime names, labels, macros, or overload sets. A later rule that permits one source name to denote an overload set or another multi-entity binding MUST define that binding relation explicitly; duplicate module-level binding keys do not become an overload set merely because the declarations have different signatures or categories.
 
@@ -61,7 +61,7 @@ If that namespace contains the binding keyed by `k`, module-scope lookup resolve
 
 If the namespace contains no binding keyed by `k`, this module-scope lookup does not resolve a binding. This rule does not cause imported modules, future preludes, member scopes, or another namespace to be searched implicitly.
 
-Within represented function bodies, `local-bindings.md` owns when active function-local bindings are consulted before this same-module relation. The consuming source form validates the category of the selected entity; same-module lookup does not skip bindings based on the category desired by that context.
+Within represented function bodies, `local-bindings.md` owns when active function-local bindings are consulted before this same-module relation. The consuming source form validates the category of the selected entity; same-module lookup does not skip bindings based on the category desired by that context. Explicit unqualified record-construction targets and unqualified record-pattern heads consume same-module declaration lookup directly under their own owners without introducing local-binding participation.
 
 ## Source-unit module aliases
 
@@ -112,7 +112,9 @@ When those conditions hold, the qualified lookup resolves to that target binding
 
 An unqualified lookup MUST NOT search imported modules merely because they are aliased in the source unit. This revision defines no selective direct imports, wildcard or glob imports, dot imports, re-exports, implicit preludes, transitive import visibility, or imported-member precedence rules.
 
-The concrete `a::m` form in `concrete-syntax.md` maps exactly to this lookup relation. `::` does not by itself define arbitrary member access, nested module paths, associated-item lookup, or another name-resolution domain. The consuming concrete type, direct-call, or record-construction-target context validates the category of the resolved binding after this lookup; qualified lookup does not skip an inaccessible or wrong-category binding.
+The concrete `a::m` form in `concrete-syntax.md` maps exactly to this lookup relation. `::` does not by itself define arbitrary member access, nested module paths, associated-item lookup, or another name-resolution domain. The consuming concrete type, direct-call, record-construction-target, or record-pattern-head context validates the category of the resolved binding after this lookup; qualified lookup does not skip an inaccessible or wrong-category binding.
+
+A qualified record-pattern head therefore consumes the same lookup relation as the already represented qualified type/call/construction contexts. The lookup establishes only the exported target module binding; `patterns.md` separately requires the resolved binding to denote one nominal record and applies direct record-field accessibility through `field-access.md` to the fields explicitly opened by the pattern. This document does not create pattern-field lookup or a second visibility relation.
 
 Module aliases themselves are not exported module-level bindings under this revision and therefore do not re-export their target modules or target bindings.
 
