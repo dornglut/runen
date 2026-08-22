@@ -350,8 +350,13 @@ impl Parser<'_> {
     fn parse_conditional_value(&mut self) {
         if self.at(SyntaxKind::Ident) {
             match self.peek_nontrivia(1) {
-                Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_direct_call(),
-                Some(SyntaxKind::Dot) => self.parse_field_value_use(),
+                Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => {
+                    self.parse_direct_call_or_field_value_use();
+                }
+                Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
+                Some(SyntaxKind::LBrace) if self.record_construction_followed_by_selector() => {
+                    self.parse_record_construction_or_field_value_use();
+                }
                 _ => {
                     self.builder.start_node(SyntaxKind::IdentifierUse.into());
                     self.bump();
@@ -529,9 +534,11 @@ impl Parser<'_> {
         }
 
         match self.peek_nontrivia(1) {
-            Some(SyntaxKind::LBrace) => self.parse_record_construction(),
-            Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_direct_call(),
-            Some(SyntaxKind::Dot) => self.parse_field_value_use(),
+            Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
+            Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => {
+                self.parse_direct_call_or_field_value_use();
+            }
+            Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
             _ => self.bump(),
         }
     }
@@ -602,9 +609,11 @@ impl Parser<'_> {
     fn parse_value(&mut self) {
         match self.current() {
             Some(SyntaxKind::Ident) => match self.peek_nontrivia(1) {
-                Some(SyntaxKind::LBrace) => self.parse_record_construction(),
-                Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_direct_call(),
-                Some(SyntaxKind::Dot) => self.parse_field_value_use(),
+                Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
+                Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => {
+                    self.parse_direct_call_or_field_value_use();
+                }
+                Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
                 _ => {
                     self.builder.start_node(SyntaxKind::IdentifierUse.into());
                     self.bump();
@@ -657,13 +666,65 @@ impl Parser<'_> {
         }
     }
 
-    fn parse_field_value_use(&mut self) {
+    fn parse_binding_field_value_use(&mut self) {
         self.builder.start_node(SyntaxKind::FieldValueUse.into());
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.parse_field_selectors();
+        self.builder.finish_node();
+    }
+
+    fn parse_direct_call_or_field_value_use(&mut self) {
+        let checkpoint = self.builder.checkpoint();
+        self.parse_direct_call();
+        if self.at(SyntaxKind::Dot) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::FieldValueUse.into());
+            self.parse_field_selectors();
+            self.builder.finish_node();
+        }
+    }
+
+    fn parse_record_construction_or_field_value_use(&mut self) {
+        let checkpoint = self.builder.checkpoint();
+        self.parse_record_construction();
+        if self.at(SyntaxKind::Dot) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::FieldValueUse.into());
+            self.parse_field_selectors();
+            self.builder.finish_node();
+        }
+    }
+
+    fn parse_field_selectors(&mut self) {
+        debug_assert!(self.at(SyntaxKind::Dot));
         while self.eat(SyntaxKind::Dot) {
             self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         }
-        self.builder.finish_node();
+    }
+
+    fn record_construction_followed_by_selector(&self) -> bool {
+        let mut tokens = self.tokens[self.position..]
+            .iter()
+            .filter(|token| !token.kind.is_trivia())
+            .map(|token| token.kind);
+        if tokens.next() != Some(SyntaxKind::Ident) || tokens.next() != Some(SyntaxKind::LBrace) {
+            return false;
+        }
+
+        let mut depth = 1_usize;
+        while let Some(kind) = tokens.next() {
+            match kind {
+                SyntaxKind::LBrace => depth += 1,
+                SyntaxKind::RBrace => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return tokens.next() == Some(SyntaxKind::Dot);
+                    }
+                }
+                _ => {}
+            }
+        }
+        false
     }
 
     fn parse_record_construction(&mut self) {

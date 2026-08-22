@@ -173,6 +173,77 @@ impl TypeMap {
             }
         }
     }
+
+    fn remaining_frontier_after_consumed_path(
+        &self,
+        root: core::TypeId,
+        consumed: &[usize],
+    ) -> Result<Vec<Vec<usize>>, LoweringError> {
+        if consumed.is_empty() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "field-value use has empty field path",
+            ));
+        }
+
+        let mut frontier = Vec::new();
+        let mut path = Vec::new();
+        self.append_remaining_frontier_after_consumed_path(
+            root,
+            consumed,
+            0,
+            &mut path,
+            &mut frontier,
+        )?;
+        Ok(frontier)
+    }
+
+    fn append_remaining_frontier_after_consumed_path(
+        &self,
+        ty: core::TypeId,
+        consumed: &[usize],
+        depth: usize,
+        path: &mut Vec<usize>,
+        frontier: &mut Vec<Vec<usize>>,
+    ) -> Result<(), LoweringError> {
+        if depth == consumed.len() {
+            return Ok(());
+        }
+
+        let definition = self
+            .types
+            .get(ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "lowered Core type is absent from the type table",
+            ))?;
+        let core::TypeKind::Struct(fields) = &definition.kind else {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR structural path does not match lowered Core type shape",
+            ));
+        };
+        let selected = consumed[depth];
+        if selected >= fields.len() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR structural path does not match lowered Core type shape",
+            ));
+        }
+
+        for (field_index, field) in fields.iter().enumerate().rev() {
+            path.push(field_index);
+            if field_index == selected {
+                self.append_remaining_frontier_after_consumed_path(
+                    field.ty,
+                    consumed,
+                    depth + 1,
+                    path,
+                    frontier,
+                )?;
+            } else {
+                frontier.push(path.clone());
+            }
+            path.pop();
+        }
+        Ok(())
+    }
 }
 
 const INTRINSICS: [(hir::IntrinsicType, core::ScalarType, &str); 12] = [
@@ -696,15 +767,42 @@ impl<'a> FunctionLowerer<'a> {
         source_ty: core::TypeId,
         cleanup: &hir::RecordPatternTransientCleanup,
     ) -> Result<(), LoweringError> {
+        self.lower_transient_cleanup_paths(
+            source_local,
+            source_ty,
+            &cleanup.paths,
+            "record pattern transient cleanup paths are not structurally disjoint",
+        )
+    }
+
+    fn lower_field_receiver_transient_cleanup(
+        &mut self,
+        source_local: core::LocalId,
+        source_ty: core::TypeId,
+        cleanup: &hir::FieldReceiverTransientCleanup,
+    ) -> Result<(), LoweringError> {
+        self.lower_transient_cleanup_paths(
+            source_local,
+            source_ty,
+            &cleanup.paths,
+            "field receiver transient cleanup paths are not structurally disjoint",
+        )
+    }
+
+    fn lower_transient_cleanup_paths(
+        &mut self,
+        source_local: core::LocalId,
+        source_ty: core::TypeId,
+        paths: &[Vec<usize>],
+        disjoint_error: &'static str,
+    ) -> Result<(), LoweringError> {
         let mut seen_paths = Vec::<Vec<usize>>::new();
-        for path in &cleanup.paths {
+        for path in paths {
             if seen_paths
                 .iter()
                 .any(|seen| path.starts_with(seen) || seen.starts_with(path))
             {
-                return Err(LoweringError::InvalidHirInvariant(
-                    "record pattern transient cleanup paths are not structurally disjoint",
-                ));
+                return Err(LoweringError::InvalidHirInvariant(disjoint_error));
             }
             seen_paths.push(path.clone());
 
@@ -786,7 +884,7 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(result)
             }
             hir::ValueKind::FieldValueUse {
-                binding,
+                receiver,
                 fields,
                 ownership,
             } => {
@@ -795,7 +893,91 @@ impl<'a> FunctionLowerer<'a> {
                         "field-value use has empty field path",
                     ));
                 }
-                let place = self.binding_place(*binding, fields)?;
+
+                let expected_ownership = match value.ty {
+                    hir::Type::Intrinsic(_) => hir::OwnedUse::Duplicate,
+                    hir::Type::Record(_) => hir::OwnedUse::Consume,
+                };
+                if *ownership != expected_ownership {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "field-value ownership does not match retained result duplicability",
+                    ));
+                }
+
+                let retained_result_ty = self.types.get(value.ty)?;
+                let (source_local, source_ty, producer_cleanup) = match receiver {
+                    hir::FieldValueReceiver::Binding { binding, ty } => {
+                        let source_local = self.binding(*binding)?;
+                        let source_ty = self.types.get(*ty)?;
+                        if self.local_type(source_local)? != source_ty {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "field-value binding receiver type does not match mapped binding local",
+                            ));
+                        }
+                        (source_local, source_ty, None)
+                    }
+                    hir::FieldValueReceiver::Producer {
+                        value: producer,
+                        cleanup,
+                    } => {
+                        if !matches!(
+                            &producer.kind,
+                            hir::ValueKind::DirectCall { .. }
+                                | hir::ValueKind::RecordConstruction { .. }
+                        ) {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "field-value producer receiver has unrepresented producer category",
+                            ));
+                        }
+                        let source_ty = self.types.get(producer.ty)?;
+                        let source_local = self.lower_value(producer)?;
+                        if self.local_type(source_local)? != source_ty {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "field-value producer receiver type does not match lowered producer temporary",
+                            ));
+                        }
+                        (source_local, source_ty, Some(cleanup))
+                    }
+                };
+
+                let place = self.local_place(source_local, fields)?;
+                let projected_ty = self.types.project_type(source_ty, &place.projections)?;
+                if projected_ty != retained_result_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "field-value retained result type does not match projected receiver field type",
+                    ));
+                }
+
+                if let Some(cleanup) = producer_cleanup {
+                    match ownership {
+                        hir::OwnedUse::Duplicate => {
+                            if cleanup.paths.as_slice() != [Vec::<usize>::new()] {
+                                return Err(LoweringError::InvalidHirInvariant(
+                                    "duplicating field receiver does not retain complete receiver cleanup",
+                                ));
+                            }
+                        }
+                        hir::OwnedUse::Consume => {
+                            if cleanup.paths.iter().any(|path| {
+                                path.starts_with(fields.as_slice())
+                                    || fields.as_slice().starts_with(path.as_slice())
+                            }) {
+                                return Err(LoweringError::InvalidHirInvariant(
+                                    "consumed field receiver path overlaps retained cleanup frontier",
+                                ));
+                            }
+                            let expected = self
+                                .types
+                                .remaining_frontier_after_consumed_path(source_ty, fields)?;
+                            if cleanup.paths.as_slice() != expected.as_slice() {
+                                return Err(LoweringError::InvalidHirInvariant(
+                                    "consuming field receiver cleanup does not match canonical remaining frontier",
+                                ));
+                            }
+                        }
+                    }
+                }
+
                 let temporary = self.push_temporary(value.ty)?;
                 let operand = match ownership {
                     hir::OwnedUse::Duplicate => core::Operand::Copy(place.into()),
@@ -805,6 +987,10 @@ impl<'a> FunctionLowerer<'a> {
                     dst: core::Place::local(temporary),
                     src: operand,
                 });
+
+                if let Some(cleanup) = producer_cleanup {
+                    self.lower_field_receiver_transient_cleanup(source_local, source_ty, cleanup)?;
+                }
                 Ok(temporary)
             }
         }

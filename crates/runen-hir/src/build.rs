@@ -4,10 +4,10 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
     Accessibility, AssignmentMutability, BindingId, Block, Body, CleanupPath, Diagnostic,
-    DiagnosticKind, Field, Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId,
-    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, RecordPatternBinding,
-    RecordPatternScrutinee, RecordPatternTransientCleanup, Return, SourceLocation, SourceUnit,
-    Statement, Type, TypedCompilation, Value, ValueKind,
+    DiagnosticKind, Field, FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId,
+    IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter, Record, RecordFieldValue,
+    RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTransientCleanup, Return,
+    SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -1852,14 +1852,96 @@ fn validate_field_value_use(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
     let value_location = location(header.unit, node);
+    let producer_node = node.children().find(|child| {
+        matches!(
+            child.kind(),
+            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction
+        )
+    });
     let identifiers = node
         .children_with_tokens()
         .filter_map(|element| element.into_token())
         .filter(|token| token.kind() == SyntaxKind::Ident)
         .collect::<Vec<_>>();
+
+    if let Some(producer_node) = producer_node {
+        debug_assert!(!identifiers.is_empty());
+        let receiver_ty = match producer_node.kind() {
+            SyntaxKind::DirectCall => {
+                let function =
+                    resolve_call_target(header, &producer_node, context, bindings, diagnostics)?;
+                let Some(result) = context.headers[function.0].result else {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::NoResultCallUsedAsValue,
+                        location: location(header.unit, &producer_node),
+                    });
+                    return None;
+                };
+                result
+            }
+            SyntaxKind::RecordConstruction => Type::Record(resolve_record_construction_target(
+                header,
+                &producer_node,
+                context,
+                diagnostics,
+            )?),
+            _ => unreachable!("producer-backed field receiver has accepted producer kind"),
+        };
+
+        let (fields, final_ty) =
+            resolve_field_path(header, &identifiers, receiver_ty, context, diagnostics)?;
+        if final_ty != required {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::TypeMismatch {
+                    expected: required,
+                    found: final_ty,
+                },
+                location: value_location,
+            });
+            return None;
+        }
+        let ownership = if final_ty.is_duplicable() {
+            OwnedUse::Duplicate
+        } else {
+            OwnedUse::Consume
+        };
+
+        let mut producer_bindings = bindings.clone();
+        let producer = validate_value(
+            header,
+            &producer_node,
+            receiver_ty,
+            context,
+            &mut producer_bindings,
+            diagnostics,
+        )?;
+        *bindings = producer_bindings;
+
+        let mut transient = StructuralOwnershipState::default();
+        if ownership == OwnedUse::Consume {
+            transient.consume_path(&fields);
+        }
+        let cleanup = FieldReceiverTransientCleanup {
+            paths: remaining_ownership_frontier(receiver_ty, &transient, context.records),
+        };
+
+        return Some(Value {
+            ty: final_ty,
+            kind: ValueKind::FieldValueUse {
+                receiver: FieldValueReceiver::Producer {
+                    value: Box::new(producer),
+                    cleanup,
+                },
+                fields,
+                ownership,
+            },
+            location: value_location,
+        });
+    }
+
     let (root_token, selectors) = identifiers
         .split_first()
-        .expect("syntax-clean field-value use contains a root identifier");
+        .expect("syntax-clean binding-root field-value use contains a root identifier");
     debug_assert!(!selectors.is_empty());
 
     let root_name = key(root_token);
@@ -1886,7 +1968,70 @@ fn validate_field_value_use(
         }
     };
 
-    let mut current = binding_ty;
+    let (fields, final_ty) =
+        resolve_field_path(header, selectors, binding_ty, context, diagnostics)?;
+    let binding = bindings
+        .get(&root_name)
+        .expect("resolved field-value root remains in active binding scope");
+    if binding.ownership.path_availability(&fields) != PathAvailability::FullyAvailable {
+        let selector = selectors
+            .last()
+            .expect("syntax-clean field-value use has at least one selector");
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableFieldValue,
+            location: SourceLocation {
+                unit: header.unit,
+                range: selector.text_range(),
+            },
+        });
+        return None;
+    }
+
+    if final_ty != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found: final_ty,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    let ownership = if final_ty.is_duplicable() {
+        OwnedUse::Duplicate
+    } else {
+        bindings
+            .get_mut(&root_name)
+            .expect("resolved field-value root remains in active binding scope")
+            .ownership
+            .consume_path(&fields);
+        OwnedUse::Consume
+    };
+
+    Some(Value {
+        ty: final_ty,
+        kind: ValueKind::FieldValueUse {
+            receiver: FieldValueReceiver::Binding {
+                binding: binding_id,
+                ty: binding_ty,
+            },
+            fields,
+            ownership,
+        },
+        location: value_location,
+    })
+}
+
+fn resolve_field_path(
+    header: &FunctionHeader,
+    selectors: &[SyntaxToken],
+    receiver_ty: Type,
+    context: &BodyResolutionContext<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<(Vec<usize>, Type)> {
+    debug_assert!(!selectors.is_empty());
+    let mut current = receiver_ty;
     let mut fields = Vec::with_capacity(selectors.len());
     for selector in selectors {
         let selector_location = SourceLocation {
@@ -1924,55 +2069,45 @@ fn validate_field_value_use(
         fields.push(field);
         current = record_decl.fields[field].ty;
     }
+    Some((fields, current))
+}
 
-    let binding = bindings
-        .get(&root_name)
-        .expect("resolved field-value root remains in active binding scope");
-    if binding.ownership.path_availability(&fields) != PathAvailability::FullyAvailable {
-        let selector = selectors
-            .last()
-            .expect("syntax-clean field-value use has at least one selector");
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::UnavailableFieldValue,
-            location: SourceLocation {
-                unit: header.unit,
-                range: selector.text_range(),
-            },
-        });
-        return None;
-    }
-
-    if current != required {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected: required,
-                found: current,
-            },
-            location: value_location,
-        });
-        return None;
-    }
-
-    let ownership = if current.is_duplicable() {
-        OwnedUse::Duplicate
-    } else {
-        bindings
-            .get_mut(&root_name)
-            .expect("resolved field-value root remains in active binding scope")
-            .ownership
-            .consume_path(&fields);
-        OwnedUse::Consume
+fn resolve_record_construction_target(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<RecordId> {
+    let target_token = direct_token(node, SyntaxKind::Ident);
+    let target_name = key(&target_token);
+    let target_location = SourceLocation {
+        unit: header.unit,
+        range: target_token.text_range(),
     };
 
-    Some(Value {
-        ty: current,
-        kind: ValueKind::FieldValueUse {
-            binding: binding_id,
-            fields,
-            ownership,
-        },
-        location: value_location,
-    })
+    match context
+        .modules
+        .get(&header.module)
+        .and_then(|module| module.namespace.get(&target_name))
+        .copied()
+        .map(|entity| entity.entity)
+    {
+        Some(EntityId::Record(record)) => Some(record),
+        Some(EntityId::Function(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedRecordType,
+                location: target_location,
+            });
+            None
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: target_location,
+            });
+            None
+        }
+    }
 }
 
 fn validate_record_construction(
@@ -1984,37 +2119,7 @@ fn validate_record_construction(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
     let construction_location = location(header.unit, node);
-    let target_token = direct_token(node, SyntaxKind::Ident);
-    let target_name = key(&target_token);
-    let target_location = SourceLocation {
-        unit: header.unit,
-        range: target_token.text_range(),
-    };
-
-    let record = match context
-        .modules
-        .get(&header.module)
-        .and_then(|module| module.namespace.get(&target_name))
-        .copied()
-        .map(|entity| entity.entity)
-    {
-        Some(EntityId::Record(record)) => record,
-        Some(EntityId::Function(_)) => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::ExpectedRecordType,
-                location: target_location,
-            });
-            return None;
-        }
-        None => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::UnresolvedName,
-                location: target_location,
-            });
-            return None;
-        }
-    };
-
+    let record = resolve_record_construction_target(header, node, context, diagnostics)?;
     let record_ty = Type::Record(record);
     let record_decl = &context.records[record.0];
     let mut seen = BTreeSet::<usize>::new();
@@ -2205,6 +2310,75 @@ fn parse_decimal_magnitude(text: &str, limit: u64) -> Option<u64> {
     Some(value)
 }
 
+fn resolve_call_target(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<FunctionId> {
+    if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        return match resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )? {
+            EntityId::Function(id) => Some(id),
+            EntityId::Record(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedFunction,
+                    location: location(header.unit, &qualified),
+                });
+                None
+            }
+        };
+    }
+
+    let name_token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&name_token);
+    let name_location = SourceLocation {
+        unit: header.unit,
+        range: name_token.text_range(),
+    };
+
+    if bindings.contains_key(&name) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ExpectedFunction,
+            location: name_location,
+        });
+        return None;
+    }
+
+    match context
+        .modules
+        .get(&header.module)
+        .and_then(|module| module.namespace.get(&name))
+        .copied()
+        .map(|entity| entity.entity)
+    {
+        Some(EntityId::Function(id)) => Some(id),
+        Some(EntityId::Record(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedFunction,
+                location: name_location,
+            });
+            None
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: name_location,
+            });
+            None
+        }
+    }
+}
+
 fn validate_call(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -2212,67 +2386,7 @@ fn validate_call(
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<(FunctionId, Vec<Value>, Option<Type>)> {
-    let function = if let Some(qualified) = node
-        .children()
-        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
-    {
-        match resolve_qualified_entity(
-            header.unit,
-            &qualified,
-            context.modules,
-            context.imports,
-            diagnostics,
-        )? {
-            EntityId::Function(id) => id,
-            EntityId::Record(_) => {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::ExpectedFunction,
-                    location: location(header.unit, &qualified),
-                });
-                return None;
-            }
-        }
-    } else {
-        let name_token = direct_token(node, SyntaxKind::Ident);
-        let name = key(&name_token);
-        let name_location = SourceLocation {
-            unit: header.unit,
-            range: name_token.text_range(),
-        };
-
-        if bindings.contains_key(&name) {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::ExpectedFunction,
-                location: name_location,
-            });
-            return None;
-        }
-
-        match context
-            .modules
-            .get(&header.module)
-            .and_then(|module| module.namespace.get(&name))
-            .copied()
-            .map(|entity| entity.entity)
-        {
-            Some(EntityId::Function(id)) => id,
-            Some(EntityId::Record(_)) => {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::ExpectedFunction,
-                    location: name_location,
-                });
-                return None;
-            }
-            None => {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::UnresolvedName,
-                    location: name_location,
-                });
-                return None;
-            }
-        }
-    };
-
+    let function = resolve_call_target(header, node, context, bindings, diagnostics)?;
     let target = &context.headers[function.0];
     let argument_list = direct_child(node, SyntaxKind::ArgumentList);
     let argument_nodes = argument_list

@@ -30,6 +30,130 @@ fn field_value_uses_parse_losslessly_with_nested_paths_and_trivia() {
 }
 
 #[test]
+fn producer_receivers_wrap_complete_call_or_construction_nodes() {
+    let source = "import ext; record Inner { value: I8 } record Outer { inner: Inner } fn make() -> Outer { return Outer { inner: Inner { value: 1 } }; } fn f() -> I8 { let a: I8 = make() /*a*/ . inner . value; let b: I8 = ext::make().inner.value; return Outer { inner: Inner { value: 2 } }.inner.value; }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let uses = parsed
+        .syntax()
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::FieldValueUse)
+        .collect::<Vec<_>>();
+    assert_eq!(uses.len(), 3);
+
+    let direct_call_receivers = uses
+        .iter()
+        .filter_map(|field_use| {
+            field_use
+                .children()
+                .find(|node| node.kind() == SyntaxKind::DirectCall)
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(direct_call_receivers.len(), 2);
+    assert_eq!(
+        direct_call_receivers
+            .iter()
+            .filter(|call| {
+                call.children()
+                    .any(|node| node.kind() == SyntaxKind::QualifiedModuleMember)
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        uses.iter()
+            .filter(|field_use| {
+                field_use
+                    .children()
+                    .any(|node| node.kind() == SyntaxKind::RecordConstruction)
+            })
+            .count(),
+        1
+    );
+    assert!(uses.iter().all(|node| {
+        node.children()
+            .filter(|child| {
+                matches!(
+                    child.kind(),
+                    SyntaxKind::DirectCall | SyntaxKind::RecordConstruction
+                )
+            })
+            .count()
+            == 1
+    }));
+}
+
+#[test]
+fn producer_receiver_requires_selector_and_bare_producers_stay_bare() {
+    let source = "record Box { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn f() -> Box { let a: Box = make(); return Box { value: 2 }; }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::FieldValueUse)
+            .count(),
+        0
+    );
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn producer_field_values_compose_only_through_existing_nested_value_positions() {
+    let source = "record Box { value: I8 } record Holder { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn sink(value: I8) {} fn f() -> Holder { sink(make().value); return Holder { value: make().value }; }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let uses = parsed
+        .syntax()
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::FieldValueUse)
+        .collect::<Vec<_>>();
+    assert_eq!(uses.len(), 2);
+    assert!(uses.iter().all(|field_use| {
+        field_use
+            .children()
+            .filter(|child| child.kind() == SyntaxKind::DirectCall)
+            .count()
+            == 1
+    }));
+    assert_eq!(
+        uses.iter()
+            .filter(|field_use| {
+                field_use
+                    .ancestors()
+                    .any(|ancestor| ancestor.kind() == SyntaxKind::ArgumentList)
+            })
+            .count(),
+        1
+    );
+    assert_eq!(
+        uses.iter()
+            .filter(|field_use| {
+                field_use
+                    .ancestors()
+                    .any(|ancestor| ancestor.kind() == SyntaxKind::RecordInitializer)
+            })
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn field_value_use_is_distinct_from_bare_identifier_use() {
     let parsed = parse("record Box { value: I8 } fn f(root: Box) -> I8 { return root.value; }");
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -50,12 +174,36 @@ fn field_value_use_is_distinct_from_bare_identifier_use() {
 }
 
 #[test]
+fn malformed_producer_selectors_do_not_swallow_enclosing_boundaries() {
+    let source = "record Box { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn sink(value: I8) {} fn f() { sink(make().); sink(Box { value: 1 }.); sink(1); } fn g() {}";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(!parsed.errors().is_empty());
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::FunctionDefinition)
+            .count(),
+        4
+    );
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::CallStatement)
+            .count(),
+        3
+    );
+}
+
+#[test]
 fn malformed_or_unrepresented_dot_forms_remain_syntax_invalid() {
     for source in [
         "record Box { value: I8 } fn f(root: Box) -> I8 { return root.; }",
         "record Box { value: I8 } fn f(root: Box) -> I8 { return root.value(); }",
+        "record Box { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn f() -> I8 { return make().value(); }",
         "record Box { value: I8 } fn f(root: Box) { root.value = 1; }",
-        "record Box { value: I8 } fn f() -> I8 { return Box { value: 1 }.value; }",
         "fn f() -> I8 { return 1.2; }",
     ] {
         let parsed = parse(source);
