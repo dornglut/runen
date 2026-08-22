@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::{HashSet, VecDeque};
 
 use crate::interprocedural::{Body, Function, Program, Terminator};
 use crate::{
@@ -542,7 +542,7 @@ fn require_interior_mutable_place(
 fn is_interior_mutable_place(types: &TypeTable, body: &Body, place: &Place) -> bool {
     let local = body
         .local(place.local)
-        .expect("validated place references a known containing local");
+        .expect("validated local type is known");
     let mut current = local.ty;
 
     if types
@@ -728,6 +728,13 @@ enum AccessRequirement {
     Exclusive,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct ValidationState {
+    current: BasicBlockId,
+    locals: Vec<ObjectState>,
+    active_loans: Vec<Option<ActiveLoan>>,
+}
+
 fn validate_path_state(
     program: &Program,
     function_id: FunctionId,
@@ -755,15 +762,20 @@ fn validate_path_state(
         );
     }
 
-    let mut active_loans = vec![None; body.loans.len()];
-    let mut current = body.entry;
+    let initial = ValidationState {
+        current: body.entry,
+        locals,
+        active_loans: vec![None; body.loans.len()],
+    };
+    let mut worklist = VecDeque::from([initial]);
     let mut seen = HashSet::new();
 
-    loop {
-        if !seen.insert((current, locals.clone(), active_loans.clone())) {
-            return Ok(());
+    'worklist: while let Some(mut state) = worklist.pop_front() {
+        if !seen.insert(state.clone()) {
+            continue;
         }
 
+        let current = state.current;
         let block = body
             .block(current)
             .expect("structurally validated Core MIR reaches only known blocks");
@@ -778,14 +790,14 @@ fn validate_path_state(
                 validate_state_statement(
                     types,
                     body,
-                    &mut locals,
-                    &mut active_loans,
+                    &mut state.locals,
+                    &mut state.active_loans,
                     statement,
                     &point,
                 )?,
                 DefinedStep::NoDefinedContinuation
             ) {
-                return Ok(());
+                continue 'worklist;
             }
         }
 
@@ -795,25 +807,27 @@ fn validate_path_state(
             statement: None,
         };
         match &block.terminator {
-            Terminator::Goto(target) => current = *target,
-            Terminator::Fault(_) => return Ok(()),
+            Terminator::Goto(target) => {
+                state.current = *target;
+                worklist.push_back(state);
+            }
+            Terminator::Fault(_) => {}
             Terminator::Return(value) => {
                 if let Some(value) = value
                     && matches!(
                         validate_operand_state(
                             types,
                             body,
-                            &mut locals,
-                            &active_loans,
+                            &mut state.locals,
+                            &state.active_loans,
                             value,
                             &point,
                         )?,
                         DefinedStep::NoDefinedContinuation
                     )
                 {
-                    return Ok(());
+                    continue 'worklist;
                 }
-                return Ok(());
             }
             Terminator::Call {
                 function: target_function,
@@ -823,12 +837,12 @@ fn validate_path_state(
             } => {
                 if let Some(destination) = destination {
                     authorize_direct_access(
-                        &active_loans,
+                        &state.active_loans,
                         destination,
                         AccessRequirement::Exclusive,
                         &point,
                     )?;
-                    if !place_state(&locals, destination).all_never_initialized() {
+                    if !place_state(&state.locals, destination).all_never_initialized() {
                         return Err(point_error(
                             &point,
                             MirValidationErrorKind::CallResultRequiresNeverInitialized(
@@ -843,14 +857,14 @@ fn validate_path_state(
                         validate_operand_state(
                             types,
                             body,
-                            &mut locals,
-                            &active_loans,
+                            &mut state.locals,
+                            &state.active_loans,
                             argument,
                             &point,
                         )?,
                         DefinedStep::NoDefinedContinuation
                     ) {
-                        return Ok(());
+                        continue 'worklist;
                     }
                 }
 
@@ -864,14 +878,17 @@ fn validate_path_state(
                     write_validation_value(
                         types,
                         result_ty,
-                        place_state_mut(&mut locals, destination),
+                        place_state_mut(&mut state.locals, destination),
                         value,
                     );
                 }
-                current = *target;
+                state.current = *target;
+                worklist.push_back(state);
             }
         }
     }
+
+    Ok(())
 }
 
 fn validate_state_statement(
