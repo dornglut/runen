@@ -675,7 +675,6 @@ fn branch(condition: Operand, true_target: u32, false_target: u32) -> Terminator
 #[test]
 fn branch_validates_targets_and_bool_valued_operand_shape() {
     let mut types = TypeTable::new();
-    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
 
     let valid = Function {
@@ -697,7 +696,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         types: types.clone(),
         functions: vec![valid],
     })
-    .expect("Bool constant with equal valid targets is branch-admissible");
+    .expect("Bool constant with equal valid targets is branch-admissible without a Bool TypeId");
 
     let invalid_target = Function {
         name: "invalid_target".into(),
@@ -758,8 +757,6 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
     })
     .expect_err("malformed AddressOf access fails before Branch Bool admission");
     assert_eq!(error.kind, MirValidationErrorKind::InvalidLocal(LocalId(9)));
-
-    let _ = bool_ty;
 }
 
 #[test]
@@ -893,7 +890,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     let error = validate_program(Program {
-        types: types.clone(),
+        types,
         functions: vec![raw_i64],
     })
     .expect_err("RawMove through non-Bool pointee is not branch-admissible");
