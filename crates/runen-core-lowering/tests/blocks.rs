@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    Function as CoreFunction, LocalId, Place, PlaceAccess, Statement as CoreStatement, Terminator,
-    ValidatedProgram,
+    Function as CoreFunction, LocalId, Operand, Place, PlaceAccess, Statement as CoreStatement,
+    Terminator, ValidatedProgram,
 };
 use runen_core_lowering::lower;
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
