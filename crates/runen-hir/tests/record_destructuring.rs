@@ -141,7 +141,8 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
     );
 
     for name in ["call", "construct", "field"] {
-        let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, name).body.statements[0]
+        let Statement::RecordDestructure { scrutinee, .. } =
+            &function(&hir, name).body.statements[0]
         else {
             panic!("expected producer-backed pattern");
         };
@@ -263,10 +264,7 @@ fn recursive_producer_cleanup_is_maximal_recursive_frontier_in_reverse_structura
     let RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee else {
         panic!("expected producer scrutinee");
     };
-    assert_eq!(
-        cleanup.paths,
-        [vec![2], vec![1, 2], vec![1, 0], vec![0]]
-    );
+    assert_eq!(cleanup.paths, [vec![2], vec![1, 2], vec![1, 0], vec![0]]);
 }
 
 #[test]
@@ -278,7 +276,8 @@ fn recursive_producer_no_consume_keeps_complete_root_and_all_transferred_is_empt
                  Outer { inner: Inner { a: 1, b: 2 }, tail: 3 }; \
          }",
     );
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&all_dup, "f").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &function(&all_dup, "f").body.statements[0]
     else {
         panic!("expected producer pattern");
     };
