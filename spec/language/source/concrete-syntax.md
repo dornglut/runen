@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including direct binding-root and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, producer-backed pattern scrutinee evaluation and transient cleanup, return, cleanup, divergence, fault, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection and definite normal ownership joins from [Source control flow](control-flow.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); binding-rooted field-path selection, direct field accessibility, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including direct binding-root and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, producer-backed pattern scrutinee evaluation and transient cleanup, return, normal-continuation presence, cleanup, divergence, fault, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, zero/one/two normal-outcome composition, and definite normal ownership from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -190,16 +190,16 @@ BodyStatement  = LocalDeclaration
                | CallStatement
                | BlockStatement
                | IfStatement
-BlockStatement = "{" BodyStatement* "}"
+BlockStatement = "{" BodyStatement* ReturnStatement? "}"
 ```
 
-A represented return statement, when present, is terminal at the function-root body level. Source containing another root body statement after that represented return does not match this body grammar.
+`ReturnStatement` is not a `BodyStatement`. It appears only as the optional terminal element of the immediately containing root `Body` or nested `BlockStatement`. Consequently, concrete source cannot place another `BodyStatement` or second `ReturnStatement` after that return in the same lexical block.
 
-A represented `BlockStatement` is statement-only and produces no source value. Its closing `}` is the complete statement terminator; no trailing semicolon is present. The enclosed sequence may be empty, and block statements may nest recursively because `BlockStatement` is itself a `BodyStatement`.
+A represented `BlockStatement` is statement-only and produces no source value. Its closing `}` is the complete statement terminator; no trailing semicolon is present. Its `BodyStatement` sequence may be empty, its optional terminal return may be absent, and block statements may nest recursively because `BlockStatement` is itself a `BodyStatement`.
 
-Because `ReturnStatement` is not a `BodyStatement`, this block form does not admit a return inside a nested block. A block statement itself does not create a block expression, tail value, Unit/Void value, label, loop, break, continue, or catch form. Conditional selection is introduced only by `IfStatement` below.
+A terminal return inside a nested block terminates the current source function activation under `function-execution.md`; it does not merely break out of that block. The block form still does not create a block expression, tail value, Unit/Void value, label, loop, break, continue, or catch form. Conditional selection is introduced only by `IfStatement` below.
 
-Each `BlockStatement` maps to exactly one child lexical scope under `local-bindings.md`. Execution order, normal child-scope cleanup, fault propagation, and divergence consequences are owned by `function-execution.md`. When a block is a conditional arm, `control-flow.md` owns its relationship to conditional selection and the definite normal join.
+Each `BlockStatement` maps to exactly one child lexical scope under `local-bindings.md`. Execution order, normal-continuation presence, normal child-scope cleanup, return cleanup, fault propagation, and divergence consequences are owned by `function-execution.md`. When a block is a conditional arm, `control-flow.md` owns its relationship to conditional selection and zero/one/two normal-outcome composition.
 
 ## Conditional statements
 
@@ -227,15 +227,15 @@ A `DirectCall` conditional value retains both its represented unqualified and `a
 
 `RecordConstruction` is not a represented conditional-value spelling in this revision. This restriction does not remove record construction from ordinary `Value` positions or producer-backed record-pattern scrutinees.
 
-The then arm is always one explicit `BlockStatement`. `else` is optional; when present it is followed by exactly one explicit `BlockStatement`. Each explicit arm therefore maps to one ordinary child lexical scope. The omitted-else false outcome and definite enclosing ownership join are owned by `control-flow.md`; omission does not synthesize a concrete block or lexical scope.
+The then arm is always one explicit `BlockStatement`. `else` is optional; when present it is followed by exactly one explicit `BlockStatement`. Each explicit arm therefore maps to one ordinary child lexical scope and may contain its own optional terminal `ReturnStatement`. The omitted-else false outcome and definite normal-successor composition are owned by `control-flow.md`; omission does not synthesize a concrete block or lexical scope.
 
 This revision defines no direct `else if` production. A nested conditional may instead occur as a `BodyStatement` inside an explicit else block, for example the abstract shape `else { if ... { ... } }`.
 
 An `IfStatement` produces no source value and has no trailing semicolon. It does not add a conditional expression, block value, Unit/Void value, pattern condition, guard, truthiness relation, comparison, or logical operator.
 
-`ReturnStatement` remains absent from `BodyStatement`; conditional arms therefore do not introduce nested or early return under this grammar.
+Because `ReturnStatement` is an optional terminal element of `BlockStatement`, a conditional arm may return from the current function. Return remains absent from `BodyStatement`, so this grammar still does not admit an arbitrary nonterminal return followed by more statements in that same arm block.
 
-Runtime condition selection, condition producer ordering, arm validation, normal arm cleanup composition, fault/divergence behavior, and exact structural-ownership-state equality at the normal successor are owned by `control-flow.md`.
+Runtime condition selection, condition producer ordering, arm validation, normal-continuation composition, normal arm cleanup, return behavior, fault/divergence behavior, and exact structural-ownership-state equality whenever two normal outcomes meet are owned by `control-flow.md` and `function-execution.md`.
 
 ## Ordinary local declarations
 
@@ -418,13 +418,17 @@ This subset has no floating, string, byte, character, aggregate, pointer, or oth
 ReturnStatement = "return" Value? ";"
 ```
 
-For a result-bearing function, the body MUST end with `return Value;`. The returned value's type and ownership transfer are governed by `function-execution.md` and MUST satisfy the callable result type.
+A `ReturnStatement` may be the optional terminal element of the root `Body` or of any nested `BlockStatement`. It always returns from the current source function activation; there is no block-local return meaning.
 
-For a no-result function, the body MAY end with `return;` or omit the return statement and complete normally at `}`.
+In a result-bearing function, every represented path that reaches a `ReturnStatement` must use `return Value;`, and the returned value's type and ownership transfer are governed by `function-execution.md` and MUST satisfy the callable result type.
+
+In a no-result function, every represented `ReturnStatement` must be `return;`. The root body may also omit a terminal return and complete normally at `}`.
 
 `return;` is invalid in a result-bearing function. `return Value;` is invalid in a no-result function.
 
-This subset defines no tail-expression return and no earlier/nonterminal return position.
+A result-bearing function is not required syntactically to end with one root `return Value;`. Instead, `function-execution.md` requires that no represented path reach the root closing boundary normally without a valid result-bearing return. A conditional whose two explicit arms both return may therefore eliminate the root normal continuation.
+
+This subset defines no tail-expression return, no return as a `BodyStatement`, and no arbitrary nonterminal return followed by another statement in the same lexical block.
 
 ## Unqualified lookup and category validation
 
@@ -461,7 +465,7 @@ This revision does not define:
 - grouping or general expression grammar;
 - assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, destructuring assignment, or general place/lvalue syntax beyond represented whole-binding assignment;
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
-- conditional expressions, direct `else if`, early/nested return, loops, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch, labels, break, continue, or other control-transfer forms beyond represented statement-level `if`;
+- conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch, labels, break, continue, or other control-transfer forms beyond represented statement-level `if` and terminal return;
 - record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and binding-rooted `FieldValueUse` producer-backed forms; in particular no literal, bare `IdentifierUse`-as-value, grouping, operator expression, conversion, or arbitrary general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction;
