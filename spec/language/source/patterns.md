@@ -92,7 +92,7 @@ Every selected pattern field, including fields selected inside nested nodes, ind
 
 For the currently represented record declaration form, direct fields are module-private. Therefore recursive pattern selection may open only record nodes whose fields are directly accessible to the containing function.
 
-A same-module outer record may have a field whose type is a foreign exported record. The outer field itself may be selected and bound as one complete binding leaf because the outer field is accessible. A nested record pattern may not open that foreign record under this revision because its fields remain module-private to the foreign module.
+A same-module outer record may have a field whose type is a foreign exported record. The accessible outer field may be bound as one complete binding leaf. That foreign record cannot be recursively opened under this revision: every nested pattern head is same-module-only, and direct selection of the foreign record's fields is independently prohibited by the current module-private field-accessibility relation.
 
 This relation does not introduce field-visibility syntax or broaden construction/field access across modules.
 
