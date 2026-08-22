@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, ModuleId, OwnedUse, SourceUnit,
-    Statement, Type, Value, ValueKind, build_typed_hir,
+    DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
+    SourceUnit, Statement, Type, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, SyntaxKind, parse_source};
 
@@ -173,13 +173,22 @@ fn producer_construction_receiver_retains_complete_producer() {
          fn f() -> I8 { return Outer { inner: Inner { value: 9 } }.inner.value; }",
     );
     let value = returned_value(function(&hir, "f"));
-    let ValueKind::FieldValueUse { receiver, fields, .. } = &value.kind else {
+    let ValueKind::FieldValueUse {
+        receiver, fields, ..
+    } = &value.kind
+    else {
         panic!("expected producer-backed field use");
     };
-    let FieldValueReceiver::Producer { value: producer, .. } = receiver else {
+    let FieldValueReceiver::Producer {
+        value: producer, ..
+    } = receiver
+    else {
         panic!("expected producer receiver");
     };
-    assert!(matches!(producer.kind, ValueKind::RecordConstruction { .. }));
+    assert!(matches!(
+        producer.kind,
+        ValueKind::RecordConstruction { .. }
+    ));
     assert_eq!(producer.ty, Type::Record(hir.records[1].id));
     assert_eq!(fields, &[0, 0]);
 }
@@ -219,8 +228,8 @@ fn producer_field_location_is_the_complete_field_use() {
         .find(|node| node.kind() == SyntaxKind::FieldValueUse)
         .expect("field-value syntax node")
         .text_range();
-    let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
-        .expect("accepted HIR");
+    let hir =
+        build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])]).expect("accepted HIR");
     let value = returned_value(function(&hir, "f"));
     assert_eq!(value.location.unit, 0);
     assert_eq!(value.location.range, syntax_range);
@@ -233,9 +242,11 @@ fn producer_static_rejection_does_not_commit_receiver_consumption() {
          fn make(ticket: Ticket) -> Box { return Box { value: 1 }; } fn sink(ticket: Ticket) {} \
          fn f(ticket: Ticket) { let bad: U8 = make(ticket).value; sink(ticket); }",
     );
-    assert!(final_type
-        .iter()
-        .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(
+        final_type
+            .iter()
+            .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
     assert!(!has_kind(&final_type, DiagnosticKind::UnavailableBinding));
 
     let unknown_selector = errors(
