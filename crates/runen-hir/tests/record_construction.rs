@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, LiteralValue, ModuleId, OwnedUse, SourceUnit, Statement, Type,
-    Value, ValueKind, build_typed_hir,
+    DiagnosticKind, ImportTarget, IntrinsicType, LiteralValue, ModuleId, OwnedUse, SourceUnit,
+    Statement, Type, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -20,6 +20,21 @@ fn errors(source: &str) -> Vec<runen_hir::Diagnostic> {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
         .expect_err("test source must be rejected")
+}
+
+fn cross_module(
+    target_source: &str,
+    source: &str,
+) -> Result<runen_hir::TypedCompilation, Vec<runen_hir::Diagnostic>> {
+    let target = parse(target_source);
+    let source = parse(source);
+    assert!(target.errors().is_empty(), "{:?}", target.errors());
+    assert!(source.errors().is_empty(), "{:?}", source.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).unwrap()];
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &target, &[]),
+        SourceUnit::new(ModuleId::new(1), &source, &imports),
+    ])
 }
 
 fn function<'a>(hir: &'a runen_hir::TypedCompilation, name: &str) -> &'a runen_hir::Function {
@@ -98,6 +113,133 @@ fn constructor_target_reports_wrong_category_and_unresolved_names() {
 }
 
 #[test]
+fn qualified_target_uses_existing_lookup_and_erases_qualification_in_hir() {
+    let hir = cross_module(
+        "export record Empty {} export record Pair { export left: I8, export right: U64 }",
+        "import dep; \
+         fn empty() -> dep::Empty { return dep::Empty {}; } \
+         fn pair() -> dep::Pair { return dep::Pair { right: 9, left: 3 }; }",
+    )
+    .expect("exported foreign records with accessible fields are constructible");
+
+    let pair = hir
+        .records
+        .iter()
+        .find(|record| record.name == "Pair")
+        .expect("foreign Pair record");
+    let value = returned_value(function(&hir, "pair"));
+    assert_eq!(value.ty, Type::Record(pair.id));
+    let ValueKind::RecordConstruction { record, fields } = &value.kind else {
+        panic!("qualified target must remain ordinary record-construction HIR");
+    };
+    assert_eq!(*record, pair.id);
+    assert_eq!(fields.iter().map(|field| field.field).collect::<Vec<_>>(), vec![1, 0]);
+    assert_eq!(
+        fields[0].value.kind,
+        ValueKind::Literal(LiteralValue::U64(9))
+    );
+    assert_eq!(
+        fields[1].value.kind,
+        ValueKind::Literal(LiteralValue::I8(3))
+    );
+
+    assert!(matches!(
+        returned_value(function(&hir, "empty")).kind,
+        ValueKind::RecordConstruction { ref fields, .. } if fields.is_empty()
+    ));
+}
+
+#[test]
+fn qualified_target_preserves_lookup_failure_partition() {
+    let unknown_alias = cross_module(
+        "export record Pair { export left: I8 }",
+        "import dep; fn f() -> dep::Pair { return other::Pair { left: 1 }; }",
+    )
+    .expect_err("undeclared alias must reject");
+    assert!(unknown_alias
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnresolvedName));
+
+    let missing_member = cross_module(
+        "export record Other {}",
+        "import dep; fn f() -> dep::Other { return dep::Pair { }; }",
+    )
+    .expect_err("absent target member must reject");
+    assert!(missing_member
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnresolvedName));
+
+    let private_target = cross_module(
+        "record Pair { export left: I8 }",
+        "import dep; fn f() { let value: dep::Pair = dep::Pair { left: 1 }; }",
+    )
+    .expect_err("private foreign target must reject before construction");
+    assert!(private_target
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::InaccessibleBinding));
+
+    let wrong_category = cross_module(
+        "export fn Pair() {}",
+        "import dep; fn f() { let value: I8 = dep::Pair {}; }",
+    )
+    .expect_err("exported function is not a constructor target");
+    assert!(wrong_category
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::ExpectedRecordType));
+}
+
+#[test]
+fn qualified_initializer_access_resolves_identity_before_visibility() {
+    let inaccessible = cross_module(
+        "export record Pair { left: I8, export right: I8 }",
+        "import dep; fn f() -> dep::Pair { return dep::Pair { left: 1, right: 2 }; }",
+    )
+    .expect_err("known private foreign field must be inaccessible");
+    assert!(inaccessible
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::InaccessibleRecordField));
+    assert!(!inaccessible
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnknownRecordField));
+
+    let unknown = cross_module(
+        "export record Pair { export left: I8 }",
+        "import dep; fn f() -> dep::Pair { return dep::Pair { other: 1 }; }",
+    )
+    .expect_err("unknown foreign field must remain unknown");
+    assert!(unknown
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnknownRecordField));
+    assert!(!unknown
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::InaccessibleRecordField));
+}
+
+#[test]
+fn foreign_private_fields_make_exhaustive_qualified_construction_impossible() {
+    let named_private = cross_module(
+        "export record Pair { hidden: I8, export shown: I8 }",
+        "import dep; fn f() -> dep::Pair { return dep::Pair { hidden: 1, shown: 2 }; }",
+    )
+    .expect_err("naming private field must reject");
+    assert!(named_private
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::InaccessibleRecordField));
+    assert!(!named_private
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::MissingRecordInitializer));
+
+    let omitted_private = cross_module(
+        "export record Pair { hidden: I8, export shown: I8 }",
+        "import dep; fn f() -> dep::Pair { return dep::Pair { shown: 2 }; }",
+    )
+    .expect_err("omitting private field must remain incomplete");
+    assert!(omitted_private
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::MissingRecordInitializer));
+}
+
+#[test]
 fn structural_initializer_errors_are_diagnosed_before_any_producer_consumption() {
     let duplicate = errors(
         "record Token {} record Holder { item: Token } \
@@ -160,6 +302,27 @@ fn structural_initializer_errors_are_diagnosed_before_any_producer_consumption()
 }
 
 #[test]
+fn qualified_structural_rejection_does_not_commit_initializer_consumption() {
+    for source in [
+        "import dep; fn f(token: dep::Token) -> dep::Token { let bad: dep::Holder = dep::Holder { hidden: token }; return token; }",
+        "import dep; fn f(token: dep::Token) -> dep::Token { let bad: dep::Holder = dep::Holder { other: token }; return token; }",
+        "import dep; fn f(token: dep::Token) -> dep::Token { let bad: dep::Holder = dep::Holder { item: token, item: token }; return token; }",
+    ] {
+        let diagnostics = cross_module(
+            "export record Token {} export record Holder { hidden: Token, export item: Token }",
+            source,
+        )
+        .expect_err("structurally invalid qualified construction must reject");
+        assert!(
+            !diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnavailableBinding),
+            "initializer must not consume token before complete structural validity: {source}"
+        );
+    }
+}
+
+#[test]
 fn constructor_result_requires_exact_outer_record_type() {
     let diagnostics = errors("record A {} record B {} fn f() -> A { return B {}; }");
     assert!(diagnostics.iter().any(|diagnostic| matches!(
@@ -169,6 +332,22 @@ fn constructor_result_requires_exact_outer_record_type() {
             found: Type::Record(found),
         } if expected != found
     )));
+}
+
+#[test]
+fn qualified_constructor_result_mismatch_precedes_initializer_consumption() {
+    let diagnostics = cross_module(
+        "export record Token {} export record Holder { export item: Token }",
+        "import dep; record Local {} fn f(token: dep::Token) -> dep::Token { let bad: Local = dep::Holder { item: token }; return token; }",
+    )
+    .expect_err("qualified construction result must exactly match receiving type");
+    assert!(diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
+    assert!(!diagnostics
+        .iter()
+        .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnavailableBinding));
 }
 
 #[test]
@@ -210,6 +389,28 @@ fn nested_construction_calls_and_nonduplicable_field_consumption_are_retained() 
 }
 
 #[test]
+fn qualified_constructor_retains_source_order_and_nonduplicable_consumption() {
+    let hir = cross_module(
+        "export record Token {} export record Pair { export right: Token, export left: Token }",
+        "import dep; fn build(left: dep::Token, right: dep::Token) -> dep::Pair { return dep::Pair { left: left, right: right }; }",
+    )
+    .expect("qualified construction with exported fields must validate");
+
+    let value = returned_value(function(&hir, "build"));
+    let ValueKind::RecordConstruction { fields, .. } = &value.kind else {
+        panic!("expected construction");
+    };
+    assert_eq!(fields.iter().map(|field| field.field).collect::<Vec<_>>(), vec![1, 0]);
+    assert!(fields.iter().all(|field| matches!(
+        field.value.kind,
+        ValueKind::BindingUse {
+            ownership: OwnedUse::Consume,
+            ..
+        }
+    )));
+}
+
+#[test]
 fn construction_composes_with_every_current_value_consumer() {
     let hir = build(
         "record Box { value: I8 } \
@@ -245,6 +446,34 @@ fn construction_composes_with_every_current_value_consumer() {
     };
     assert!(matches!(
         fields[0].value.kind,
+        ValueKind::RecordConstruction { .. }
+    ));
+}
+
+#[test]
+fn qualified_construction_composes_with_current_value_consumers() {
+    let hir = cross_module(
+        "export record Box { export value: I8 }",
+        "import dep; \
+         record Outer { box: dep::Box } \
+         fn sink(value: dep::Box) {} \
+         fn all() -> dep::Box { \
+             let mut value: dep::Box = dep::Box { value: 1 }; \
+             value = dep::Box { value: 2 }; \
+             let nested: Outer = Outer { box: dep::Box { value: 3 } }; \
+             sink(dep::Box { value: 4 }); \
+             return dep::Box { value: 5 }; \
+         }",
+    )
+    .expect("qualified construction must remain the existing value producer");
+
+    let all = function(&hir, "all");
+    assert!(matches!(all.body.statements[0], Statement::Local { .. }));
+    assert!(matches!(all.body.statements[1], Statement::Assignment { .. }));
+    assert!(matches!(all.body.statements[2], Statement::Local { .. }));
+    assert!(matches!(all.body.statements[3], Statement::Call { .. }));
+    assert!(matches!(
+        returned_value(all).kind,
         ValueKind::RecordConstruction { .. }
     ));
 }
