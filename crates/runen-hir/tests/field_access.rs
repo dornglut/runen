@@ -857,8 +857,7 @@ fn nested_field_access_rechecks_the_current_record_module_at_each_step() {
     };
     assert_eq!(fields, &[1, 0]);
 
-    let ValueKind::FieldValueUse { fields, .. } =
-        &returned_value(function(&hir, "back_home")).kind
+    let ValueKind::FieldValueUse { fields, .. } = &returned_value(function(&hir, "back_home")).kind
     else {
         panic!("expected nested field-value use");
     };
@@ -888,10 +887,7 @@ fn qualified_producer_field_access_preserves_transactional_argument_ownership() 
         SourceUnit::new(local_module, &local, &ext),
     ])
     .expect_err("private selector must reject before receiver argument ownership commits");
-    assert!(has_kind(
-        &rejected,
-        DiagnosticKind::InaccessibleRecordField
-    ));
+    assert!(has_kind(&rejected, DiagnosticKind::InaccessibleRecordField));
     assert!(!has_kind(&rejected, DiagnosticKind::UnavailableBinding));
 
     let accepted_then_consumed = build_typed_hir(&[
@@ -961,11 +957,13 @@ fn exported_foreign_record_field_keeps_existing_consume_semantics() {
     ])
     .expect("foreign exported fields must preserve existing ownership classification");
 
-    let (_, child_fields, child_ownership) = binding_receiver(returned_value(function(&hir, "child")));
+    let (_, child_fields, child_ownership) =
+        binding_receiver(returned_value(function(&hir, "child")));
     assert_eq!(child_fields, &[0]);
     assert_eq!(child_ownership, OwnedUse::Consume);
 
-    let (_, count_fields, count_ownership) = binding_receiver(returned_value(function(&hir, "count")));
+    let (_, count_fields, count_ownership) =
+        binding_receiver(returned_value(function(&hir, "count")));
     assert_eq!(count_fields, &[1]);
     assert_eq!(count_ownership, OwnedUse::Duplicate);
 }
