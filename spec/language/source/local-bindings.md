@@ -43,7 +43,7 @@ A represented ordinary local declaration:
 
 Uninitialized ordinary local declarations are not represented.
 
-The initializer is resolved and evaluated in the lexical environment that exists before the new binding is introduced. The binding enters scope only after successful initialization completes. It therefore cannot be selected by lookup from its own initializer.
+The initializer is resolved and typed in the lexical environment that exists before the new binding is introduced. `function-execution.md` owns initializer evaluation and transfer. The binding enters scope only after successful initialization completes and therefore cannot be selected by lookup from its own initializer.
 
 The concrete forms in `concrete-syntax.md` establish immutable `let name: Type = Value;` and mutable `let mut name: Type = Value;` bindings. This revision defines no inferred local type or uninitialized local form.
 
@@ -56,9 +56,10 @@ One source-valid record-destructuring declaration under `patterns.md` may introd
 For every pattern binding leaf, `patterns.md` supplies:
 
 - the introduced lexical key;
-- the exact selected source type;
-- one stable source declaration position in the pattern's retained binding-leaf order; and
+- the exact selected source type; and
 - the duplicate-or-consume production consequence that yields the binding's initial owned value.
+
+`patterns.md` also supplies the complete declaration's retained binding-leaf source order. This binding owner uses that order as the declaration order of the introduced bindings.
 
 This binding owner supplies each introduced binding with one stable source-semantic binding identity and classifies it as immutable for assignment purposes.
 
