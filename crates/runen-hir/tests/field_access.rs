@@ -1,8 +1,8 @@
 use runen_hir::{
-    DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Statement, Type,
-    Value, ValueKind, build_typed_hir,
+    DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, ModuleId, OwnedUse, SourceUnit,
+    Statement, Type, Value, ValueKind, build_typed_hir,
 };
-use runen_syntax::{Parse, parse_source};
+use runen_syntax::{Parse, SyntaxKind, parse_source};
 
 fn parse(source: &str) -> Parse {
     parse_source(source.as_bytes()).expect("valid UTF-8 test source")
@@ -38,6 +38,18 @@ fn returned_value(function: &runen_hir::Function) -> &Value {
         .expect("result-bearing test function has returned value")
 }
 
+fn binding_receiver(value: &Value) -> (&FieldValueReceiver, &[usize], OwnedUse) {
+    let ValueKind::FieldValueUse {
+        receiver,
+        fields,
+        ownership,
+    } = &value.kind
+    else {
+        panic!("expected field-value use");
+    };
+    (receiver, fields, *ownership)
+}
+
 fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
     diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
 }
@@ -59,31 +71,24 @@ fn resolves_paths_and_retains_duplicate_ownership() {
     );
 
     let one = function(&hir, "one");
-    let ValueKind::FieldValueUse {
-        binding,
-        fields,
-        ownership,
-    } = &returned_value(one).kind
-    else {
-        panic!("expected field-value use");
+    let (receiver, fields, ownership) = binding_receiver(returned_value(one));
+    let FieldValueReceiver::Binding { binding, ty } = receiver else {
+        panic!("expected binding field receiver");
     };
     assert_eq!(*binding, one.parameters[0].binding);
+    assert_eq!(*ty, Type::Record(hir.records[1].id));
     assert_eq!(fields, &[0]);
-    assert_eq!(*ownership, OwnedUse::Duplicate);
+    assert_eq!(ownership, OwnedUse::Duplicate);
     assert_eq!(returned_value(one).ty, Type::Intrinsic(IntrinsicType::I8));
 
     let nested = function(&hir, "nested");
-    let ValueKind::FieldValueUse {
-        binding,
-        fields,
-        ownership,
-    } = &returned_value(nested).kind
-    else {
-        panic!("expected nested field-value use");
+    let (receiver, fields, ownership) = binding_receiver(returned_value(nested));
+    let FieldValueReceiver::Binding { binding, .. } = receiver else {
+        panic!("expected binding field receiver");
     };
     assert_eq!(*binding, nested.parameters[0].binding);
     assert_eq!(fields, &[1, 1]);
-    assert_eq!(*ownership, OwnedUse::Duplicate);
+    assert_eq!(ownership, OwnedUse::Duplicate);
 }
 
 #[test]
@@ -113,17 +118,13 @@ fn root_lookup_uses_active_binding_precedence_without_category_bypass() {
          fn f(root: Box) -> I8 { return root.value; }",
     );
     let f = function(&hir, "f");
-    let ValueKind::FieldValueUse {
-        binding,
-        fields,
-        ownership,
-    } = &returned_value(f).kind
-    else {
+    let (receiver, fields, ownership) = binding_receiver(returned_value(f));
+    let FieldValueReceiver::Binding { binding, .. } = receiver else {
         panic!("expected field use rooted in parameter");
     };
     assert_eq!(*binding, f.parameters[0].binding);
     assert_eq!(fields, &[0]);
-    assert_eq!(*ownership, OwnedUse::Duplicate);
+    assert_eq!(ownership, OwnedUse::Duplicate);
     assert_eq!(returned_value(f).ty, Type::Intrinsic(IntrinsicType::I8));
 
     let wrong_category = errors("record root { value: I8 } fn g() -> I8 { return root.value; }");
@@ -131,6 +132,147 @@ fn root_lookup_uses_active_binding_precedence_without_category_bypass() {
         &wrong_category,
         DiagnosticKind::ExpectedValueBinding
     ));
+}
+
+#[test]
+fn producer_call_receiver_retains_producer_type_path_and_complete_duplicate_cleanup() {
+    let hir = build(
+        "record Inner { value: I8 } record Outer { inner: Inner } \
+         fn make() -> Outer { return Outer { inner: Inner { value: 7 } }; } \
+         fn f() -> I8 { return make().inner.value; }",
+    );
+    let f = function(&hir, "f");
+    let value = returned_value(f);
+    let ValueKind::FieldValueUse {
+        receiver,
+        fields,
+        ownership,
+    } = &value.kind
+    else {
+        panic!("expected producer-backed field use");
+    };
+    let FieldValueReceiver::Producer {
+        value: producer,
+        cleanup,
+    } = receiver
+    else {
+        panic!("expected producer receiver");
+    };
+    assert!(matches!(producer.kind, ValueKind::DirectCall { .. }));
+    assert_eq!(producer.ty, Type::Record(hir.records[1].id));
+    assert_eq!(fields, &[0, 0]);
+    assert_eq!(*ownership, OwnedUse::Duplicate);
+    assert_eq!(cleanup.paths, vec![Vec::<usize>::new()]);
+    assert_eq!(value.ty, Type::Intrinsic(IntrinsicType::I8));
+}
+
+#[test]
+fn producer_construction_receiver_retains_complete_producer() {
+    let hir = build(
+        "record Inner { value: I8 } record Outer { inner: Inner } \
+         fn f() -> I8 { return Outer { inner: Inner { value: 9 } }.inner.value; }",
+    );
+    let value = returned_value(function(&hir, "f"));
+    let ValueKind::FieldValueUse { receiver, fields, .. } = &value.kind else {
+        panic!("expected producer-backed field use");
+    };
+    let FieldValueReceiver::Producer { value: producer, .. } = receiver else {
+        panic!("expected producer receiver");
+    };
+    assert!(matches!(producer.kind, ValueKind::RecordConstruction { .. }));
+    assert_eq!(producer.ty, Type::Record(hir.records[1].id));
+    assert_eq!(fields, &[0, 0]);
+}
+
+#[test]
+fn producer_nonduplicable_selection_retains_canonical_remaining_frontier() {
+    let hir = build(
+        "record Token {} record Inner { token: Token, count: I8 } \
+         record Outer { pad: I8, inner: Inner } \
+         fn make() -> Outer { return Outer { pad: 1, inner: Inner { token: Token {}, count: 2 } }; } \
+         fn f() -> Token { return make().inner.token; }",
+    );
+    let ValueKind::FieldValueUse {
+        receiver,
+        fields,
+        ownership,
+    } = &returned_value(function(&hir, "f")).kind
+    else {
+        panic!("expected producer-backed field use");
+    };
+    let FieldValueReceiver::Producer { cleanup, .. } = receiver else {
+        panic!("expected producer receiver");
+    };
+    assert_eq!(fields, &[1, 0]);
+    assert_eq!(*ownership, OwnedUse::Consume);
+    assert_eq!(cleanup.paths, vec![vec![1, 1], vec![0]]);
+}
+
+#[test]
+fn producer_field_location_is_the_complete_field_use() {
+    let source = "record Box { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn f() -> I8 { return make().value; }";
+    let parsed = parse(source);
+    assert!(parsed.errors().is_empty());
+    let syntax_range = parsed
+        .syntax()
+        .descendants()
+        .find(|node| node.kind() == SyntaxKind::FieldValueUse)
+        .expect("field-value syntax node")
+        .text_range();
+    let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
+        .expect("accepted HIR");
+    let value = returned_value(function(&hir, "f"));
+    assert_eq!(value.location.unit, 0);
+    assert_eq!(value.location.range, syntax_range);
+}
+
+#[test]
+fn producer_static_rejection_does_not_commit_receiver_consumption() {
+    let final_type = errors(
+        "record Ticket {} record Box { value: I8 } \
+         fn make(ticket: Ticket) -> Box { return Box { value: 1 }; } fn sink(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { let bad: U8 = make(ticket).value; sink(ticket); }",
+    );
+    assert!(final_type
+        .iter()
+        .any(|diagnostic| matches!(diagnostic.kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(!has_kind(&final_type, DiagnosticKind::UnavailableBinding));
+
+    let unknown_selector = errors(
+        "record Ticket {} record Box { value: I8 } \
+         fn make(ticket: Ticket) -> Box { return Box { value: 1 }; } fn sink(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { let bad: I8 = make(ticket).missing; sink(ticket); }",
+    );
+    assert!(has_kind(
+        &unknown_selector,
+        DiagnosticKind::UnknownRecordField
+    ));
+    assert!(!has_kind(
+        &unknown_selector,
+        DiagnosticKind::UnavailableBinding
+    ));
+
+    let no_result = errors(
+        "record Ticket {} fn make(ticket: Ticket) {} fn sink(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { let bad: I8 = make(ticket).value; sink(ticket); }",
+    );
+    assert!(has_kind(
+        &no_result,
+        DiagnosticKind::NoResultCallUsedAsValue
+    ));
+    assert!(!has_kind(&no_result, DiagnosticKind::UnavailableBinding));
+}
+
+#[test]
+fn invalid_receiver_producer_does_not_commit_speculative_argument_consumption() {
+    let diagnostics = errors(
+        "record Ticket {} record Box { value: I8 } \
+         fn make(ticket: Ticket, count: I8) -> Box { return Box { value: count }; } \
+         fn sink(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { let bad: I8 = make(ticket, missing).value; sink(ticket); }",
+    );
+    assert!(has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
+    assert!(!has_kind(&diagnostics, DiagnosticKind::UnavailableBinding));
 }
 
 #[test]
@@ -168,17 +310,13 @@ fn nonduplicable_final_field_is_consumed_and_retained_in_hir() {
          fn f(root: Outer) -> Inner { return root.inner; }",
     );
     let f = function(&hir, "f");
-    let ValueKind::FieldValueUse {
-        binding,
-        fields,
-        ownership,
-    } = &returned_value(f).kind
-    else {
-        panic!("expected consuming field-value use");
+    let (receiver, fields, ownership) = binding_receiver(returned_value(f));
+    let FieldValueReceiver::Binding { binding, .. } = receiver else {
+        panic!("expected binding receiver");
     };
     assert_eq!(*binding, f.parameters[0].binding);
     assert_eq!(fields, &[0]);
-    assert_eq!(*ownership, OwnedUse::Consume);
+    assert_eq!(ownership, OwnedUse::Consume);
 }
 
 #[test]
@@ -347,13 +485,17 @@ fn assignment_rhs_can_consume_target_field_before_successful_whole_reset() {
     let ValueKind::RecordConstruction { fields, .. } = &value.kind else {
         panic!("assignment RHS must remain a record construction");
     };
+    let ValueKind::FieldValueUse {
+        receiver,
+        ownership: OwnedUse::Consume,
+        ..
+    } = &fields[0].value.kind
+    else {
+        panic!("expected consuming field initializer");
+    };
     assert!(matches!(
-        fields[0].value.kind,
-        ValueKind::FieldValueUse {
-            binding: consumed,
-            ownership: OwnedUse::Consume,
-            ..
-        } if consumed == *binding
+        receiver,
+        FieldValueReceiver::Binding { binding: consumed, .. } if consumed == binding
     ));
     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
         panic!("expected post-assignment call");
@@ -425,6 +567,26 @@ fn direct_access_to_foreign_record_fields_is_rejected() {
         &diagnostics,
         DiagnosticKind::InaccessibleRecordField
     ));
+}
+
+#[test]
+fn qualified_call_receiver_resolves_before_foreign_field_access_rejects() {
+    let foreign = parse(
+        "export record Foreign { value: I8 } export fn make() -> Foreign { return Foreign { value: 1 }; }",
+    );
+    let local = parse("import ext; fn f() -> I8 { return ext::make().value; }");
+    let ext = ImportTarget::new("ext", ModuleId::new(1)).expect("valid alias");
+    let diagnostics = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &foreign, &[]),
+        SourceUnit::new(ModuleId::new(2), &local, &[ext]),
+    ])
+    .expect_err("foreign field selection remains inaccessible");
+    assert!(has_kind(
+        &diagnostics,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+    assert!(!has_kind(&diagnostics, DiagnosticKind::UnresolvedName));
+    assert!(!has_kind(&diagnostics, DiagnosticKind::ExpectedFunction));
 }
 
 #[test]
