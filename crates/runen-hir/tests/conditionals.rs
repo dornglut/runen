@@ -63,7 +63,11 @@ fn retains_exact_bool_condition_and_explicit_arm_blocks() {
             .normal_cleanup
             .is_empty()
     );
-    assert!(else_block.expect("explicit else block").has_normal_continuation);
+    assert!(
+        else_block
+            .expect("explicit else block")
+            .has_normal_continuation
+    );
 }
 
 #[test]
