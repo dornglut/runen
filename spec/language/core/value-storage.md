@@ -63,7 +63,7 @@ Consequences:
 
 - when a local's root type is marked, the whole local storage region and all structural descendants lie within that interior-mutable region;
 - when only a nested field type is marked, that field and its structural descendants lie within an interior-mutable region;
-- an unmarked containing aggregate does not become wholly interior-mable merely because one descendant type is marked;
+- an unmarked containing aggregate does not become wholly interior-mutable merely because one descendant type is marked;
 - a disjoint sibling outside the marked descendant region does not inherit the marker.
 
 Interior mutability is storage/type capability, not alias authority. It does not create or upgrade a loan, permit ownership-consuming access through a shared loan, or imply ordinary local assignment mutability.
