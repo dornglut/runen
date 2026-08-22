@@ -58,6 +58,8 @@ The represented producer families are:
 
 `concrete-syntax.md` exposes exactly those five families in `Value`. A record-destructuring declaration is not another `Value` producer: `patterns.md` owns its grouped production of zero or more binding-leaf values. A producer-backed record-pattern scrutinee reuses one existing producer family in a pattern-specific receiving position.
 
+Future operator, conversion, or other expression owners MAY introduce additional owned value producers without redefining the receiving relations in this document.
+
 Unless another accepted source owner defines a distinct rule, a producer used where this document requires a value MUST finish evaluation before that value is transferred to its receiving binding/transient owner.
 
 Literal evaluation is effect-free, non-faulting, and non-diverging after source validation. This execution owner supplies a required source type where contextual integer materialization needs it and then transfers the resulting value.
@@ -72,7 +74,7 @@ Construction produces exactly one owned source value of that nominal record type
 
 Each initializer is associated with one selected declaration field. That field's source type is the required type supplied to the initializer's `Value` producer. The produced field value MUST have exactly that type; no conversion, coercion, widening, narrowing, defaulting, or inference is introduced.
 
-A represented decimal integer literal used as a field initializer materializes under that selected field type through `literals.md`.
+A represented decimal integer literal used as a field initializer materializes under that selected field type through `literals.md`. This is the same required-type materialization relation used by existing value consumers and does not create a conversion or inferred constructor target.
 
 Initializers evaluate strictly left to right in constructor source order, regardless of target record declaration order. For each initializer:
 
@@ -90,6 +92,8 @@ If initializer `i` yields a defined fault before construction completes:
 4. preserve binding structural ownership transitions already caused by evaluated initializers; and
 5. continue the same defined fault.
 
+In particular, if an earlier initializer consumed a complete non-duplicable binding or one non-duplicable structural subvalue, that ownership remains transferred while the transient value produced from it is cleaned exactly once after a later initializer faults. The former binding's remaining ownership frontier excludes the consumed path.
+
 If initializer `i` diverges, no record value is produced and no construction cleanup occurs merely because execution continues. Earlier construction transients remain owned by the suspended construction and prior ownership transitions remain effective.
 
 Only after every initializer succeeds does assembly occur. Assembly transfers every transient construction value exactly once, without duplication, into its selected declaration field and forms one owned nominal record value. Result structural field order is declaration order; constructor source order controls evaluation/transient production.
@@ -100,7 +104,7 @@ For a zero-field record there are no initializer producers/transients; successfu
 
 A result-bearing call or nested construction used as an initializer must complete before that field transient exists and before a later initializer begins.
 
-The completed record value may be transferred into ordinary local initialization, assignment RHS, direct-call argument, return result, enclosing construction field, or a producer-backed recursive record-pattern scrutinee.
+The completed record value may be transferred into ordinary local initialization, assignment RHS, direct-call argument, return result, enclosing construction field, or a producer-backed recursive record-pattern scrutinee. Those receiving relations keep their existing outer ordering and exact-type requirements.
 
 This relation adds no field access/assignment, partial-field reinitialization, pattern selection, update/spread/default initialization, shorthand, positive duplicability selection, method/constructor body, or cross-module construction contract.
 
@@ -108,15 +112,15 @@ This relation adds no field access/assignment, partial-field reinitialization, p
 
 A represented direct call has exactly one ordered argument operand for each callable-signature parameter slot. Argument count MUST match exactly.
 
-Each argument evaluation MUST produce one owned source value whose type equals exactly the corresponding parameter source type. No implicit conversion/coercion/defaulting is introduced.
+Each argument evaluation MUST produce one owned source value whose type equals exactly the corresponding parameter source type. This revision introduces no implicit conversion, coercion, widening, narrowing, subtyping, or numeric defaulting.
 
-The parameter type is the required source type supplied to a producer that needs contextual typing. Decimal integer arguments therefore materialize under the corresponding parameter type.
+The parameter type is the required source type supplied to a producer that needs contextual typing. Decimal integer arguments therefore materialize under the corresponding parameter type through `literals.md`; this does not create a conversion or inference relation.
 
 Arguments evaluate left to right.
 
 Ordinary complete-binding argument use follows `local-bindings.md`; a binding-rooted field-value argument follows `field-access.md`. Any ownership transition occurs at that argument's evaluation position.
 
-Each successfully evaluated argument is held as one owned **transient argument value** until all arguments succeed.
+Each successfully evaluated argument is held as one owned **transient argument value** until all arguments succeed. Transient ownership is semantic and does not require a materialized source storage place.
 
 If argument `i` yields a defined fault before callee activation:
 
@@ -135,13 +139,13 @@ After all arguments succeed:
 
 Transfer does not duplicate a transient argument value.
 
-Parameter slots are owned-value parameters in this represented relation. Future reference/borrow/pass-mode parameters require separate authority.
+Parameter slots are owned-value parameters in this represented relation. This rule neither introduces nor prohibits future reference, borrow, or other pass-mode parameter forms; such forms require their own accepted authority.
 
 ## Ordinary local initialization
 
 When a represented local initializer evaluates an owned value producer, evaluation completes before the produced value is transferred into the binding.
 
-The local's declared type is the required type supplied to a producer that needs one. The produced value MUST have exactly that type.
+The local's declared type is the required type supplied to a producer that needs one. A represented decimal integer literal initializer therefore materializes under that declared type through `literals.md` before transfer. The produced value MUST have exactly that type.
 
 After transfer, the local begins with complete initial structural ownership of its value under `local-bindings.md` and `structural-ownership.md`. Transfer does not duplicate the produced value.
 
@@ -202,7 +206,7 @@ This section does not redefine pattern-head/field selection, structural path val
 
 A represented whole-binding assignment consumes assignment target legality, mutability, declared type, RHS type requirement, and binding structural lifecycle from `local-bindings.md`, together with remaining-frontier selection from `structural-ownership.md`.
 
-The target's declared source type is the required type supplied to an RHS producer that needs one.
+The target's declared source type is the required type supplied to an RHS producer that needs one. A represented decimal integer literal RHS therefore materializes under that target type through `literals.md` before replacement execution.
 
 For a source-valid assignment, execution is **source-first** with respect to replacement:
 
@@ -222,7 +226,7 @@ For non-duplicable `x = x`, RHS evaluation consumes the complete old value, leav
 
 If the RHS consumes only a non-duplicable subvalue of `x`, the target becomes partial before replacement. Its canonical remaining frontier then contains exactly the maximal still-owned disjoint source subvalues; replacement cleans those and never re-cleans the consumed path.
 
-The same ordering applies when nested producer evaluation consumes the target or one of its subvalues before replacement production completes.
+The same ordering applies when direct-call argument evaluation, record-construction initializer evaluation, or another represented producer consumes the complete target or one of its structural subvalues before a later operation successfully produces the replacement value.
 
 If RHS evaluation yields a defined fault, assignment performs no replacement cleanup/reset/transfer. Completed ownership transitions remain effective and activation fault cleanup uses the target's resulting current state.
 
@@ -280,7 +284,7 @@ A binding cleanup selects its complete-root remaining ownership frontier under `
 
 A producer-backed recursive record-pattern transient uses the same structural frontier relation over its own non-binding structural owned-value root. Cleaning that transient means cleaning those frontier values exactly once in canonical frontier order and then ending all transient ownership. It does not make the transient a binding or add it to lexical/activation cleanup.
 
-When a source value is realized in Core storage, applicable destruction-domain, stored-value-lifetime, and cleanup semantics remain owned by Core. This document determines only source ownership-ending selection and source order.
+When a source value is realized in Core storage, applicable destruction-domain, stored-value-lifetime, and cleanup semantics remain owned by [Core value and storage semantics](../core/value-storage.md). This document determines only source ownership-ending selection and source order.
 
 A value already transferred or consumed is not cleaned again by its former owner. This applies to lexical/activation cleanup, construction/argument transients, producer-backed pattern transients, and old assignment-target subvalues.
 
@@ -306,7 +310,9 @@ This cleanup order is semantic and independent of physical stack layout, ABI pas
 
 ## Normal return
 
-For a source function with one result type, that result type is the required type supplied to the return-value producer. A represented return MUST first evaluate exactly one owned value producer whose type equals exactly that result type.
+For a source function with one result type, that result type is the required type supplied to the return-value producer. A represented decimal integer literal return therefore materializes under the declared result type through `literals.md`.
+
+A represented return MUST first evaluate exactly one owned value producer whose type equals exactly that result type.
 
 Result evaluation, including any structural ownership transition caused by a consuming producer, completes before return-induced scope/activation cleanup.
 
@@ -326,7 +332,7 @@ For a no-result function, represented `return;` performs the same scope/paramete
 
 Reaching the normal end of a represented no-result function body is equivalent to normal no-result completion.
 
-A result-bearing represented body MUST NOT have a reachable normal end without a result. The current concrete grammar enforces this with a terminal value return. A later control-flow owner must preserve that requirement.
+A result-bearing represented body MUST NOT have a reachable normal end without a result. The current concrete grammar enforces this with a terminal value return. A later control-flow owner MUST preserve that requirement.
 
 No Unit/Void source value is introduced by no-result completion.
 
@@ -345,9 +351,11 @@ If the fault arises from a directly called callee, the caller's direct-call eval
 
 “Same defined fault” preserves the semantic fault outcome selected by the initiating operation. This revision defines no payload representation, messages, numeric codes, exception objects, backtraces, panic syntax, or catch syntax.
 
-This propagation is semantic unwinding of source ownership and does not require physical stack unwinding.
+This propagation is semantic unwinding of source ownership and does not require physical stack unwinding. A realization MAY use another mechanism only when it preserves every applicable cleanup and observable behavior required by the accepted source and Core contracts.
 
-Recoverable domain/application failures represented as ordinary values remain ordinary values and do not use this relation merely because they represent failure.
+A future catch or panic owner may introduce explicit source forms and extend the applicable propagation relation at those explicit boundaries. No such boundary is represented here.
+
+Recoverable domain/application failures represented as ordinary values remain ordinary values under `behavior.md`; they do not use this relation merely because they represent failure.
 
 ## Transient-value cleanup
 
@@ -365,7 +373,7 @@ A producer-backed recursive record-destructuring declaration owns one pattern sc
 
 A direct binding-root record pattern has no independently owned scrutinee transient; its accepted leaf productions initialize final pattern bindings directly.
 
-This revision defines no general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup.
+This revision defines no general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented record construction, direct-call argument/result transfer, assignment transfer, and producer-backed record destructuring are owned here.
 
 ## Divergence
 
@@ -381,7 +389,7 @@ A direct binding-root record-destructuring operation has no divergence point aft
 
 Left-to-right constructor evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, producer-before-pattern evaluation, **depth-first pattern binding-leaf source order**, and concrete straight-line body/block execution fix relative source ordering for any effects that future accepted operation owners make observable.
 
-Literal evaluation has no source-visible side effect under `literals.md`.
+Literal evaluation has no source-visible side effect under `literals.md`; adding literals to represented ordinary value positions therefore adds no competing effect-order relation.
 
 Field-value production is non-faulting/non-diverging after source validation, but consuming a non-duplicable field performs its structural ownership transition at that producer position. When field-value use is a producer-backed pattern scrutinee, that transition completes before pattern transient leaf production.
 
@@ -397,11 +405,11 @@ This revision defines no source effect system, purity, effect inference, specula
 
 Floating literals, operators, general expressions, arbitrary assignment places, branches/loops, arbitrary-receiver members, refutable/rest/shorthand pattern categories, additional producer-backed scrutinee families, and other source forms remain outside this execution relation.
 
-The represented construction, recursive pattern, and partial-ownership cleanup relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, and cleanup. They do not add or alter Core operations or destruction rules.
+The represented construction, recursive pattern, and partial-ownership cleanup relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements through accepted Core semantics rather than use Core representation behavior as source authority.
 
 After source validation, duplicating field use may refine to projected Core `Copy`, consuming field use to projected `Move`, and whole-binding replacement to source-first Core `Assign`. A direct-root recursive pattern binding leaf may refine to a mapped source local initialized in depth-first leaf order by projected `Copy`/`Move` from the mapped source root using the retained full leaf path. A producer-backed pattern may lower its existing producer to one compiler result temporary, initialize mapped pattern locals by projected `Copy`/`Move` from retained leaf paths, and refine the retained source transient frontier through projected/aggregate Core destruction.
 
-Remaining source cleanup may refine to Core destruction only where the lower destruction domain is non-empty. Ending ownership of a zero-leaf source value may refine to no Core `Drop`.
+Remaining source cleanup may refine to Core destruction only where the lower destruction domain is non-empty. Ending ownership of a zero-leaf source value may refine to no Core `Drop`; emitting an invalid lower destruction operation merely to materialize source ownership is not required.
 
 A compiler temporary used for a producer-backed scrutinee is not a source binding. Core path state, scalar liveness, copyability, local numbering, and destruction domains are not source pattern/structural ownership authority.
 
