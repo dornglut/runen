@@ -215,7 +215,7 @@ The target's declared source type is the required type supplied to an RHS produc
 For a source-valid assignment, execution is **source-first** with respect to replacement:
 
 1. evaluate the RHS completely;
-2. preserve every ownership transition caused by that evaluation;
+2. preserve every ownership transition caused while evaluating that RHS;
 3. preserve the successfully produced RHS value outside the target's old-value cleanup set until replacement transfer;
 4. only after successful RHS production, select the target binding's then-current complete-root remaining ownership frontier under `structural-ownership.md`;
 5. clean each frontier source subvalue exactly once in canonical frontier order;
