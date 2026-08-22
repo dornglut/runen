@@ -173,25 +173,57 @@ fn direct_else_if_is_rejected_but_nested_if_in_else_block_is_valid() {
 }
 
 #[test]
-fn nested_return_remains_rejected_and_following_if_is_preserved() {
-    let source = "fn bad(flag: Bool) { if flag { return; if flag {} } }";
+fn terminal_returns_are_accepted_in_conditional_arms() {
+    let source = "fn choose(flag: Bool) -> I64 { if flag { return 1; } else { return 2; } }";
     let parsed = parse(source);
+
     assert_eq!(parsed.text(), source);
-    assert!(!parsed.errors().is_empty());
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(
         parsed
             .syntax()
             .descendants()
-            .filter(|node| node.kind() == SyntaxKind::IfStatement)
+            .filter(|node| node.kind() == SyntaxKind::ReturnStatement)
             .count(),
         2
     );
 }
 
 #[test]
-fn missing_then_close_preserves_else_boundary() {
-    let source = "fn broken(flag: Bool) { if flag { sink(); else { other(); } kept(); }";
+fn nested_return_is_terminal_and_following_if_is_recovered_losslessly() {
+    let source = "fn bad(flag: Bool) { if flag { return; if flag {} } }";
     let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| error.kind() == SyntaxErrorKind::UnexpectedAfterReturn)
+    );
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::ReturnStatement)
+            .count(),
+        1
+    );
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::IfStatement)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn missing_then_close_after_return_preserves_else_boundary() {
+    let source = "fn broken(flag: Bool) { if flag { return; else { other(); } kept(); }";
+    let parsed = parse(source);
+
     assert_eq!(parsed.text(), source);
     assert!(
         parsed
@@ -210,6 +242,12 @@ fn missing_then_close_preserves_else_boundary() {
             .filter(|node| node.kind() == SyntaxKind::BlockStatement)
             .count(),
         2
+    );
+    assert!(
+        parsed
+            .syntax()
+            .descendants()
+            .any(|node| node.kind() == SyntaxKind::ReturnStatement)
     );
     assert!(
         parsed

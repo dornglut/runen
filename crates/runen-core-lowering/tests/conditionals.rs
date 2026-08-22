@@ -3,7 +3,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    IntrinsicType, ModuleId, SourceUnit, Statement as HirStatement, Type, build_typed_hir,
+    CleanupPath, IntrinsicType, ModuleId, SourceUnit, Statement as HirStatement, Type,
+    build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -228,5 +229,176 @@ fn lowering_consumes_retained_source_join_fact_without_rederiving_it() {
             .blocks
             .iter()
             .any(|block| matches!(block.terminator, Terminator::Branch { .. }))
+    );
+}
+
+#[test]
+fn returning_arm_has_no_normal_edge_and_sole_normal_arm_carries_following_source() {
+    let lowered = lower_source(
+        "fn sink(value: I64) {} \
+         fn f(flag: Bool, value: I64) { \
+             if flag { return; } else {} \
+             sink(value); \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Branch {
+        true_target,
+        false_target,
+        ..
+    } = f.body.blocks[0].terminator
+    else {
+        panic!("entry must branch");
+    };
+
+    assert!(matches!(
+        f.body.blocks[true_target.0 as usize].terminator,
+        Terminator::Return(None)
+    ));
+    assert!(matches!(
+        f.body.blocks[false_target.0 as usize].terminator,
+        Terminator::Call { .. }
+    ));
+    assert!(
+        !f.body
+            .blocks
+            .iter()
+            .any(|block| matches!(block.terminator, Terminator::Goto(_))),
+        "one-normal conditional does not need a synthetic join edge"
+    );
+}
+
+#[test]
+fn sole_normal_arm_cleanup_precedes_following_source_on_that_path() {
+    let lowered = lower_source(
+        "record Box { value: I64 } \
+         fn sink(value: I64) {} \
+         fn f(flag: Bool, value: I64) { \
+             if flag { return; } else { let child: Box = Box { value: value }; } \
+             sink(value); \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Branch { false_target, .. } = f.body.blocks[0].terminator else {
+        panic!("entry must branch");
+    };
+    let normal = &f.body.blocks[false_target.0 as usize];
+
+    assert!(
+        normal
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, CoreStatement::Drop { .. }))
+    );
+    assert!(matches!(normal.terminator, Terminator::Call { .. }));
+}
+
+#[test]
+fn two_returning_arms_create_no_join_or_synthetic_root_return() {
+    let lowered = lower_source(
+        "fn f(flag: Bool) -> I64 { \
+             if flag { return 1; } else { return 2; } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    assert_eq!(f.body.blocks.len(), 3);
+    assert_eq!(
+        f.body
+            .blocks
+            .iter()
+            .filter(|block| matches!(block.terminator, Terminator::Branch { .. }))
+            .count(),
+        1
+    );
+    assert_eq!(
+        f.body
+            .blocks
+            .iter()
+            .filter(|block| matches!(block.terminator, Terminator::Return(Some(_))))
+            .count(),
+        2
+    );
+    assert!(!f.body.blocks.iter().any(|block| matches!(
+        block.terminator,
+        Terminator::Goto(_) | Terminator::Return(None)
+    )));
+}
+
+#[test]
+fn omitted_else_is_the_direct_normal_target_when_then_returns() {
+    let lowered = lower_source(
+        "fn sink(value: I64) {} \
+         fn f(flag: Bool, value: I64) { \
+             if flag { return; } \
+             sink(value); \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Branch {
+        true_target,
+        false_target,
+        ..
+    } = f.body.blocks[0].terminator
+    else {
+        panic!("entry must branch");
+    };
+
+    assert!(matches!(
+        f.body.blocks[true_target.0 as usize].terminator,
+        Terminator::Return(None)
+    ));
+    assert!(matches!(
+        f.body.blocks[false_target.0 as usize].terminator,
+        Terminator::Call { .. }
+    ));
+}
+
+#[test]
+fn lowering_rejects_normal_cleanup_on_no_normal_block() {
+    let mut compilation = hir("fn f(flag: Bool) { \
+             if flag { let child: I64 = 1; return; } else { return; } \
+         }");
+    let f = compilation
+        .functions
+        .iter_mut()
+        .find(|function| function.name == "f")
+        .expect("function f");
+    let HirStatement::If { then_block, .. } = &mut f.body.statements[0] else {
+        panic!("expected HIR conditional");
+    };
+    let HirStatement::Local { binding, .. } = &then_block.statements[0] else {
+        panic!("expected then-arm local");
+    };
+    then_block.normal_cleanup.push(CleanupPath {
+        binding: *binding,
+        fields: Vec::new(),
+    });
+
+    assert_eq!(
+        lower(&compilation),
+        Err(LoweringError::InvalidHirInvariant(
+            "no-normal HIR block retains normal cleanup"
+        ))
+    );
+}
+
+#[test]
+fn lowering_rejects_retained_continuation_that_disagrees_with_sequence() {
+    let mut compilation = hir("fn f(flag: Bool) { \
+             if flag { return; } else { return; } \
+         }");
+    let f = compilation
+        .functions
+        .iter_mut()
+        .find(|function| function.name == "f")
+        .expect("function f");
+    f.body.has_normal_continuation = true;
+
+    assert_eq!(
+        lower(&compilation),
+        Err(LoweringError::InvalidHirInvariant(
+            "HIR retained continuation disagrees with its statement sequence"
+        ))
     );
 }

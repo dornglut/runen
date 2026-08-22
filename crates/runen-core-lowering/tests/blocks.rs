@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    Function as CoreFunction, LocalId, Place, PlaceAccess, Statement as CoreStatement, Terminator,
-    ValidatedProgram,
+    Function as CoreFunction, LocalId, Operand, Place, PlaceAccess, Statement as CoreStatement,
+    Terminator, ValidatedProgram,
 };
 use runen_core_lowering::lower;
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
@@ -308,4 +308,59 @@ fn future_source_local_precedes_temporaries_but_initializes_only_after_call_cont
     assert!(f.body.blocks[target.0 as usize].statements.iter().any(
         |statement| matches!(statement, CoreStatement::Init { dst, .. } if dst.local == LocalId(2))
     ));
+}
+
+#[test]
+fn nested_no_result_return_skips_normal_block_cleanup() {
+    let lowered = lower_source("fn f() { { let child: I64 = 1; return; } }");
+    let f = function(lowered.as_program(), "f");
+
+    assert!(drop_sequence(f).is_empty());
+    assert!(
+        f.body
+            .blocks
+            .iter()
+            .any(|block| matches!(block.terminator, Terminator::Return(None)))
+    );
+}
+
+#[test]
+fn nested_result_return_lowers_exact_result_operand() {
+    let lowered = lower_source("fn f(value: I64) -> I64 { { return value; } }");
+    let f = function(lowered.as_program(), "f");
+
+    assert!(f.body.blocks.iter().any(|block| matches!(
+        block.terminator,
+        Terminator::Return(Some(Operand::Move(PlaceAccess::Direct(_))))
+    )));
+}
+
+#[test]
+fn direct_call_nested_return_returns_from_call_continuation() {
+    let lowered = lower_source(
+        "fn make() -> I64 { return 1; } \
+         fn f() -> I64 { { return make(); } }",
+    );
+    let f = function(lowered.as_program(), "f");
+
+    let (target, destination) = f
+        .body
+        .blocks
+        .iter()
+        .find_map(|block| match &block.terminator {
+            Terminator::Call {
+                target,
+                destination: Some(destination),
+                ..
+            } => Some((*target, destination.clone())),
+            _ => None,
+        })
+        .expect("return producer call");
+    let continuation = &f.body.blocks[target.0 as usize];
+    let Terminator::Return(Some(Operand::Move(PlaceAccess::Direct(returned)))) =
+        &continuation.terminator
+    else {
+        panic!("call continuation must return the produced result");
+    };
+    assert_eq!(returned, &destination);
 }

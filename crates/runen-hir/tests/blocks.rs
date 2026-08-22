@@ -50,6 +50,8 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
     let f = function(&hir, "f");
 
     let first = block(&f.body.statements[0]);
+    assert!(first.has_normal_continuation);
+    assert!(first.terminal_return.is_none());
     let Statement::Local {
         binding: first_a, ..
     } = &first.statements[0]
@@ -76,6 +78,7 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
     };
     assert_ne!(*first_a, *second_a);
     assert_eq!(second.normal_cleanup, vec![cleanup(*second_a, &[])]);
+    assert!(f.body.has_normal_continuation);
 }
 
 #[test]
@@ -152,6 +155,7 @@ fn consumed_child_local_is_omitted_from_normal_cleanup() {
     let child = block(&f.body.statements[0]);
 
     assert!(child.normal_cleanup.is_empty());
+    assert!(child.has_normal_continuation);
 }
 
 #[test]
@@ -262,4 +266,68 @@ fn recursively_nested_blocks_retain_independent_cleanup_selections() {
 
     assert_eq!(inner.normal_cleanup, vec![cleanup(*inner_binding, &[])]);
     assert_eq!(outer.normal_cleanup, vec![cleanup(*outer_binding, &[])]);
+}
+
+#[test]
+fn returning_nested_block_retains_return_and_no_normal_cleanup() {
+    let hir = build("fn f() { { let child: I64 = 1; return; } }")
+        .expect("terminal nested return must validate");
+    let f = function(&hir, "f");
+    let child = block(&f.body.statements[0]);
+
+    assert!(!child.has_normal_continuation);
+    assert!(child.terminal_return.is_some());
+    assert!(child.normal_cleanup.is_empty());
+    assert!(!f.body.has_normal_continuation);
+    assert!(f.body.terminal_return.is_none());
+}
+
+#[test]
+fn nested_result_return_satisfies_root_result_obligation() {
+    let hir = build("fn f(value: I64) -> I64 { { return value; } }")
+        .expect("nested result return terminates the activation");
+    let f = function(&hir, "f");
+    let child = block(&f.body.statements[0]);
+
+    assert!(!child.has_normal_continuation);
+    assert!(
+        child
+            .terminal_return
+            .as_ref()
+            .and_then(|returned| returned.value.as_ref())
+            .is_some()
+    );
+    assert!(!f.body.has_normal_continuation);
+}
+
+#[test]
+fn nested_return_preserves_result_value_presence_rules() {
+    let missing = build("fn f() -> I64 { { return; } }")
+        .expect_err("result-bearing nested return requires a value");
+    assert!(has_diagnostic(
+        &missing,
+        DiagnosticKind::ExpectedResultValue
+    ));
+
+    let unexpected = build("fn f() { { return 1; } }")
+        .expect_err("no-result nested return cannot carry a value");
+    assert!(has_diagnostic(
+        &unexpected,
+        DiagnosticKind::UnexpectedResultValue
+    ));
+}
+
+#[test]
+fn semantic_unreachable_after_returning_block_is_not_validated() {
+    let errors = build("fn f() { { return; } missing(); }")
+        .expect_err("sibling after a no-normal block must be unreachable");
+
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnreachableStatement
+    ));
+    assert!(
+        !has_diagnostic(&errors, DiagnosticKind::UnresolvedName),
+        "unreachable sibling must not be semantically validated"
+    );
 }

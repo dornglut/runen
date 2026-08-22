@@ -265,11 +265,13 @@ pub struct CleanupPath {
     pub fields: Vec<usize>,
 }
 
-/// One resolved nested lexical block and its validated normal-exit cleanup order.
+/// One resolved nested lexical block and its validated source-continuation facts.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Block {
     pub statements: Vec<Statement>,
+    pub terminal_return: Option<Return>,
     pub normal_cleanup: Vec<CleanupPath>,
+    pub has_normal_continuation: bool,
     pub location: SourceLocation,
 }
 
@@ -304,7 +306,7 @@ pub enum Statement {
     If {
         condition: Value,
         then_block: Block,
-        else_block: Option<Block>,
+        else_block: Option<Box<Block>>,
         location: SourceLocation,
     },
 }
@@ -321,6 +323,7 @@ pub struct Return {
 pub struct Body {
     pub statements: Vec<Statement>,
     pub terminal_return: Option<Return>,
+    pub has_normal_continuation: bool,
 }
 
 /// One resolved source function entity and its typed body.
@@ -402,6 +405,7 @@ pub enum DiagnosticKind {
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
     ConditionalOwnershipMismatch,
+    UnreachableStatement,
     MissingResultReturn,
     ExpectedResultValue,
     UnexpectedResultValue,
