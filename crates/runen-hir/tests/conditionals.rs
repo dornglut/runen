@@ -56,12 +56,14 @@ fn retains_exact_bool_condition_and_explicit_arm_blocks() {
     assert_eq!(ownership, OwnedUse::Duplicate);
     assert!(then_block.statements.is_empty());
     assert!(then_block.normal_cleanup.is_empty());
+    assert!(then_block.has_normal_continuation);
     assert!(
         else_block
             .expect("explicit else block")
             .normal_cleanup
             .is_empty()
     );
+    assert!(else_block.expect("explicit else block").has_normal_continuation);
 }
 
 #[test]
@@ -383,4 +385,84 @@ fn post_join_field_use_observes_the_committed_single_structural_state() {
         &errors,
         DiagnosticKind::UnavailableFieldValue
     ));
+}
+
+#[test]
+fn returning_outcome_is_not_compared_with_sole_normal_outcome() {
+    build(
+        "record Ticket {} \
+         fn f(flag: Bool, value: Ticket) -> Ticket { \
+             if flag { return value; } else {} \
+             return value; \
+         }",
+    )
+    .expect("returning ownership need not equal the sole normal outcome");
+}
+
+#[test]
+fn returning_then_with_omitted_else_commits_unchanged_false_state() {
+    build(
+        "record Ticket {} \
+         fn f(flag: Bool, value: Ticket) -> Ticket { \
+             if flag { return value; } \
+             return value; \
+         }",
+    )
+    .expect("omitted else is the sole unchanged normal outcome when then returns");
+}
+
+#[test]
+fn two_returning_arms_remove_normal_continuation_and_satisfy_result_obligation() {
+    let hir = build(
+        "fn f(flag: Bool, value: I64) -> I64 { \
+             if flag { return value; } else { return value; } \
+         }",
+    )
+    .expect("two returning arms terminate every represented static path");
+    let f = function(&hir, "f");
+    let (_, then_block, else_block) = conditional(&f.body.statements[0]);
+
+    assert!(!then_block.has_normal_continuation);
+    assert!(!else_block.expect("explicit else").has_normal_continuation);
+    assert!(!f.body.has_normal_continuation);
+    assert!(f.body.terminal_return.is_none());
+}
+
+#[test]
+fn one_remaining_normal_path_without_later_return_still_requires_result() {
+    let errors = build("fn f(flag: Bool) -> I64 { if flag { return 1; } else {} }")
+        .expect_err("normal root-end path still requires a result return");
+
+    assert!(has_diagnostic(&errors, DiagnosticKind::MissingResultReturn));
+}
+
+#[test]
+fn semantic_unreachable_after_zero_normal_conditional_is_not_validated() {
+    let errors = build("fn f(flag: Bool) { if flag { return; } else { return; } missing(); }")
+        .expect_err("sibling after zero-normal conditional must be unreachable");
+
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnreachableStatement
+    ));
+    assert!(
+        !has_diagnostic(&errors, DiagnosticKind::UnresolvedName),
+        "unreachable sibling must not be semantically validated"
+    );
+}
+
+#[test]
+fn nested_zero_one_two_normal_composition_is_recursive() {
+    let hir = build(
+        "fn f(a: Bool, b: Bool, value: I64) -> I64 { \
+             if a { \
+                 if b { return value; } else { return value; } \
+             } else { \
+                 return value; \
+             } \
+         }",
+    )
+    .expect("nested zero-normal conditional composes into the outer arm");
+
+    assert!(!function(&hir, "f").body.has_normal_continuation);
 }
