@@ -132,7 +132,10 @@ fn build() -> Pair {
         .descendants()
         .find(|node| {
             node.kind() == SyntaxKind::FieldValueUse
-                && node.text().to_string().contains("dep::Pair { left: 4 }.left")
+                && node
+                    .text()
+                    .to_string()
+                    .contains("dep::Pair { left: 4 }.left")
         })
         .expect("qualified-construction-backed field use");
     assert!(
@@ -161,16 +164,17 @@ fn qualified_construction_backed_field_use_is_a_condition_but_bare_construction_
 
     let rejected = parse("import dep; fn f() { if dep::Flag {} { let value: Bool = true; } }");
     assert!(!rejected.errors().is_empty());
-    assert!(!rejected
-        .syntax()
-        .descendants()
-        .any(|node| node.kind() == SyntaxKind::RecordConstruction));
+    assert!(
+        !rejected
+            .syntax()
+            .descendants()
+            .any(|node| node.kind() == SyntaxKind::RecordConstruction)
+    );
 }
 
 #[test]
 fn qualified_construction_is_syntactically_available_as_pattern_scrutinee_only() {
-    let source =
-        "import dep; record Pair { left: I8 } fn f() { let Pair { left: value } = dep::Pair { left: 1 }; }";
+    let source = "import dep; record Pair { left: I8 } fn f() { let Pair { left: value } = dep::Pair { left: 1 }; }";
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
@@ -240,16 +244,13 @@ fn missing_constructor_close_preserves_later_body_and_top_level_constructs() {
         let parsed = parse(source);
 
         assert_eq!(parsed.text(), source);
-        assert!(
-            parsed.errors().iter().any(|error| {
-                error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
-            })
-        );
+        assert!(parsed.errors().iter().any(|error| {
+            error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
+        }));
 
         let root = parsed.syntax();
         assert!(root.descendants().any(|node| {
-            node.kind() == SyntaxKind::LocalDeclaration
-                && node.text().to_string().contains("later")
+            node.kind() == SyntaxKind::LocalDeclaration && node.text().to_string().contains("later")
         }));
         assert!(root.descendants().any(|node| {
             node.kind() == SyntaxKind::RecordDefinition && node.text().to_string().contains("Next")
