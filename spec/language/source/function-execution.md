@@ -76,7 +76,7 @@ A source-valid producer-backed field-value producer instead completes the receiv
 
 A source-valid producer-backed field-value use consumes from `field-access.md` the already validated receiver category, complete receiver producer, exact receiver type, complete resolved non-empty field path, exact final result type, duplicate-or-consume consequence, and canonical remaining-frontier cleanup paths.
 
-The surrounding receiving position's required source type applies to the final selected field result. It does not replace the receiver producer's own exact result type. A direct-call receiver therefore executes against the result type selected from its resolved callable signature, and a record-construction receiver executes against its explicit nominal target type.
+The surrounding receiving position's required source type applies to the final selected field result. It does not replace the receiver producer's own exact result type. A direct-call receiver therefore executes against the result type selected from its resolved callable signature, and a record-construction receiver executes against its explicit resolved nominal target type, whether the concrete target was unqualified or qualified.
 
 For one producer-backed field-value use, execution is exactly:
 
@@ -101,11 +101,15 @@ The complete field-receiver transient lifecycle finishes before an enclosing loc
 
 ## Record construction
 
-A source-valid represented record construction has one resolved same-module nominal record target and one named initializer for every declared field as mapped by `concrete-syntax.md`.
+A source-valid represented record construction has one resolved nominal record target and one named initializer for every declared field as mapped by `concrete-syntax.md`. The target may have been selected by the accepted unqualified same-module construction lookup or by the accepted one-hop qualified cross-module lookup; target qualification has no dynamic execution role after source validation.
 
-Construction produces exactly one owned source value of that nominal record type. The target is explicit rather than inferred. When an enclosing consumer supplies a required source type, the construction result MUST be exactly equal to that type under `types.md`.
+Before construction execution begins, source validation has already established the complete static construction boundary: target alias/member lookup where applicable, target binding accessibility and record category, exact nominal result type, every initializer field identity, direct field accessibility for every known initializer under `field-access.md`, duplicate status, exhaustive field coverage, and exact surrounding required-type equality when a receiver supplies one. A rejection of any of those facts evaluates no initializer and commits no initializer-producer ownership consequence.
 
-Each initializer is associated with one selected declaration field. That field's source type is the required type supplied to the initializer's `Value` producer. The produced field value MUST have exactly that type; no conversion, coercion, widening, narrowing, defaulting, or inference is introduced.
+Construction produces exactly one owned source value of the resolved nominal record type. The target is explicit rather than inferred. When an enclosing consumer supplies a required source type, the construction result MUST be exactly equal to that type under `types.md`.
+
+Each initializer is associated with one already resolved and accessible declaration field. That field's source type is the required type supplied to the initializer's `Value` producer. The produced field value MUST have exactly that type; no conversion, coercion, widening, narrowing, defaulting, or inference is introduced.
+
+For a same-module target, private and exported fields are both directly accessible under `field-access.md`. For a qualified foreign target, the target record binding is already exported through qualified lookup and each explicitly initialized field must independently have exported direct accessibility. Because construction remains exhaustive, a foreign exported record with any module-private field has no source-valid qualified construction through this form. A zero-field exported foreign record has no initializer-access check and may construct directly when its target lookup/result-type requirements hold.
 
 A represented decimal integer literal used as a field initializer materializes under that selected field type through `literals.md`. This is the same required-type materialization relation used by existing value consumers and does not create a conversion or inferred constructor target.
 
@@ -137,9 +141,13 @@ For a zero-field record there are no initializer producers/transients; successfu
 
 A result-bearing call, nested construction, or producer-backed field-value use used as an initializer must complete before that field transient exists and before a later initializer begins.
 
-The completed record value may be transferred into ordinary local initialization, assignment RHS, direct-call argument, return result, enclosing construction field, a bounded producer-backed field-value receiver, or a producer-backed recursive record-pattern scrutinee. Those receiving relations keep their existing outer ordering and exact-type requirements.
+The completed record value may be transferred into ordinary local initialization, assignment RHS, direct-call argument, return result, enclosing construction field, a bounded producer-backed field-value receiver, or a producer-backed recursive record-pattern scrutinee. Those receiving relations keep their existing outer ordering and exact-type requirements. A qualified construction therefore composes through these existing receiving relations without defining a second execution category.
 
-This relation adds no field access/assignment, partial-field reinitialization, pattern selection, update/spread/default initialization, shorthand, positive duplicability selection, method/constructor body, or cross-module construction contract.
+When a qualified construction is used as a producer-backed field receiver, the outer field-value transaction owned by `field-access.md` establishes its field receiver/path/result facts before this construction may commit initializer ownership. When a qualified construction appears as a record-pattern scrutinee producer, the pattern's same-module head and exact top-type relation remain controlling; qualification does not create a qualified pattern head.
+
+Target qualification is source lookup only. It creates no runtime module loading, dynamic access check, ABI/layout/linkage consequence, constructor function, or distinct constructed-value identity. A faithful typed representation may discard the qualified-vs-unqualified target category after retaining the resolved record identity and initializer facts.
+
+This relation adds no field assignment, partial-field reinitialization, pattern selection, update/spread/default initialization, shorthand, positive duplicability selection, method/constructor body, public-constructor capability, or constructor-specific visibility class.
 
 ## Direct-call arguments
 
@@ -147,7 +155,7 @@ A represented direct call has exactly one ordered argument operand for each call
 
 Each argument evaluation MUST produce one owned source value whose type equals exactly the corresponding parameter source type. This revision introduces no implicit conversion, coercion, widening, narrowing, subtyping, or numeric defaulting.
 
-The parameter type is the required source type supplied to a producer that needs contextual typing. Decimal integer arguments therefore materialize under the corresponding parameter type through `literals.md`; this does not create a conversion or inference relation.
+The parameter type is the required source type supplied to a producer that needs one. Decimal integer arguments therefore materialize under the corresponding parameter type through `literals.md`; this does not create a conversion or inference relation.
 
 Arguments evaluate left to right.
 
@@ -209,16 +217,19 @@ A direct zero-field or recursively empty nested pattern contributes no binding l
 For a producer-backed category:
 
 1. complete recursive pattern structure and introduced-binding validity before producer evaluation;
-2. evaluate the selected direct-call, record-construction, or field-value producer completely using the top pattern head's nominal record type as the exact required type and the pre-pattern-binding lexical environment;
-3. when that producer is a producer-backed field-value use, complete its field-receiver production, selected-result preservation, remaining-frontier cleanup, and field-receiver transient ending before the resulting owned record can become the pattern scrutinee;
-4. if producer evaluation faults or diverges, perform no pattern leaf production and establish no pattern scrutinee transient;
-5. on producer success, transfer the produced record into one fully owned pattern scrutinee transient whose structural ownership state begins complete;
-6. apply pattern-owned binding-leaf `Duplicate`/`Consume` productions in retained depth-first source order;
-7. after every binding leaf has been produced, clean the transient's remaining structural ownership frontier selected by `patterns.md` through `structural-ownership.md` exactly once;
-8. only after transient cleanup completes, establish all pattern-introduced bindings in the containing lexical scope together; and
-9. only then may the next body statement begin.
+2. validate the selected direct-call, record-construction, or field-value producer using the top pattern head's nominal record type as the exact required type and the pre-pattern-binding lexical environment;
+3. only after that complete producer is source-valid, evaluate it completely;
+4. when that producer is a producer-backed field-value use, complete its field-receiver production, selected-result preservation, remaining-frontier cleanup, and field-receiver transient ending before the resulting owned record can become the pattern scrutinee;
+5. if producer evaluation faults or diverges, perform no pattern leaf production and establish no pattern scrutinee transient;
+6. on producer success, transfer the produced record into one fully owned pattern scrutinee transient whose structural ownership state begins complete;
+7. apply pattern-owned binding-leaf `Duplicate`/`Consume` productions in retained depth-first source order;
+8. after every binding leaf has been produced, clean the transient's remaining structural ownership frontier selected by `patterns.md` through `structural-ownership.md` exactly once;
+9. only after transient cleanup completes, establish all pattern-introduced bindings in the containing lexical scope together; and
+10. only then may the next body statement begin.
 
-The pattern scrutinee transient is not a local binding and does not participate in lexical/activation cleanup after step 7. A field-receiver transient internal to the producer is a separate earlier transient and likewise never participates in pattern-transient cleanup.
+A qualified foreign record construction may be syntactically one selected producer, but under the current pattern owner it cannot become source-valid against an unqualified same-module top pattern head because exact nominal type equality is required. That rejection therefore occurs during producer validation before any constructor initializer evaluates or commits ownership.
+
+The pattern scrutinee transient is not a local binding and does not participate in lexical/activation cleanup after step 8. A field-receiver transient internal to the producer is a separate earlier transient and likewise never participates in pattern-transient cleanup.
 
 Successful leaf production and pattern-transient cleanup introduce no new defined-fault or divergence outcome after producer success under the represented relation.
 
@@ -412,7 +423,7 @@ Recoverable domain/application failures represented as ordinary values remain or
 
 ## Transient-value cleanup
 
-Construction transients produced before a later initializer fault are cleaned in reverse construction production/source order before the same fault continues. Once transferred into a successful record result, they are no longer independently owned.
+Construction transients produced before a later initializer fault are cleaned in reverse construction production/source order before the same fault continues. Once transferred into a successful record result, they are no longer independently owned. Target qualification does not alter this transient lifecycle.
 
 Argument transients produced before a later argument fault are cleaned in reverse production order before the fault continues in the caller.
 
@@ -432,7 +443,7 @@ This revision defines no general temporary lifetime extension, expression-statem
 
 ## Divergence
 
-If a record-construction initializer diverges, the construction remains suspended in that initializer. Earlier construction transients and completed ownership transitions remain; no construction/activation/scope cleanup occurs merely because execution continues.
+If a record-construction initializer diverges, the construction remains suspended in that initializer. Earlier construction transients and completed ownership transitions remain; no construction/activation/scope cleanup occurs merely because execution continues. This is identical for unqualified and qualified construction because target/accessibility validation completed before initializer evaluation began.
 
 If a directly called callee diverges, the caller remains suspended at that call and performs no return/fault cleanup merely because time passes.
 
@@ -454,17 +465,19 @@ A binding-root field-value production is non-faulting/non-diverging after source
 
 Pattern binding-leaf production is non-faulting/non-diverging after source validation and any producer completion. Its source-ordered non-duplicable leaf transfers are ownership transitions whose consequences are visible to later leaves and statements.
 
-Record assembly after successful initializer evaluation is effect-free. Initializer source order, rather than declaration field order, remains producer-effect ordering authority.
+Record assembly after successful initializer evaluation is effect-free. Initializer source order, rather than declaration field order, remains producer-effect ordering authority. Target qualification is resolved statically and adds no runtime effect or ordering point.
 
 This revision defines no source effect system, purity, effect inference, speculation legality, or general transformation rules.
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns represented concrete grammar. `literals.md` owns boolean/integer materialization. `structural-ownership.md` owns structural paths/state/availability/frontiers. `field-access.md` owns binding-root and bounded producer-backed receiver selection, field accessibility, source-selected final-field duplicate-or-consume production, and producer-receiver remaining-frontier facts. `patterns.md` owns recursive record-pattern structure, binding-leaf facts/order, direct-root ownership production, producer-transient ownership transitions, and pattern-transient frontier selection. `local-bindings.md` owns binding identity/scope/lookup/mutability/lifecycle and whole-binding use/assignment legality. `control-flow.md` owns represented conditional selection, arm validation, and definite normal conditional ownership.
+`concrete-syntax.md` owns represented concrete grammar, including unqualified and qualified record-construction targets. `literals.md` owns boolean/integer materialization. `structural-ownership.md` owns structural paths/state/availability/frontiers. `field-access.md` owns binding-root and bounded producer-backed receiver selection, direct field accessibility consumed by field selection and construction initializers, source-selected final-field duplicate-or-consume production, and producer-receiver remaining-frontier facts. `patterns.md` owns recursive record-pattern structure, binding-leaf facts/order, direct-root ownership production, producer-transient ownership transitions, and pattern-transient frontier selection. `local-bindings.md` owns binding identity/scope/lookup/mutability/lifecycle and whole-binding use/assignment legality. `control-flow.md` owns represented conditional selection, arm validation, and definite normal conditional ownership.
 
 Floating literals, operators, general expressions, arbitrary assignment places, loops, unrestricted nonterminal-within-block return, arbitrary-receiver members, refutable/rest/shorthand pattern categories, additional producer-backed scrutinee families, and other source forms remain outside this execution relation.
 
 The represented construction, bounded producer-backed field-value, recursive pattern, partial-ownership cleanup, return, and existing producer execution relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, normal-continuation presence, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements and the separately owned conditional requirements through accepted Core semantics rather than use Core representation behavior as source authority.
+
+Record-construction target qualification is fully discharged by source validation. A faithful HIR requires only the resolved nominal record identity, resolved initializer field identities/types, validated initializer values, and source location already needed by construction; it need not retain whether the source target was unqualified or qualified. Existing record-construction lowering therefore remains sufficient and MUST NOT introduce Core module/visibility metadata or runtime access checks merely for qualification.
 
 After source validation, duplicating binding-root field use may refine to projected Core `Copy`, consuming binding-root field use to projected `Move`, and whole-binding replacement to source-first Core `Assign`. A producer-backed field-value use may lower its retained receiver producer through the existing value lowering relation, use the produced compiler-owned receiver local as the structural root, project the retained path, preserve the selected result through the retained `Copy`/`Move` consequence, and emit cleanup only for the retained source-selected receiver remaining frontier before returning the result temporary to its enclosing lower context. Lowering MUST NOT inspect Core path liveness or initialization state to choose the source duplicate/consume consequence or receiver cleanup frontier.
 
@@ -480,4 +493,4 @@ No parser, lossless syntax, typed HIR, Core MIR production lowering, runtime, or
 
 ## Further boundaries
 
-This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, conditional expressions, unequal-state/path-dependent two-normal-outcome conditional joins, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable-match control flow, field assignment/partial-field reinitialization, arbitrary value/expression field receivers beyond the bounded direct-call/record-construction receiver set, general postfix/member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified/cross-module construction or pattern heads, field visibility modifiers, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
+This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, conditional expressions, unequal-state/path-dependent two-normal-outcome conditional joins, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable-match control flow, field assignment/partial-field reinitialization, arbitrary value/expression field receivers beyond the bounded direct-call/record-construction receiver set, general postfix/member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified/cross-module pattern heads, additional field accessibility classes beyond the represented module-private/exported relation, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
