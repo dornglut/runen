@@ -11,7 +11,10 @@ fn reserves_if_and_else_without_splitting_longer_identifiers() {
     assert_eq!(user_identifier_key("if"), None);
     assert_eq!(user_identifier_key("else"), None);
     assert_eq!(user_identifier_key("ifonly").as_deref(), Some("ifonly"));
-    assert_eq!(user_identifier_key("elsewhere").as_deref(), Some("elsewhere"));
+    assert_eq!(
+        user_identifier_key("elsewhere").as_deref(),
+        Some("elsewhere")
+    );
 
     let parsed = parse("fn ifonly(elsewhere: Bool) { if elsewhere {} }");
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -191,9 +194,10 @@ fn missing_then_close_preserves_else_boundary() {
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(
-        parsed.errors().iter().any(|error| {
-            error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
-        })
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
     );
     let conditional = parsed
         .syntax()
