@@ -2058,6 +2058,12 @@ fn validate_field_value_use(
     })
 }
 
+fn record_field_is_accessible(module: ModuleId, record: &Record, field: usize) -> bool {
+    record.module == module
+        || (record.accessibility == Accessibility::Exported
+            && record.fields[field].accessibility == Accessibility::Exported)
+}
+
 fn resolve_field_path(
     header: &FunctionHeader,
     selectors: &[SyntaxToken],
@@ -2094,10 +2100,7 @@ fn resolve_field_path(
             return None;
         };
 
-        if record_decl.module != header.module
-            && (record_decl.accessibility != Accessibility::Exported
-                || record_decl.fields[field].accessibility != Accessibility::Exported)
-        {
+        if !record_field_is_accessible(header.module, record_decl, field) {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InaccessibleRecordField,
                 location: selector_location,
@@ -2117,6 +2120,28 @@ fn resolve_record_construction_target(
     context: &BodyResolutionContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<RecordId> {
+    if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        return match resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )? {
+            EntityId::Record(record) => Some(record),
+            EntityId::Function(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRecordType,
+                    location: location(header.unit, &qualified),
+                });
+                None
+            }
+        };
+    }
+
     let target_token = direct_token(node, SyntaxKind::Ident);
     let target_name = key(&target_token);
     let target_location = SourceLocation {
@@ -2184,6 +2209,14 @@ fn validate_record_construction(
             structurally_valid = false;
             continue;
         };
+
+        if !record_field_is_accessible(header.module, record_decl, field) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InaccessibleRecordField,
+                location: initializer_location,
+            });
+            structurally_valid = false;
+        }
 
         if !seen.insert(field) {
             diagnostics.push(Diagnostic {

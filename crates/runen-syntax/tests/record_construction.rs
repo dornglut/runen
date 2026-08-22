@@ -63,11 +63,146 @@ fn reordered_initializers_retain_source_order_as_explicit_nodes() {
 }
 
 #[test]
-fn qualified_and_standalone_construction_are_not_silently_accepted() {
-    let qualified =
-        parse("record Pair { left: I8 } fn f() -> Pair { return other::Pair { left: 1 }; }");
-    assert!(!qualified.errors().is_empty());
+fn qualified_construction_reuses_qualified_member_and_stays_distinct_from_call() {
+    let source = r#"
+import dep;
+record Pair { left: I8 }
+fn f() -> Pair { return dep::Pair { left: 1 }; }
+fn g() -> Pair { return dep::make(); }
+"#;
+    let parsed = parse(source);
 
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let root = parsed.syntax();
+    let construction = root
+        .descendants()
+        .find(|node| node.kind() == SyntaxKind::RecordConstruction)
+        .expect("qualified record construction");
+    assert_eq!(
+        construction
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::QualifiedModuleMember)
+            .count(),
+        1
+    );
+    assert_eq!(
+        construction
+            .children()
+            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .count(),
+        0
+    );
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn qualified_construction_composes_in_value_and_field_receiver_positions() {
+    let source = r#"
+import dep;
+record Pair { left: I8 }
+fn sink(value: Pair) {}
+fn build() -> Pair {
+    let mut value: Pair = dep::Pair { left: 1 };
+    value = dep::Pair { left: 2 };
+    sink(dep::Pair { left: 3 });
+    let selected: I8 = dep::Pair { left: 4 }.left;
+    return dep::Pair { left: dep::Pair { left: 5 }.left };
+}
+"#;
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+
+    let root = parsed.syntax();
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::RecordConstruction)
+            .count(),
+        6
+    );
+    let field_use = root
+        .descendants()
+        .find(|node| {
+            node.kind() == SyntaxKind::FieldValueUse
+                && node
+                    .text()
+                    .to_string()
+                    .contains("dep::Pair { left: 4 }.left")
+        })
+        .expect("qualified-construction-backed field use");
+    assert!(
+        field_use
+            .children()
+            .any(|node| node.kind() == SyntaxKind::RecordConstruction)
+    );
+}
+
+#[test]
+fn qualified_construction_backed_field_use_is_a_condition_but_bare_construction_is_not() {
+    let accepted = parse(
+        "import dep; fn f() { if dep::Flag { ready: true }.ready { let value: Bool = true; } }",
+    );
+    assert_eq!(
+        accepted.text(),
+        "import dep; fn f() { if dep::Flag { ready: true }.ready { let value: Bool = true; } }"
+    );
+    assert!(accepted.errors().is_empty(), "{:?}", accepted.errors());
+    assert!(accepted.syntax().descendants().any(|node| {
+        node.kind() == SyntaxKind::FieldValueUse
+            && node
+                .children()
+                .any(|child| child.kind() == SyntaxKind::RecordConstruction)
+    }));
+
+    let rejected = parse("import dep; fn f() { if dep::Flag {} { let value: Bool = true; } }");
+    assert!(!rejected.errors().is_empty());
+    assert!(
+        !rejected
+            .syntax()
+            .descendants()
+            .any(|node| node.kind() == SyntaxKind::RecordConstruction)
+    );
+}
+
+#[test]
+fn qualified_construction_is_syntactically_available_as_pattern_scrutinee_only() {
+    let source = "import dep; record Pair { left: I8 } fn f() { let Pair { left: value } = dep::Pair { left: 1 }; }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let declaration = parsed
+        .syntax()
+        .descendants()
+        .find(|node| node.kind() == SyntaxKind::RecordDestructuringDeclaration)
+        .expect("record destructuring declaration");
+    assert!(
+        declaration
+            .children()
+            .any(|node| node.kind() == SyntaxKind::RecordConstruction)
+    );
+    let pattern = declaration
+        .children()
+        .find(|node| node.kind() == SyntaxKind::RecordPattern)
+        .expect("record pattern");
+    assert!(
+        !pattern
+            .descendants()
+            .any(|node| node.kind() == SyntaxKind::QualifiedModuleMember),
+        "qualified construction must not broaden pattern-head syntax"
+    );
+}
+
+#[test]
+fn standalone_construction_is_not_a_body_statement() {
     let standalone = parse("record Pair {} fn f() { Pair {} }");
     assert!(
         standalone
@@ -83,6 +218,7 @@ fn malformed_initializers_preserve_following_initializer_boundaries() {
         "record Pair { left: I8, right: I8 } fn f() -> Pair { return Pair { left 1, right: 2 }; }",
         "record Pair { left: I8, right: I8 } fn f() -> Pair { return Pair { left: , right: 2 }; }",
         "record Pair { left: I8, right: I8 } fn f() -> Pair { return Pair { left: 1 right: 2 }; }",
+        "import dep; fn f() -> dep::Pair { return dep::Pair { left 1, right: 2 }; }",
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
@@ -101,22 +237,23 @@ fn malformed_initializers_preserve_following_initializer_boundaries() {
 
 #[test]
 fn missing_constructor_close_preserves_later_body_and_top_level_constructs() {
-    let source = "record Pair { left: I8 } fn f() { let value: Pair = Pair { left: 1; let later: I8 = 2; } record Next {}";
-    let parsed = parse(source);
+    for source in [
+        "record Pair { left: I8 } fn f() { let value: Pair = Pair { left: 1; let later: I8 = 2; } record Next {}",
+        "import dep; fn f() { let value: dep::Pair = dep::Pair { left: 1; let later: I8 = 2; } record Next {}",
+    ] {
+        let parsed = parse(source);
 
-    assert_eq!(parsed.text(), source);
-    assert!(
-        parsed
-            .errors()
-            .iter()
-            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
-    );
+        assert_eq!(parsed.text(), source);
+        assert!(parsed.errors().iter().any(|error| {
+            error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
+        }));
 
-    let root = parsed.syntax();
-    assert!(root.descendants().any(|node| {
-        node.kind() == SyntaxKind::LocalDeclaration && node.text().to_string().contains("later")
-    }));
-    assert!(root.descendants().any(|node| {
-        node.kind() == SyntaxKind::RecordDefinition && node.text().to_string().contains("Next")
-    }));
+        let root = parsed.syntax();
+        assert!(root.descendants().any(|node| {
+            node.kind() == SyntaxKind::LocalDeclaration && node.text().to_string().contains("later")
+        }));
+        assert!(root.descendants().any(|node| {
+            node.kind() == SyntaxKind::RecordDefinition && node.text().to_string().contains("Next")
+        }));
+    }
 }
