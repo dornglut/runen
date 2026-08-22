@@ -509,12 +509,11 @@ impl<'a> FunctionLowerer<'a> {
 
         let then_normal = then_block.has_normal_continuation;
         let else_normal = else_block.is_none_or(|block| block.has_normal_continuation);
-        let normal_outcomes = usize::from(then_normal) + usize::from(else_normal);
         let then_target = self.new_block()?;
         let else_target = else_block.map(|_| self.new_block()).transpose()?;
 
-        match normal_outcomes {
-            2 => {
+        match (then_normal, else_normal) {
+            (true, true) => {
                 let join_target = self.new_block()?;
                 self.terminate_current(core::Terminator::Branch {
                     condition: core::Operand::Move(core::Place::local(condition_local).into()),
@@ -534,7 +533,7 @@ impl<'a> FunctionLowerer<'a> {
 
                 self.current = join_target.0 as usize;
             }
-            1 => {
+            (true, false) | (false, true) => {
                 let normal_target = if else_block.is_none() {
                     if then_normal {
                         return Err(LoweringError::InvalidHirInvariant(
@@ -545,11 +544,12 @@ impl<'a> FunctionLowerer<'a> {
                 } else {
                     None
                 };
-                let false_target = else_target.or(normal_target).ok_or(
-                    LoweringError::InvalidHirInvariant(
-                        "conditional has no false target for its retained outcome",
-                    ),
-                )?;
+                let false_target =
+                    else_target
+                        .or(normal_target)
+                        .ok_or(LoweringError::InvalidHirInvariant(
+                            "conditional has no false target for its retained outcome",
+                        ))?;
                 self.terminate_current(core::Terminator::Branch {
                     condition: core::Operand::Move(core::Place::local(condition_local).into()),
                     true_target: then_target,
@@ -584,7 +584,7 @@ impl<'a> FunctionLowerer<'a> {
                     ))?
                     .0 as usize;
             }
-            0 => {
+            (false, false) => {
                 let else_target = else_target.ok_or(LoweringError::InvalidHirInvariant(
                     "zero-normal conditional cannot omit else",
                 ))?;
@@ -603,7 +603,6 @@ impl<'a> FunctionLowerer<'a> {
                 self.current = else_target.0 as usize;
                 self.lower_block(else_block)?;
             }
-            _ => unreachable!("binary conditional has at most two normal outcomes"),
         }
 
         Ok(())
