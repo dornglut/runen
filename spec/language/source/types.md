@@ -140,7 +140,7 @@ The nominal selection is a conservative source ownership-policy choice. Structur
 
 **Non-duplicable** means only that this non-consuming owned duplication capability is unavailable. It does not prohibit ownership transfer/consumption or a future explicit clone, copy-construction, conversion, factory, deserialization, or other operation from independently producing another value.
 
-Ordinary whole-binding use consumes this capability through `local-bindings.md`. Binding-rooted field-value use consumes it through `field-access.md` for the final selected field path. Recursive record patterns consume it through `patterns.md` independently for every binding leaf: a duplicable leaf produces a non-consuming duplicate from its complete structural path, while a non-duplicable leaf transfers/consumes exactly that complete path. Structural path availability and resulting ancestor/disjoint consequences are owned by `structural-ownership.md`, not by the duplicability classification.
+Ordinary whole-binding use uses this capability through `local-bindings.md`. Binding-rooted field-value use uses it through `field-access.md` for the final selected field path. Recursive record patterns use it through `patterns.md` independently for every binding leaf: a duplicable leaf produces a non-consuming duplicate from its complete structural path, while a non-duplicable leaf transfers/consumes exactly that complete path. Structural path availability and resulting ancestor/disjoint consequences are owned by `structural-ownership.md`, not by the duplicability classification.
 
 This section does not define other expression contexts, field assignment or partial reinitialization, parameter passing, result transfer, calls, pattern syntax, or any explicit cloning/copy-construction operation.
 
@@ -148,7 +148,7 @@ Duplicability is source semantics independent of any future `Copy`-like trait sp
 
 No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial structural ownership rather than silently changing either property.
 
-This capability consumes the conceptual distinction between ownership transfer and non-consuming duplication already present in Core semantics, but Core copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
+This capability reflects the conceptual distinction between ownership transfer and non-consuming duplication already present in Core semantics, but Core copyability representation is not source-language authority. This revision defines no direct source-to-MIR lowering rule.
 
 ## Literal and conversion boundary
 
