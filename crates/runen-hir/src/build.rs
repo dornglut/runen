@@ -920,14 +920,9 @@ fn validate_block(
                 next_binding,
                 diagnostics,
             )),
-            SyntaxKind::IfStatement => validate_if(
-                header,
-                &child,
-                context,
-                bindings,
-                next_binding,
-                diagnostics,
-            ),
+            SyntaxKind::IfStatement => {
+                validate_if(header, &child, context, bindings, next_binding, diagnostics)
+            }
             _ => {
                 unreachable!("syntax-clean nested block contains only represented body statements")
             }
