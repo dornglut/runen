@@ -64,7 +64,10 @@ fn parses_plain_selected_and_exported_selected_records_losslessly() {
         .map(|token| token.kind())
         .collect::<Vec<_>>();
     assert!(direct_tokens.contains(&SyntaxKind::KwCopy));
-    assert_eq!(selected.text(), "record /* before */ copy /* after */ Point {}");
+    assert_eq!(
+        selected.text(),
+        "record /* before */ copy /* after */ Point {}"
+    );
 }
 
 #[test]
@@ -83,7 +86,10 @@ fn rejects_copy_outside_the_record_selection_position() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly accepted: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly accepted: {source}"
+        );
     }
 }
 
