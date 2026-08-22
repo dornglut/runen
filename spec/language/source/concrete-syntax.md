@@ -105,7 +105,7 @@ A represented source unit MAY contain imports and no module-level declarations.
 
 A record or function definition without `ExportModifier` establishes one **module-private** module binding. The same definition with `ExportModifier` establishes one **exported** module binding. Those accessibility classes and their lookup consequences are owned by `names-modules.md`; `export` has no ABI, linkage, FFI, runtime, or realization meaning.
 
-`export` modifies only a represented record or function item. `export import` is not a represented form.
+At source-unit item position, `export` modifies only a represented record or function item. The same reserved key has the separate bounded record-field position defined below. `export import` is not a represented form, and this reuse does not establish a general declaration-modifier system.
 
 This subset has no declaration-without-body, re-export, package, constant, static, or other module-item syntax.
 
@@ -130,10 +130,16 @@ This form defines no source-visible module path, package coordinate, dependency 
 ```text
 RecordDefinition = "record" UserIdentifier "{" RecordFields? "}"
 RecordFields     = RecordField ("," RecordField)* ","?
-RecordField      = UserIdentifier ":" Type
+RecordField      = ExportModifier? UserIdentifier ":" Type
 ```
 
 A represented record definition maps to exactly one nominal record declaration under `types.md` using the record name's lexical identifier key and the field sequence in concrete source order. Its module accessibility is determined by the enclosing optional `ExportModifier` as described above.
+
+Each `RecordField` maps its identifier and `Type` to the field identity/type/order relation in `types.md`. Without the field-position `ExportModifier`, the field has **module-private** direct accessibility; with it, the field has **exported** direct accessibility under `field-access.md`.
+
+The record item's export class and each field's direct accessibility are independent. Exporting a record does not export any field, and exporting one field does not export the containing record or any sibling field. `field-access.md` owns the resulting cross-module direct-access rule and the source-accessibility requirement for the direct declared type of an exported field in an exported record.
+
+A field-position `export` does not introduce a module declaration binding, ABI/linkage visibility, layout contract, synthetic getter/setter, or general modifier mechanism. The field remains one ordinary record field for nominal identity and structural order.
 
 The field sequence MAY be empty. A trailing comma is permitted.
 
@@ -395,7 +401,7 @@ A selector chain such as `make().outer.inner` is one `ProducerFieldValueUse` wit
 
 Because direct-call arguments and construction initializers contain `Value`, bounded producer-backed field-value uses may compose recursively inside those already represented positions. This recursion does not create grouping or operator precedence.
 
-Exact receiver result-type selection, same-module direct field accessibility, selector-path resolution, binding-root final-path availability, producer-receiver transient ownership, final-field duplicate-or-consume consequence, remaining-frontier selection, and resulting source type are owned by `field-access.md` and `structural-ownership.md`. This grammar does not duplicate those relations.
+Exact receiver result-type selection, direct record-field accessibility at every selector step, selector-path resolution, binding-root final-path availability, producer-receiver transient ownership, final-field duplicate-or-consume consequence, remaining-frontier selection, and resulting source type are owned by `field-access.md` and `structural-ownership.md`. A qualified direct-call receiver may therefore yield a foreign exported record whose exported field is selected under that owner without making the field selector itself a qualified module lookup. This grammar does not duplicate those relations.
 
 The same `.` selector spelling represents both duplicate and consume outcomes. No second move/extract token is introduced.
 
@@ -453,7 +459,7 @@ After lookup selects an entity, the consuming syntactic context validates its ca
 
 Consequently, when a parameter/local binding has the same key as a module-level function, an unqualified direct-call spelling resolves to the local binding and is invalid as a direct call rather than bypassing it. For assignment, a selected parameter/local binding is validated for assignment mutability; when no local exists and same-module lookup selects a module declaration, that entity is invalid as an assignment target rather than bypassed. A `BindingFieldValueUse` root and direct binding-root record-pattern scrutinee follow the same precedence and require a parameter/local binding under their owners.
 
-A `ProducerFieldValueUse` applies the lookup relation of its complete receiver producer: unqualified direct call uses ordinary function-body lookup, qualified direct call uses module-alias lookup, and record construction uses same-module record lookup. The later field selectors do not cause a second root/name lookup; they consume nominal field identities under `field-access.md`.
+A `ProducerFieldValueUse` applies the lookup relation of its complete receiver producer: unqualified direct call uses ordinary function-body lookup, qualified direct call uses module-alias lookup, and record construction uses same-module record lookup. The later field selectors do not cause a second root/name lookup; they consume nominal field identities and per-field accessibility under `field-access.md`.
 
 A producer-backed pattern scrutinee likewise applies the lookup relation of its concrete producer before the pattern consumes the produced value. When that producer is a `ProducerFieldValueUse`, its receiver lookup and complete field-value production occur before the resulting owned value enters the pattern transient relation. Pattern-introduced bindings are not yet in scope during any of those lookups.
 
@@ -471,7 +477,7 @@ After qualified lookup selects the target binding, the consuming type or direct-
 
 A parameter/local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local controls ordinary unqualified spelling but does not block syntactically qualified `alias::member`.
 
-The two-part qualification syntax does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, qualified record construction, or qualified record-pattern heads. A qualified direct call may appear as a producer-backed record-pattern scrutinee or as the receiver of a `ProducerFieldValueUse` because those positions reuse `DirectCall`; this does not make any record-pattern head, construction target, or field selector itself qualified.
+The two-part qualification syntax does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, qualified record construction, or qualified record-pattern heads. A qualified direct call may appear as a producer-backed record-pattern scrutinee or as the receiver of a `ProducerFieldValueUse` because those positions reuse `DirectCall`; the resulting record value may then undergo ordinary `.` field selection through `field-access.md`. This does not make any record-pattern head, construction target, or field selector itself a qualified module member.
 
 ## Deliberate boundaries
 
@@ -486,7 +492,7 @@ This revision does not define:
 - record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal, bare `IdentifierUse`-as-value, grouping, operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - qualified/cross-module, inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, or method-based record construction;
-- arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; cross-module field access; field visibility modifiers; methods; or associated-item lookup;
+- arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; field accessibility beyond the represented module-private/exported direct relation; package/friend/protected accessibility; methods; properties; or associated-item lookup;
 - qualified/cross-module record-pattern heads;
 - positive record duplicability-selection syntax;
 - references, borrow syntax or pattern binding modes, source interior mutability, raw-pointer assignment, or lifetime syntax;
