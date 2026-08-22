@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, body and nested-block statement sequencing, dynamic direct-call activations, direct-call argument/result ownership transfer, record-construction field evaluation and transient assembly, ordinary local initialization, recursive record-destructuring declaration completion including producer-backed scrutinee evaluation and transient cleanup, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, direct return, recursion/divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, body and nested-block statement sequencing, dynamic direct-call activations, direct-call argument/result ownership transfer, record-construction field evaluation and transient assembly, ordinary local initialization, recursive record-destructuring declaration completion including producer-backed scrutinee evaluation and transient cleanup, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, return execution and static normal-continuation presence, recursion/divergence, and defined-fault propagation through direct source calls.
 
 It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity/callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), structural ownership state and remaining frontiers from [Source structural ownership](structural-ownership.md), parameter/local identity, scope, lookup, assignment mutability, whole-binding use, and assignment legality from [Source function-local bindings](local-bindings.md), binding-rooted field-value production from [Source field-value access](field-access.md), and recursive exhaustive record-pattern structure, scrutinee category, binding-leaf order, per-leaf ownership consequences, and producer transient frontier selection from [Source patterns](patterns.md). It does not redefine those owners.
 
-[Source control flow](control-flow.md) consumes this document's owned-value producer execution, nested-block execution, lexical cleanup, defined-fault propagation, and divergence relations when defining represented statement-level conditionals and their definite normal successor. This document does not redefine conditional selection or conditional ownership joins.
+[Source control flow](control-flow.md) consumes this document's owned-value producer execution, nested-block execution, normal-continuation presence, lexical cleanup, defined-fault propagation, and divergence relations when defining represented statement-level conditionals and their definite normal successor. This document does not redefine conditional selection or conditional ownership joins.
 
 The represented concrete function/body/block/value/call/record-construction/field-value/record-destructuring/assignment/conditional/return grammar is owned by [Source concrete syntax](concrete-syntax.md).
 
@@ -242,9 +242,18 @@ This revision defines no field/place assignment, partial-field reinitialization,
 
 ## Body and nested-block statement sequencing
 
-For the root function body and each represented `BlockStatement`, the applicable `BodyStatement` sequence executes strictly in concrete source order.
+For source validation, every represented statement or lexical block has only the minimum **normal-continuation presence** needed by this source subset:
 
-Root-body execution begins with its first statement after successful parameter transfer. A nested block begins when its statement is reached. A later statement begins only after the preceding statement completes normally. When the preceding statement is one represented `IfStatement`, normal completion includes the definite normal successor established by `control-flow.md`.
+- **normal continuation present** means the construct establishes exactly one definite ordinary function-local binding environment for a following statement or enclosing normal continuation; and
+- **no normal continuation** means every represented static control-flow path through that construct performs a represented return from the current source function activation.
+
+This classification is not a source value, runtime tag, source CFG node, state set, effect, or ownership lattice. Defined faults and divergence remain dynamic execution outcomes and do not form additional static completion alternatives.
+
+For the root function body and each represented `BlockStatement`, the applicable `BodyStatement` sequence is validated and executes strictly in concrete source order while a normal continuation remains present. Every ordinary source-valid local declaration, record-destructuring declaration, assignment, no-result call statement, and normally completing nested block preserves one normal continuation. A represented terminal return has no normal continuation. A represented conditional exposes the normal-continuation presence and, when present, the definite normal environment established by `control-flow.md`.
+
+A syntactically later `BodyStatement` or terminal `ReturnStatement` in the same containing sequence after a preceding statement with no normal continuation is source-invalid as unreachable. This is a semantic sequencing rule; it does not admit an otherwise unrepresented concrete tail after a terminal return in the same lexical block.
+
+Root-body execution begins with its first statement after successful parameter transfer. A nested block begins when its statement is reached. A later statement begins only after the preceding statement completes normally.
 
 For an ordinary local declaration:
 
@@ -264,23 +273,25 @@ For a no-result direct-call statement, complete the call normally before continu
 For a nested block:
 
 1. activate its child lexical scope;
-2. execute its contained `BodyStatement`s recursively in concrete order;
-3. on normal completion, normally exit the child scope using lexical-scope cleanup below; and
-4. only after that cleanup may the containing sequence continue.
+2. execute its contained sequence recursively in concrete order, including its optional terminal return when present;
+3. if the nested block has a normal continuation, normally exit the child scope using lexical-scope cleanup below and expose the resulting enclosing binding environment; and
+4. only after that normal cleanup may the containing sequence continue.
+
+A nested block with no normal continuation performs no independent normal child-scope cleanup: the selected return follows the activation-return cleanup relation below, which cleans every then-active lexical scope exactly once.
 
 A block statement produces no source value and introduces no Unit/Void value.
 
-For a represented conditional statement, condition evaluation, selected-arm execution, explicit-arm scope composition, and definite normal ownership at its successor are owned by `control-flow.md`. This sequencing relation consumes only its normal completion before beginning the next containing body statement.
+For a represented conditional statement, condition evaluation, selected-arm execution, explicit-arm scope composition, zero/one/two normal outcomes, and definite normal ownership at any successor are owned by `control-flow.md`. This sequencing relation consumes that normal continuation only when one exists before beginning the next containing body statement.
 
 If a body statement yields a defined fault, later statements do not execute and the active function activation follows fault cleanup/propagation. A nested block exiting this way does not also perform independent normal cleanup; its child scope participates exactly once in fault cleanup.
 
 If a body statement diverges, later statements do not execute and no termination/child-scope cleanup occurs merely because execution continues.
 
-A root terminal return begins only after all preceding root body statements complete normally.
+A terminal return in the root body or a nested block begins only after every preceding statement in that same lexical sequence has completed normally.
 
-A represented no-result root body reaching its closing boundary without a terminal return performs normal no-result completion.
+A represented no-result root body reaching its closing boundary with a normal continuation and without a terminal return performs normal no-result completion.
 
-This sequencing relation introduces no loop, early/nonterminal return, unreachable-statement weakening, short-circuit operator, catch, defer, refutable match, or other multi-path control transfer beyond consuming the normal completion of the represented conditional owner.
+This sequencing relation introduces no loop, unrestricted mid-block return, unreachable-statement weakening, short-circuit operator, catch, defer, refutable match, or other multi-path control transfer beyond represented terminal returns and the conditional owner consumed above.
 
 ## Source cleanup
 
@@ -316,9 +327,11 @@ This cleanup order is semantic and independent of physical stack layout, ABI pas
 
 ## Normal return
 
+A represented return may be the optional terminal return of the root body or of any represented nested lexical block admitted by `concrete-syntax.md`. Every such return terminates the current source function activation; it does not merely exit the immediately containing block.
+
 For a source function with one result type, that result type is the required type supplied to the return-value producer. A represented decimal integer literal return therefore materializes under the declared result type through `literals.md`.
 
-A represented return MUST first evaluate exactly one owned value producer whose type equals exactly that result type.
+A represented return in a result-bearing function MUST first evaluate exactly one owned value producer whose type equals exactly that result type. A represented return in a no-result function MUST contain no value.
 
 Result evaluation, including any structural ownership transition caused by a consuming producer, completes before return-induced scope/activation cleanup.
 
@@ -334,13 +347,17 @@ Transfer to the caller does not duplicate the result.
 
 A complete non-duplicable local consumed by result evaluation has no remaining frontier and is not cleaned again. A consumed subvalue is excluded while disjoint remaining subvalues are cleaned normally.
 
-For a no-result function, represented `return;` performs the same scope/parameter cleanup and normal activation termination but produces no value.
+For a no-result function, represented `return;` performs the same active-scope/parameter cleanup and normal activation termination but produces no value.
+
+A return reached from a nested block or conditional arm does not first perform that block's ordinary normal lexical cleanup. Return-induced activation cleanup already includes every then-active descendant scope and therefore cleans each binding exactly once.
+
+If return-value production yields a defined fault before successful result production, no normal return occurs. The existing defined-fault cleanup/propagation relation below handles the then-current active scopes exactly once. If return-value production diverges, no normal return cleanup occurs merely because execution remains suspended.
 
 Reaching the normal end of a represented no-result function body is equivalent to normal no-result completion.
 
-A result-bearing represented body MUST NOT have a reachable normal end without a result. The current concrete grammar enforces this with a terminal value return. The represented conditional relation does not alter that requirement because it introduces no nested/early return; future non-normal control-flow forms MUST preserve the applicable result-bearing completion requirement.
+A result-bearing represented body MUST NOT have a reachable normal end without a result. This is a normal-path validity requirement, not a requirement for one unconditional concrete root-terminal return. A conditional whose two explicit arms both have no normal continuation may therefore satisfy the result obligation without a following root return. When any represented path still establishes a normal root continuation, that continuation must eventually encounter a source-valid result-bearing return before the root closing boundary.
 
-No Unit/Void source value is introduced by no-result completion.
+No implicit result, default result, Unit, or Void source value is introduced.
 
 ## Defined-fault propagation
 
@@ -387,7 +404,7 @@ If a record-construction initializer diverges, the construction remains suspende
 
 If a directly called callee diverges, the caller remains suspended at that call and performs no return/fault cleanup merely because time passes.
 
-Active caller/callee ownership state and any suspended producer transients persist subject to operations already completed. The same applies when a diverging call is an assignment RHS, producer-backed record-pattern scrutinee, or represented conditional value. There is no implicit source execution-step budget.
+Active caller/callee ownership state and any suspended producer transients persist subject to operations already completed. The same applies when a diverging call is an assignment RHS, producer-backed record-pattern scrutinee, represented conditional value, or return-value producer. There is no implicit source execution-step budget.
 
 A direct binding-root record-destructuring operation has no divergence point after validation. A producer-backed operation may diverge only while evaluating its existing producer; after producer success, leaf production and transient completion are non-diverging.
 
@@ -411,11 +428,13 @@ This revision defines no source effect system, purity, effect inference, specula
 
 `concrete-syntax.md` owns represented concrete grammar. `literals.md` owns boolean/integer materialization. `structural-ownership.md` owns structural paths/state/availability/frontiers. `field-access.md` owns binding-rooted field selection/accessibility and final-field duplicate-or-consume production. `patterns.md` owns recursive record-pattern structure, binding-leaf facts/order, direct-root ownership production, producer-transient ownership transitions, and transient frontier selection. `local-bindings.md` owns binding identity/scope/lookup/mutability/lifecycle and whole-binding use/assignment legality. `control-flow.md` owns represented conditional selection, arm validation, and definite normal conditional ownership.
 
-Floating literals, operators, general expressions, arbitrary assignment places, loops, early/nonterminal return, arbitrary-receiver members, refutable/rest/shorthand pattern categories, additional producer-backed scrutinee families, and other source forms remain outside this execution relation.
+Floating literals, operators, general expressions, arbitrary assignment places, loops, unrestricted nonterminal-within-block return, arbitrary-receiver members, refutable/rest/shorthand pattern categories, additional producer-backed scrutinee families, and other source forms remain outside this execution relation.
 
-The represented construction, recursive pattern, partial-ownership cleanup, and existing producer execution relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements and the separately owned conditional requirements through accepted Core semantics rather than use Core representation behavior as source authority.
+The represented construction, recursive pattern, partial-ownership cleanup, return, and existing producer execution relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, normal-continuation presence, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements and the separately owned conditional requirements through accepted Core semantics rather than use Core representation behavior as source authority.
 
 After source validation, duplicating field use may refine to projected Core `Copy`, consuming field use to projected `Move`, and whole-binding replacement to source-first Core `Assign`. A direct-root recursive pattern binding leaf may refine to a mapped source local initialized in depth-first leaf order by projected `Copy`/`Move` from the mapped source root using the retained full leaf path. A producer-backed pattern may lower its existing producer to one compiler result temporary, initialize mapped pattern locals by projected `Copy`/`Move` from retained leaf paths, and refine the retained source transient frontier through projected/aggregate Core destruction.
+
+A source return may refine to the existing Core `Return` terminator from whichever lower block represents that return point. Normal lexical-scope cleanup and normal `Goto` continuation are emitted only for source paths that actually have a normal continuation; a returning path does not require a synthetic normal join edge. Source normal-continuation presence and source cleanup selection MUST be established before lowering and MUST NOT be reconstructed from Core reachability, path-state worklists, scalar liveness, or initialization state.
 
 Remaining source cleanup may refine to Core destruction only where the lower destruction domain is non-empty. Ending ownership of a zero-leaf source value may refine to no Core `Drop`; emitting an invalid lower destruction operation merely to materialize source ownership is not required.
 
@@ -425,4 +444,4 @@ No parser, lossless syntax, typed HIR, Core MIR production lowering, runtime, or
 
 ## Further boundaries
 
-This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, conditional expressions, unequal-state/path-dependent conditional joins, early/nonterminal return, loops, refutable-match control flow, field assignment/partial-field reinitialization, arbitrary-receiver member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified/cross-module construction or pattern heads, field visibility modifiers, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
+This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, conditional expressions, unequal-state/path-dependent two-normal-outcome conditional joins, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable-match control flow, field assignment/partial-field reinitialization, arbitrary-receiver member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified/cross-module construction or pattern heads, field visibility modifiers, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
