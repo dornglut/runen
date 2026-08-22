@@ -132,20 +132,24 @@ fn producer_field_values_compose_only_through_existing_nested_value_positions() 
             == 1
     }));
     assert_eq!(
-        parsed
-            .syntax()
-            .descendants()
-            .filter(|node| node.kind() == SyntaxKind::ArgumentList)
+        uses.iter()
+            .filter(|field_use| {
+                field_use
+                    .ancestors()
+                    .any(|ancestor| ancestor.kind() == SyntaxKind::ArgumentList)
+            })
             .count(),
-        3
+        1
     );
     assert_eq!(
-        parsed
-            .syntax()
-            .descendants()
-            .filter(|node| node.kind() == SyntaxKind::RecordInitializer)
+        uses.iter()
+            .filter(|field_use| {
+                field_use
+                    .ancestors()
+                    .any(|ancestor| ancestor.kind() == SyntaxKind::RecordInitializer)
+            })
             .count(),
-        3
+        1
     );
 }
 
