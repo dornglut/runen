@@ -62,7 +62,8 @@ fn retains_exact_bool_condition_body_and_normal_cleanup() {
 
 #[test]
 fn integer_condition_is_rejected_through_exact_bool_required_type() {
-    let errors = build("fn f() { while 1 {} }").expect_err("integer condition must fail Bool typing");
+    let errors =
+        build("fn f() { while 1 {} }").expect_err("integer condition must fail Bool typing");
     assert!(has_diagnostic(
         &errors,
         DiagnosticKind::IntegerLiteralRequiresInteger {
@@ -214,8 +215,9 @@ fn literal_true_still_has_static_normal_continuation_for_result_obligation() {
 
 #[test]
 fn body_locals_end_at_each_body_scope_and_do_not_escape() {
-    let errors = build("fn f(flag: Bool) { while flag { let child: I64 = 1; } let x: I64 = child; }")
-        .expect_err("while body local must not escape the child block");
+    let errors =
+        build("fn f(flag: Bool) { while flag { let child: I64 = 1; } let x: I64 = child; }")
+            .expect_err("while body local must not escape the child block");
     assert!(has_diagnostic(&errors, DiagnosticKind::UnresolvedName));
 }
 
