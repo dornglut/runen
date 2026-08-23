@@ -249,6 +249,8 @@ impl Parser<'_> {
             match self.current() {
                 Some(SyntaxKind::KwLet) => self.parse_let_statement(),
                 Some(SyntaxKind::KwFault) => self.parse_fault_statement(),
+                Some(SyntaxKind::KwBreak) => self.parse_break_statement(),
+                Some(SyntaxKind::KwContinue) => self.parse_continue_statement(),
                 Some(SyntaxKind::KwReturn) => {
                     self.parse_return_statement();
                     returned = true;
@@ -321,6 +323,8 @@ impl Parser<'_> {
             match self.current() {
                 Some(SyntaxKind::KwLet) => self.parse_let_statement(),
                 Some(SyntaxKind::KwFault) => self.parse_fault_statement(),
+                Some(SyntaxKind::KwBreak) => self.parse_break_statement(),
+                Some(SyntaxKind::KwContinue) => self.parse_continue_statement(),
                 Some(SyntaxKind::KwReturn) => {
                     self.parse_return_statement();
                     returned = true;
@@ -413,6 +417,8 @@ impl Parser<'_> {
                 SyntaxKind::KwElse,
                 SyntaxKind::KwLet,
                 SyntaxKind::KwFault,
+                SyntaxKind::KwBreak,
+                SyntaxKind::KwContinue,
                 SyntaxKind::KwIf,
                 SyntaxKind::KwWhile,
                 SyntaxKind::KwReturn,
@@ -482,6 +488,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
                 || self.at(SyntaxKind::KwFault)
+                || self.at(SyntaxKind::KwBreak)
+                || self.at(SyntaxKind::KwContinue)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwWhile)
                 || self.at(SyntaxKind::KwElse)
@@ -510,6 +518,8 @@ impl Parser<'_> {
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
                         SyntaxKind::KwFault,
+                        SyntaxKind::KwBreak,
+                        SyntaxKind::KwContinue,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwWhile,
                         SyntaxKind::KwElse,
@@ -532,6 +542,8 @@ impl Parser<'_> {
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
+                    SyntaxKind::KwBreak,
+                    SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
@@ -603,6 +615,8 @@ impl Parser<'_> {
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
+                    SyntaxKind::KwBreak,
+                    SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
@@ -637,6 +651,20 @@ impl Parser<'_> {
     fn parse_fault_statement(&mut self) {
         self.builder.start_node(SyntaxKind::FaultStatement.into());
         self.expect(SyntaxKind::KwFault, ExpectedSyntax::Statement);
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_break_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::BreakStatement.into());
+        self.expect(SyntaxKind::KwBreak, ExpectedSyntax::Statement);
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_continue_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::ContinueStatement.into());
+        self.expect(SyntaxKind::KwContinue, ExpectedSyntax::Statement);
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
         self.builder.finish_node();
     }
@@ -731,6 +759,8 @@ impl Parser<'_> {
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
                         SyntaxKind::KwFault,
+                        SyntaxKind::KwBreak,
+                        SyntaxKind::KwContinue,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwWhile,
                         SyntaxKind::KwElse,
@@ -847,6 +877,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
                 || self.at(SyntaxKind::KwFault)
+                || self.at(SyntaxKind::KwBreak)
+                || self.at(SyntaxKind::KwContinue)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwWhile)
                 || self.at(SyntaxKind::KwElse)
@@ -881,6 +913,8 @@ impl Parser<'_> {
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
                         SyntaxKind::KwFault,
+                        SyntaxKind::KwBreak,
+                        SyntaxKind::KwContinue,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwWhile,
                         SyntaxKind::KwElse,
@@ -903,6 +937,8 @@ impl Parser<'_> {
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
+                    SyntaxKind::KwBreak,
+                    SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
@@ -946,6 +982,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
                 || self.at(SyntaxKind::KwFault)
+                || self.at(SyntaxKind::KwBreak)
+                || self.at(SyntaxKind::KwContinue)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwWhile)
                 || self.at(SyntaxKind::KwElse)
@@ -973,6 +1011,8 @@ impl Parser<'_> {
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
+                    SyntaxKind::KwBreak,
+                    SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
