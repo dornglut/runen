@@ -990,7 +990,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     let error = validate_program(Program {
-        types: types.clone(),
+        types,
         functions: vec![raw_i64],
     })
     .expect_err("RawMove through non-Bool pointee is not branch-admissible");
@@ -1333,7 +1333,6 @@ fn branch_condition_ub_creates_no_successor_work_item() {
             ],
         ),
     };
-
     validate_program(Program {
         types,
         functions: vec![function],
