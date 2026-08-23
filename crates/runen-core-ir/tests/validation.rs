@@ -528,24 +528,39 @@ fn validation_rejects_repeated_loop_init_while_destination_remains_live() {
 }
 
 #[test]
-fn cyclic_init_after_lifetime_end_is_valid() {
+fn cyclic_scalar_and_aggregate_init_after_lifetime_end_are_valid() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
-    let place = Place::local(LocalId(0));
+    let pair_ty = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", i64_ty), Field::new("right", i64_ty)],
+    ));
+    let scalar = Place::local(LocalId(0));
+    let pair = Place::local(LocalId(1));
     let body = one_function_program(
         types,
         Body {
-            locals: vec![LocalDecl::new("value", i64_ty, false)],
+            locals: vec![
+                LocalDecl::new("scalar", i64_ty, false),
+                LocalDecl::new("pair", pair_ty, false),
+            ],
             loans: Vec::new(),
             entry: BasicBlockId(0),
             blocks: vec![BasicBlock::new(
                 vec![
                     Statement::Init {
-                        dst: place.clone(),
+                        dst: scalar.clone(),
                         src: Operand::Constant(Value::I64(1)),
                     },
+                    Statement::Init {
+                        dst: pair.clone(),
+                        src: Operand::Constant(Value::Struct(vec![Value::I64(2), Value::I64(3)])),
+                    },
                     Statement::Drop {
-                        place: place.into(),
+                        place: pair.into(),
+                    },
+                    Statement::Drop {
+                        place: scalar.into(),
                     },
                 ],
                 Terminator::Goto(BasicBlockId(0)),
@@ -553,7 +568,8 @@ fn cyclic_init_after_lifetime_end_is_valid() {
         },
     );
 
-    validate_program(body).expect("backedge may revisit Init after the prior lifetime ended");
+    validate_program(body)
+        .expect("backedge may revisit scalar and aggregate Init after prior lifetimes ended");
 }
 
 #[test]
