@@ -100,6 +100,10 @@ pub enum SyntaxKind {
     WhileStatement,
     DecimalFloatingMagnitude,
     DecimalFloatingLiteral,
+    KwBreak,
+    KwContinue,
+    BreakStatement,
+    ContinueStatement,
 }
 
 impl SyntaxKind {
@@ -233,6 +237,10 @@ impl Language for RunenLanguage {
             75 => SyntaxKind::WhileStatement,
             76 => SyntaxKind::DecimalFloatingMagnitude,
             77 => SyntaxKind::DecimalFloatingLiteral,
+            78 => SyntaxKind::KwBreak,
+            79 => SyntaxKind::KwContinue,
+            80 => SyntaxKind::BreakStatement,
+            81 => SyntaxKind::ContinueStatement,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -417,6 +425,8 @@ pub(crate) fn reserved_identifier_kind(key: &str) -> Option<SyntaxKind> {
         "if" => Some(SyntaxKind::KwIf),
         "else" => Some(SyntaxKind::KwElse),
         "while" => Some(SyntaxKind::KwWhile),
+        "break" => Some(SyntaxKind::KwBreak),
+        "continue" => Some(SyntaxKind::KwContinue),
         "import" => Some(SyntaxKind::KwImport),
         "export" => Some(SyntaxKind::KwExport),
         "true" => Some(SyntaxKind::KwTrue),
