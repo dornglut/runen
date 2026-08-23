@@ -370,6 +370,14 @@ pub enum Statement {
     Fault {
         location: SourceLocation,
     },
+    Break {
+        cleanup: Vec<CleanupPath>,
+        location: SourceLocation,
+    },
+    Continue {
+        cleanup: Vec<CleanupPath>,
+        location: SourceLocation,
+    },
     Block(Block),
     If {
         condition: Value,
@@ -488,6 +496,10 @@ pub enum DiagnosticKind {
     ResultCallUsedAsStatement,
     ConditionalOwnershipMismatch,
     LoopOwnershipMismatch,
+    BreakOutsideLoop,
+    ContinueOutsideLoop,
+    BreakOwnershipMismatch,
+    ContinueOwnershipMismatch,
     UnreachableStatement,
     MissingResultReturn,
     ExpectedResultValue,
