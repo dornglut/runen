@@ -399,6 +399,15 @@ fn missing_operator_operands_preserve_structural_recovery_boundaries() {
     assert_eq!(count(&body, SyntaxKind::WhileStatement), 1);
     assert_eq!(count(&body, SyntaxKind::CallStatement), 1);
 
+    let call_source = "fn sink(left: Bool, right: Bool) {} fn bad(flag: Bool) { sink(flag == , true); } fn after() {}";
+    let call = parse(call_source);
+    assert_eq!(call.text(), call_source);
+    assert!(!call.errors().is_empty());
+    assert_eq!(count(&call, SyntaxKind::FunctionDefinition), 3);
+    assert_eq!(count(&call, SyntaxKind::CallStatement), 1);
+    assert_eq!(count(&call, SyntaxKind::BooleanEqualityValue), 1);
+    assert_eq!(count(&call, SyntaxKind::BooleanLiteral), 1);
+
     let item_source = "fn bad(flag: Bool) -> Bool { return flag == ; } fn after() {}";
     let item = parse(item_source);
     assert_eq!(item.text(), item_source);
