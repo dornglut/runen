@@ -2714,7 +2714,7 @@ fn round_decimal_binary(
         let selected = match midpoint {
             Ordering::Less => lower,
             Ordering::Greater => lower + 1,
-            Ordering::Equal if lower % 2 == 0 => lower,
+            Ordering::Equal if lower.is_multiple_of(2) => lower,
             Ordering::Equal => lower + 1,
         };
         return if selected == 0 {
@@ -2755,7 +2755,7 @@ fn round_decimal_binary(
     let selected = match midpoint {
         Ordering::Less => lower,
         Ordering::Greater => lower + 1,
-        Ordering::Equal if lower % 2 == 0 => lower,
+        Ordering::Equal if lower.is_multiple_of(2) => lower,
         Ordering::Equal => lower + 1,
     };
     if selected < significand_limit {
@@ -2795,7 +2795,7 @@ fn greatest_significand_not_above(
     exponent: i32,
 ) -> u64 {
     while low < high {
-        let mid = low + (high - low + 1) / 2;
+        let mid = low + (high - low).div_ceil(2);
         if compare_decimal_to_dyadic(datum, mid, exponent) != Ordering::Less {
             low = mid;
         } else {
