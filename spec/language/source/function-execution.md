@@ -77,7 +77,7 @@ A source-valid producer-backed field-value producer instead completes the receiv
 
 ## Boolean logical-negation producer validation and execution
 
-A represented Boolean logical-negation producer consumes from `operators.md` the intrinsic result type `Bool`, operand required type `Bool`, successful semantic value transformation, and absence of any operator-local binding structural-ownership transition.
+A represented Boolean logical-negation producer consumes from `operators.md` the intrinsic result type `Bool`, operand required type `Bool`, successful semantic value transformation, immediate consumption of the successfully produced owned operand value, and absence of any operator-local binding structural-ownership transition.
 
 The surrounding receiving position's required source type applies first to the operator's intrinsic result type. Source validation MUST establish that the surrounding required type is exactly `Bool` before validating an operand in a way that may commit a binding ownership consequence. If the surrounding required type is not `Bool`, the operator is source-invalid with result type `Bool`, and no operand ownership consequence is committed merely while diagnosing that mismatch.
 
@@ -91,14 +91,14 @@ Dynamic execution is exactly:
 2. preserve every binding ownership consequence completed by that operand evaluation;
 3. if operand evaluation yields defined fault `F`, produce no logical-negation result and continue the same `F` through the existing producer/receiving cleanup and propagation relations;
 4. if operand evaluation diverges, produce no logical-negation result and perform no cleanup merely because execution remains suspended;
-5. after successful Bool operand production, apply the Boolean logical-negation semantic value relation from `operators.md` exactly once; and
-6. transfer the resulting owned Bool exactly once to the surrounding receiving position.
+5. after successful Bool operand production, consume that owned operand value exactly once by applying the Boolean logical-negation semantic value relation from `operators.md`; and
+6. transfer the resulting distinct owned Bool exactly once to the surrounding receiving position.
 
-After successful operand production, the logical-negation step itself is non-faulting and non-diverging and adds no source-visible side effect, binding transition, transient cleanup phase, storage identity, or runtime state.
+The consumed operand result receives no separate cleanup after step 5. After successful operand production, the logical-negation step itself is non-faulting and non-diverging and adds no source-visible side effect, binding transition, separately cleanup-bearing transient category, storage identity, or runtime state.
 
 When logical negation is used as a represented `if` or bounded-`while` condition, the successful post-condition binding environment is therefore exactly the operand producer's successful post-evaluation environment. Only the owned Bool condition value is transformed before `control-flow.md` consumes it for selection.
 
-Nested logical-negation producers apply this same relation recursively. Each nesting level validates/evaluates its complete operand once and adds no binding structural-ownership transition of its own.
+Nested logical-negation producers apply this same relation recursively. Each nesting level validates/evaluates its complete operand once, consumes that successful operand result once, and adds no binding structural-ownership transition of its own.
 
 ## Producer-backed field-value execution
 
@@ -167,7 +167,7 @@ Assembly after successful initializer evaluation is non-faulting and non-divergi
 
 For a zero-field record there are no initializer producers/transients; successful construction directly produces the complete empty record value.
 
-A result-bearing call, nested construction, producer-backed field-value use, or Boolean logical-negation producer used as an initializer must complete before that field transient exists and before a later initializer begins.
+A result-bearing call, nested construction, or producer-backed field-value use used as an initializer must complete before that field transient exists and before a later initializer begins.
 
 The completed record value may be transferred into ordinary local initialization, assignment RHS, direct-call argument, return result, enclosing construction field, a bounded producer-backed field-value receiver, or a producer-backed recursive record-pattern scrutinee. Those receiving relations keep their existing outer ordering and exact-type requirements. A qualified construction therefore composes through these existing receiving relations without defining a second execution category.
 
@@ -187,7 +187,7 @@ The parameter type is the required source type supplied to a producer that needs
 
 Arguments evaluate left to right.
 
-Ordinary complete-binding argument use follows `local-bindings.md`; field-value arguments follow `field-access.md` and, for bounded producer-backed receivers, the complete field-receiver lifecycle above. Boolean logical-negation arguments complete their operand evaluation and logical-negation relation above before their produced Bool is held as the argument transient. Any ownership transition occurs at the applicable producer's evaluation position.
+Ordinary complete-binding argument use follows `local-bindings.md`; field-value arguments follow `field-access.md` and, for bounded producer-backed receivers, the complete field-receiver lifecycle above. Any ownership transition occurs at that argument's evaluation position.
 
 Each successfully evaluated argument is held as one owned **transient argument value** until all arguments succeed. Transient ownership is semantic and does not require a materialized source storage place.
 
@@ -214,7 +214,7 @@ Parameter slots are owned-value parameters in this represented relation. This ru
 
 When a represented local initializer evaluates an owned value producer, evaluation completes before the produced value is transferred into the binding.
 
-The local's declared type is the required type supplied to a producer that needs one. A represented decimal integer literal initializer therefore materializes under that declared type through `literals.md` before transfer. A Boolean logical-negation initializer first establishes that the declared required type is exactly Bool, then validates/evaluates its operand under the relation above. The produced value MUST have exactly the local's declared type.
+The local's declared type is the required type supplied to a producer that needs one. A represented decimal integer literal initializer therefore materializes under that declared type through `literals.md` before transfer. The produced value MUST have exactly that type.
 
 After transfer, the local begins with complete initial structural ownership of its value under `local-bindings.md` and `structural-ownership.md`. Transfer does not duplicate the produced value.
 
@@ -255,7 +255,7 @@ For a producer-backed category:
 9. only after transient cleanup completes, establish all pattern-introduced bindings in the containing lexical scope together; and
 10. only then may the next body statement begin.
 
-Any accepted producer-backed scrutinee follows exactly this sequence when its result type equals the already resolved top pattern record type. Boolean logical negation is deliberately not one of the accepted producer-backed record-pattern scrutinee categories. Whether the accepted producer target or receiver, the pattern head, both, or neither use represented qualification does not add a producer, transient, ownership transition, fault path, divergence path, or cleanup phase.
+Any accepted producer-backed scrutinee follows exactly this sequence when its result type equals the already resolved top pattern record type. Whether the producer target or receiver, the pattern head, both, or neither use represented qualification does not add a producer, transient, ownership transition, fault path, divergence path, or cleanup phase.
 
 The pattern scrutinee transient is not a local binding and does not participate in lexical/activation cleanup after step 8. A field-receiver transient internal to the producer is a separate earlier transient and likewise never participates in pattern-transient cleanup.
 
@@ -279,7 +279,7 @@ This section does not redefine pattern-head/field selection, structural path val
 
 A represented whole-binding assignment consumes assignment target legality, mutability, declared type, RHS type requirement, and binding structural lifecycle from `local-bindings.md`, together with remaining-frontier selection from `structural-ownership.md`.
 
-The target's declared source type is the required type supplied to an RHS producer that needs one. A represented decimal integer literal RHS therefore materializes under that target type through `literals.md` before replacement execution. A Boolean logical-negation RHS must satisfy the exact Bool receiving and operand relation above before replacement begins.
+The target's declared source type is the required type supplied to an RHS producer that needs one. A represented decimal integer literal RHS therefore materializes under that target type through `literals.md` before replacement execution.
 
 For a source-valid assignment, execution is **source-first** with respect to replacement:
 
@@ -299,7 +299,7 @@ For non-duplicable `x = x`, RHS evaluation consumes the complete old value, leav
 
 If the RHS consumes only a non-duplicable subvalue of `x`, the target becomes partial before replacement. Its canonical remaining frontier then contains exactly the maximal still-owned disjoint source subvalues; replacement cleans those and never re-cleans the consumed path.
 
-The same ordering applies when direct-call argument evaluation, record-construction initializer evaluation, producer-backed field-receiver evaluation, Boolean logical-negation operand evaluation, or another represented producer consumes the complete target or one of its structural subvalues before a later operation successfully produces the replacement value.
+The same ordering applies when direct-call argument evaluation, record-construction initializer evaluation, producer-backed field-receiver evaluation, or another represented producer consumes the complete target or one of its structural subvalues before a later operation successfully produces the replacement value.
 
 If RHS evaluation yields a defined fault, assignment performs no replacement cleanup/reset/transfer. Completed ownership transitions remain effective and activation fault cleanup uses the target's resulting current state.
 
@@ -468,7 +468,7 @@ This cleanup order is semantic and independent of physical stack layout, ABI pas
 
 A represented return may be the optional terminal return of the root body or of any represented nested lexical block admitted by `concrete-syntax.md`. Every such return terminates the current source function activation; it does not merely exit the immediately containing block.
 
-For a source function with one result type, that result type is the required type supplied to the return-value producer. A represented decimal integer literal return therefore materializes under the declared result type through `literals.md`. A Boolean logical-negation return must satisfy the exact Bool receiving and operand relation above before activation cleanup begins.
+For a source function with one result type, that result type is the required type supplied to the return-value producer. A represented decimal integer literal return therefore materializes under the declared result type through `literals.md`.
 
 A represented return in a result-bearing function MUST first evaluate exactly one owned value producer whose type equals exactly that result type. A represented return in a no-result function MUST contain no value.
 
@@ -537,8 +537,6 @@ A producer-backed recursive record-destructuring declaration owns one pattern sc
 
 A direct binding-root record pattern has no independently owned scrutinee transient; its accepted leaf productions initialize final pattern bindings directly.
 
-Boolean logical negation creates no additional cleanup-bearing transient category. Its operand producer retains every transient lifecycle already required by that producer, and the successful Bool result transfers directly to the surrounding receiving relation after the operator relation is applied.
-
 This revision defines no general temporary lifetime extension, expression-statement discard, or arbitrary temporary cleanup. Only transient values required by represented record construction, direct-call argument/result transfer, producer-backed field-value receivers, assignment transfer, and producer-backed record destructuring are owned here. The successful Bool condition transient used by represented conditional or bounded-`while` selection is owned and ended by `control-flow.md` after this document's existing producer relation yields it.
 
 ## Divergence
@@ -549,9 +547,9 @@ If a directly called callee diverges, the caller remains suspended at that call 
 
 If a direct call or record construction used as a producer-backed field receiver diverges before successful receiver production, no field-receiver transient or selected field result exists. Any earlier producer-owned transients and completed ownership transitions remain governed by that receiver producer's existing divergence relation.
 
-Active caller/callee ownership state and any suspended producer transients persist subject to operations already completed. The same applies when a diverging call is an assignment RHS, Boolean logical-negation operand, producer-backed field receiver, producer-backed record-pattern scrutinee, represented conditional/loop condition, or return-value producer. There is no implicit source execution-step budget.
+Active caller/callee ownership state and any suspended producer transients persist subject to operations already completed. The same applies when a diverging call is an assignment RHS, producer-backed field receiver, producer-backed record-pattern scrutinee, represented conditional/loop condition, or return-value producer. There is no implicit source execution-step budget.
 
-A direct binding-root record-destructuring operation has no divergence point after validation. A producer-backed operation may diverge only while evaluating its existing producer; after producer success, Boolean logical negation, field selection/field-receiver completion, or pattern leaf production/pattern-transient completion is non-diverging under the applicable owner.
+A direct binding-root record-destructuring operation has no divergence point after validation. A producer-backed operation may diverge only while evaluating its existing producer; after producer success, field selection/field-receiver completion or pattern leaf production/pattern-transient completion is non-diverging under the applicable owner.
 
 The represented explicit `fault;`, `break;`, and `continue;` statements themselves are not divergence categories: once reached, `fault;` selects `ExplicitFault`, while admitted break/continue perform their finite transfer cleanup and transfer to the selected loop target.
 
