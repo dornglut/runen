@@ -7,11 +7,12 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
     Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
-    CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field, FieldReceiverTransientCleanup,
-    FieldValueReceiver, Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId,
-    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, RecordPatternBinding,
-    RecordPatternScrutinee, RecordPatternTransientCleanup, Return, SourceLocation, SourceUnit,
-    Statement, Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
+    FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
+    LiteralValue, Module, ModuleId, OwnedUse, Parameter, Record, RecordFieldValue, RecordId,
+    RecordPatternBinding, RecordPatternScrutinee, RecordPatternTransientCleanup, Return,
+    SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
+    type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -2114,6 +2115,66 @@ fn validate_value(
 ) -> Option<Value> {
     let value_location = location(header.unit, node);
     match node.kind() {
+        SyntaxKind::BooleanEqualityValue => {
+            let found = Type::Intrinsic(IntrinsicType::Bool);
+            if required != found {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::TypeMismatch {
+                        expected: required,
+                        found,
+                    },
+                    location: value_location,
+                });
+                return None;
+            }
+
+            let operator = node
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .find(|token| matches!(token.kind(), SyntaxKind::EqEq | SyntaxKind::BangEq))
+                .expect("syntax-clean Boolean equality contains one operator token");
+            let relation = match operator.kind() {
+                SyntaxKind::EqEq => BooleanEqualityRelation::Equal,
+                SyntaxKind::BangEq => BooleanEqualityRelation::NotEqual,
+                _ => unreachable!("equality operator token has accepted equality kind"),
+            };
+            let mut operands = node.children().filter(|child| is_value_node(child.kind()));
+            let left_node = operands
+                .next()
+                .expect("syntax-clean Boolean equality contains a left operand");
+            let right_node = operands
+                .next()
+                .expect("syntax-clean Boolean equality contains a right operand");
+            debug_assert!(operands.next().is_none());
+
+            let mut operand_bindings = bindings.clone();
+            let left = validate_value(
+                header,
+                &left_node,
+                found,
+                context,
+                &mut operand_bindings,
+                diagnostics,
+            )?;
+            let right = validate_value(
+                header,
+                &right_node,
+                found,
+                context,
+                &mut operand_bindings,
+                diagnostics,
+            )?;
+            *bindings = operand_bindings;
+            Some(Value {
+                ty: found,
+                kind: ValueKind::BooleanEquality {
+                    relation,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                location: value_location,
+            })
+        }
         SyntaxKind::BooleanNotValue => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
             if required != found {
@@ -3248,7 +3309,8 @@ fn value_child(node: &SyntaxNode) -> SyntaxNode {
 fn is_value_node(kind: SyntaxKind) -> bool {
     matches!(
         kind,
-        SyntaxKind::BooleanNotValue
+        SyntaxKind::BooleanEqualityValue
+            | SyntaxKind::BooleanNotValue
             | SyntaxKind::BooleanLiteral
             | SyntaxKind::DecimalIntegerLiteral
             | SyntaxKind::DecimalFloatingLiteral

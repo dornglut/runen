@@ -148,6 +148,10 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
             Some((SyntaxKind::Arrow, 2))
         } else if rest.starts_with("::") {
             Some((SyntaxKind::ColonColon, 2))
+        } else if rest.starts_with("==") {
+            Some((SyntaxKind::EqEq, 2))
+        } else if rest.starts_with("!=") {
+            Some((SyntaxKind::BangEq, 2))
         } else {
             match character {
                 '(' => Some((SyntaxKind::LParen, 1)),

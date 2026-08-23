@@ -994,6 +994,93 @@ impl<'a> FunctionLowerer<'a> {
                 self.current = join_target.0 as usize;
                 Ok(result)
             }
+            hir::ValueKind::BooleanEquality {
+                relation,
+                left,
+                right,
+            } => {
+                let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+                if value.ty != bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Boolean-equality result type is not Bool",
+                    ));
+                }
+                if left.ty != bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Boolean-equality left operand type is not Bool",
+                    ));
+                }
+                if right.ty != bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Boolean-equality right operand type is not Bool",
+                    ));
+                }
+
+                let left_local = self.lower_value(left)?;
+                let core_bool_ty = self.types.get(bool_ty)?;
+                if self.local_type(left_local)? != core_bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Boolean-equality left operand temporary is not Bool",
+                    ));
+                }
+
+                let right_local = self.lower_value(right)?;
+                if self.local_type(right_local)? != core_bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Boolean-equality right operand temporary is not Bool",
+                    ));
+                }
+
+                let result = self.push_temporary(bool_ty)?;
+                let left_true = self.new_block()?;
+                let left_false = self.new_block()?;
+                let true_true = self.new_block()?;
+                let true_false = self.new_block()?;
+                let false_true = self.new_block()?;
+                let false_false = self.new_block()?;
+                let join_target = self.new_block()?;
+                let (ff, ft, tf, tt) = match *relation {
+                    hir::BooleanEqualityRelation::Equal => (true, false, false, true),
+                    hir::BooleanEqualityRelation::NotEqual => (false, true, true, false),
+                };
+
+                self.terminate_current(core::Terminator::Branch {
+                    condition: core::Operand::Move(core::Place::local(left_local).into()),
+                    true_target: left_true,
+                    false_target: left_false,
+                })?;
+
+                self.current = left_true.0 as usize;
+                self.terminate_current(core::Terminator::Branch {
+                    condition: core::Operand::Move(core::Place::local(right_local).into()),
+                    true_target: true_true,
+                    false_target: true_false,
+                })?;
+
+                self.current = left_false.0 as usize;
+                self.terminate_current(core::Terminator::Branch {
+                    condition: core::Operand::Move(core::Place::local(right_local).into()),
+                    true_target: false_true,
+                    false_target: false_false,
+                })?;
+
+                for (target, constant) in [
+                    (true_true, tt),
+                    (true_false, tf),
+                    (false_true, ft),
+                    (false_false, ff),
+                ] {
+                    self.current = target.0 as usize;
+                    self.push_statement(core::Statement::Init {
+                        dst: core::Place::local(result),
+                        src: core::Operand::Constant(core::Value::Bool(constant)),
+                    });
+                    self.terminate_current(core::Terminator::Goto(join_target))?;
+                }
+
+                self.current = join_target.0 as usize;
+                Ok(result)
+            }
             hir::ValueKind::BindingUse { binding, ownership } => {
                 let source = self.binding(*binding)?;
                 let temporary = self.push_temporary(value.ty)?;
