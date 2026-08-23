@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
+    Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{Machine, TerminalStatus, VerificationEventKind};
 
