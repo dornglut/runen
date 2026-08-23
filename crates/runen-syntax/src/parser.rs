@@ -347,7 +347,6 @@ impl Parser<'_> {
             }
             self.bump_trivia();
         }
-
         if !missing_close {
             self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
         }
@@ -374,7 +373,7 @@ impl Parser<'_> {
     }
 
     fn parse_conditional_value(&mut self) {
-        self.parse_value_in(ValueContext::Conditional);
+        self.parse_equality_value(ValueContext::Conditional);
     }
 
     fn parse_let_statement(&mut self) {
@@ -641,7 +640,19 @@ impl Parser<'_> {
     }
 
     fn parse_value(&mut self) {
-        self.parse_value_in(ValueContext::Ordinary);
+        self.parse_equality_value(ValueContext::Ordinary);
+    }
+
+    fn parse_equality_value(&mut self, context: ValueContext) {
+        let checkpoint = self.builder.checkpoint();
+        self.parse_value_in(context);
+        if self.at(SyntaxKind::EqEq) || self.at(SyntaxKind::BangEq) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BooleanEqualityValue.into());
+            self.bump();
+            self.parse_value_in(context);
+            self.builder.finish_node();
+        }
     }
 
     fn parse_value_in(&mut self, context: ValueContext) {
