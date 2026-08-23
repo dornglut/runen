@@ -98,6 +98,8 @@ pub enum SyntaxKind {
     FaultStatement,
     KwWhile,
     WhileStatement,
+    DecimalFloatingMagnitude,
+    DecimalFloatingLiteral,
 }
 
 impl SyntaxKind {
@@ -132,7 +134,12 @@ impl SyntaxKind {
     pub(crate) const fn is_value_start(self) -> bool {
         matches!(
             self,
-            Self::Ident | Self::KwTrue | Self::KwFalse | Self::DecimalMagnitude | Self::Minus
+            Self::Ident
+                | Self::KwTrue
+                | Self::KwFalse
+                | Self::DecimalMagnitude
+                | Self::DecimalFloatingMagnitude
+                | Self::Minus
         )
     }
 }
@@ -224,6 +231,8 @@ impl Language for RunenLanguage {
             73 => SyntaxKind::FaultStatement,
             74 => SyntaxKind::KwWhile,
             75 => SyntaxKind::WhileStatement,
+            76 => SyntaxKind::DecimalFloatingMagnitude,
+            77 => SyntaxKind::DecimalFloatingLiteral,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
