@@ -92,16 +92,16 @@ A no-result target requires no result destination.
 
 A result-bearing target requires exactly one direct destination place in the caller whose Core type is exactly equal to the target result type.
 
-The result destination is a first-initialization destination, not an assignment or replacement destination. At the call point:
+The result destination is a non-replacing initialization destination, not an assignment or replacement destination. At the call point:
 
-- every scalar leaf in the destination MUST still be Never-initialized under `value-storage.md`; and
+- the destination MUST be wholly vacant under `value-storage.md`; and
 - direct access to that destination MUST have the same exclusive access authority required by ordinary `Init`.
 
 The containing local need not be mutable merely because the call may initialize the destination.
 
-The destination admission facts are established for the call point before argument operand state transitions are applied. Argument evaluation never itself initializes the call result destination under this relation.
+The destination admission facts are established for the call point before argument operand state transitions are applied. Argument evaluation cannot make an initially Live destination admissible to that same call merely by moving or destroying its prior value.
 
-A successful result return initializes the result destination and begins the corresponding stored-value lifetimes before control continues at the normal target.
+A successful result return initializes the admitted vacant destination without replacement destruction and begins new stored-value lifetimes there before control continues at the normal target. Those lifetimes may be the first or later lifetimes in the same continuing destination storage extent.
 
 A faulting or diverging callee does not initialize the destination and does not follow the normal target.
 
@@ -155,7 +155,7 @@ For a result-bearing return:
 
 For a no-result return, perform the same activation termination relation but produce no Core value.
 
-When the caller expects a result, successful result transfer initializes the admitted result destination and normal execution resumes at the call's normal continuation block.
+When the caller expects a result, successful result transfer initializes the previously admitted vacant result destination without replacement destruction and normal execution resumes at the call's normal continuation block.
 
 When the caller expects no result, normal execution resumes at the normal continuation block without producing or discarding a hidden value.
 
@@ -210,7 +210,7 @@ A represented Core program is language-valid under this relation only when all o
 - each argument operand type exactly matches its corresponding target parameter-local type;
 - argument operand state transitions are valid in left-to-right order;
 - result-destination presence exactly matches target result/no-result structure;
-- a result destination has exactly the target result type, is wholly Never-initialized at the call point, and has ordinary direct exclusive initialization authority;
+- a result destination has exactly the target result type, is wholly vacant at the call point, and has ordinary direct exclusive initialization authority;
 - every normal call continuation block exists in the caller body;
 - every return's result presence and type exactly match its enclosing function result structure; and
 - result operand state effects are valid before termination.

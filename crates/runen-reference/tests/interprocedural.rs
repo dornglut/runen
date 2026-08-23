@@ -149,6 +149,109 @@ fn result_is_preserved_across_callee_cleanup_and_caller_resumes_after_cleanup() 
 }
 
 #[test]
+fn reused_vacant_result_destination_is_initialized_without_replacement_destruction() {
+    let (types, tracked) = tracked_types();
+    let result = Place::local(LocalId(0));
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("result", tracked, false)],
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: Vec::new(),
+                        destination: Some(result.clone()),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(
+                    vec![Statement::Drop {
+                        place: result.clone().into(),
+                    }],
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: Vec::new(),
+                        destination: Some(result.clone()),
+                        target: BasicBlockId(2),
+                    },
+                ),
+                BasicBlock::new(
+                    vec![Statement::Read {
+                        src: result.clone().into(),
+                    }],
+                    Terminator::Return(None),
+                ),
+            ],
+        ),
+    };
+    let callee = Function {
+        name: "produce".into(),
+        parameters: Vec::new(),
+        result: Some(tracked),
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Constant(Value::TrackedFixture(7)))),
+            )],
+        ),
+    };
+
+    let validated = validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect("a Dead call result destination is vacant");
+    let report = Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect("defined repeated result transfer");
+
+    let caller_events = report
+        .verification_events
+        .iter()
+        .enumerate()
+        .filter(|(_, event)| event.activation.0 == 1)
+        .collect::<Vec<_>>();
+    let writes = caller_events
+        .iter()
+        .filter_map(|(index, event)| {
+            matches!(
+                event.kind,
+                VerificationEventKind::Write {
+                    ref place,
+                    kind: VerificationWriteKind::Init,
+                } if *place == result
+            )
+            .then_some(*index)
+        })
+        .collect::<Vec<_>>();
+    let drops = caller_events
+        .iter()
+        .filter_map(|(index, event)| {
+            matches!(
+                event.kind,
+                VerificationEventKind::DropTrackedFixture {
+                    ref place,
+                    id: 7,
+                } if *place == result
+            )
+            .then_some(*index)
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(writes.len(), 2);
+    assert_eq!(drops.len(), 2);
+    assert!(writes[0] < drops[0]);
+    assert!(drops[0] < writes[1]);
+    assert!(writes[1] < drops[1]);
+}
+
+#[test]
 fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
     let (types, tracked) = tracked_types();
 

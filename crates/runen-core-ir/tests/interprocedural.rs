@@ -316,7 +316,7 @@ fn call_arguments_apply_copy_then_move_effects_left_to_right() {
 }
 
 #[test]
-fn result_destination_must_still_be_never_initialized() {
+fn result_destination_must_be_vacant() {
     let (types, i64_ty) = scalar_program_types();
     let caller = Function {
         name: "caller".into(),
@@ -358,12 +358,112 @@ fn result_destination_must_still_be_never_initialized() {
         types,
         functions: vec![caller, callee],
     })
-    .expect_err("call result is first initialization, not replacement");
+    .expect_err("call result initialization cannot replace a Live destination");
     assert!(matches!(
         error.kind,
-        MirValidationErrorKind::CallResultRequiresNeverInitialized(ref place)
+        MirValidationErrorKind::CallResultRequiresVacant(ref place)
             if *place == Place::local(LocalId(0))
     ));
+}
+
+#[test]
+fn result_destination_vacancy_is_checked_before_argument_moves() {
+    let (types, i64_ty) = scalar_program_types();
+    let result = Place::local(LocalId(0));
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("result", i64_ty, false)],
+            vec![
+                BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: result.clone(),
+                        src: Operand::Constant(Value::I64(5)),
+                    }],
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: vec![Operand::Move(result.clone().into())],
+                        destination: Some(result.clone()),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(Vec::new(), Terminator::Return(None)),
+            ],
+        ),
+    };
+    let callee = Function {
+        name: "identity".into(),
+        parameters: vec![LocalId(0)],
+        result: Some(i64_ty),
+        body: body(
+            vec![LocalDecl::new("parameter", i64_ty, false)],
+            vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
+            )],
+        ),
+    };
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect_err("argument Move cannot manufacture vacancy for its own result destination");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::CallResultRequiresVacant(result)
+    );
+}
+
+#[test]
+fn cyclic_result_call_reuses_destination_after_prior_lifetime_ends() {
+    let (types, i64_ty) = scalar_program_types();
+    let result = Place::local(LocalId(0));
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: None,
+        body: body(
+            vec![LocalDecl::new("result", i64_ty, false)],
+            vec![
+                BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Call {
+                        function: FunctionId(1),
+                        arguments: Vec::new(),
+                        destination: Some(result.clone()),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(
+                    vec![Statement::Drop {
+                        place: result.into(),
+                    }],
+                    Terminator::Goto(BasicBlockId(0)),
+                ),
+            ],
+        ),
+    };
+    let callee = Function {
+        name: "produce".into(),
+        parameters: Vec::new(),
+        result: Some(i64_ty),
+        body: body(
+            Vec::new(),
+            vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Constant(Value::I64(8)))),
+            )],
+        ),
+    };
+
+    validate_program(Program {
+        types,
+        functions: vec![caller, callee],
+    })
+    .expect("cyclic call may reuse its result destination after the prior lifetime ends");
 }
 
 #[test]
