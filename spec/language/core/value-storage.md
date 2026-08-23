@@ -94,7 +94,7 @@ Whenever a Core function activation is created, one fresh dynamic local storage 
 
 The storage-instance identity remains stable while the storage extent continues. In particular, none of the following creates a new storage instance:
 
-- first initialization;
+- initialization, including initialization after an earlier stored-value lifetime ended;
 - moving a stored value out;
 - explicit destruction;
 - ordinary assignment or reinitialization;
@@ -118,7 +118,7 @@ A stored-value lifetime ends when the stored value is consumed by move, destroye
 
 `Read` and `Copy` do not end the source stored-value lifetime.
 
-Both ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
+`Init` may begin either the first stored-value lifetime or a later stored-value lifetime in vacant storage. Ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
 
 The current revision defines stored-value lifetime at scalar storage leaves. Aggregate initialization and liveness are derived recursively from the states of those leaves; an aggregate does not acquire a separate hidden lifetime identity.
 
@@ -137,6 +137,16 @@ A scalar storage leaf has not yet begun any stored-value lifetime during its cur
 A scalar storage leaf previously had a stored-value lifetime that ended by move, destruction, or replacement, and it has not subsequently been written again.
 
 Aggregate initialization state is derived recursively from its leaves; it is not a separate boolean flag.
+
+### Vacant
+
+A scalar storage leaf is **vacant** exactly when it is not Live: its state is Never-initialized or Dead.
+
+A structural aggregate place is **wholly vacant** exactly when every recursively contained scalar leaf is vacant. A mixed Never-initialized/Dead aggregate with no Live scalar leaf is therefore wholly vacant. A recursively zero-leaf structural value is vacuously wholly vacant; no hidden aggregate lifetime state is introduced merely to distinguish first from later initialization.
+
+Vacancy is determined for the selected destination place or sub-place. Live storage outside that selected structural region does not make the selected destination non-vacant.
+
+A wholly vacant place has an empty destruction domain.
 
 ### Destruction domain
 
@@ -162,21 +172,21 @@ A move from one field affects only that field. A partially initialized aggregate
 
 Partial initialization does not change storage extent or storage-instance identity. It changes only which scalar leaves currently have stored-value lifetimes.
 
-## First initialization
+## Non-replacing initialization
 
-`Init(dst, value)` writes a value into a place only if every leaf in `dst` is Never-initialized.
+`Init(dst, value)` writes a complete value into a place only if `dst` is wholly vacant.
 
-`Init` MUST NOT reinitialize storage whose previous stored-value lifetime ended and which therefore became Dead.
+Destination vacancy is established at the `Init` operation point before evaluation of the source operand. Source evaluation therefore cannot make an initially Live destination admissible to that same `Init`. In particular, `Init(dst, Move(dst))` is invalid when `dst` is Live at admission rather than becoming an assignment-like replacement after the move.
 
 The value MUST structurally match the type of `dst`.
 
-First initialization does not require the containing local to be mutable.
+Initialization does not require the containing local to be mutable for ordinary assignment.
 
-Each scalar leaf written by a successful `Init` begins its first stored-value lifetime in that storage extent.
+After successful source evaluation, `Init` writes the complete value without destroying destination contents because a wholly vacant destination has no Live destruction domain. Each scalar leaf written by the operation becomes Live and begins a new stored-value lifetime, whether or not an earlier stored-value lifetime existed in that storage.
 
-`Init` remains an exclusive-access operation under the borrowing rules. Interior mutability does not weaken first-initialization access requirements.
+`Init` remains an exclusive-access operation under the borrowing rules. Interior mutability does not weaken initialization access requirements.
 
-First initialization does not create the local's storage-instance identity; that identity already exists for the storage extent before initialization occurs.
+Initialization does not create or replace the local's storage-instance identity; that identity already exists for the continuing storage extent before initialization occurs.
 
 ## Read
 
@@ -222,7 +232,7 @@ The general language mechanism that determines copyability is not defined by thi
 
 It also requires the exclusive alias authority specified by [Core borrowing](borrowing.md). Interior-mutability markers do not weaken either ordinary-assignment requirement.
 
-Unlike `Init`, `Assign` is path-state tolerant: `dst` may be wholly Never-initialized, partially initialized, fully Live, or contain Dead subobjects.
+Unlike `Init`, `Assign` may target storage containing Live leaves and therefore may perform replacement. Its `dst` may be wholly Never-initialized, partially initialized, fully Live, or contain Dead subobjects.
 
 Assignment evaluates conceptually as:
 
