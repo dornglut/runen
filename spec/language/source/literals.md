@@ -98,7 +98,7 @@ The exact decimal rational denoted at this stage is a literal datum used only by
 
 The concrete floating token extent, decimal point, and optional sign grammar are owned by `concrete-syntax.md`.
 
-The floating magnitude may contain arbitrarily many digits, subject only to the accepted source-input and syntax-tree representation boundary. Host parser limits, host integer widths, host floating ranges, and host decimal-to-binary conversion behavior have no semantic authority.
+The floating magnitude may contain arbitrarily many digits. Host parser limits, host integer widths, host floating ranges, and host decimal-to-binary conversion behavior have no semantic authority. Any independently applicable whole-source admission limit does not become a literal-value or numeric-range rule.
 
 ## Floating required-type materialization
 
