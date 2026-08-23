@@ -460,8 +460,8 @@ This form defines no inferred or anonymous constructor target, positional field 
 The represented field-value forms have this grammar:
 
 ```text
-FieldValueUse         = BindingFieldValueUse | ProducerFieldValueUse
-BindingFieldValueUse  = UserIdentifier FieldSelector+
+FieldValueUse        = BindingFieldValueUse | ProducerFieldValueUse
+BindingFieldValueUse = UserIdentifier FieldSelector+
 ProducerFieldValueUse = FieldReceiverProducer FieldSelector+
 FieldReceiverProducer = DirectCall | RecordConstruction
 FieldSelector         = "." UserIdentifier
@@ -490,12 +490,12 @@ The `.` punctuation token in this production has no decimal-literal, method, ass
 ## Value forms
 
 ```text
-Value                  = Literal | IdentifierUse | DirectCall | RecordConstruction | FieldValueUse
-Literal                = BooleanLiteral | DecimalIntegerLiteral | DecimalFloatingLiteral
-BooleanLiteral         = "true" | "false"
-DecimalIntegerLiteral  = "-"? DecimalMagnitude
+Value                 = Literal | IdentifierUse | DirectCall | RecordConstruction | FieldValueUse
+Literal               = BooleanLiteral | DecimalIntegerLiteral | DecimalFloatingLiteral
+BooleanLiteral        = "true" | "false"
+DecimalIntegerLiteral = "-"? DecimalMagnitude
 DecimalFloatingLiteral = "-"? DecimalFloatingMagnitude
-IdentifierUse          = UserIdentifier
+IdentifierUse         = UserIdentifier
 ```
 
 The represented literal forms map to `literals.md`. `true` and `false` denote the boolean literal forms owned there. A `DecimalIntegerLiteral` supplies its concrete sign and decimal magnitude to the exact mathematical-integer and required-type materialization relation owned there. A `DecimalFloatingLiteral` supplies its concrete sign and one contiguous decimal floating magnitude token to the exact decimal-rational and required-type floating materialization relation owned there. This grammar does not assign an integer or floating default type, abstract literal type, conversion, or arithmetic semantics.
