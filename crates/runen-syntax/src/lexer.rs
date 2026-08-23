@@ -124,8 +124,19 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
             while end < source.len() && source.as_bytes()[end].is_ascii_digit() {
                 end += 1;
             }
+            let mut kind = SyntaxKind::DecimalMagnitude;
+            if end + 1 < source.len()
+                && source.as_bytes()[end] == b'.'
+                && source.as_bytes()[end + 1].is_ascii_digit()
+            {
+                kind = SyntaxKind::DecimalFloatingMagnitude;
+                end += 2;
+                while end < source.len() && source.as_bytes()[end].is_ascii_digit() {
+                    end += 1;
+                }
+            }
             tokens.push(LexToken {
-                kind: SyntaxKind::DecimalMagnitude,
+                kind,
                 start: offset,
                 end,
             });

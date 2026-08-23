@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, LiteralValue, ModuleId, SourceUnit, Statement, Type, ValueKind,
-    build_typed_hir,
+    BinaryFloatSign, BinaryFloatValue, DiagnosticKind, IntrinsicType, LiteralValue, ModuleId,
+    SourceUnit, Statement, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -35,6 +35,18 @@ fn returned_literal(source_type: &str, spelling: &str) -> LiteralValue {
         panic!("expected typed literal HIR value");
     };
     literal
+}
+
+fn normal(sign: BinaryFloatSign, significand: u64, exponent: i16) -> BinaryFloatValue {
+    BinaryFloatValue::Normal {
+        sign,
+        significand,
+        exponent,
+    }
+}
+
+fn subnormal(sign: BinaryFloatSign, significand: u64) -> BinaryFloatValue {
+    BinaryFloatValue::Subnormal { sign, significand }
 }
 
 #[test]
@@ -141,6 +153,176 @@ fn integer_literal_diagnostics_distinguish_context_kind_from_range_failure() {
 }
 
 #[test]
+fn floating_spelling_materializes_to_each_exact_required_format() {
+    assert_eq!(
+        returned_literal("F16", "1.0"),
+        LiteralValue::F16(normal(BinaryFloatSign::Positive, 1 << 10, 0))
+    );
+    assert_eq!(
+        returned_literal("F32", "1.0"),
+        LiteralValue::F32(normal(BinaryFloatSign::Positive, 1 << 23, 0))
+    );
+    assert_eq!(
+        returned_literal("F64", "1.0"),
+        LiteralValue::F64(normal(BinaryFloatSign::Positive, 1 << 52, 0))
+    );
+}
+
+#[test]
+fn floating_literal_rejects_nonfloating_required_types_without_conversion() {
+    for (source_type, required) in [
+        ("Bool", Type::Intrinsic(IntrinsicType::Bool)),
+        ("I32", Type::Intrinsic(IntrinsicType::I32)),
+    ] {
+        let source = format!("fn bad() -> {source_type} {{ return 1.0; }}");
+        let diagnostics = errors(&source);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.kind == DiagnosticKind::FloatingLiteralRequiresFloating { required }
+        }));
+    }
+
+    let diagnostics = errors("record Ticket {} fn bad() -> Ticket { return 1.0; }");
+    assert!(diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.kind,
+        DiagnosticKind::FloatingLiteralRequiresFloating {
+            required: Type::Record(_)
+        }
+    )));
+
+    let integer_looking = errors("fn bad() -> F32 { return 1; }");
+    assert!(integer_looking.iter().any(|diagnostic| {
+        diagnostic.kind
+            == DiagnosticKind::IntegerLiteralRequiresInteger {
+                required: Type::Intrinsic(IntrinsicType::F32),
+            }
+    }));
+}
+
+#[test]
+fn floating_zero_preserves_source_sign_and_redundant_zero_digits() {
+    for spelling in ["0.0", "00.000"] {
+        assert_eq!(
+            returned_literal("F16", spelling),
+            LiteralValue::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive))
+        );
+    }
+    for spelling in ["-0.0", "-00.000"] {
+        assert_eq!(
+            returned_literal("F16", spelling),
+            LiteralValue::F16(BinaryFloatValue::Zero(BinaryFloatSign::Negative))
+        );
+    }
+}
+
+#[test]
+fn f16_subnormal_and_zero_boundary_round_exactly() {
+    assert_eq!(
+        returned_literal("F16", "0.000000059604644775390625"),
+        LiteralValue::F16(subnormal(BinaryFloatSign::Positive, 1))
+    );
+    assert_eq!(
+        returned_literal("F16", "0.0000000298023223876953125"),
+        LiteralValue::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive))
+    );
+    assert_eq!(
+        returned_literal("F16", "-0.0000000298023223876953125"),
+        LiteralValue::F16(BinaryFloatValue::Zero(BinaryFloatSign::Negative))
+    );
+    assert_eq!(
+        returned_literal("F16", "0.00000002980232238769531249"),
+        LiteralValue::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive))
+    );
+    assert_eq!(
+        returned_literal("F16", "0.00000002980232238769531251"),
+        LiteralValue::F16(subnormal(BinaryFloatSign::Positive, 1))
+    );
+}
+
+#[test]
+fn f16_interior_ties_and_subnormal_normal_carry_use_nearest_even() {
+    assert_eq!(
+        returned_literal("F16", "1.00048828125"),
+        LiteralValue::F16(normal(BinaryFloatSign::Positive, 1024, 0))
+    );
+    assert_eq!(
+        returned_literal("F16", "1.00146484375"),
+        LiteralValue::F16(normal(BinaryFloatSign::Positive, 1026, 0))
+    );
+    assert_eq!(
+        returned_literal("F16", "0.0000610053539276123046875"),
+        LiteralValue::F16(normal(BinaryFloatSign::Positive, 1024, -14))
+    );
+}
+
+#[test]
+fn f16_upper_boundary_rounds_finite_text_to_finite_or_infinity_exactly() {
+    assert_eq!(
+        returned_literal("F16", "65504.0"),
+        LiteralValue::F16(normal(BinaryFloatSign::Positive, 2047, 15))
+    );
+    assert_eq!(
+        returned_literal("F16", "65519.999"),
+        LiteralValue::F16(normal(BinaryFloatSign::Positive, 2047, 15))
+    );
+    assert_eq!(
+        returned_literal("F16", "65520.0"),
+        LiteralValue::F16(BinaryFloatValue::Infinity(BinaryFloatSign::Positive))
+    );
+    assert_eq!(
+        returned_literal("F16", "-65520.0"),
+        LiteralValue::F16(BinaryFloatValue::Infinity(BinaryFloatSign::Negative))
+    );
+    assert_eq!(
+        returned_literal("F16", "999999.0"),
+        LiteralValue::F16(BinaryFloatValue::Infinity(BinaryFloatSign::Positive))
+    );
+}
+
+#[test]
+fn tiny_huge_and_long_decimal_inputs_do_not_use_host_numeric_ranges() {
+    let tiny_f32 = format!("0.{}1", "0".repeat(44));
+    assert_eq!(
+        returned_literal("F32", &tiny_f32),
+        LiteralValue::F32(subnormal(BinaryFloatSign::Positive, 1))
+    );
+
+    let tiny_f64 = format!("0.{}1", "0".repeat(323));
+    assert_eq!(
+        returned_literal("F64", &tiny_f64),
+        LiteralValue::F64(BinaryFloatValue::Zero(BinaryFloatSign::Positive))
+    );
+
+    let huge = format!("{}.0", "9".repeat(2000));
+    assert_eq!(
+        returned_literal("F32", &huge),
+        LiteralValue::F32(BinaryFloatValue::Infinity(BinaryFloatSign::Positive))
+    );
+    assert_eq!(
+        returned_literal("F64", &huge),
+        LiteralValue::F64(BinaryFloatValue::Infinity(BinaryFloatSign::Positive))
+    );
+
+    let long_one = format!("{}1.{}", "0".repeat(2000), "0".repeat(2000));
+    assert_eq!(
+        returned_literal("F64", &long_one),
+        LiteralValue::F64(normal(BinaryFloatSign::Positive, 1 << 52, 0))
+    );
+}
+
+#[test]
+fn floating_conditional_is_rejected_by_existing_exact_bool_requirement() {
+    for source in ["fn bad() { if 1.0 {} }", "fn bad() { while -2.0 {} }"] {
+        let diagnostics = errors(source);
+        assert!(diagnostics.iter().any(|diagnostic| {
+            diagnostic.kind
+                == DiagnosticKind::FloatingLiteralRequiresFloating {
+                    required: Type::Intrinsic(IntrinsicType::Bool),
+                }
+        }));
+    }
+}
+
+#[test]
 fn boolean_literal_uses_existing_exact_type_mismatch_boundary() {
     let diagnostics = errors("fn bad() -> I8 { return true; }");
     assert!(diagnostics.iter().any(|diagnostic| {
@@ -153,32 +335,42 @@ fn boolean_literal_uses_existing_exact_type_mismatch_boundary() {
 }
 
 #[test]
-fn no_result_return_rejects_literal_without_manufacturing_an_integer_context() {
-    let diagnostics = errors("fn bad() { return 1; }");
-    assert!(
-        diagnostics
-            .iter()
-            .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnexpectedResultValue)
-    );
-    assert!(!diagnostics.iter().any(|diagnostic| matches!(
-        diagnostic.kind,
-        DiagnosticKind::IntegerLiteralRequiresInteger { .. }
-            | DiagnosticKind::IntegerLiteralOutOfRange { .. }
-    )));
+fn no_result_return_rejects_literal_without_manufacturing_a_numeric_context() {
+    for source in ["fn bad() { return 1; }", "fn bad() { return 1.0; }"] {
+        let diagnostics = errors(source);
+        assert!(
+            diagnostics
+                .iter()
+                .any(|diagnostic| diagnostic.kind == DiagnosticKind::UnexpectedResultValue)
+        );
+        assert!(!diagnostics.iter().any(|diagnostic| matches!(
+            diagnostic.kind,
+            DiagnosticKind::IntegerLiteralRequiresInteger { .. }
+                | DiagnosticKind::IntegerLiteralOutOfRange { .. }
+                | DiagnosticKind::FloatingLiteralRequiresFloating { .. }
+        )));
+    }
 }
 
 #[test]
 fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_bindings() {
     let hir = build(
         "record Ticket {} \
+         record Sample { value: F32 } \
          fn id(value: U64) -> U64 { return value; } \
+         fn id_float(value: F32) -> F32 { return value; } \
          fn test(ticket: Ticket) -> Ticket { \
              let mut number: U64 = 1; \
              number = 2; \
              let result: U64 = id(18446744073709551615); \
+             let mut floating: F32 = 1.0; \
+             floating = 2.0; \
+             let float_result: F32 = id_float(3.0); \
+             let sample: Sample = Sample { value: 4.0 }; \
              return ticket; \
          } \
-         fn direct_return() -> I16 { return -32768; }",
+         fn direct_return() -> I16 { return -32768; } \
+         fn float_return() -> F32 { return 5.0; }",
     );
 
     let test = hir
@@ -212,6 +404,52 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         ValueKind::Literal(LiteralValue::U64(u64::MAX))
     );
 
+    let Statement::Local { initializer, .. } = &test.body.statements[3] else {
+        panic!("expected floating local initializer");
+    };
+    assert_eq!(initializer.ty, Type::Intrinsic(IntrinsicType::F32));
+    assert_eq!(
+        initializer.kind,
+        ValueKind::Literal(LiteralValue::F32(normal(
+            BinaryFloatSign::Positive,
+            1 << 23,
+            0,
+        )))
+    );
+
+    let Statement::Assignment { value, .. } = &test.body.statements[4] else {
+        panic!("expected floating literal assignment");
+    };
+    assert_eq!(value.ty, Type::Intrinsic(IntrinsicType::F32));
+
+    let Statement::Local { initializer, .. } = &test.body.statements[5] else {
+        panic!("expected floating result-bearing call initializer");
+    };
+    let ValueKind::DirectCall { arguments, .. } = &initializer.kind else {
+        panic!("expected floating direct call value");
+    };
+    assert_eq!(arguments[0].ty, Type::Intrinsic(IntrinsicType::F32));
+    assert!(matches!(
+        arguments[0].kind,
+        ValueKind::Literal(LiteralValue::F32(_))
+    ));
+
+    let Statement::Local { initializer, .. } = &test.body.statements[6] else {
+        panic!("expected floating record initializer");
+    };
+    let Type::Record(record) = initializer.ty else {
+        panic!("expected Sample record type");
+    };
+    assert_eq!(hir.record(record).name, "Sample");
+    let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
+        panic!("expected record construction initializer");
+    };
+    assert_eq!(fields.len(), 1);
+    assert!(matches!(
+        fields[0].value.kind,
+        ValueKind::Literal(LiteralValue::F32(_))
+    ));
+
     let returned = test
         .body
         .terminal_return
@@ -232,4 +470,17 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         direct_return.kind,
         ValueKind::Literal(LiteralValue::I16(i16::MIN))
     );
+
+    let float_return = hir
+        .functions
+        .iter()
+        .find(|function| function.name == "float_return")
+        .and_then(|function| function.body.terminal_return.as_ref())
+        .and_then(|returned| returned.value.as_ref())
+        .expect("direct floating literal return");
+    assert_eq!(float_return.ty, Type::Intrinsic(IntrinsicType::F32));
+    assert!(matches!(
+        float_return.kind,
+        ValueKind::Literal(LiteralValue::F32(_))
+    ));
 }
