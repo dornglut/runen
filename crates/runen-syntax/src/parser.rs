@@ -248,6 +248,7 @@ impl Parser<'_> {
 
             match self.current() {
                 Some(SyntaxKind::KwLet) => self.parse_let_statement(),
+                Some(SyntaxKind::KwFault) => self.parse_fault_statement(),
                 Some(SyntaxKind::KwReturn) => {
                     self.parse_return_statement();
                     returned = true;
@@ -318,6 +319,7 @@ impl Parser<'_> {
 
             match self.current() {
                 Some(SyntaxKind::KwLet) => self.parse_let_statement(),
+                Some(SyntaxKind::KwFault) => self.parse_fault_statement(),
                 Some(SyntaxKind::KwReturn) => {
                     self.parse_return_statement();
                     returned = true;
@@ -399,6 +401,7 @@ impl Parser<'_> {
                 SyntaxKind::RBrace,
                 SyntaxKind::KwElse,
                 SyntaxKind::KwLet,
+                SyntaxKind::KwFault,
                 SyntaxKind::KwIf,
                 SyntaxKind::KwReturn,
             ])
@@ -466,6 +469,7 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::Semicolon)
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwFault)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
@@ -492,6 +496,7 @@ impl Parser<'_> {
                         SyntaxKind::Semicolon,
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
+                        SyntaxKind::KwFault,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
@@ -512,6 +517,7 @@ impl Parser<'_> {
                     SyntaxKind::Semicolon,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
@@ -581,6 +587,7 @@ impl Parser<'_> {
                     SyntaxKind::RBrace,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
@@ -607,6 +614,13 @@ impl Parser<'_> {
     fn parse_call_statement(&mut self) {
         self.builder.start_node(SyntaxKind::CallStatement.into());
         self.parse_direct_call();
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_fault_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::FaultStatement.into());
+        self.expect(SyntaxKind::KwFault, ExpectedSyntax::Statement);
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
         self.builder.finish_node();
     }
@@ -680,6 +694,7 @@ impl Parser<'_> {
                         SyntaxKind::RBrace,
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
+                        SyntaxKind::KwFault,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
@@ -794,6 +809,7 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::Semicolon)
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwFault)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
@@ -826,6 +842,7 @@ impl Parser<'_> {
                         SyntaxKind::Semicolon,
                         SyntaxKind::LBrace,
                         SyntaxKind::KwLet,
+                        SyntaxKind::KwFault,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
@@ -846,6 +863,7 @@ impl Parser<'_> {
                     SyntaxKind::Semicolon,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
@@ -887,6 +905,7 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::RBrace)
                 || self.at(SyntaxKind::LBrace)
                 || self.at(SyntaxKind::KwLet)
+                || self.at(SyntaxKind::KwFault)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
@@ -912,6 +931,7 @@ impl Parser<'_> {
                     SyntaxKind::RBrace,
                     SyntaxKind::LBrace,
                     SyntaxKind::KwLet,
+                    SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
