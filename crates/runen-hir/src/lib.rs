@@ -300,6 +300,9 @@ pub enum RecordPatternScrutinee {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
     Literal(LiteralValue),
+    BooleanNot {
+        operand: Box<Value>,
+    },
     BindingUse {
         binding: BindingId,
         ownership: OwnedUse,

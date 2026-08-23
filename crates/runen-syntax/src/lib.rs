@@ -104,6 +104,8 @@ pub enum SyntaxKind {
     KwContinue,
     BreakStatement,
     ContinueStatement,
+    Bang,
+    BooleanNotValue,
 }
 
 impl SyntaxKind {
@@ -144,6 +146,7 @@ impl SyntaxKind {
                 | Self::DecimalMagnitude
                 | Self::DecimalFloatingMagnitude
                 | Self::Minus
+                | Self::Bang
         )
     }
 }
@@ -241,6 +244,8 @@ impl Language for RunenLanguage {
             79 => SyntaxKind::KwContinue,
             80 => SyntaxKind::BreakStatement,
             81 => SyntaxKind::ContinueStatement,
+            82 => SyntaxKind::Bang,
+            83 => SyntaxKind::BooleanNotValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

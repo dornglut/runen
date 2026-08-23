@@ -2114,6 +2114,38 @@ fn validate_value(
 ) -> Option<Value> {
     let value_location = location(header.unit, node);
     match node.kind() {
+        SyntaxKind::BooleanNotValue => {
+            let found = Type::Intrinsic(IntrinsicType::Bool);
+            if required != found {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::TypeMismatch {
+                        expected: required,
+                        found,
+                    },
+                    location: value_location,
+                });
+                return None;
+            }
+
+            let operand_node = value_child(node);
+            let mut operand_bindings = bindings.clone();
+            let operand = validate_value(
+                header,
+                &operand_node,
+                found,
+                context,
+                &mut operand_bindings,
+                diagnostics,
+            )?;
+            *bindings = operand_bindings;
+            Some(Value {
+                ty: found,
+                kind: ValueKind::BooleanNot {
+                    operand: Box::new(operand),
+                },
+                location: value_location,
+            })
+        }
         SyntaxKind::BooleanLiteral => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
             if required != found {
@@ -3216,7 +3248,8 @@ fn value_child(node: &SyntaxNode) -> SyntaxNode {
 fn is_value_node(kind: SyntaxKind) -> bool {
     matches!(
         kind,
-        SyntaxKind::BooleanLiteral
+        SyntaxKind::BooleanNotValue
+            | SyntaxKind::BooleanLiteral
             | SyntaxKind::DecimalIntegerLiteral
             | SyntaxKind::DecimalFloatingLiteral
             | SyntaxKind::IdentifierUse
