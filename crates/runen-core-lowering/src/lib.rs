@@ -1211,6 +1211,40 @@ fn lower_literal(value: hir::LiteralValue) -> core::Value {
         hir::LiteralValue::U16(value) => core::Value::U16(value),
         hir::LiteralValue::U32(value) => core::Value::U32(value),
         hir::LiteralValue::U64(value) => core::Value::U64(value),
+        hir::LiteralValue::F16(value) => core::Value::F16(lower_binary_float(value)),
+        hir::LiteralValue::F32(value) => core::Value::F32(lower_binary_float(value)),
+        hir::LiteralValue::F64(value) => core::Value::F64(lower_binary_float(value)),
+    }
+}
+
+fn lower_binary_float(value: hir::BinaryFloatValue) -> core::BinaryFloatValue {
+    match value {
+        hir::BinaryFloatValue::Zero(sign) => core::BinaryFloatValue::Zero(lower_float_sign(sign)),
+        hir::BinaryFloatValue::Subnormal { sign, significand } => {
+            core::BinaryFloatValue::Subnormal {
+                sign: lower_float_sign(sign),
+                significand,
+            }
+        }
+        hir::BinaryFloatValue::Normal {
+            sign,
+            significand,
+            exponent,
+        } => core::BinaryFloatValue::Normal {
+            sign: lower_float_sign(sign),
+            significand,
+            exponent,
+        },
+        hir::BinaryFloatValue::Infinity(sign) => {
+            core::BinaryFloatValue::Infinity(lower_float_sign(sign))
+        }
+    }
+}
+
+fn lower_float_sign(sign: hir::BinaryFloatSign) -> core::BinaryFloatSign {
+    match sign {
+        hir::BinaryFloatSign::Positive => core::BinaryFloatSign::Positive,
+        hir::BinaryFloatSign::Negative => core::BinaryFloatSign::Negative,
     }
 }
 
