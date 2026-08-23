@@ -51,13 +51,8 @@ impl<'a> Lowerer<'a> {
         let mut functions = Vec::with_capacity(self.compilation.functions.len());
         for function in &self.compilation.functions {
             functions.push(
-                FunctionLowerer::new(
-                    self.compilation,
-                    &self.types,
-                    &self.functions,
-                    function,
-                )?
-                .lower()?,
+                FunctionLowerer::new(self.compilation, &self.types, &self.functions, function)?
+                    .lower()?,
             );
         }
 
