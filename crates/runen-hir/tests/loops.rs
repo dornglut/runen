@@ -398,17 +398,11 @@ fn inner_loop_transfer_cleanup_stops_at_inner_body_scope() {
     .expect("inner transfer targets only the inner loop");
     let f = function(&hir, "f");
     let (_, outer_body) = while_statement(&f.body.statements[0]);
-    let Statement::Local {
-        binding: outer, ..
-    } = &outer_body.statements[0]
-    else {
+    let Statement::Local { binding: outer, .. } = &outer_body.statements[0] else {
         panic!("outer local");
     };
     let (_, inner_body) = while_statement(&outer_body.statements[1]);
-    let Statement::Local {
-        binding: inner, ..
-    } = &inner_body.statements[0]
-    else {
+    let Statement::Local { binding: inner, .. } = &inner_body.statements[0] else {
         panic!("inner local");
     };
     let cleanup = transfer_cleanup(&inner_body.statements[1]);
