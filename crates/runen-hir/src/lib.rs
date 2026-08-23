@@ -142,6 +142,34 @@ pub enum OwnedUse {
     Consume,
 }
 
+/// Semantic sign of one materialized binary-floating literal value.
+///
+/// This is representation-neutral source/HIR information, not a physical sign bit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryFloatSign {
+    Positive,
+    Negative,
+}
+
+/// Representation-neutral semantic binary-floating value retained after literal materialization.
+///
+/// `significand` and `exponent` use the accepted semantic format equations. No NaN
+/// member is introduced because the represented decimal floating literal family has no NaN producer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinaryFloatValue {
+    Zero(BinaryFloatSign),
+    Subnormal {
+        sign: BinaryFloatSign,
+        significand: u64,
+    },
+    Normal {
+        sign: BinaryFloatSign,
+        significand: u64,
+        exponent: i16,
+    },
+    Infinity(BinaryFloatSign),
+}
+
 /// Exact typed scalar literal value represented by the current source subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LiteralValue {
@@ -154,6 +182,9 @@ pub enum LiteralValue {
     U16(u16),
     U32(u32),
     U64(u64),
+    F16(BinaryFloatValue),
+    F32(BinaryFloatValue),
+    F64(BinaryFloatValue),
 }
 
 /// One resolved record field.
@@ -443,6 +474,7 @@ pub enum DiagnosticKind {
     TypeMismatch { expected: Type, found: Type },
     IntegerLiteralRequiresInteger { required: Type },
     IntegerLiteralOutOfRange { required: Type },
+    FloatingLiteralRequiresFloating { required: Type },
     DuplicateRecordInitializer,
     UnknownRecordField,
     MissingRecordInitializer,
