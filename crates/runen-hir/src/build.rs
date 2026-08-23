@@ -1970,7 +1970,8 @@ fn validate_value(
             })
         }
         SyntaxKind::DecimalFloatingLiteral => {
-            let literal = materialize_floating_literal(node, required, value_location, diagnostics)?;
+            let literal =
+                materialize_floating_literal(node, required, value_location, diagnostics)?;
             Some(Value {
                 ty: required,
                 kind: ValueKind::Literal(literal),
@@ -2606,7 +2607,8 @@ fn materialize_floating_literal(
         return None;
     };
 
-    let (format, wrap): (BinaryFloatFormat, fn(BinaryFloatValue) -> LiteralValue) = match intrinsic {
+    let (format, wrap): (BinaryFloatFormat, fn(BinaryFloatValue) -> LiteralValue) = match intrinsic
+    {
         IntrinsicType::F16 => (
             BinaryFloatFormat {
                 precision: 11,
@@ -2692,12 +2694,7 @@ fn round_decimal_binary(
     let quantum_exponent = format.emin - (format.precision as i32 - 1);
 
     if compare_decimal_to_dyadic(datum, 1, format.emin) == Ordering::Less {
-        let lower = greatest_significand_not_above(
-            datum,
-            0,
-            normal_min - 1,
-            quantum_exponent,
-        );
+        let lower = greatest_significand_not_above(datum, 0, normal_min - 1, quantum_exponent);
         if lower != 0
             && compare_decimal_to_dyadic(datum, lower, quantum_exponent) == Ordering::Equal
         {
@@ -2738,12 +2735,7 @@ fn round_decimal_binary(
 
     let exponent = greatest_exponent_not_above(datum, format.emin, format.emax);
     let grid_exponent = exponent - (format.precision as i32 - 1);
-    let lower = greatest_significand_not_above(
-        datum,
-        normal_min,
-        max_significand,
-        grid_exponent,
-    );
+    let lower = greatest_significand_not_above(datum, normal_min, max_significand, grid_exponent);
     if compare_decimal_to_dyadic(datum, lower, grid_exponent) == Ordering::Equal {
         return BinaryFloatValue::Normal {
             sign,
@@ -2818,12 +2810,7 @@ fn compare_decimal_to_dyadic(datum: &DecimalDatum, significand: u64, exponent: i
         return Ordering::Greater;
     }
     let (candidate, candidate_scale) = dyadic_decimal(significand, exponent);
-    compare_scaled_decimal(
-        &datum.digits,
-        datum.scale,
-        &candidate,
-        candidate_scale,
-    )
+    compare_scaled_decimal(&datum.digits, datum.scale, &candidate, candidate_scale)
 }
 
 fn dyadic_decimal(significand: u64, exponent: i32) -> (String, usize) {
