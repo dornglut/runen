@@ -311,9 +311,8 @@ fn boolean_equality_refines_to_two_level_move_branches_and_exact_truth_tables() 
         ("==", true, false, false, true),
         ("!=", false, true, true, false),
     ] {
-        let source = format!(
-            "fn f(left: Bool, right: Bool) -> Bool {{ return left {operator} right; }}"
-        );
+        let source =
+            format!("fn f(left: Bool, right: Bool) -> Bool {{ return left {operator} right; }}");
         let lowered = lower_source(&source);
         let f = function(lowered.as_program(), "f");
 
@@ -355,7 +354,10 @@ fn boolean_equality_refines_to_two_level_move_branches_and_exact_truth_tables() 
         let (tf_result, tf) = bool_init(&f.body.blocks[true_false.0 as usize]);
         let (ft_result, ft) = bool_init(&f.body.blocks[false_true.0 as usize]);
         let (ff_result, ff) = bool_init(&f.body.blocks[false_false.0 as usize]);
-        assert_eq!((ff, ft, tf, tt), (expected_ff, expected_ft, expected_tf, expected_tt));
+        assert_eq!(
+            (ff, ft, tf, tt),
+            (expected_ff, expected_ft, expected_tf, expected_tt)
+        );
         assert_eq!(tt_result, tf_result);
         assert_eq!(tt_result, ft_result);
         assert_eq!(tt_result, ff_result);
@@ -475,8 +477,7 @@ fn call_backed_equality_lowers_left_then_right_before_any_comparison_branch() {
         unreachable!();
     };
     for successor in [true_target, false_target] {
-        let Terminator::Branch { condition, .. } =
-            &f.body.blocks[successor.0 as usize].terminator
+        let Terminator::Branch { condition, .. } = &f.body.blocks[successor.0 as usize].terminator
         else {
             panic!("each left outcome must branch on the already-lowered right result");
         };
@@ -492,7 +493,10 @@ fn right_fault_path_is_validator_accepted_with_left_temporary_held_by_existing_c
     );
     let f = function(lowered.as_program(), "f");
 
-    assert!(matches!(f.body.blocks[0].terminator, Terminator::Call { .. }));
+    assert!(matches!(
+        f.body.blocks[0].terminator,
+        Terminator::Call { .. }
+    ));
     assert!(
         f.body
             .blocks
@@ -583,9 +587,8 @@ fn lowering_rejects_non_bool_retained_boolean_equality_right_fact() {
 
 #[test]
 fn nested_prefix_operands_preserve_current_block_before_equality_cfg() {
-    let lowered = lower_source(
-        "fn f(left: Bool, right: Bool) -> Bool { return !left == !right; }",
-    );
+    let lowered =
+        lower_source("fn f(left: Bool, right: Bool) -> Bool { return !left == !right; }");
     let f = function(lowered.as_program(), "f");
 
     assert_eq!(
