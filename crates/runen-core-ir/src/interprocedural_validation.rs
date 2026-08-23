@@ -1228,6 +1228,9 @@ fn validation_value_from_constant(value: &Value) -> ValidationValue {
         | Value::U16(_)
         | Value::U32(_)
         | Value::U64(_)
+        | Value::F16(_)
+        | Value::F32(_)
+        | Value::F64(_)
         | Value::TrackedFixture(_) => ValidationValue::Scalar(ValidationScalar::NonPointer),
         Value::Struct(values) => {
             ValidationValue::Struct(values.iter().map(validation_value_from_constant).collect())

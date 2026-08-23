@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, Operand, Place, PlaceAccess, Projection,
-    ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind,
-    TypeTable, ValidatedProgram, Value,
+    BasicBlockId, BinaryFloatValue, BorrowKind, FunctionId, LoanId, LocalId, Operand, Place,
+    PlaceAccess, Projection, ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator,
+    TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
 };
 
 use crate::{RawPointerValue, UndefinedBehaviorKind, VerificationWriteKind};
@@ -99,6 +99,9 @@ enum RuntimeValue {
     U16(u16),
     U32(u32),
     U64(u64),
+    F16(BinaryFloatValue),
+    F32(BinaryFloatValue),
+    F64(BinaryFloatValue),
     RawPointer(RawPointerValue),
     TrackedFixture(u64),
     Struct(Vec<RuntimeValue>),
@@ -116,6 +119,9 @@ impl RuntimeValue {
             Value::U16(value) => Self::U16(*value),
             Value::U32(value) => Self::U32(*value),
             Value::U64(value) => Self::U64(*value),
+            Value::F16(value) => Self::F16(*value),
+            Value::F32(value) => Self::F32(*value),
+            Value::F64(value) => Self::F64(*value),
             Value::TrackedFixture(value) => Self::TrackedFixture(*value),
             Value::Struct(values) => Self::Struct(values.iter().map(Self::from_constant).collect()),
         }
@@ -132,6 +138,9 @@ impl RuntimeValue {
             Self::U16(value) => Value::U16(value),
             Self::U32(value) => Value::U32(value),
             Self::U64(value) => Value::U64(value),
+            Self::F16(value) => Value::F16(value),
+            Self::F32(value) => Value::F32(value),
+            Self::F64(value) => Value::F64(value),
             Self::TrackedFixture(value) => Value::TrackedFixture(value),
             Self::Struct(values) => {
                 Value::Struct(values.into_iter().map(Self::into_public_value).collect())
@@ -967,6 +976,15 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Ru
         }
         (TypeKind::Scalar(ScalarType::U64), ObjectState::Leaf(leaf), RuntimeValue::U64(value)) => {
             *leaf = LeafState::Live(RuntimeValue::U64(value));
+        }
+        (TypeKind::Scalar(ScalarType::F16), ObjectState::Leaf(leaf), RuntimeValue::F16(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::F16(value));
+        }
+        (TypeKind::Scalar(ScalarType::F32), ObjectState::Leaf(leaf), RuntimeValue::F32(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::F32(value));
+        }
+        (TypeKind::Scalar(ScalarType::F64), ObjectState::Leaf(leaf), RuntimeValue::F64(value)) => {
+            *leaf = LeafState::Live(RuntimeValue::F64(value));
         }
         (
             TypeKind::Scalar(ScalarType::RawPointer(_)),

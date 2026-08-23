@@ -67,6 +67,56 @@ pub enum ScalarType {
     TrackedFixture,
 }
 
+/// Semantic sign carried by represented Core binary-floating constants.
+///
+/// This is not a physical sign bit or an ABI encoding.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryFloatSign {
+    Positive,
+    Negative,
+}
+
+/// Representation-neutral binary-floating constant payload used by Core proving MIR.
+///
+/// `significand` is the positive semantic integer `m` from the accepted binary
+/// floating value equations. A normal `exponent` is the semantic normal exponent
+/// `e`, not a biased physical exponent. NaN constants are deliberately absent until
+/// an accepted producer requires a particular semantic NaN member.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinaryFloatValue {
+    Zero(BinaryFloatSign),
+    Subnormal {
+        sign: BinaryFloatSign,
+        significand: u64,
+    },
+    Normal {
+        sign: BinaryFloatSign,
+        significand: u64,
+        exponent: i16,
+    },
+    Infinity(BinaryFloatSign),
+}
+
+impl BinaryFloatValue {
+    fn matches_format(&self, precision: u32, emin: i16, emax: i16) -> bool {
+        let normal_min = 1_u64 << (precision - 1);
+        let significand_limit = 1_u64 << precision;
+
+        match self {
+            Self::Zero(_) | Self::Infinity(_) => true,
+            Self::Subnormal { significand, .. } => (1..normal_min).contains(significand),
+            Self::Normal {
+                significand,
+                exponent,
+                ..
+            } => {
+                (normal_min..significand_limit).contains(significand)
+                    && (emin..=emax).contains(exponent)
+            }
+        }
+    }
+}
+
 /// A field in a structural Core type.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Field {
@@ -256,6 +306,15 @@ impl TypeTable {
             | (TypeKind::Scalar(ScalarType::U32), Value::U32(_))
             | (TypeKind::Scalar(ScalarType::U64), Value::U64(_))
             | (TypeKind::Scalar(ScalarType::TrackedFixture), Value::TrackedFixture(_)) => true,
+            (TypeKind::Scalar(ScalarType::F16), Value::F16(value)) => {
+                value.matches_format(11, -14, 15)
+            }
+            (TypeKind::Scalar(ScalarType::F32), Value::F32(value)) => {
+                value.matches_format(24, -126, 127)
+            }
+            (TypeKind::Scalar(ScalarType::F64), Value::F64(value)) => {
+                value.matches_format(53, -1022, 1023)
+            }
             (TypeKind::Struct(fields), Value::Struct(values)) => {
                 fields.len() == values.len()
                     && fields
@@ -284,6 +343,9 @@ pub enum Value {
     U16(u16),
     U32(u32),
     U64(u64),
+    F16(BinaryFloatValue),
+    F32(BinaryFloatValue),
+    F64(BinaryFloatValue),
     /// Verification-only fixture identity whose destruction is visible in the oracle trace.
     /// This is not a Runen language value primitive.
     TrackedFixture(u64),
