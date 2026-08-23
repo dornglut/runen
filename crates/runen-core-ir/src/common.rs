@@ -104,9 +104,7 @@ impl BinaryFloatValue {
 
         match self {
             Self::Zero(_) | Self::Infinity(_) => true,
-            Self::Subnormal { significand, .. } => {
-                (1..normal_min).contains(significand)
-            }
+            Self::Subnormal { significand, .. } => (1..normal_min).contains(significand),
             Self::Normal {
                 significand,
                 exponent,
@@ -465,7 +463,7 @@ impl PlaceAccess {
     pub fn field(mut self, index: u32) -> Self {
         match &mut self {
             Self::Direct(place) => place.projections.push(Projection::Field(index)),
-            Self::Loan { projections, .. } => projections.push(projection),
+            Self::Loan { projections, .. } => projections.push(Projection::Field(index)),
         }
         self
     }
