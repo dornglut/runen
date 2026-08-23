@@ -57,9 +57,8 @@ fn result_bearing_root_fault_lowers_without_result_value() {
 
 #[test]
 fn all_source_explicit_fault_sites_use_one_stable_core_reason() {
-    let lowered = lower_source(
-        "fn a() { fault; } fn b(flag: Bool) { if flag { fault; } else { fault; } }",
-    );
+    let lowered =
+        lower_source("fn a() { fault; } fn b(flag: Bool) { if flag { fault; } else { fault; } }");
     let program = lowered.as_program();
     let mut codes = program
         .functions
@@ -195,9 +194,7 @@ fn two_faulting_arms_emit_no_synthetic_join_or_root_return() {
 
 #[test]
 fn return_fault_zero_normal_conditional_has_only_represented_terminations() {
-    let lowered = lower_source(
-        "fn f(flag: Bool) -> I64 { if flag { return 1; } else { fault; } }",
-    );
+    let lowered = lower_source("fn f(flag: Bool) -> I64 { if flag { return 1; } else { fault; } }");
     let f = function(lowered.as_program(), "f");
 
     assert_eq!(
