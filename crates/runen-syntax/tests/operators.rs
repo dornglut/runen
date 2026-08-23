@@ -43,7 +43,12 @@ fn operator_syntax_kinds_are_append_only_and_lossless() {
         .syntax()
         .descendants_with_tokens()
         .filter_map(|element| element.into_token())
-        .filter(|token| matches!(token.kind(), SyntaxKind::Bang | SyntaxKind::EqEq | SyntaxKind::BangEq))
+        .filter(|token| {
+            matches!(
+                token.kind(),
+                SyntaxKind::Bang | SyntaxKind::EqEq | SyntaxKind::BangEq
+            )
+        })
         .map(|token| (token.kind(), token.text().to_owned()))
         .collect::<Vec<_>>();
     assert!(tokens.contains(&(SyntaxKind::Bang, "!".to_owned())));
