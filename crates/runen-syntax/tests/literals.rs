@@ -89,10 +89,10 @@ fn entry() -> F16 {
             .count(),
         5
     );
-    assert!(nontrivia_tokens(&parsed).contains(&(
-        SyntaxKind::DecimalFloatingMagnitude,
-        "000.5000".into()
-    )));
+    assert!(
+        nontrivia_tokens(&parsed)
+            .contains(&(SyntaxKind::DecimalFloatingMagnitude, "000.5000".into()))
+    );
 
     let negative = root
         .descendants()
@@ -112,20 +112,33 @@ fn decimal_floating_magnitude_is_one_contiguous_digit_dot_digit_token() {
     for spelling in ["0.0", "1.25", "000.5000"] {
         let source = format!("fn value() -> F32 {{ return {spelling}; }}");
         let parsed = parse(&source);
-        assert!(parsed.errors().is_empty(), "{spelling}: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "{spelling}: {:?}",
+            parsed.errors()
+        );
         let floating = nontrivia_tokens(&parsed)
             .into_iter()
             .filter(|(kind, _)| *kind == SyntaxKind::DecimalFloatingMagnitude)
             .collect::<Vec<_>>();
-        assert_eq!(floating, vec![(SyntaxKind::DecimalFloatingMagnitude, spelling.into())]);
+        assert_eq!(
+            floating,
+            vec![(SyntaxKind::DecimalFloatingMagnitude, spelling.into())]
+        );
     }
 }
 
 #[test]
 fn decimal_point_boundaries_do_not_widen_the_floating_token() {
     let cases = [
-        (".5", vec![(SyntaxKind::Dot, "."), (SyntaxKind::DecimalMagnitude, "5")]),
-        ("1.", vec![(SyntaxKind::DecimalMagnitude, "1"), (SyntaxKind::Dot, ".")]),
+        (
+            ".5",
+            vec![(SyntaxKind::Dot, "."), (SyntaxKind::DecimalMagnitude, "5")],
+        ),
+        (
+            "1.",
+            vec![(SyntaxKind::DecimalMagnitude, "1"), (SyntaxKind::Dot, ".")],
+        ),
         (
             "1 . 0",
             vec![
@@ -141,7 +154,10 @@ fn decimal_point_boundaries_do_not_widen_the_floating_token() {
         let parsed = parse(&source);
         let tokens = nontrivia_tokens(&parsed);
         for (kind, text) in expected {
-            assert!(tokens.contains(&(kind, text.into())), "{spelling}: {tokens:?}");
+            assert!(
+                tokens.contains(&(kind, text.into())),
+                "{spelling}: {tokens:?}"
+            );
         }
         assert!(
             !tokens
@@ -185,10 +201,12 @@ fn unsupported_floating_suffixes_and_literal_field_receivers_are_rejected() {
 
 #[test]
 fn floating_literals_are_conditional_values_but_not_pattern_scrutinees() {
-    let conditional = parse(
-        "fn test() { if 1.0 {} while - 2.0 {} }",
+    let conditional = parse("fn test() { if 1.0 {} while - 2.0 {} }");
+    assert!(
+        conditional.errors().is_empty(),
+        "{:?}",
+        conditional.errors()
     );
-    assert!(conditional.errors().is_empty(), "{:?}", conditional.errors());
     assert_eq!(
         conditional
             .syntax()
@@ -271,16 +289,12 @@ fn non_ascii_decimal_lookalikes_are_not_decimal_magnitudes() {
             .iter()
             .any(|error| { error.kind() == SyntaxErrorKind::UnrecognizedToken })
     );
-    assert!(
-        !nontrivia_tokens(&parsed)
-            .iter()
-            .any(|(kind, text)| {
-                matches!(
-                    kind,
-                    SyntaxKind::DecimalMagnitude | SyntaxKind::DecimalFloatingMagnitude
-                ) && text == "١"
-            })
-    );
+    assert!(!nontrivia_tokens(&parsed).iter().any(|(kind, text)| {
+        matches!(
+            kind,
+            SyntaxKind::DecimalMagnitude | SyntaxKind::DecimalFloatingMagnitude
+        ) && text == "١"
+    }));
 }
 
 #[test]
