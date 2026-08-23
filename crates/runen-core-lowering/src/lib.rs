@@ -366,6 +366,9 @@ impl<'a> FunctionLowerer<'a> {
                         self.register_source_locals(&else_block.statements)?;
                     }
                 }
+                hir::Statement::While { body, .. } => {
+                    self.register_source_locals(&body.statements)?;
+                }
                 hir::Statement::Assignment { .. }
                 | hir::Statement::Call { .. }
                 | hir::Statement::Fault { .. } => {}
@@ -480,6 +483,9 @@ impl<'a> FunctionLowerer<'a> {
                     else_block,
                     ..
                 } => self.lower_if(condition, then_block, else_block.as_deref())?,
+                hir::Statement::While {
+                    condition, body, ..
+                } => self.lower_while(condition, body)?,
             }
 
             has_normal_continuation = Self::statement_has_normal_continuation(statement);
@@ -498,7 +504,8 @@ impl<'a> FunctionLowerer<'a> {
             } => else_block.as_ref().is_none_or(|else_block| {
                 then_block.has_normal_continuation || else_block.has_normal_continuation
             }),
-            hir::Statement::Local { .. }
+            hir::Statement::While { .. }
+            | hir::Statement::Local { .. }
             | hir::Statement::RecordDestructure { .. }
             | hir::Statement::Assignment { .. }
             | hir::Statement::Call { .. } => true,
@@ -692,6 +699,47 @@ impl<'a> FunctionLowerer<'a> {
             }
         }
 
+        Ok(())
+    }
+
+    fn lower_while(
+        &mut self,
+        condition: &hir::Value,
+        body: &hir::Block,
+    ) -> Result<(), LoweringError> {
+        let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+        if condition.ty != bool_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "while condition type is not Bool",
+            ));
+        }
+
+        let header = self.new_block()?;
+        self.terminate_current(core::Terminator::Goto(header))?;
+        self.current = header.0 as usize;
+
+        let condition_local = self.lower_value(condition)?;
+        if self.local_type(condition_local)? != self.types.get(bool_ty)? {
+            return Err(LoweringError::InvalidHirInvariant(
+                "lowered while condition temporary is not Bool",
+            ));
+        }
+
+        let body_target = self.new_block()?;
+        let continuation = self.new_block()?;
+        self.terminate_current(core::Terminator::Branch {
+            condition: core::Operand::Move(core::Place::local(condition_local).into()),
+            true_target: body_target,
+            false_target: continuation,
+        })?;
+
+        self.current = body_target.0 as usize;
+        self.lower_block(body)?;
+        if body.has_normal_continuation {
+            self.terminate_current(core::Terminator::Goto(header))?;
+        }
+
+        self.current = continuation.0 as usize;
         Ok(())
     }
 
