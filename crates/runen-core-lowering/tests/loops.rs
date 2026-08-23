@@ -299,7 +299,10 @@ fn continue_does_not_duplicate_direct_call_condition_evaluation() {
     let Terminator::Branch { true_target, .. } = f.body.blocks[target.0 as usize].terminator else {
         panic!("condition continuation Branch");
     };
-    assert_eq!(f.body.blocks[true_target.0 as usize].terminator, Terminator::Goto(header));
+    assert_eq!(
+        f.body.blocks[true_target.0 as usize].terminator,
+        Terminator::Goto(header)
+    );
     assert_eq!(
         f.body
             .blocks
