@@ -429,12 +429,26 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         panic!("expected floating direct call value");
     };
     assert_eq!(arguments[0].ty, Type::Intrinsic(IntrinsicType::F32));
-    assert!(matches!(arguments[0].kind, ValueKind::Literal(LiteralValue::F32(_))));
+    assert!(matches!(
+        arguments[0].kind,
+        ValueKind::Literal(LiteralValue::F32(_))
+    ));
 
     let Statement::Local { initializer, .. } = &test.body.statements[6] else {
         panic!("expected floating record initializer");
     };
-    assert_eq!(initializer.ty, Type::Record(runen_hir::RecordId(1)));
+    let Type::Record(record) = initializer.ty else {
+        panic!("expected Sample record type");
+    };
+    assert_eq!(hir.record(record).name, "Sample");
+    let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
+        panic!("expected record construction initializer");
+    };
+    assert_eq!(fields.len(), 1);
+    assert!(matches!(
+        fields[0].value.kind,
+        ValueKind::Literal(LiteralValue::F32(_))
+    ));
 
     let returned = test
         .body
