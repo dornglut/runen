@@ -257,10 +257,8 @@ fn boolean_not_flows_through_all_generic_value_consumers() {
 
 #[test]
 fn if_and_while_reuse_the_same_boolean_not_hir_and_commit_operand_state() {
-    let hir = build(
-        "fn control(flag: Bool) { if !flag {} while !!flag { break; } }",
-    )
-    .expect("Boolean-not conditions are represented through the generic Value kind");
+    let hir = build("fn control(flag: Bool) { if !flag {} while !!flag { break; } }")
+        .expect("Boolean-not conditions are represented through the generic Value kind");
     let control = function(&hir, "control");
     let Statement::If { condition, .. } = &control.body.statements[0] else {
         panic!("expected if statement");
