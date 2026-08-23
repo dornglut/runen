@@ -78,14 +78,59 @@ fn direct_results_preserve_semantic_floating_classes_exactly() {
 }
 
 #[test]
-fn floating_value_survives_init_copy_assign_and_move() {
+fn floating_value_survives_init_copy_and_move_exactly() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("f32", ScalarType::F32));
-    let initial = Value::F32(BinaryFloatValue::Normal {
+    let expected = Value::F32(BinaryFloatValue::Normal {
         sign: BinaryFloatSign::Positive,
         significand: (1_u64 << 23) + 17,
         exponent: 5,
     });
+    let program = Program {
+        types,
+        functions: vec![Function {
+            name: "entry".into(),
+            parameters: Vec::new(),
+            result: Some(f32_ty),
+            body: Body {
+                locals: vec![
+                    LocalDecl::new("source", f32_ty, false),
+                    LocalDecl::new("target", f32_ty, false),
+                ],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: Place::local(LocalId(0)),
+                            src: Operand::Constant(expected.clone()),
+                        },
+                        Statement::Init {
+                            dst: Place::local(LocalId(1)),
+                            src: Operand::Copy(Place::local(LocalId(0)).into()),
+                        },
+                    ],
+                    Terminator::Return(Some(Operand::Move(Place::local(LocalId(1)).into()))),
+                )],
+            },
+        }],
+    };
+
+    let validated = validate_program(program).expect("floating copy program must validate");
+    let report = Machine::new(validated, FunctionId(0))
+        .expect("entry has zero parameters")
+        .execute()
+        .expect("floating copy transport is defined");
+
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(expected));
+}
+
+#[test]
+fn floating_value_survives_assignment_and_move_exactly() {
+    let mut types = TypeTable::new();
+    let f32_ty = types.push(TypeDef::scalar("f32", ScalarType::F32));
+    let initial = Value::F32(BinaryFloatValue::Infinity(BinaryFloatSign::Positive));
     let replacement = Value::F32(BinaryFloatValue::Subnormal {
         sign: BinaryFloatSign::Negative,
         significand: 37,
@@ -97,10 +142,7 @@ fn floating_value_survives_init_copy_assign_and_move() {
             parameters: Vec::new(),
             result: Some(f32_ty),
             body: Body {
-                locals: vec![
-                    LocalDecl::new("source", f32_ty, false),
-                    LocalDecl::new("target", f32_ty, true),
-                ],
+                locals: vec![LocalDecl::new("target", f32_ty, true)],
                 loans: Vec::new(),
                 entry: BasicBlockId(0),
                 blocks: vec![BasicBlock::new(
@@ -109,26 +151,22 @@ fn floating_value_survives_init_copy_assign_and_move() {
                             dst: Place::local(LocalId(0)),
                             src: Operand::Constant(initial),
                         },
-                        Statement::Init {
-                            dst: Place::local(LocalId(1)),
-                            src: Operand::Copy(Place::local(LocalId(0)).into()),
-                        },
                         Statement::Assign {
-                            dst: Place::local(LocalId(1)).into(),
+                            dst: Place::local(LocalId(0)).into(),
                             src: Operand::Constant(replacement.clone()),
                         },
                     ],
-                    Terminator::Return(Some(Operand::Move(Place::local(LocalId(1)).into()))),
+                    Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
                 )],
             },
         }],
     };
 
-    let validated = validate_program(program).expect("floating transport program must validate");
+    let validated = validate_program(program).expect("floating assignment program must validate");
     let report = Machine::new(validated, FunctionId(0))
         .expect("entry has zero parameters")
         .execute()
-        .expect("floating transport is defined");
+        .expect("floating assignment transport is defined");
 
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(replacement));
