@@ -449,7 +449,7 @@ pub enum Operand {
 /// Core MIR operations represented by the current proving kernel.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
-    /// First initialization of direct storage. Re-initialization uses `Assign`.
+    /// Non-replacing initialization of wholly vacant direct storage.
     Init { dst: Place, src: Operand },
     /// Begins a root borrow from direct access or a child borrow from loan access.
     Borrow {
