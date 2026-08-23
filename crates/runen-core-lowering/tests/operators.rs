@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, LocalId, Operand, PlaceAccess, Statement as CoreStatement, Terminator, ValidatedProgram,
-    Value as CoreValue,
+    BasicBlock, LocalId, Operand, PlaceAccess, Statement as CoreStatement, Terminator,
+    ValidatedProgram, Value as CoreValue,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
@@ -60,14 +60,18 @@ fn boolean_not_refines_to_move_branch_two_inits_and_one_join() {
     else {
         panic!("negation entry must terminate with Branch");
     };
-    let operand = moved_local(condition).expect("Boolean-not Branch must Move its operand temporary");
+    let operand =
+        moved_local(condition).expect("Boolean-not Branch must Move its operand temporary");
     assert!(f.body.locals[operand.0 as usize].name.starts_with("$tmp"));
 
     let true_block = &f.body.blocks[true_target.0 as usize];
     let false_block = &f.body.blocks[false_target.0 as usize];
     let (true_result, true_value) = bool_init(true_block);
     let (false_result, false_value) = bool_init(false_block);
-    assert_eq!(true_result, false_result, "both paths initialize one result local");
+    assert_eq!(
+        true_result, false_result,
+        "both paths initialize one result local"
+    );
     assert!(!true_value, "true operand path produces false");
     assert!(false_value, "false operand path produces true");
 
@@ -88,9 +92,8 @@ fn boolean_not_refines_to_move_branch_two_inits_and_one_join() {
 
 #[test]
 fn call_backed_operand_branches_only_from_successful_call_continuation() {
-    let lowered = lower_source(
-        "fn ready() -> Bool { return true; } fn f() -> Bool { return !ready(); }",
-    );
+    let lowered =
+        lower_source("fn ready() -> Bool { return true; } fn f() -> Bool { return !ready(); }");
     let f = function(lowered.as_program(), "f");
 
     let Terminator::Call { target, .. } = f.body.blocks[0].terminator else {
@@ -152,7 +155,10 @@ fn nested_boolean_not_preserves_current_block_and_builds_nested_valid_cfg() {
         Terminator::Goto(target) if target == inner_join
     ));
     assert!(
-        matches!(f.body.blocks[inner_join.0 as usize].terminator, Terminator::Branch { .. }),
+        matches!(
+            f.body.blocks[inner_join.0 as usize].terminator,
+            Terminator::Branch { .. }
+        ),
         "outer negation must branch from the inner negation join"
     );
 }
