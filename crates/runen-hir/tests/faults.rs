@@ -1,4 +1,6 @@
-use runen_hir::{DiagnosticKind, ModuleId, SourceUnit, Statement, TypedCompilation, build_typed_hir};
+use runen_hir::{
+    DiagnosticKind, ModuleId, SourceUnit, Statement, TypedCompilation, build_typed_hir,
+};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -41,7 +43,10 @@ fn result_bearing_function_may_end_only_by_fault() {
 
     assert!(!f.body.has_normal_continuation);
     assert!(f.body.terminal_return.is_none());
-    assert!(matches!(f.body.statements.as_slice(), [Statement::Fault { .. }]));
+    assert!(matches!(
+        f.body.statements.as_slice(),
+        [Statement::Fault { .. }]
+    ));
 }
 
 #[test]
@@ -55,15 +60,21 @@ fn nested_faulting_block_has_no_normal_cleanup() {
 
     assert!(!block.has_normal_continuation);
     assert!(block.normal_cleanup.is_empty());
-    assert!(matches!(block.statements.last(), Some(Statement::Fault { .. })));
+    assert!(matches!(
+        block.statements.last(),
+        Some(Statement::Fault { .. })
+    ));
 }
 
 #[test]
 fn statement_after_fault_is_unreachable_and_not_semantically_validated() {
-    let errors = build("fn f() { fault; missing(); }")
-        .expect_err("following statement must be unreachable");
+    let errors =
+        build("fn f() { fault; missing(); }").expect_err("following statement must be unreachable");
 
-    assert!(has_diagnostic(&errors, DiagnosticKind::UnreachableStatement));
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnreachableStatement
+    ));
     assert!(
         !has_diagnostic(&errors, DiagnosticKind::UnresolvedName),
         "unreachable sibling must not be validated as an ordinary continuation"
@@ -74,7 +85,10 @@ fn statement_after_fault_is_unreachable_and_not_semantically_validated() {
 fn terminal_return_after_fault_is_unreachable() {
     let errors = build("fn f() { fault; return; }")
         .expect_err("terminal return after fault must be unreachable");
-    assert!(has_diagnostic(&errors, DiagnosticKind::UnreachableStatement));
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnreachableStatement
+    ));
 }
 
 #[test]
@@ -112,16 +126,12 @@ fn explicit_fault_and_normal_arm_use_only_the_normal_arm_state() {
 
 #[test]
 fn fault_fault_and_return_fault_conditionals_have_zero_normal_continuation() {
-    let both_fault = build(
-        "fn f(flag: Bool) -> I64 { if flag { fault; } else { fault; } }",
-    )
-    .expect("two faulting arms complete result-bearing function abnormally");
+    let both_fault = build("fn f(flag: Bool) -> I64 { if flag { fault; } else { fault; } }")
+        .expect("two faulting arms complete result-bearing function abnormally");
     assert!(!function(&both_fault, "f").body.has_normal_continuation);
 
-    let mixed = build(
-        "fn f(flag: Bool) -> I64 { if flag { return 1; } else { fault; } }",
-    )
-    .expect("return/fault arms have zero normal outcome");
+    let mixed = build("fn f(flag: Bool) -> I64 { if flag { return 1; } else { fault; } }")
+        .expect("return/fault arms have zero normal outcome");
     assert!(!function(&mixed, "f").body.has_normal_continuation);
 }
 
