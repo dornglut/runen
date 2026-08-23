@@ -975,6 +975,9 @@ fn validate_body_statement(
         SyntaxKind::IfStatement => {
             validate_if(header, node, context, bindings, next_binding, diagnostics)
         }
+        SyntaxKind::WhileStatement => {
+            validate_while(header, node, context, bindings, next_binding, diagnostics)
+        }
         SyntaxKind::ReturnStatement => {
             unreachable!("terminal return is handled by its containing source sequence")
         }
@@ -993,7 +996,8 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
         } => else_block.as_ref().is_none_or(|else_block| {
             then_block.has_normal_continuation || else_block.has_normal_continuation
         }),
-        Statement::Local { .. }
+        Statement::While { .. }
+        | Statement::Local { .. }
         | Statement::RecordDestructure { .. }
         | Statement::Assignment { .. }
         | Statement::Call { .. } => true,
@@ -1053,7 +1057,8 @@ fn validate_block(
                 | Statement::Call { .. }
                 | Statement::Fault { .. }
                 | Statement::Block(_)
-                | Statement::If { .. } => {}
+                | Statement::If { .. }
+                | Statement::While { .. } => {}
             }
             has_normal_continuation = statement_has_normal_continuation(&statement);
             statements.push(statement);
@@ -1201,6 +1206,77 @@ fn validate_if(
         condition,
         then_block,
         else_block: else_block.map(Box::new),
+        location: location(header.unit, node),
+    })
+}
+
+fn validate_while(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let loop_head = bindings.clone();
+    let mut post_condition = loop_head.clone();
+    let condition_node = value_child(node);
+    let condition = validate_value(
+        header,
+        &condition_node,
+        Type::Intrinsic(IntrinsicType::Bool),
+        context,
+        &mut post_condition,
+        diagnostics,
+    )?;
+
+    let body_node = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::BlockStatement)
+        .expect("syntax-clean while contains one body block");
+    let mut body_bindings = post_condition.clone();
+    let body_diagnostics = diagnostics.len();
+    let body_statement = validate_block(
+        header,
+        &body_node,
+        context,
+        &mut body_bindings,
+        next_binding,
+        diagnostics,
+    );
+    let body_valid = diagnostics.len() == body_diagnostics;
+    let Statement::Block(body) = body_statement else {
+        unreachable!("block validation returns one block statement");
+    };
+
+    if !body_valid {
+        return None;
+    }
+
+    if body.has_normal_continuation {
+        let equal = loop_head.values().all(|head| {
+            let body_state = body_bindings
+                .values()
+                .find(|state| state.id == head.id)
+                .expect("normal while body retains every loop-head binding identity");
+            debug_assert_eq!(body_state.ty, head.ty);
+            debug_assert_eq!(body_state.mutability, head.mutability);
+            body_state.ownership == head.ownership
+        });
+
+        if !equal {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::LoopOwnershipMismatch,
+                location: location(header.unit, node),
+            });
+            return None;
+        }
+    }
+
+    *bindings = post_condition;
+    Some(Statement::While {
+        condition,
+        body,
         location: location(header.unit, node),
     })
 }

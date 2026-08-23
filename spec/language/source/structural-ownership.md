@@ -6,9 +6,9 @@ This document owns the represented source-semantic relation for structural owned
 
 It consumes represented source type identity, nominal record identity, record field identity and source structural field order from [Source type foundation](types.md). It does not redefine those owners.
 
-[Source function-local bindings](local-bindings.md) instantiates this relation for each represented parameter/local binding and owns binding identity, lexical scope, lookup, assignment mutability, declaration lifecycle, ordinary whole-binding owned-value use, assignment legality, and reset points. [Source field-value access](field-access.md) consumes this relation for binding-rooted selected paths and for the structural ownership state/frontier of a producer-backed field-receiver transient. [Source patterns](patterns.md) consumes this relation for direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding or transient ownership ends. [Source control flow](control-flow.md) consumes complete binding structural ownership states to establish definite represented conditional successors.
+[Source function-local bindings](local-bindings.md) instantiates this relation for each represented parameter/local binding and owns binding identity, lexical scope, lookup, assignment mutability, declaration lifecycle, ordinary whole-binding owned-value use, assignment legality, and reset points. [Source field-value access](field-access.md) consumes this relation for binding-rooted selected paths and for the structural ownership state/frontier of a producer-backed field-receiver transient. [Source patterns](patterns.md) consumes this relation for direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding or transient ownership ends. [Source control flow](control-flow.md) consumes complete binding structural ownership states to establish definite represented conditional successors and to admit the bounded `while` backedge.
 
-This document does not define lexical bindings, names, mutability, field lookup/accessibility, pattern syntax, source type duplicability selection, conditional selection, custom destruction, references/borrows, a source place/lvalue category, physical storage, layout, Core MIR liveness, or an implementation representation.
+This document does not define lexical bindings, names, mutability, field lookup/accessibility, pattern syntax, source type duplicability selection, conditional or loop selection, custom destruction, references/borrows, a source place/lvalue category, physical storage, layout, Core MIR liveness, or an implementation representation.
 
 ## Structural owned-value roots
 
@@ -170,13 +170,20 @@ A consuming owner may replace a structural root only when its own semantics expl
 
 Structural availability is statically required source validity for operations that consume or duplicate a path through this relation. An invalid use is not converted into a defined runtime use-after-consumption fault merely because a physical implementation could track moves dynamically.
 
-[Source control flow](control-flow.md) owns the first represented multi-path consumer. For a normally completing represented conditional, it requires exact equality of every enclosing binding's structural ownership state—equivalently, the exact prefix-free consumed-path set supplied by this document—before establishing one definite successor state.
+[Source control flow](control-flow.md) owns the represented multi-path and cyclic consumers. For a normally completing represented conditional, it requires exact equality of every enclosing binding's structural ownership state—equivalently, the exact prefix-free consumed-path set supplied by this document—before establishing one definite successor state.
 
-That conditional rule consumes this structural state relation; it does not add a union, intersection, normalization, maybe-owned state, runtime flag, or automatic edge-cleanup operation to this document.
+For the represented bounded `while`, let `H` be the enclosing binding environment immediately before condition validation and `C` the environment after successful condition validation. The loop relation consumes this document's state exactly as follows:
 
-Future loops, refutable matches, catch/recovery forms, early returns, or other multi-path control-flow owners MUST independently define how structural ownership is made definite at their applicable successor points and how any path-dependent remaining ownership is handled. Their rules are not implied by the represented conditional relation.
+- the false normal successor is exactly `C`;
+- the true outcome validates the body from a copy of `C`;
+- when the body has a normal continuation, every enclosing binding identity from `H` MUST have a consumed-path set exactly equal to its set in `H` after ordinary body-scope cleanup before the backedge is admitted; and
+- a body with no normal continuation contributes no backedge state and therefore requires no equality comparison.
 
-In particular, neither a consumed-path union nor another general control-flow join is silently established by the existence of this structural relation or by the exact-state conditional consumer.
+These control-flow rules consume this structural state relation; they do not add a union, intersection, normalization, maybe-owned state, runtime flag, automatic edge-cleanup operation, widening operation, or fixed-point inference to this document.
+
+Future refutable matches, catch/recovery forms, early returns beyond the represented terminal relation, additional loop forms, or other multi-path control-flow owners MUST independently define how structural ownership is made definite at their applicable successor or backedge points. Their rules are not implied by the represented conditional or bounded-`while` relations.
+
+In particular, neither a consumed-path union nor another general control-flow join is silently established by the existence of this structural relation or by its exact-state control-flow consumers.
 
 ## Direct consumers
 
@@ -204,11 +211,11 @@ For a successful producer-backed pattern, the produced transient begins as one c
 
 `function-execution.md` decides when represented binding or transient ownership ends and consumes the applicable remaining frontier. It also owns ordering between distinct bindings, lexical scopes, activations, and producer transients.
 
-### Conditional control flow
+### Conditional and bounded-loop control flow
 
-`control-flow.md` compares the complete structural ownership state of every enclosing binding across normal conditional outcomes and admits a normal successor only when those states are equal.
+`control-flow.md` compares the complete structural ownership state of every enclosing binding across normal conditional outcomes and admits a normal conditional successor only when the applicable states are equal. For bounded `while`, it compares each normal body backedge state against the corresponding pre-condition `H` state and admits the backedge only on exact equality; the loop's false normal successor remains the post-condition `C` state without a merge.
 
-This document supplies the state being compared. It does not select arms, define lexical scopes, or decide conditional validity beyond the structural relations consumed by `control-flow.md`.
+This document supplies the state being compared. It does not select arms or loop outcomes, define lexical scopes, or decide control-flow validity beyond the structural relations consumed by `control-flow.md`.
 
 ## Source/Core separation
 
@@ -216,10 +223,10 @@ Source structural ownership is independent of Core proving representation.
 
 Core path state, `Live`/`Dead`, Never-initialized state, scalar copyability, destruction domains, local identifiers, and projections are not source structural ownership authority.
 
-A faithful lowering MAY map resolved source paths to Core structural projections after source validation and MAY omit lower destruction for source-owned zero-leaf frontier members where Core has no scalar destruction domain. It MUST NOT use lower liveness or copyability to reconstruct source path availability, duplicate-versus-consume selection, remaining-frontier membership, or represented conditional join validity.
+A faithful lowering MAY map resolved source paths to Core structural projections after source validation and MAY omit lower destruction for source-owned zero-leaf frontier members where Core has no scalar destruction domain. It MUST NOT use lower liveness or copyability to reconstruct source path availability, duplicate-versus-consume selection, remaining-frontier membership, represented conditional join validity, or bounded-`while` backedge validity.
 
 ## Further boundaries
 
-This revision does not define general source places/lvalues, field assignment, partial-field reinitialization, references, borrows, lifetimes, pointer provenance, interior mutability, custom destructors, must-consume policy, arbitrary temporary lifetime extension, unequal-state/path-dependent conditional joins, loop fixed points, refutable-match joins, exception/catch state merges, ABI/layout, parser/HIR/Core MIR representation, runtime moved-state flags, or backend storage.
+This revision does not define general source places/lvalues, field assignment, partial-field reinitialization, references, borrows, lifetimes, pointer provenance, interior mutability, custom destructors, must-consume policy, arbitrary temporary lifetime extension, unequal-state/path-dependent conditional joins, additional loop forms or general loop fixed-point inference, refutable-match joins, exception/catch state merges, ABI/layout, parser/HIR/Core MIR representation, runtime moved-state flags, or backend storage.
 
 Those concerns require their own accepted owners and may consume this structural relation only when their canonical semantics explicitly say so.

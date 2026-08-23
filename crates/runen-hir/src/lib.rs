@@ -346,6 +346,11 @@ pub enum Statement {
         else_block: Option<Box<Block>>,
         location: SourceLocation,
     },
+    While {
+        condition: Value,
+        body: Block,
+        location: SourceLocation,
+    },
 }
 
 /// Terminal represented return, when concrete source contains one.
@@ -450,6 +455,7 @@ pub enum DiagnosticKind {
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
     ConditionalOwnershipMismatch,
+    LoopOwnershipMismatch,
     UnreachableStatement,
     MissingResultReturn,
     ExpectedResultValue,

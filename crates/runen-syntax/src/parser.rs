@@ -254,6 +254,7 @@ impl Parser<'_> {
                     returned = true;
                 }
                 Some(SyntaxKind::KwIf) => self.parse_if_statement(),
+                Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
@@ -325,6 +326,7 @@ impl Parser<'_> {
                     returned = true;
                 }
                 Some(SyntaxKind::KwIf) => self.parse_if_statement(),
+                Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
@@ -350,6 +352,14 @@ impl Parser<'_> {
         if self.eat(SyntaxKind::KwElse) {
             self.parse_block_statement();
         }
+        self.builder.finish_node();
+    }
+
+    fn parse_while_statement(&mut self) {
+        self.builder.start_node(SyntaxKind::WhileStatement.into());
+        self.expect(SyntaxKind::KwWhile, ExpectedSyntax::Statement);
+        self.parse_conditional_value();
+        self.parse_block_statement();
         self.builder.finish_node();
     }
 
@@ -403,6 +413,7 @@ impl Parser<'_> {
                 SyntaxKind::KwLet,
                 SyntaxKind::KwFault,
                 SyntaxKind::KwIf,
+                SyntaxKind::KwWhile,
                 SyntaxKind::KwReturn,
             ])
             && !self.at_any(TOP_LEVEL_STARTERS)
@@ -471,6 +482,7 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::KwLet)
                 || self.at(SyntaxKind::KwFault)
                 || self.at(SyntaxKind::KwIf)
+                || self.at(SyntaxKind::KwWhile)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
@@ -498,6 +510,7 @@ impl Parser<'_> {
                         SyntaxKind::KwLet,
                         SyntaxKind::KwFault,
                         SyntaxKind::KwIf,
+                        SyntaxKind::KwWhile,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
@@ -519,6 +532,7 @@ impl Parser<'_> {
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
+                    SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -589,6 +603,7 @@ impl Parser<'_> {
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
+                    SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -696,6 +711,7 @@ impl Parser<'_> {
                         SyntaxKind::KwLet,
                         SyntaxKind::KwFault,
                         SyntaxKind::KwIf,
+                        SyntaxKind::KwWhile,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
@@ -811,6 +827,7 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::KwLet)
                 || self.at(SyntaxKind::KwFault)
                 || self.at(SyntaxKind::KwIf)
+                || self.at(SyntaxKind::KwWhile)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
@@ -844,6 +861,7 @@ impl Parser<'_> {
                         SyntaxKind::KwLet,
                         SyntaxKind::KwFault,
                         SyntaxKind::KwIf,
+                        SyntaxKind::KwWhile,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
@@ -865,6 +883,7 @@ impl Parser<'_> {
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
+                    SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -907,6 +926,7 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::KwLet)
                 || self.at(SyntaxKind::KwFault)
                 || self.at(SyntaxKind::KwIf)
+                || self.at(SyntaxKind::KwWhile)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
@@ -933,6 +953,7 @@ impl Parser<'_> {
                     SyntaxKind::KwLet,
                     SyntaxKind::KwFault,
                     SyntaxKind::KwIf,
+                    SyntaxKind::KwWhile,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
