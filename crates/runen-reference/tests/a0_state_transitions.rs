@@ -119,18 +119,19 @@ fn assign_reinitializes_storage_that_became_dead_after_move() {
 }
 
 #[test]
-fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
+fn init_reinitializes_storage_that_became_dead_after_move_without_replacement() {
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar(
         "TrackedFixture",
         ScalarType::TrackedFixture,
     ));
     let value = Place::local(LocalId(0));
+    let taken = Place::local(LocalId(1));
 
     let program = one_block(
         types,
         vec![
-            LocalDecl::new("value", tracked, true),
+            LocalDecl::new("value", tracked, false),
             LocalDecl::new("taken", tracked, false),
         ],
         vec![
@@ -139,22 +140,44 @@ fn init_cannot_reinitialize_storage_that_became_dead_after_move() {
                 src: Operand::Constant(Value::TrackedFixture(1)),
             },
             Statement::Init {
-                dst: Place::local(LocalId(1)),
+                dst: taken.clone(),
                 src: Operand::Move(value.clone().into()),
             },
             Statement::Init {
                 dst: value.clone(),
                 src: Operand::Constant(Value::TrackedFixture(2)),
             },
+            Statement::Read {
+                src: value.clone().into(),
+            },
         ],
     );
 
-    let error = validate_program(program)
-        .expect_err("dead storage must be reinitialized with Assign, not Init");
+    let report = defined_report(program);
+    let events = event_kinds(&report.verification_events);
     assert_eq!(
-        error.kind,
-        MirValidationErrorKind::InitRequiresNeverInitialized(value)
+        events
+            .iter()
+            .filter(|event| {
+                matches!(
+                    event,
+                    VerificationEventKind::Write {
+                        place,
+                        kind: VerificationWriteKind::Init,
+                    } if *place == value
+                )
+            })
+            .count(),
+        2
     );
+    let dropped_ids = events
+        .iter()
+        .filter_map(|event| match event {
+            VerificationEventKind::DropTrackedFixture { id, .. } => Some(*id),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(dropped_ids, vec![1, 2]);
 }
 
 #[test]
@@ -278,7 +301,7 @@ fn explicit_drop_of_partial_aggregate_destroys_only_live_subobjects() {
 }
 
 #[test]
-fn init_cannot_start_a_second_stored_value_lifetime_after_drop() {
+fn init_starts_a_new_stored_value_lifetime_after_drop() {
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar(
         "TrackedFixture",
@@ -304,10 +327,27 @@ fn init_cannot_start_a_second_stored_value_lifetime_after_drop() {
         ],
     );
 
-    let error = validate_program(program).expect_err("Drop leaves Dead storage, not fresh storage");
+    let report = defined_report(program);
     assert_eq!(
-        error.kind,
-        MirValidationErrorKind::InitRequiresNeverInitialized(value)
+        event_kinds(&report.verification_events),
+        vec![
+            VerificationEventKind::Write {
+                place: value.clone(),
+                kind: VerificationWriteKind::Init,
+            },
+            VerificationEventKind::DropTrackedFixture {
+                place: value.clone(),
+                id: 1,
+            },
+            VerificationEventKind::Write {
+                place: value.clone(),
+                kind: VerificationWriteKind::Init,
+            },
+            VerificationEventKind::DropTrackedFixture {
+                place: value,
+                id: 2,
+            },
+        ]
     );
 }
 
