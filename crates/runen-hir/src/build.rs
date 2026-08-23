@@ -138,6 +138,24 @@ impl BodyResolutionContext<'_> {
     }
 }
 
+#[derive(Debug, Default)]
+struct ControlValidationContext {
+    scopes: Vec<ScopeFrame>,
+    loops: Vec<LoopTarget>,
+}
+
+#[derive(Debug)]
+struct ScopeFrame {
+    direct_bindings: Vec<BindingId>,
+}
+
+#[derive(Debug)]
+struct LoopTarget {
+    body_scope: usize,
+    head: BTreeMap<String, BindingState>,
+    continuation: BTreeMap<String, BindingState>,
+}
+
 pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Diagnostic>> {
     let mut diagnostics = syntax_admission_diagnostics(units);
     if !diagnostics.is_empty() {
@@ -891,6 +909,7 @@ fn validate_body(
         records,
         headers,
     };
+    let mut control = ControlValidationContext::default();
     let mut statements = Vec::new();
     let mut terminal_return = None;
     let mut has_normal_continuation = true;
@@ -921,6 +940,7 @@ fn validate_body(
             &node,
             &context,
             &mut bindings,
+            &mut control,
             next_binding,
             diagnostics,
         ) {
@@ -936,6 +956,9 @@ fn validate_body(
         });
     }
 
+    debug_assert!(control.scopes.is_empty());
+    debug_assert!(control.loops.is_empty());
+
     Body {
         statements,
         terminal_return,
@@ -948,6 +971,7 @@ fn validate_body_statement(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
+    control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
@@ -967,20 +991,39 @@ fn validate_body_statement(
         SyntaxKind::FaultStatement => Some(Statement::Fault {
             location: location(header.unit, node),
         }),
+        SyntaxKind::BreakStatement => {
+            validate_loop_transfer(header, node, context, bindings, control, true, diagnostics)
+        }
+        SyntaxKind::ContinueStatement => {
+            validate_loop_transfer(header, node, context, bindings, control, false, diagnostics)
+        }
         SyntaxKind::BlockStatement => Some(validate_block(
             header,
             node,
             context,
             bindings,
+            control,
             next_binding,
             diagnostics,
         )),
-        SyntaxKind::IfStatement => {
-            validate_if(header, node, context, bindings, next_binding, diagnostics)
-        }
-        SyntaxKind::WhileStatement => {
-            validate_while(header, node, context, bindings, next_binding, diagnostics)
-        }
+        SyntaxKind::IfStatement => validate_if(
+            header,
+            node,
+            context,
+            bindings,
+            control,
+            next_binding,
+            diagnostics,
+        ),
+        SyntaxKind::WhileStatement => validate_while(
+            header,
+            node,
+            context,
+            bindings,
+            control,
+            next_binding,
+            diagnostics,
+        ),
         SyntaxKind::ReturnStatement => {
             unreachable!("terminal return is handled by its containing source sequence")
         }
@@ -990,7 +1033,7 @@ fn validate_body_statement(
 
 fn statement_has_normal_continuation(statement: &Statement) -> bool {
     match statement {
-        Statement::Fault { .. } => false,
+        Statement::Fault { .. } | Statement::Break { .. } | Statement::Continue { .. } => false,
         Statement::Block(block) => block.has_normal_continuation,
         Statement::If {
             then_block,
@@ -1012,11 +1055,14 @@ fn validate_block(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
+    control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Statement {
+    control.scopes.push(ScopeFrame {
+        direct_bindings: Vec::new(),
+    });
     let mut statements = Vec::new();
-    let mut direct_bindings = Vec::<(String, BindingId)>::new();
     let mut terminal_return = None;
     let mut has_normal_continuation = true;
 
@@ -1041,24 +1087,39 @@ fn validate_block(
             continue;
         }
 
-        let statement =
-            validate_body_statement(header, &child, context, bindings, next_binding, diagnostics);
+        let statement = validate_body_statement(
+            header,
+            &child,
+            context,
+            bindings,
+            control,
+            next_binding,
+            diagnostics,
+        );
 
         if let Some(statement) = statement {
             match &statement {
-                Statement::Local { binding, name, .. } => {
-                    direct_bindings.push((name.clone(), *binding));
+                Statement::Local { binding, .. } => {
+                    control
+                        .scopes
+                        .last_mut()
+                        .expect("validated block retains its lexical scope")
+                        .direct_bindings
+                        .push(*binding);
                 }
                 Statement::RecordDestructure { bindings, .. } => {
-                    direct_bindings.extend(
-                        bindings
-                            .iter()
-                            .map(|binding| (binding.name.clone(), binding.binding)),
-                    );
+                    control
+                        .scopes
+                        .last_mut()
+                        .expect("validated block retains its lexical scope")
+                        .direct_bindings
+                        .extend(bindings.iter().map(|binding| binding.binding));
                 }
                 Statement::Assignment { .. }
                 | Statement::Call { .. }
                 | Statement::Fault { .. }
+                | Statement::Break { .. }
+                | Statement::Continue { .. }
                 | Statement::Block(_)
                 | Statement::If { .. }
                 | Statement::While { .. } => {}
@@ -1068,13 +1129,15 @@ fn validate_block(
         }
     }
 
+    let scope = control
+        .scopes
+        .pop()
+        .expect("validated block lexical scope is balanced");
     let mut normal_cleanup = Vec::new();
     if has_normal_continuation {
-        for (name, binding) in direct_bindings.iter().rev() {
-            let state = bindings
-                .get(name)
+        for binding in scope.direct_bindings.iter().rev() {
+            let state = binding_state_by_id(bindings, *binding)
                 .expect("validated direct child binding remains active through block end");
-            debug_assert_eq!(state.id, *binding);
             for fields in remaining_ownership_frontier(state.ty, &state.ownership, context.records)
             {
                 normal_cleanup.push(CleanupPath {
@@ -1085,7 +1148,11 @@ fn validate_block(
         }
     }
 
-    for (name, binding) in direct_bindings {
+    for binding in scope.direct_bindings {
+        let name = bindings
+            .iter()
+            .find_map(|(name, state)| (state.id == binding).then(|| name.clone()))
+            .expect("validated direct child binding is active at block end");
         let removed = bindings
             .remove(&name)
             .expect("validated direct child binding is removed at block end");
@@ -1106,6 +1173,7 @@ fn validate_if(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
+    control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
@@ -1136,6 +1204,7 @@ fn validate_if(
         &then_node,
         context,
         &mut then_bindings,
+        control,
         next_binding,
         diagnostics,
     );
@@ -1152,6 +1221,7 @@ fn validate_if(
             &else_node,
             context,
             &mut else_bindings,
+            control,
             next_binding,
             diagnostics,
         );
@@ -1218,6 +1288,7 @@ fn validate_while(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     bindings: &mut BTreeMap<String, BindingState>,
+    control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
@@ -1238,15 +1309,27 @@ fn validate_while(
         .find(|child| child.kind() == SyntaxKind::BlockStatement)
         .expect("syntax-clean while contains one body block");
     let mut body_bindings = post_condition.clone();
+    let body_scope = control.scopes.len();
+    control.loops.push(LoopTarget {
+        body_scope,
+        head: loop_head.clone(),
+        continuation: post_condition.clone(),
+    });
     let body_diagnostics = diagnostics.len();
     let body_statement = validate_block(
         header,
         &body_node,
         context,
         &mut body_bindings,
+        control,
         next_binding,
         diagnostics,
     );
+    let popped = control
+        .loops
+        .pop()
+        .expect("validated while target stack is balanced");
+    debug_assert_eq!(popped.body_scope, body_scope);
     let body_valid = diagnostics.len() == body_diagnostics;
     let Statement::Block(body) = body_statement else {
         unreachable!("block validation returns one block statement");
@@ -1282,6 +1365,99 @@ fn validate_while(
         body,
         location: location(header.unit, node),
     })
+}
+
+fn validate_loop_transfer(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &BTreeMap<String, BindingState>,
+    control: &ControlValidationContext,
+    is_break: bool,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let transfer_location = location(header.unit, node);
+    let Some(target) = control.loops.last() else {
+        diagnostics.push(Diagnostic {
+            kind: if is_break {
+                DiagnosticKind::BreakOutsideLoop
+            } else {
+                DiagnosticKind::ContinueOutsideLoop
+            },
+            location: transfer_location,
+        });
+        return None;
+    };
+
+    let required = if is_break {
+        &target.continuation
+    } else {
+        &target.head
+    };
+    if !ownership_matches_target(bindings, required) {
+        diagnostics.push(Diagnostic {
+            kind: if is_break {
+                DiagnosticKind::BreakOwnershipMismatch
+            } else {
+                DiagnosticKind::ContinueOwnershipMismatch
+            },
+            location: transfer_location,
+        });
+        return None;
+    }
+
+    let cleanup = transfer_cleanup(bindings, context.records, control, target.body_scope);
+    Some(if is_break {
+        Statement::Break {
+            cleanup,
+            location: transfer_location,
+        }
+    } else {
+        Statement::Continue {
+            cleanup,
+            location: transfer_location,
+        }
+    })
+}
+
+fn ownership_matches_target(
+    bindings: &BTreeMap<String, BindingState>,
+    required: &BTreeMap<String, BindingState>,
+) -> bool {
+    required.values().all(|expected| {
+        binding_state_by_id(bindings, expected.id)
+            .is_some_and(|actual| actual.ownership == expected.ownership)
+    })
+}
+
+fn transfer_cleanup(
+    bindings: &BTreeMap<String, BindingState>,
+    records: &[Record],
+    control: &ControlValidationContext,
+    body_scope: usize,
+) -> Vec<CleanupPath> {
+    debug_assert!(body_scope < control.scopes.len());
+    let mut cleanup = Vec::new();
+    for scope in control.scopes[body_scope..].iter().rev() {
+        for binding in scope.direct_bindings.iter().rev() {
+            let state = binding_state_by_id(bindings, *binding)
+                .expect("active transfer scope retains every direct binding");
+            for fields in remaining_ownership_frontier(state.ty, &state.ownership, records) {
+                cleanup.push(CleanupPath {
+                    binding: *binding,
+                    fields,
+                });
+            }
+        }
+    }
+    cleanup
+}
+
+fn binding_state_by_id(
+    bindings: &BTreeMap<String, BindingState>,
+    binding: BindingId,
+) -> Option<&BindingState> {
+    bindings.values().find(|state| state.id == binding)
 }
 
 fn remaining_ownership_frontier(

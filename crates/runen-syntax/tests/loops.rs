@@ -7,11 +7,25 @@ fn parse(text: &str) -> runen_syntax::Parse {
 }
 
 #[test]
-fn reserves_while_without_splitting_longer_identifiers() {
+fn reserves_loop_keys_without_splitting_longer_identifiers() {
     assert_eq!(user_identifier_key("while"), None);
+    assert_eq!(user_identifier_key("break"), None);
+    assert_eq!(user_identifier_key("continue"), None);
     assert_eq!(user_identifier_key("whiled").as_deref(), Some("whiled"));
+    assert_eq!(
+        user_identifier_key("breakable").as_deref(),
+        Some("breakable")
+    );
+    assert_eq!(
+        user_identifier_key("continued").as_deref(),
+        Some("continued")
+    );
+    assert_eq!(
+        user_identifier_key("continue_").as_deref(),
+        Some("continue_")
+    );
 
-    let source = "fn whiled(flag: Bool) { while flag {} }";
+    let source = "fn breakable(continued: Bool) { while continued { continue; break; } }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -23,7 +37,57 @@ fn reserves_while_without_splitting_longer_identifiers() {
         .map(|token| (token.kind(), token.text().to_owned()))
         .collect::<Vec<_>>();
     assert!(tokens.contains(&(SyntaxKind::KwWhile, "while".to_owned())));
-    assert!(tokens.contains(&(SyntaxKind::Ident, "whiled".to_owned())));
+    assert!(tokens.contains(&(SyntaxKind::KwBreak, "break".to_owned())));
+    assert!(tokens.contains(&(SyntaxKind::KwContinue, "continue".to_owned())));
+    assert!(tokens.contains(&(SyntaxKind::Ident, "breakable".to_owned())));
+    assert!(tokens.contains(&(SyntaxKind::Ident, "continued".to_owned())));
+}
+
+#[test]
+fn break_and_continue_are_ordinary_body_statements_and_do_not_stop_parsing() {
+    let source = "fn sink() {} fn f(flag: Bool) { while flag { break; sink(); } while flag { continue; sink(); } }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let root = parsed.syntax();
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::BreakStatement)
+            .count(),
+        1
+    );
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::ContinueStatement)
+            .count(),
+        1
+    );
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::CallStatement)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn break_and_continue_require_exact_semicolon_forms() {
+    for source in [
+        "fn f(flag: Bool) { while flag { break } }",
+        "fn f(flag: Bool) { while flag { continue } }",
+        "fn f(flag: Bool) { while flag { break value; } }",
+        "fn f(flag: Bool) { while flag { continue value; } }",
+    ] {
+        let parsed = parse(source);
+        assert_eq!(parsed.text(), source);
+        assert!(
+            parsed.errors().iter().any(|error| {
+                error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Semicolon)
+            }),
+            "expected semicolon diagnostic for {source:?}: {:?}",
+            parsed.errors()
+        );
+    }
 }
 
 #[test]

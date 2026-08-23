@@ -259,6 +259,302 @@ fn zero_leaf_body_local_needs_no_core_drop_before_backedge() {
 }
 
 #[test]
+fn continue_cleanup_precedes_direct_goto_to_condition_header() {
+    let lowered = lower_source(
+        "record Box { value: I64 } \
+         fn f(flag: Bool) { while flag { let child: Box = Box { value: 1 }; continue; } }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Goto(header) = f.body.blocks[0].terminator else {
+        panic!("entry Goto header");
+    };
+    let Terminator::Branch { true_target, .. } = f.body.blocks[header.0 as usize].terminator else {
+        panic!("header Branch");
+    };
+    let body = &f.body.blocks[true_target.0 as usize];
+    assert_eq!(
+        body.statements
+            .iter()
+            .filter(|statement| matches!(statement, CoreStatement::Drop { .. }))
+            .count(),
+        1,
+        "transfer cleanup must be emitted exactly once"
+    );
+    assert_eq!(body.terminator, Terminator::Goto(header));
+}
+
+#[test]
+fn continue_does_not_duplicate_direct_call_condition_evaluation() {
+    let lowered = lower_source(
+        "fn ready() -> Bool { return true; } \
+         fn f() { while ready() { continue; } }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Goto(header) = f.body.blocks[0].terminator else {
+        panic!("entry Goto header");
+    };
+    let Terminator::Call { target, .. } = f.body.blocks[header.0 as usize].terminator else {
+        panic!("condition header Call");
+    };
+    let Terminator::Branch { true_target, .. } = f.body.blocks[target.0 as usize].terminator else {
+        panic!("condition continuation Branch");
+    };
+    assert_eq!(
+        f.body.blocks[true_target.0 as usize].terminator,
+        Terminator::Goto(header)
+    );
+    assert_eq!(
+        f.body
+            .blocks
+            .iter()
+            .filter(|block| matches!(block.terminator, Terminator::Call { .. }))
+            .count(),
+        1,
+        "continue revisits the one static condition call site"
+    );
+}
+
+#[test]
+fn break_cleanup_precedes_goto_to_same_post_loop_block_as_false_exit() {
+    let lowered = lower_source(
+        "record Box { value: I64 } \
+         fn sink(value: I64) {} \
+         fn f(flag: Bool, value: I64) { \
+             while flag { let child: Box = Box { value: 1 }; break; } \
+             sink(value); \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Goto(header) = f.body.blocks[0].terminator else {
+        panic!("entry Goto header");
+    };
+    let Terminator::Branch {
+        true_target,
+        false_target,
+        ..
+    } = f.body.blocks[header.0 as usize].terminator
+    else {
+        panic!("header Branch");
+    };
+    let body = &f.body.blocks[true_target.0 as usize];
+    assert_eq!(
+        body.statements
+            .iter()
+            .filter(|statement| matches!(statement, CoreStatement::Drop { .. }))
+            .count(),
+        1
+    );
+    assert_eq!(body.terminator, Terminator::Goto(false_target));
+    assert!(matches!(
+        f.body.blocks[false_target.0 as usize].terminator,
+        Terminator::Call { .. }
+    ));
+    assert_eq!(
+        f.body
+            .blocks
+            .iter()
+            .filter(|block| matches!(block.terminator, Terminator::Branch { .. }))
+            .count(),
+        1,
+        "break must not synthesize or reevaluate a false condition"
+    );
+}
+
+#[test]
+fn zero_leaf_transfer_cleanup_erases_to_no_core_drop() {
+    let lowered = lower_source(
+        "record Empty {} \
+         fn f(flag: Bool) { while flag { let child: Empty = Empty {}; break; } }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Goto(header) = f.body.blocks[0].terminator else {
+        panic!("entry Goto header");
+    };
+    let Terminator::Branch { true_target, .. } = f.body.blocks[header.0 as usize].terminator else {
+        panic!("header Branch");
+    };
+    let body = &f.body.blocks[true_target.0 as usize];
+    assert!(
+        !body
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, CoreStatement::Drop { .. }))
+    );
+}
+
+#[test]
+fn partial_transfer_cleanup_uses_existing_projected_core_drop_only() {
+    let lowered = lower_source(
+        "record Left { value: I64 } record Right { value: I64 } \
+         record Pair { left: Left, right: Right } \
+         fn take(value: Left) {} \
+         fn f(flag: Bool) { \
+             while flag { \
+                 let child: Pair = Pair { left: Left { value: 1 }, right: Right { value: 2 } }; \
+                 take(child.left); \
+                 break; \
+             } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Goto(_) = f.body.blocks[0].terminator else {
+        panic!("entry Goto header");
+    };
+    let branch_block = f
+        .body
+        .blocks
+        .iter()
+        .position(|block| matches!(block.terminator, Terminator::Branch { .. }))
+        .expect("while Branch");
+    let Terminator::Branch { true_target, .. } = f.body.blocks[branch_block].terminator else {
+        unreachable!();
+    };
+
+    let mut block = true_target.0 as usize;
+    let drop_place = loop {
+        if let Some(CoreStatement::Drop { place }) = f.body.blocks[block]
+            .statements
+            .iter()
+            .find(|statement| matches!(statement, CoreStatement::Drop { .. }))
+        {
+            break place;
+        }
+        let Terminator::Call { target, .. } = f.body.blocks[block].terminator else {
+            panic!("expected call continuation before transfer cleanup");
+        };
+        block = target.0 as usize;
+    };
+    let PlaceAccess::Direct(drop_place) = drop_place else {
+        panic!("cleanup Drop must use direct place access");
+    };
+    assert_eq!(drop_place.projections.len(), 1);
+}
+
+#[test]
+fn nested_continue_targets_inner_header_not_outer_header() {
+    let lowered = lower_source(
+        "record Box { value: I64 } \
+         fn f(a: Bool, b: Bool) { \
+             while a { \
+                 let outer: Box = Box { value: 1 }; \
+                 while b { let inner: Box = Box { value: 2 }; continue; } \
+             } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Goto(outer_header) = f.body.blocks[0].terminator else {
+        panic!("outer header");
+    };
+    let Terminator::Branch {
+        true_target: outer_body,
+        ..
+    } = f.body.blocks[outer_header.0 as usize].terminator
+    else {
+        panic!("outer Branch");
+    };
+    let Terminator::Goto(inner_header) = f.body.blocks[outer_body.0 as usize].terminator else {
+        panic!("outer body must enter inner header");
+    };
+    let Terminator::Branch {
+        true_target: inner_body,
+        ..
+    } = f.body.blocks[inner_header.0 as usize].terminator
+    else {
+        panic!("inner Branch");
+    };
+    assert_eq!(
+        f.body.blocks[inner_body.0 as usize].terminator,
+        Terminator::Goto(inner_header)
+    );
+    assert_ne!(inner_header, outer_header);
+}
+
+#[test]
+fn nested_break_targets_inner_post_loop_not_outer_post_loop() {
+    let lowered = lower_source(
+        "record Box { value: I64 } \
+         fn f(a: Bool, b: Bool) { \
+             while a { \
+                 let outer: Box = Box { value: 1 }; \
+                 while b { let inner: Box = Box { value: 2 }; break; } \
+             } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let Terminator::Goto(outer_header) = f.body.blocks[0].terminator else {
+        panic!("outer header");
+    };
+    let Terminator::Branch {
+        true_target: outer_body,
+        false_target: outer_continuation,
+        ..
+    } = f.body.blocks[outer_header.0 as usize].terminator
+    else {
+        panic!("outer Branch");
+    };
+    let Terminator::Goto(inner_header) = f.body.blocks[outer_body.0 as usize].terminator else {
+        panic!("outer body must enter inner header");
+    };
+    let Terminator::Branch {
+        true_target: inner_body,
+        false_target: inner_continuation,
+        ..
+    } = f.body.blocks[inner_header.0 as usize].terminator
+    else {
+        panic!("inner Branch");
+    };
+    assert_eq!(
+        f.body.blocks[inner_body.0 as usize].terminator,
+        Terminator::Goto(inner_continuation)
+    );
+    assert_ne!(inner_continuation, outer_continuation);
+}
+
+#[test]
+fn transfer_and_normal_conditional_arm_lower_without_completion_lattice() {
+    lower_source("fn f(a: Bool, b: Bool) { while a { if b { continue; } else {} } }");
+    lower_source("fn f(a: Bool, b: Bool) { while a { if b { break; } else { continue; } } }");
+    lower_source("fn f(a: Bool, b: Bool) { while a { if b { break; } } }");
+}
+
+#[test]
+fn mutable_assignment_can_restore_break_continuation_state() {
+    lower_source(
+        "record Ticket { value: I64 } \
+         fn make() -> Ticket { return Ticket { value: 1 }; } \
+         fn sink(value: Ticket) {} \
+         fn f(flag: Bool) { \
+             let mut value: Ticket = make(); \
+             while flag { sink(value); value = make(); break; } \
+         }",
+    );
+}
+
+#[test]
+fn invalid_retained_transfer_placement_is_a_lowering_invariant_failure() {
+    let mut compilation = hir("fn f(flag: Bool) { while flag { break; } }");
+    let f = compilation
+        .functions
+        .iter_mut()
+        .find(|function| function.name == "f")
+        .expect("function f");
+    let HirStatement::While { body, .. } = &f.body.statements[0] else {
+        panic!("expected HIR while");
+    };
+    let transfer = body.statements[0].clone();
+    f.body.statements = vec![transfer];
+    f.body.terminal_return = None;
+    f.body.has_normal_continuation = false;
+
+    assert_eq!(
+        lower(&compilation),
+        Err(LoweringError::InvalidHirInvariant(
+            "loop transfer has no enclosing lowering target"
+        ))
+    );
+}
+
+#[test]
 fn non_bool_retained_while_is_rejected_as_hir_invariant() {
     let mut compilation = hir("fn f(flag: Bool) { while flag {} }");
     let f = compilation
