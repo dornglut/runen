@@ -3,9 +3,7 @@ use runen_core_ir::{
     Value as CoreValue,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{
-    IntrinsicType, ModuleId, SourceUnit, Statement as HirStatement, Type, ValueKind, build_typed_hir,
-};
+use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -299,11 +297,4 @@ fn boolean_not_does_not_require_any_new_core_semantic_operation() {
         3,
         "operand materialization plus two path result Inits are sufficient"
     );
-
-    let _ = HirStatement::Fault {
-        location: runen_hir::SourceLocation {
-            unit: 0,
-            range: runen_syntax::TextRange::empty(runen_syntax::TextSize::from(0)),
-        },
-    };
 }
