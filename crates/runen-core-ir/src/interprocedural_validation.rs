@@ -57,8 +57,8 @@ pub enum MirValidationErrorKind {
     RawAssignRequiresPointer(TypeId),
     AssignToImmutable(LocalId),
     InteriorMutationRequiresMarkedRegion(Place),
-    InitRequiresNeverInitialized(Place),
-    CallResultRequiresNeverInitialized(Place),
+    InitRequiresVacant(Place),
+    CallResultRequiresVacant(Place),
     UseOfUninitialized(Place),
     DropOfUninitialized(Place),
     BorrowOfUninitialized(Place),
@@ -745,11 +745,11 @@ impl ObjectState {
         }
     }
 
-    fn all_never_initialized(&self) -> bool {
+    fn wholly_vacant(&self) -> bool {
         match self {
-            Self::Leaf(LeafState::NeverInitialized) => true,
-            Self::Leaf(LeafState::Live(_) | LeafState::Dead) => false,
-            Self::Aggregate(fields) => fields.iter().all(Self::all_never_initialized),
+            Self::Leaf(LeafState::NeverInitialized | LeafState::Dead) => true,
+            Self::Leaf(LeafState::Live(_)) => false,
+            Self::Aggregate(fields) => fields.iter().all(Self::wholly_vacant),
         }
     }
 
@@ -933,12 +933,10 @@ fn validate_path_state(
                         AccessRequirement::Exclusive,
                         &point,
                     )?;
-                    if !place_state(&state.locals, destination).all_never_initialized() {
+                    if !place_state(&state.locals, destination).wholly_vacant() {
                         return Err(point_error(
                             &point,
-                            MirValidationErrorKind::CallResultRequiresNeverInitialized(
-                                destination.clone(),
-                            ),
+                            MirValidationErrorKind::CallResultRequiresVacant(destination.clone()),
                         ));
                     }
                 }
@@ -993,10 +991,10 @@ fn validate_state_statement(
     match statement {
         Statement::Init { dst, src } => {
             authorize_direct_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
-            if !place_state(locals, dst).all_never_initialized() {
+            if !place_state(locals, dst).wholly_vacant() {
                 return Err(point_error(
                     point,
-                    MirValidationErrorKind::InitRequiresNeverInitialized(dst.clone()),
+                    MirValidationErrorKind::InitRequiresVacant(dst.clone()),
                 ));
             }
             let dst_ty = place_type(types, body, dst, point)?;
