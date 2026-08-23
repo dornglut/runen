@@ -397,6 +397,7 @@ impl Parser<'_> {
                 SyntaxKind::KwTrue
                     | SyntaxKind::KwFalse
                     | SyntaxKind::DecimalMagnitude
+                    | SyntaxKind::DecimalFloatingMagnitude
                     | SyntaxKind::Minus
             )
         ) {
@@ -689,14 +690,35 @@ impl Parser<'_> {
                 self.bump();
                 self.builder.finish_node();
             }
-            Some(SyntaxKind::Minus) => {
+            Some(SyntaxKind::DecimalFloatingMagnitude) => {
                 self.builder
-                    .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                    .start_node(SyntaxKind::DecimalFloatingLiteral.into());
                 self.bump();
-                self.expect(
-                    SyntaxKind::DecimalMagnitude,
-                    ExpectedSyntax::DecimalMagnitude,
+                self.builder.finish_node();
+            }
+            Some(SyntaxKind::Minus) => {
+                let floating =
+                    self.peek_nontrivia(1) == Some(SyntaxKind::DecimalFloatingMagnitude);
+                self.builder.start_node(
+                    if floating {
+                        SyntaxKind::DecimalFloatingLiteral
+                    } else {
+                        SyntaxKind::DecimalIntegerLiteral
+                    }
+                    .into(),
                 );
+                self.bump();
+                if floating {
+                    self.expect(
+                        SyntaxKind::DecimalFloatingMagnitude,
+                        ExpectedSyntax::DecimalMagnitude,
+                    );
+                } else {
+                    self.expect(
+                        SyntaxKind::DecimalMagnitude,
+                        ExpectedSyntax::DecimalMagnitude,
+                    );
+                }
                 self.builder.finish_node();
             }
             _ => {
