@@ -34,24 +34,27 @@ The result type is an intrinsic fact of the operator relation; it is not inferre
 
 Let `b` be the successfully produced semantic `Bool` operand value.
 
-Boolean logical negation produces exactly the opposite semantic `Bool` value:
+Boolean logical negation consumes that owned operand value exactly once and produces exactly one distinct owned `Bool` result with the opposite semantic value:
 
 - when `b` is `true`, the result is `false`;
 - when `b` is `false`, the result is `true`.
 
 These two cases are exhaustive because `types.md` defines exactly two semantic `Bool` values.
 
+Ownership of the successful operand result ends at this operator application. The consumed operand result is not duplicated and receives no independent cleanup after the result has been produced.
+
 The operation is deterministic. Equal semantic Bool operands produce equal semantic Bool results independently of source spelling, implementation representation, target, backend, optimization level, or host-language behavior.
 
 ## Operator-local ownership and execution effects
 
-Boolean logical negation receives one already successfully produced owned `Bool` operand and produces one owned `Bool` result.
+Boolean logical negation receives one already successfully produced owned `Bool` operand, consumes that operand as defined above, and produces one owned `Bool` result.
 
 The logical-negation operation itself:
 
 - consumes no parameter or local binding directly;
 - duplicates or transfers no binding-owned structural path directly;
 - changes no binding structural-ownership state;
+- creates no separately cleanup-bearing source transient category;
 - creates no source binding, address, reference, or source-visible storage identity;
 - introduces no defined-fault reason;
 - introduces no divergence possibility after successful operand production; and
@@ -75,9 +78,8 @@ After successful source validation, a faithful typed frontend must retain enough
 
 - one Boolean logical-negation value producer;
 - its complete recursively contained operand value;
-- exact operand type `Bool`;
-- exact result type `Bool`; and
-- the source location required by the implementation's diagnostic/source-mapping contract.
+- exact operand type `Bool`; and
+- exact result type `Bool`.
 
 A minimal typed representation may be equivalent to:
 
@@ -89,7 +91,7 @@ ValueKind::BooleanNot {
 
 where both the outer value and operand have source type `Bool`.
 
-This explanatory shape is not an implementation-layout mandate. Token spelling, a numeric precedence value, associativity metadata, Core block identities, source-CFG identities, source ownership-state sets, and runtime operator tags are not semantic facts required after validation.
+This explanatory shape is not an implementation-layout mandate. Source locations may be retained by diagnostics/tooling but are not part of the operator's semantic identity. Token spelling, a numeric precedence value, associativity metadata, Core block identities, source-CFG identities, source ownership-state sets, and runtime operator tags are not semantic facts required after validation.
 
 A faithful lowerer MUST reject internally inconsistent retained operator facts, such as a non-`Bool` operand or result, rather than repairing them from lower/Core type information.
 
@@ -109,7 +111,8 @@ After the complete source operand has successfully lowered to one fresh Core loc
 This refinement is valid under the accepted Core owners because:
 
 - `Branch` evaluates its Bool-valued operand exactly once;
-- the moved operand local is a compiler representation of the already completed source operand result, so moving it adds no source binding ownership transition;
+- the `Move` consumes the lowered owned operand result exactly once, matching the source operator's operand-value consumption;
+- the moved operand local is a compiler representation of the already completed source operand result, so that move adds no source binding structural-ownership transition;
 - the fresh result local is wholly vacant on each branch path before that path's `Init`;
 - each concrete execution takes exactly one branch and therefore executes exactly one of the two result initializations;
 - Core path-state validation may propagate both branch paths to the same join while retaining their states independently rather than inventing a union, meet, join, or widening state;
