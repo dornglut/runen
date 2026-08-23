@@ -1,14 +1,17 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::{
+    cmp::Ordering,
+    collections::{BTreeMap, BTreeSet},
+};
 
 use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
-    Accessibility, AssignmentMutability, BindingId, Block, Body, CleanupPath, Diagnostic,
-    DiagnosticKind, Duplicability, Field, FieldReceiverTransientCleanup, FieldValueReceiver,
-    Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter,
-    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
-    RecordPatternTransientCleanup, Return, SourceLocation, SourceUnit, Statement, Type,
-    TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
+    CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field, FieldReceiverTransientCleanup,
+    FieldValueReceiver, Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId,
+    OwnedUse, Parameter, Record, RecordFieldValue, RecordId, RecordPatternBinding,
+    RecordPatternScrutinee, RecordPatternTransientCleanup, Return, SourceLocation, SourceUnit,
+    Statement, Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -1966,6 +1969,14 @@ fn validate_value(
                 location: value_location,
             })
         }
+        SyntaxKind::DecimalFloatingLiteral => {
+            let literal = materialize_floating_literal(node, required, value_location, diagnostics)?;
+            Some(Value {
+                ty: required,
+                kind: ValueKind::Literal(literal),
+                location: value_location,
+            })
+        }
         SyntaxKind::IdentifierUse => {
             let token = direct_token(node, SyntaxKind::Ident);
             let name = key(&token);
@@ -2524,6 +2535,340 @@ fn materialize_integer_literal(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct BinaryFloatFormat {
+    precision: u32,
+    emin: i32,
+    emax: i32,
+}
+
+#[derive(Debug)]
+struct DecimalDatum {
+    digits: String,
+    scale: usize,
+}
+
+#[derive(Debug)]
+struct SmallDecimalInt {
+    limbs: Vec<u32>,
+}
+
+impl SmallDecimalInt {
+    const BASE: u64 = 1_000_000_000;
+
+    fn from_u64(mut value: u64) -> Self {
+        let mut limbs = Vec::new();
+        while value != 0 {
+            limbs.push((value % Self::BASE) as u32);
+            value /= Self::BASE;
+        }
+        if limbs.is_empty() {
+            limbs.push(0);
+        }
+        Self { limbs }
+    }
+
+    fn mul_small(&mut self, factor: u32) {
+        let mut carry = 0_u64;
+        for limb in &mut self.limbs {
+            let product = u64::from(*limb) * u64::from(factor) + carry;
+            *limb = (product % Self::BASE) as u32;
+            carry = product / Self::BASE;
+        }
+        while carry != 0 {
+            self.limbs.push((carry % Self::BASE) as u32);
+            carry /= Self::BASE;
+        }
+    }
+
+    fn to_decimal_string(&self) -> String {
+        let mut limbs = self.limbs.iter().rev();
+        let first = limbs.next().expect("decimal integer has one limb");
+        let mut text = first.to_string();
+        for limb in limbs {
+            text.push_str(&format!("{limb:09}"));
+        }
+        text
+    }
+}
+
+fn materialize_floating_literal(
+    node: &SyntaxNode,
+    required: Type,
+    value_location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<LiteralValue> {
+    let Type::Intrinsic(intrinsic) = required else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::FloatingLiteralRequiresFloating { required },
+            location: value_location,
+        });
+        return None;
+    };
+
+    let (format, wrap): (BinaryFloatFormat, fn(BinaryFloatValue) -> LiteralValue) = match intrinsic {
+        IntrinsicType::F16 => (
+            BinaryFloatFormat {
+                precision: 11,
+                emin: -14,
+                emax: 15,
+            },
+            LiteralValue::F16,
+        ),
+        IntrinsicType::F32 => (
+            BinaryFloatFormat {
+                precision: 24,
+                emin: -126,
+                emax: 127,
+            },
+            LiteralValue::F32,
+        ),
+        IntrinsicType::F64 => (
+            BinaryFloatFormat {
+                precision: 53,
+                emin: -1022,
+                emax: 1023,
+            },
+            LiteralValue::F64,
+        ),
+        IntrinsicType::Bool
+        | IntrinsicType::I8
+        | IntrinsicType::I16
+        | IntrinsicType::I32
+        | IntrinsicType::I64
+        | IntrinsicType::U8
+        | IntrinsicType::U16
+        | IntrinsicType::U32
+        | IntrinsicType::U64 => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::FloatingLiteralRequiresFloating { required },
+                location: value_location,
+            });
+            return None;
+        }
+    };
+
+    let sign = if node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::Minus)
+    {
+        BinaryFloatSign::Negative
+    } else {
+        BinaryFloatSign::Positive
+    };
+    let magnitude = direct_token(node, SyntaxKind::DecimalFloatingMagnitude);
+    let datum = decimal_floating_datum(magnitude.text());
+    let value = if datum.digits.is_empty() {
+        BinaryFloatValue::Zero(sign)
+    } else {
+        round_decimal_binary(&datum, sign, format)
+    };
+    Some(wrap(value))
+}
+
+fn decimal_floating_datum(text: &str) -> DecimalDatum {
+    let dot = text
+        .find('.')
+        .expect("syntax floating magnitude contains one decimal point");
+    let scale = text.len() - dot - 1;
+    let mut digits = String::with_capacity(text.len() - 1);
+    digits.push_str(&text[..dot]);
+    digits.push_str(&text[dot + 1..]);
+    let leading = digits.bytes().take_while(|byte| *byte == b'0').count();
+    digits.drain(..leading);
+    DecimalDatum { digits, scale }
+}
+
+fn round_decimal_binary(
+    datum: &DecimalDatum,
+    sign: BinaryFloatSign,
+    format: BinaryFloatFormat,
+) -> BinaryFloatValue {
+    debug_assert!(!datum.digits.is_empty());
+    let normal_min = 1_u64 << (format.precision - 1);
+    let significand_limit = 1_u64 << format.precision;
+    let max_significand = significand_limit - 1;
+    let quantum_exponent = format.emin - (format.precision as i32 - 1);
+
+    if compare_decimal_to_dyadic(datum, 1, format.emin) == Ordering::Less {
+        let lower = greatest_significand_not_above(
+            datum,
+            0,
+            normal_min - 1,
+            quantum_exponent,
+        );
+        if lower != 0
+            && compare_decimal_to_dyadic(datum, lower, quantum_exponent) == Ordering::Equal
+        {
+            return BinaryFloatValue::Subnormal {
+                sign,
+                significand: lower,
+            };
+        }
+        let midpoint = compare_decimal_to_dyadic(
+            datum,
+            lower
+                .checked_mul(2)
+                .and_then(|value| value.checked_add(1))
+                .expect("bounded floating midpoint significand"),
+            quantum_exponent - 1,
+        );
+        let selected = match midpoint {
+            Ordering::Less => lower,
+            Ordering::Greater => lower + 1,
+            Ordering::Equal if lower % 2 == 0 => lower,
+            Ordering::Equal => lower + 1,
+        };
+        return if selected == 0 {
+            BinaryFloatValue::Zero(sign)
+        } else if selected == normal_min {
+            BinaryFloatValue::Normal {
+                sign,
+                significand: normal_min,
+                exponent: format.emin as i16,
+            }
+        } else {
+            BinaryFloatValue::Subnormal {
+                sign,
+                significand: selected,
+            }
+        };
+    }
+
+    let exponent = greatest_exponent_not_above(datum, format.emin, format.emax);
+    let grid_exponent = exponent - (format.precision as i32 - 1);
+    let lower = greatest_significand_not_above(
+        datum,
+        normal_min,
+        max_significand,
+        grid_exponent,
+    );
+    if compare_decimal_to_dyadic(datum, lower, grid_exponent) == Ordering::Equal {
+        return BinaryFloatValue::Normal {
+            sign,
+            significand: lower,
+            exponent: exponent as i16,
+        };
+    }
+
+    let midpoint = compare_decimal_to_dyadic(
+        datum,
+        lower
+            .checked_mul(2)
+            .and_then(|value| value.checked_add(1))
+            .expect("bounded floating midpoint significand"),
+        grid_exponent - 1,
+    );
+    let selected = match midpoint {
+        Ordering::Less => lower,
+        Ordering::Greater => lower + 1,
+        Ordering::Equal if lower % 2 == 0 => lower,
+        Ordering::Equal => lower + 1,
+    };
+    if selected < significand_limit {
+        return BinaryFloatValue::Normal {
+            sign,
+            significand: selected,
+            exponent: exponent as i16,
+        };
+    }
+    if exponent == format.emax {
+        BinaryFloatValue::Infinity(sign)
+    } else {
+        BinaryFloatValue::Normal {
+            sign,
+            significand: normal_min,
+            exponent: (exponent + 1) as i16,
+        }
+    }
+}
+
+fn greatest_exponent_not_above(datum: &DecimalDatum, mut low: i32, mut high: i32) -> i32 {
+    while low < high {
+        let mid = low + (high - low + 1) / 2;
+        if compare_decimal_to_dyadic(datum, 1, mid) != Ordering::Greater {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    low
+}
+
+fn greatest_significand_not_above(
+    datum: &DecimalDatum,
+    mut low: u64,
+    mut high: u64,
+    exponent: i32,
+) -> u64 {
+    while low < high {
+        let mid = low + (high - low + 1) / 2;
+        if compare_decimal_to_dyadic(datum, mid, exponent) != Ordering::Greater {
+            low = mid;
+        } else {
+            high = mid - 1;
+        }
+    }
+    low
+}
+
+fn compare_decimal_to_dyadic(datum: &DecimalDatum, significand: u64, exponent: i32) -> Ordering {
+    if significand == 0 {
+        return Ordering::Greater;
+    }
+    let (candidate, candidate_scale) = dyadic_decimal(significand, exponent);
+    compare_scaled_decimal(
+        &datum.digits,
+        datum.scale,
+        &candidate,
+        candidate_scale,
+    )
+}
+
+fn dyadic_decimal(significand: u64, exponent: i32) -> (String, usize) {
+    debug_assert!(significand != 0);
+    let mut integer = SmallDecimalInt::from_u64(significand);
+    if exponent >= 0 {
+        for _ in 0..exponent {
+            integer.mul_small(2);
+        }
+        (integer.to_decimal_string(), 0)
+    } else {
+        let scale = (-exponent) as usize;
+        for _ in 0..scale {
+            integer.mul_small(5);
+        }
+        (integer.to_decimal_string(), scale)
+    }
+}
+
+fn compare_scaled_decimal(
+    source_digits: &str,
+    source_scale: usize,
+    candidate_digits: &str,
+    candidate_scale: usize,
+) -> Ordering {
+    let source_cross_len = source_digits.len() + candidate_scale;
+    let candidate_cross_len = candidate_digits.len() + source_scale;
+    match source_cross_len.cmp(&candidate_cross_len) {
+        Ordering::Equal => {}
+        other => return other,
+    }
+
+    let source = source_digits.as_bytes();
+    let candidate = candidate_digits.as_bytes();
+    for index in 0..source_cross_len {
+        let left = source.get(index).copied().unwrap_or(b'0');
+        let right = candidate.get(index).copied().unwrap_or(b'0');
+        match left.cmp(&right) {
+            Ordering::Equal => {}
+            other => return other,
+        }
+    }
+    Ordering::Equal
+}
+
 fn materialize_signed(
     text: &str,
     negative: bool,
@@ -2710,6 +3055,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
         kind,
         SyntaxKind::BooleanLiteral
             | SyntaxKind::DecimalIntegerLiteral
+            | SyntaxKind::DecimalFloatingLiteral
             | SyntaxKind::IdentifierUse
             | SyntaxKind::DirectCall
             | SyntaxKind::RecordConstruction
