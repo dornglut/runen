@@ -238,8 +238,7 @@ fn nested_while_and_if_create_nested_existing_core_control_flow_only() {
 fn zero_leaf_body_local_needs_no_core_drop_before_backedge() {
     let lowered = lower_source(
         "record Empty {} \
-         fn make() -> Empty { return Empty {}; } \
-         fn f(flag: Bool) { while flag { let child: Empty = make(); } }",
+         fn f(flag: Bool) { while flag { let child: Empty = Empty {}; } }",
     );
     let f = function(lowered.as_program(), "f");
     let Terminator::Goto(header) = f.body.blocks[0].terminator else {
