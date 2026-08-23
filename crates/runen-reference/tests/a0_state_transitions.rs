@@ -352,6 +352,56 @@ fn init_starts_a_new_stored_value_lifetime_after_drop() {
 }
 
 #[test]
+fn later_vacant_init_preserves_raw_pointer_storage_identity() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", i64_ty));
+    let target = Place::local(LocalId(0));
+
+    let program = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", i64_ty, false),
+            LocalDecl::new("before", pointer_ty, false),
+            LocalDecl::new("after", pointer_ty, false),
+        ],
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::I64(1)),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::AddressOf(target.clone().into()),
+            },
+            Statement::Drop {
+                place: target.clone().into(),
+            },
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::I64(2)),
+            },
+            Statement::Init {
+                dst: Place::local(LocalId(2)),
+                src: Operand::AddressOf(target.into()),
+            },
+        ],
+    );
+
+    let report = defined_report(program);
+    let pointers = event_kinds(&report.verification_events)
+        .into_iter()
+        .filter_map(|event| match event {
+            VerificationEventKind::AddressOf { pointer, .. } => Some(pointer),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(pointers.len(), 2);
+    assert_eq!(pointers[0], pointers[1]);
+}
+
+#[test]
 fn assign_starts_a_new_stored_value_lifetime_after_drop() {
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar(
