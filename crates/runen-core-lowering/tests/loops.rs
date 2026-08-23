@@ -220,9 +220,8 @@ fn following_source_is_lowered_only_on_false_continuation() {
 
 #[test]
 fn nested_while_and_if_create_nested_existing_core_control_flow_only() {
-    let lowered = lower_source(
-        "fn f(a: Bool, b: Bool) { while a { if b { while a {} } else {} } }",
-    );
+    let lowered =
+        lower_source("fn f(a: Bool, b: Bool) { while a { if b { while a {} } else {} } }");
     let f = function(lowered.as_program(), "f");
 
     assert_eq!(
