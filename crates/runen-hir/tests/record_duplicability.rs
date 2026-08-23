@@ -40,6 +40,8 @@ fn retains_independent_record_classifications_and_type_query() {
     let hir = compile(
         "record Plain { value: I8 }\
          record copy Point { x: I32, y: I32 }\
+         record SameShape { value: I8 }\
+         record copy SelectedSameShape { value: I8 }\
          record copy SelectedEmpty {}\
          record PlainEmpty {}\
          record copy Child { value: U8 }\
@@ -54,6 +56,14 @@ fn retains_independent_record_classifications_and_type_query() {
     );
     assert_eq!(
         record(&hir, "Point").duplicability,
+        Duplicability::Duplicable
+    );
+    assert_eq!(
+        record(&hir, "SameShape").duplicability,
+        Duplicability::NonDuplicable
+    );
+    assert_eq!(
+        record(&hir, "SelectedSameShape").duplicability,
         Duplicability::Duplicable
     );
     assert_eq!(
