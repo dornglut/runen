@@ -392,10 +392,7 @@ fn init_rejects_aggregate_with_any_live_leaf() {
     );
 
     let error = validate_program(body).expect_err("partially Live aggregate is not wholly vacant");
-    assert_eq!(
-        error.kind,
-        MirValidationErrorKind::InitRequiresVacant(pair)
-    );
+    assert_eq!(error.kind, MirValidationErrorKind::InitRequiresVacant(pair));
 }
 
 #[test]
@@ -556,9 +553,7 @@ fn cyclic_scalar_and_aggregate_init_after_lifetime_end_are_valid() {
                         dst: pair.clone(),
                         src: Operand::Constant(Value::Struct(vec![Value::I64(2), Value::I64(3)])),
                     },
-                    Statement::Drop {
-                        place: pair.into(),
-                    },
+                    Statement::Drop { place: pair.into() },
                     Statement::Drop {
                         place: scalar.into(),
                     },
