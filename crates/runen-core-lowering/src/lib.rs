@@ -50,7 +50,10 @@ impl<'a> Lowerer<'a> {
     fn lower(self) -> Result<core::ValidatedProgram, LoweringError> {
         let mut functions = Vec::with_capacity(self.compilation.functions.len());
         for function in &self.compilation.functions {
-            functions.push(FunctionLowerer::new(&self.types, &self.functions, function)?.lower()?);
+            functions.push(
+                FunctionLowerer::new(self.compilation, &self.types, &self.functions, function)?
+                    .lower()?,
+            );
         }
 
         let program = core::Program {
@@ -268,6 +271,7 @@ struct BlockDraft {
 }
 
 struct FunctionLowerer<'a> {
+    compilation: &'a hir::TypedCompilation,
     types: &'a TypeMap,
     functions: &'a BTreeMap<hir::FunctionId, core::FunctionId>,
     function: &'a hir::Function,
@@ -281,11 +285,13 @@ struct FunctionLowerer<'a> {
 
 impl<'a> FunctionLowerer<'a> {
     fn new(
+        compilation: &'a hir::TypedCompilation,
         types: &'a TypeMap,
         functions: &'a BTreeMap<hir::FunctionId, core::FunctionId>,
         function: &'a hir::Function,
     ) -> Result<Self, LoweringError> {
         let mut lowerer = Self {
+            compilation,
             types,
             functions,
             function,
@@ -894,9 +900,10 @@ impl<'a> FunctionLowerer<'a> {
                     ));
                 }
 
-                let expected_ownership = match value.ty {
-                    hir::Type::Intrinsic(_) => hir::OwnedUse::Duplicate,
-                    hir::Type::Record(_) => hir::OwnedUse::Consume,
+                let expected_ownership = if self.compilation.type_is_duplicable(value.ty) {
+                    hir::OwnedUse::Duplicate
+                } else {
+                    hir::OwnedUse::Consume
                 };
                 if *ownership != expected_ownership {
                     return Err(LoweringError::InvalidHirInvariant(

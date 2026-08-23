@@ -4,10 +4,11 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
     Accessibility, AssignmentMutability, BindingId, Block, Body, CleanupPath, Diagnostic,
-    DiagnosticKind, Field, FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId,
-    IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter, Record, RecordFieldValue,
-    RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTransientCleanup, Return,
-    SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
+    DiagnosticKind, Duplicability, Field, FieldReceiverTransientCleanup, FieldValueReceiver,
+    Function, FunctionId, IntrinsicType, LiteralValue, Module, ModuleId, OwnedUse, Parameter,
+    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
+    RecordPatternTransientCleanup, Return, SourceLocation, SourceUnit, Statement, Type,
+    TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -36,6 +37,7 @@ struct RecordSyntax {
     unit: usize,
     name: String,
     accessibility: Accessibility,
+    duplicability_selection: Option<SourceLocation>,
     node: SyntaxNode,
     location: SourceLocation,
 }
@@ -127,6 +129,12 @@ struct BodyResolutionContext<'a> {
     headers: &'a [FunctionHeader],
 }
 
+impl BodyResolutionContext<'_> {
+    fn type_is_duplicable(&self, ty: Type) -> bool {
+        type_is_duplicable_in_records(ty, self.records)
+    }
+}
+
 pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Diagnostic>> {
     let mut diagnostics = syntax_admission_diagnostics(units);
     if !diagnostics.is_empty() {
@@ -159,6 +167,11 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
     }
 
     validate_record_acyclicity(&records, &mut diagnostics);
+    if !diagnostics.is_empty() {
+        return Err(diagnostics);
+    }
+
+    validate_record_duplicability(&record_syntax, &records, &mut diagnostics);
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
@@ -244,6 +257,14 @@ fn collect_declarations(
                     let name_token = direct_token(&item, SyntaxKind::Ident);
                     let name = key(&name_token);
                     let accessibility = declaration_accessibility(&item);
+                    let duplicability_selection = item
+                        .children_with_tokens()
+                        .filter_map(|element| element.into_token())
+                        .find(|token| token.kind() == SyntaxKind::KwCopy)
+                        .map(|token| SourceLocation {
+                            unit: unit_index,
+                            range: token.text_range(),
+                        });
                     let location = location(unit_index, &item);
                     if insert_entity(
                         &mut modules,
@@ -269,6 +290,7 @@ fn collect_declarations(
                         unit: unit_index,
                         name,
                         accessibility,
+                        duplicability_selection,
                         node: item,
                         location,
                     });
@@ -468,6 +490,11 @@ fn resolve_records(
             module: record.module,
             name: record.name.clone(),
             accessibility: record.accessibility,
+            duplicability: if record.duplicability_selection.is_some() {
+                Duplicability::Duplicable
+            } else {
+                Duplicability::NonDuplicable
+            },
             fields,
             location: record.location,
         });
@@ -788,6 +815,49 @@ fn visit_record(
         }
     }
     state[id.0] = 2;
+}
+
+fn validate_record_duplicability(
+    syntax: &[RecordSyntax],
+    records: &[Record],
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut resolved = vec![None; records.len()];
+    for record in records {
+        if record.duplicability != Duplicability::Duplicable {
+            resolved[record.id.0] = Some(false);
+            continue;
+        }
+        if !record_duplicability_is_valid(record.id, records, &mut resolved) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidRecordDuplicabilitySelection,
+                location: syntax[record.id.0]
+                    .duplicability_selection
+                    .expect("selected record retains its copy-token location"),
+            });
+        }
+    }
+}
+
+fn record_duplicability_is_valid(
+    id: RecordId,
+    records: &[Record],
+    resolved: &mut [Option<bool>],
+) -> bool {
+    if let Some(duplicable) = resolved[id.0] {
+        return duplicable;
+    }
+    if records[id.0].duplicability != Duplicability::Duplicable {
+        resolved[id.0] = Some(false);
+        return false;
+    }
+
+    let duplicable = records[id.0].fields.iter().all(|field| match field.ty {
+        Type::Intrinsic(_) => true,
+        Type::Record(target) => record_duplicability_is_valid(target, records, resolved),
+    });
+    resolved[id.0] = Some(duplicable);
+    duplicable
 }
 
 fn validate_body(
@@ -1577,7 +1647,7 @@ fn validate_record_destructure(
 
         let mut transient = StructuralOwnershipState::default();
         for leaf in &validation.bindings {
-            if !leaf.ty.is_duplicable() {
+            if !context.type_is_duplicable(leaf.ty) {
                 transient.consume_path(&leaf.fields);
             }
         }
@@ -1590,7 +1660,7 @@ fn validate_record_destructure(
     let mut pattern_bindings = Vec::with_capacity(validation.bindings.len());
     let mut new_states = Vec::with_capacity(validation.bindings.len());
     for resolved in validation.bindings {
-        let ownership = if resolved.ty.is_duplicable() {
+        let ownership = if context.type_is_duplicable(resolved.ty) {
             OwnedUse::Duplicate
         } else {
             if let Some((root_name, _)) = &direct_root {
@@ -1836,7 +1906,7 @@ fn validate_value(
                     });
                     return None;
                 }
-                let ownership = if binding.ty.is_duplicable() {
+                let ownership = if context.type_is_duplicable(binding.ty) {
                     OwnedUse::Duplicate
                 } else {
                     binding.ownership.consume_path(&[]);
@@ -1965,7 +2035,7 @@ fn validate_field_value_use(
             });
             return None;
         }
-        let ownership = if final_ty.is_duplicable() {
+        let ownership = if context.type_is_duplicable(final_ty) {
             OwnedUse::Duplicate
         } else {
             OwnedUse::Consume
@@ -2063,7 +2133,7 @@ fn validate_field_value_use(
         return None;
     }
 
-    let ownership = if final_ty.is_duplicable() {
+    let ownership = if context.type_is_duplicable(final_ty) {
         OwnedUse::Duplicate
     } else {
         bindings
