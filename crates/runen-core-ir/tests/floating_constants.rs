@@ -67,7 +67,10 @@ fn signed_zero_and_infinity_validate_and_remain_distinct() {
         assert_valid(scalar, positive_infinity);
         assert_valid(scalar, negative_infinity);
 
-        assert_ne!(wrapped(scalar, positive_zero), wrapped(scalar, negative_zero));
+        assert_ne!(
+            wrapped(scalar, positive_zero),
+            wrapped(scalar, negative_zero)
+        );
         assert_ne!(
             wrapped(scalar, positive_infinity),
             wrapped(scalar, negative_infinity)
