@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Fault, Function, LocalDecl, LocalId, Place, Program, ScalarType,
-    Statement, Terminator, TypeDef, TypeTable, validate_program,
+    BasicBlock, BasicBlockId, Body, Fault, Function, LocalDecl, LocalId, Place, Program,
+    ScalarType, Statement, Terminator, TypeDef, TypeTable, validate_program,
 };
 
 fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -18,7 +18,10 @@ fn explicit_fault_is_valid_without_return_value_in_result_function() {
     let result_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let first = Fault::new("first");
     let second = Fault::new("second");
-    assert_ne!(first, second, "represented fault reasons remain distinguishable");
+    assert_ne!(
+        first, second,
+        "represented fault reasons remain distinguishable"
+    );
 
     let function = Function {
         name: "faulting_result".into(),
