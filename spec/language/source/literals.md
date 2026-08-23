@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for boolean literals, signed decimal fixed-width integer literals, and context-typed decimal binary-floating literals: their semantic values, required-type materialization, integer representability/source-validity, floating formation rounding, and literal owned-value production.
 
-It consumes the represented intrinsic source type identities and semantic value domains from [Source type foundation](types.md), including the exact `F16` / `F32` / `F64` binary-format parameters. For nonzero decimal floating materialization it consumes the semantic binary floating rounding relation from [Core floating-point semantics](../core/numerics/floating-point.md). [Source concrete syntax](concrete-syntax.md) owns the represented literal spellings, reserved-key roles, decimal token forms, and grammar. [Source function execution](function-execution.md) consumes the owned values produced here and owns the surrounding initialization, assignment, call-argument, record-construction-field, field-value, conditional, and return receiving relations. This document does not redefine those owners.
+It consumes the represented intrinsic source type identities and semantic value domains from [Source type foundation](types.md), including the exact `F16` / `F32` / `F64` binary-format parameters. For nonzero decimal floating materialization it consumes the semantic binary floating rounding relation from [Core floating-point semantics](../core/numerics/floating-point.md). [Source concrete syntax](concrete-syntax.md) owns the represented literal spellings, reserved-key roles, decimal token forms, and grammar. [Source function execution](function-execution.md) consumes the owned values produced here and owns the surrounding initialization, assignment, call-argument, record-construction-field, conditional, and return receiving relations. This document does not redefine those owners.
 
 Literal semantics are independent of parser representation, typed HIR, Core MIR constant representation, host numeric parsing, physical machine integers or floating encodings, backend behavior, and target ABI.
 
@@ -184,7 +184,7 @@ Evaluating such a literal:
 
 The produced intrinsic value is duplicable because duplicability of the represented intrinsic source types is owned by `types.md`. Literal formation does not create a separate ownership class.
 
-Transfer of the produced value into an admitted local, assignment target, direct-call argument, record-construction field, field-value receiver/consumer position, conditional receiving position, or return result is owned by the applicable source owner and does not alter the literal value defined here.
+Transfer of the produced value into a receiving position whose concrete grammar admits that literal is owned by the applicable source owner and does not alter the literal value defined here. Represented examples include local initialization, assignment RHS, direct-call arguments, record-construction fields, return results, and `ConditionalValue` positions.
 
 Concrete syntax, not this semantic owner, determines which literal family is admitted in each represented receiving grammar. In particular, a decimal floating literal is included in the concrete `ConditionalValue` grammar, but `control-flow.md` rejects it semantically because a condition must produce exact source type `Bool`.
 
