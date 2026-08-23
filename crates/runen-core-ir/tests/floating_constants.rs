@@ -78,24 +78,9 @@ fn signed_zero_and_infinity_validate_and_remain_distinct() {
 #[test]
 fn exact_floating_format_boundaries_validate() {
     let cases = [
-        (
-            ScalarType::F16,
-            11_u32,
-            -14_i16,
-            15_i16,
-        ),
-        (
-            ScalarType::F32,
-            24_u32,
-            -126_i16,
-            127_i16,
-        ),
-        (
-            ScalarType::F64,
-            53_u32,
-            -1022_i16,
-            1023_i16,
-        ),
+        (ScalarType::F16, 11_u32, -14_i16, 15_i16),
+        (ScalarType::F32, 24_u32, -126_i16, 127_i16),
+        (ScalarType::F64, 53_u32, -1022_i16, 1023_i16),
     ];
 
     for (scalar, precision, emin, emax) in cases {
@@ -177,34 +162,19 @@ fn malformed_floating_payloads_reject_at_existing_type_boundary() {
 
 #[test]
 fn floating_constant_matching_is_exact_across_formats() {
-    let payload = BinaryFloatValue::Normal {
-        sign: BinaryFloatSign::Positive,
-        significand: 1_u64 << 52,
-        exponent: 0,
-    };
+    let payload = BinaryFloatValue::Zero(BinaryFloatSign::Positive);
+    let cases = [
+        (ScalarType::F16, Value::F32(payload)),
+        (ScalarType::F16, Value::F64(payload)),
+        (ScalarType::F32, Value::F16(payload)),
+        (ScalarType::F32, Value::F64(payload)),
+        (ScalarType::F64, Value::F16(payload)),
+        (ScalarType::F64, Value::F32(payload)),
+    ];
 
-    for value in [Value::F32(payload), Value::F64(payload)] {
-        let error = validate_program(program_initializing(ScalarType::F16, value))
-            .expect_err("cross-format floating constant must be rejected");
-        assert_eq!(
-            error.kind,
-            MirValidationErrorKind::TypeMismatch {
-                expected: TypeId(0)
-            }
-        );
-    }
-
-    let f16_payload = BinaryFloatValue::Normal {
-        sign: BinaryFloatSign::Positive,
-        significand: 1_u64 << 10,
-        exponent: 0,
-    };
-    for (scalar, value) in [
-        (ScalarType::F32, Value::F16(f16_payload)),
-        (ScalarType::F64, Value::F16(f16_payload)),
-    ] {
+    for (scalar, value) in cases {
         let error = validate_program(program_initializing(scalar, value))
-            .expect_err("format wrapper identity must be exact");
+            .expect_err("valid payload in the wrong format wrapper must be rejected");
         assert_eq!(
             error.kind,
             MirValidationErrorKind::TypeMismatch {
