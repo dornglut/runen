@@ -31,6 +31,12 @@ struct Parser<'a> {
     errors: Vec<SyntaxError>,
 }
 
+#[derive(Clone, Copy)]
+enum ValueContext {
+    Ordinary,
+    Conditional,
+}
+
 impl Parser<'_> {
     fn parse_root(&mut self) {
         self.builder.start_node(SyntaxKind::SourceUnit.into());
@@ -368,65 +374,7 @@ impl Parser<'_> {
     }
 
     fn parse_conditional_value(&mut self) {
-        if self.at(SyntaxKind::Ident) {
-            match self.peek_nontrivia(1) {
-                Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
-                Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
-                    Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
-                    Some(SyntaxKind::LBrace) if self.record_construction_followed_by_selector() => {
-                        self.parse_record_construction_or_field_value_use();
-                    }
-                    _ => {
-                        self.builder.start_node(SyntaxKind::IdentifierUse.into());
-                        self.bump();
-                        self.builder.finish_node();
-                    }
-                },
-                Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
-                Some(SyntaxKind::LBrace) if self.record_construction_followed_by_selector() => {
-                    self.parse_record_construction_or_field_value_use();
-                }
-                _ => {
-                    self.builder.start_node(SyntaxKind::IdentifierUse.into());
-                    self.bump();
-                    self.builder.finish_node();
-                }
-            }
-            return;
-        }
-
-        if matches!(
-            self.current(),
-            Some(
-                SyntaxKind::KwTrue
-                    | SyntaxKind::KwFalse
-                    | SyntaxKind::DecimalMagnitude
-                    | SyntaxKind::DecimalFloatingMagnitude
-                    | SyntaxKind::Minus
-            )
-        ) {
-            self.parse_value();
-            return;
-        }
-
-        self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
-        if self.current().is_some()
-            && !self.at_any(&[
-                SyntaxKind::LBrace,
-                SyntaxKind::RBrace,
-                SyntaxKind::KwElse,
-                SyntaxKind::KwLet,
-                SyntaxKind::KwFault,
-                SyntaxKind::KwBreak,
-                SyntaxKind::KwContinue,
-                SyntaxKind::KwIf,
-                SyntaxKind::KwWhile,
-                SyntaxKind::KwReturn,
-            ])
-            && !self.at_any(TOP_LEVEL_STARTERS)
-        {
-            self.recover_one();
-        }
+        self.parse_value_in(ValueContext::Conditional);
     }
 
     fn parse_let_statement(&mut self) {
@@ -693,20 +641,54 @@ impl Parser<'_> {
     }
 
     fn parse_value(&mut self) {
+        self.parse_value_in(ValueContext::Ordinary);
+    }
+
+    fn parse_value_in(&mut self, context: ValueContext) {
         match self.current() {
-            Some(SyntaxKind::Ident) => match self.peek_nontrivia(1) {
-                Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
-                Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
-                Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
+            Some(SyntaxKind::Bang) => self.parse_boolean_not_value(context),
+            Some(SyntaxKind::Ident) => match context {
+                ValueContext::Ordinary => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
-                    _ => self.parse_direct_call_or_field_value_use(),
+                    Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
+                    Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
+                        Some(SyntaxKind::LBrace) => {
+                            self.parse_record_construction_or_field_value_use();
+                        }
+                        _ => self.parse_direct_call_or_field_value_use(),
+                    },
+                    Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
+                    _ => {
+                        self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                        self.bump();
+                        self.builder.finish_node();
+                    }
                 },
-                Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
-                _ => {
-                    self.builder.start_node(SyntaxKind::IdentifierUse.into());
-                    self.bump();
-                    self.builder.finish_node();
-                }
+                ValueContext::Conditional => match self.peek_nontrivia(1) {
+                    Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
+                    Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
+                        Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
+                        Some(SyntaxKind::LBrace)
+                            if self.record_construction_followed_by_selector() =>
+                        {
+                            self.parse_record_construction_or_field_value_use();
+                        }
+                        _ => {
+                            self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                            self.bump();
+                            self.builder.finish_node();
+                        }
+                    },
+                    Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
+                    Some(SyntaxKind::LBrace) if self.record_construction_followed_by_selector() => {
+                        self.parse_record_construction_or_field_value_use();
+                    }
+                    _ => {
+                        self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                        self.bump();
+                        self.builder.finish_node();
+                    }
+                },
             },
             Some(SyntaxKind::KwTrue | SyntaxKind::KwFalse) => {
                 self.builder.start_node(SyntaxKind::BooleanLiteral.into());
@@ -751,31 +733,51 @@ impl Parser<'_> {
             }
             _ => {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
-                if self.current().is_some()
-                    && !self.at_any(&[
-                        SyntaxKind::Comma,
-                        SyntaxKind::RParen,
-                        SyntaxKind::Semicolon,
-                        SyntaxKind::RBrace,
-                        SyntaxKind::LBrace,
-                        SyntaxKind::KwLet,
-                        SyntaxKind::KwFault,
-                        SyntaxKind::KwBreak,
-                        SyntaxKind::KwContinue,
-                        SyntaxKind::KwIf,
-                        SyntaxKind::KwWhile,
-                        SyntaxKind::KwElse,
-                        SyntaxKind::KwReturn,
-                        SyntaxKind::KwImport,
-                        SyntaxKind::KwExport,
-                        SyntaxKind::KwFn,
-                        SyntaxKind::KwRecord,
-                    ])
-                {
+                let is_boundary = match context {
+                    ValueContext::Ordinary => {
+                        self.at_any(&[
+                            SyntaxKind::Comma,
+                            SyntaxKind::RParen,
+                            SyntaxKind::Semicolon,
+                            SyntaxKind::RBrace,
+                            SyntaxKind::LBrace,
+                            SyntaxKind::KwLet,
+                            SyntaxKind::KwFault,
+                            SyntaxKind::KwBreak,
+                            SyntaxKind::KwContinue,
+                            SyntaxKind::KwIf,
+                            SyntaxKind::KwWhile,
+                            SyntaxKind::KwElse,
+                            SyntaxKind::KwReturn,
+                        ]) || self.at_any(TOP_LEVEL_STARTERS)
+                    }
+                    ValueContext::Conditional => {
+                        self.at_any(&[
+                            SyntaxKind::LBrace,
+                            SyntaxKind::RBrace,
+                            SyntaxKind::KwElse,
+                            SyntaxKind::KwLet,
+                            SyntaxKind::KwFault,
+                            SyntaxKind::KwBreak,
+                            SyntaxKind::KwContinue,
+                            SyntaxKind::KwIf,
+                            SyntaxKind::KwWhile,
+                            SyntaxKind::KwReturn,
+                        ]) || self.at_any(TOP_LEVEL_STARTERS)
+                    }
+                };
+                if self.current().is_some() && !is_boundary {
                     self.recover_one();
                 }
             }
         }
+    }
+
+    fn parse_boolean_not_value(&mut self, context: ValueContext) {
+        self.builder.start_node(SyntaxKind::BooleanNotValue.into());
+        self.expect(SyntaxKind::Bang, ExpectedSyntax::Value);
+        self.parse_value_in(context);
+        self.builder.finish_node();
     }
 
     fn parse_binding_field_value_use(&mut self) {
