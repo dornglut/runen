@@ -272,6 +272,12 @@ struct BlockDraft {
     terminator: Option<core::Terminator>,
 }
 
+#[derive(Clone, Copy)]
+struct LoopLoweringTarget {
+    header: core::BasicBlockId,
+    continuation: core::BasicBlockId,
+}
+
 struct FunctionLowerer<'a> {
     compilation: &'a hir::TypedCompilation,
     types: &'a TypeMap,
@@ -283,6 +289,7 @@ struct FunctionLowerer<'a> {
     blocks: Vec<BlockDraft>,
     current: usize,
     next_temp: usize,
+    loops: Vec<LoopLoweringTarget>,
 }
 
 impl<'a> FunctionLowerer<'a> {
@@ -303,6 +310,7 @@ impl<'a> FunctionLowerer<'a> {
             blocks: vec![BlockDraft::default()],
             current: 0,
             next_temp: 0,
+            loops: Vec::new(),
         };
 
         for parameter in &function.parameters {
@@ -371,7 +379,9 @@ impl<'a> FunctionLowerer<'a> {
                 }
                 hir::Statement::Assignment { .. }
                 | hir::Statement::Call { .. }
-                | hir::Statement::Fault { .. } => {}
+                | hir::Statement::Fault { .. }
+                | hir::Statement::Break { .. }
+                | hir::Statement::Continue { .. } => {}
             }
         }
         Ok(())
@@ -396,6 +406,12 @@ impl<'a> FunctionLowerer<'a> {
             self.lower_return(returned)?;
         } else if body.has_normal_continuation {
             self.terminate_current(core::Terminator::Return(None))?;
+        }
+
+        if !self.loops.is_empty() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "lowering loop target stack is unbalanced",
+            ));
         }
 
         let result = self
@@ -476,6 +492,12 @@ impl<'a> FunctionLowerer<'a> {
                         EXPLICIT_FAULT_CODE,
                     )))?;
                 }
+                hir::Statement::Break { cleanup, .. } => {
+                    self.lower_loop_transfer(cleanup, true)?;
+                }
+                hir::Statement::Continue { cleanup, .. } => {
+                    self.lower_loop_transfer(cleanup, false)?;
+                }
                 hir::Statement::Block(block) => self.lower_block(block)?,
                 hir::Statement::If {
                     condition,
@@ -495,7 +517,9 @@ impl<'a> FunctionLowerer<'a> {
 
     fn statement_has_normal_continuation(statement: &hir::Statement) -> bool {
         match statement {
-            hir::Statement::Fault { .. } => false,
+            hir::Statement::Fault { .. }
+            | hir::Statement::Break { .. }
+            | hir::Statement::Continue { .. } => false,
             hir::Statement::Block(block) => block.has_normal_continuation,
             hir::Statement::If {
                 then_block,
@@ -562,13 +586,13 @@ impl<'a> FunctionLowerer<'a> {
         if let Some(returned) = block.terminal_return.as_ref() {
             self.lower_return(returned)?;
         } else if block.has_normal_continuation {
-            self.lower_normal_cleanup(block)?;
+            self.lower_cleanup_paths(&block.normal_cleanup)?;
         }
         Ok(())
     }
 
-    fn lower_normal_cleanup(&mut self, block: &hir::Block) -> Result<(), LoweringError> {
-        for cleanup in &block.normal_cleanup {
+    fn lower_cleanup_paths(&mut self, cleanup: &[hir::CleanupPath]) -> Result<(), LoweringError> {
+        for cleanup in cleanup {
             let place = self.binding_place(cleanup.binding, &cleanup.fields)?;
             let root_ty = self.local_type(place.local)?;
             let ty = self.types.project_type(root_ty, &place.projections)?;
@@ -579,6 +603,26 @@ impl<'a> FunctionLowerer<'a> {
             }
         }
         Ok(())
+    }
+
+    fn lower_loop_transfer(
+        &mut self,
+        cleanup: &[hir::CleanupPath],
+        is_break: bool,
+    ) -> Result<(), LoweringError> {
+        let target = self
+            .loops
+            .last()
+            .copied()
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "loop transfer has no enclosing lowering target",
+            ))?;
+        self.lower_cleanup_paths(cleanup)?;
+        self.terminate_current(core::Terminator::Goto(if is_break {
+            target.continuation
+        } else {
+            target.header
+        }))
     }
 
     fn lower_if(
@@ -734,7 +778,18 @@ impl<'a> FunctionLowerer<'a> {
         })?;
 
         self.current = body_target.0 as usize;
-        self.lower_block(body)?;
+        self.loops.push(LoopLoweringTarget {
+            header,
+            continuation,
+        });
+        let body_result = self.lower_block(body);
+        let popped = self
+            .loops
+            .pop()
+            .expect("lowering loop target stack is balanced by construction");
+        debug_assert_eq!(popped.header, header);
+        debug_assert_eq!(popped.continuation, continuation);
+        body_result?;
         if body.has_normal_continuation {
             self.terminate_current(core::Terminator::Goto(header))?;
         }
