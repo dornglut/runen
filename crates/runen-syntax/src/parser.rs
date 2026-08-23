@@ -663,7 +663,8 @@ impl Parser<'_> {
     }
 
     fn parse_continue_statement(&mut self) {
-        self.builder.start_node(SyntaxKind::ContinueStatement.into());
+        self.builder
+            .start_node(SyntaxKind::ContinueStatement.into());
         self.expect(SyntaxKind::KwContinue, ExpectedSyntax::Statement);
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
         self.builder.finish_node();
