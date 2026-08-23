@@ -4,9 +4,9 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for statement-level conditional control flow: condition admission and selection, validation of both represented conditional outcomes, explicit arm lexical-scope composition, omitted-else behavior, normal-continuation composition, definite structural ownership at any normal conditional successor, and the source-to-Core conditional refinement boundary.
 
-It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); producer-backed field-value result typing and validation from [Source field-value access](field-access.md); owned-value producers, producer evaluation, lexical-block execution, normal-continuation presence, return execution, cleanup, defined-fault propagation, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, and binding structural lifecycle from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); and represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md). Concrete `if`/`else` spelling and the represented conditional-value grammar are owned by [Source concrete syntax](concrete-syntax.md).
+It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); producer-backed field-value result typing and validation from [Source field-value access](field-access.md); owned-value producers, producer evaluation, lexical-block execution, normal-continuation presence, return execution, explicit-fault execution, cleanup, defined-fault propagation, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, and binding structural lifecycle from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); and represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md). Concrete `if`/`else` spelling and the represented conditional-value grammar are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not redefine owned-value producer semantics, field-receiver semantics, return execution, structural path/state mathematics, binding scope rules, lexical cleanup order, fault cleanup, Core path state, or concrete grammar.
+This document does not redefine owned-value producer semantics, field-receiver semantics, return execution, explicit-fault execution, structural path/state mathematics, binding scope rules, lexical cleanup order, fault cleanup, Core path state, or concrete grammar.
 
 ## Represented conditional statement
 
@@ -63,7 +63,7 @@ In particular:
 - a condition spelled as the literal `true` does not exempt the false outcome—explicit else arm or omitted-else outcome—from source validity; and
 - a condition spelled as the literal `false` does not exempt the then arm from source validation.
 
-An explicit arm that contains a represented terminal return is still validated in full even when a constant condition would prevent that arm from executing in one concrete run.
+An explicit arm that contains a represented terminal return or explicit `fault;` is still validated in full even when a constant condition would prevent that arm from executing in one concrete run.
 
 This is a source-validity rule. It does not assert that both outcomes execute in one concrete activation and does not create an unknown or three-valued Bool.
 
@@ -98,6 +98,8 @@ If condition evaluation yields one defined fault `F` before successful Bool prod
 
 The conditional statement does not add a second fault cleanup boundary.
 
+A condition producer's ability to yield a defined fault is a dynamic execution possibility. It does not by itself change the conditionally selected arms' static normal-continuation classification.
+
 ## Condition divergence
 
 If condition evaluation diverges before successful Bool production:
@@ -107,6 +109,8 @@ If condition evaluation diverges before successful Bool production:
 - no lexical-scope, activation, or conditional cleanup occurs merely because execution remains suspended.
 
 Producer-owned transients and completed ownership transitions persist exactly as required by their existing owners.
+
+Divergence is likewise a dynamic execution possibility and does not create a static no-normal outcome for an otherwise normally continuable represented construct.
 
 ## Explicit arm lexical scopes
 
@@ -120,7 +124,7 @@ Consequently:
 - bindings introduced in one arm do not survive the normal end of that arm;
 - sibling arms MAY independently introduce the same lexical identifier key because their scopes do not overlap;
 - neither arm may introduce a key that illegally shadows an active enclosing function-local binding;
-- ordinary locals, record-pattern bindings, nested blocks, assignments, calls, and the arm's optional terminal return retain their existing semantics; and
+- ordinary locals, record-pattern bindings, nested blocks, assignments, calls, explicit fault statements, and the arm's optional terminal return retain their existing semantics; and
 - nested represented conditionals may occur because `IfStatement` is itself a represented body statement inside an arm block.
 
 This document does not create an abstract source-visible branch-scope identity beyond the ordinary child lexical scopes already owned by `local-bindings.md`.
@@ -138,30 +142,42 @@ Arm-local bindings have ended before normal-successor comparison and therefore a
 
 Normal cleanup of one arm does not itself clean or reset enclosing bindings merely to make their states match another arm.
 
-## Explicit arm return
+## Explicit arm return and explicit fault
 
-When source validation determines that an explicit arm has no normal continuation because every represented path through that arm returns, that arm contributes no normal enclosing outcome to the conditional.
+When source validation determines that an explicit arm has no normal continuation because every represented static path through that arm terminates the current source function activation by a represented return and/or explicit `fault;`, that arm contributes no normal enclosing outcome to the conditional.
 
-At runtime, when the selected arm reaches one of those represented returns:
+At runtime, when the selected arm reaches a represented return:
 
 - the return terminates the current source function activation under `function-execution.md`;
 - the arm does not first perform independent normal child-scope cleanup;
 - every then-active lexical scope participates exactly once in return-induced activation cleanup; and
 - no conditional normal join or normal successor is taken on that execution.
 
-A returning arm may consume the complete root or an arbitrary source-valid structural subvalue of an enclosing binding while evaluating its return value. That returning state does not have to equal a normal sibling outcome merely to make the conditional source-valid. Return cleanup uses the returning path's actual then-current structural ownership state.
+A returning path may consume the complete root or an arbitrary source-valid structural subvalue of an enclosing binding while evaluating its return value. That returning state does not have to equal a normal sibling outcome merely to make the conditional source-valid. Return cleanup uses the returning path's actual then-current structural ownership state.
 
-This rule does not introduce path-dependent ownership at a normal successor because the returning outcome has no normal successor state.
+At runtime, when the selected arm reaches represented `fault;`:
 
-## Explicit arm fault and divergence
+- the statement selects the distinguished source defined-fault reason `ExplicitFault` under `function-execution.md`;
+- the arm does not first perform independent normal child-scope cleanup;
+- every then-active lexical scope participates exactly once in the existing activation fault cleanup;
+- completed ownership transitions before the statement remain effective; and
+- no conditional normal join or normal successor is taken on that execution.
 
-If execution inside the selected arm yields a defined fault, that execution produces no normal enclosing outcome.
+A path that explicitly faults may therefore reach the fault statement with an enclosing binding fully available, partially consumed, or unavailable according to preceding source-valid operations. That state does not have to equal a normal sibling outcome because the explicitly faulting path contributes no normal successor state.
+
+These rules do not introduce path-dependent ownership at a normal successor because return and explicit-fault terminations contribute no normal successor state.
+
+## Producer-originating arm fault and divergence
+
+If execution of an accepted producer or other operation inside the selected arm yields a defined fault before the represented successful statement structure reaches its normal continuation, that concrete execution produces no normal enclosing outcome.
 
 The active child scope participates exactly once in the existing activation fault cleanup from `function-execution.md`. It does not first perform independent normal arm cleanup and then fault cleanup.
 
-If execution inside the selected arm diverges, that execution produces no runtime normal outcome and performs no normal arm or successor cleanup merely because execution remains suspended.
+Such a producer-originating fault possibility does **not** by itself remove the arm's static normal continuation. Static completion follows the represented statement/control structure under `function-execution.md`; a producer that may fault dynamically still contributes its ordinary successful continuation when one is represented.
 
-Fault and divergence remain dynamic execution outcomes. They do not alter the static normal-continuation-presence classification owned by `function-execution.md`.
+If execution inside the selected arm diverges, that concrete execution produces no runtime normal outcome and performs no normal arm or successor cleanup merely because execution remains suspended.
+
+Divergence likewise does not alter static normal-continuation presence under this revision. The represented explicit `fault;` statement is different: it is a static no-normal body statement because its successful execution is exactly defined-fault termination rather than an ordinary continuation.
 
 ## Omitted else
 
@@ -196,7 +212,7 @@ Binding identity, declared type, and assignment-mutability classification are un
 After both represented outcomes have been source-validated, compose only their **normal** outcomes:
 
 - **two normal outcomes:** the conditional has a normal successor only when the exact structural-ownership-state equality rule below succeeds for every binding in `E`; the equal common state is the one definite normal successor;
-- **exactly one normal outcome:** that sole outcome is the conditional's one definite normal successor without any ownership-equality comparison against the returning outcome;
+- **exactly one normal outcome:** that sole outcome is the conditional's one definite normal successor without any ownership-equality comparison against the no-normal outcome;
 - **zero normal outcomes:** the conditional has no normal continuation and no normal join; and
 - **omitted else:** the false outcome is always normal, so a conditional without explicit else always has at least one normal outcome.
 
@@ -219,7 +235,7 @@ When two normal outcomes exist and any enclosing binding has unequal normal outc
 
 The equality requirement is semantic equality of source structural state. It is not equality of runtime scalar values, record values, Core local state, parser nodes, HIR data structures, compiler hashes, or physical storage.
 
-No equality comparison is performed between a normal outcome and an outcome that has no normal continuation because it returns.
+No equality comparison is performed between a normal outcome and an outcome that has no normal continuation because its represented static path terminates by return and/or explicit fault.
 
 ## Definite-state consequences
 
@@ -231,7 +247,7 @@ If both normal outcomes consume the complete root of the same enclosing non-dupl
 
 If two normal outcomes exist and one consumes the complete root while the other leaves it fully available, the states differ and the conditional is source-invalid.
 
-A returning outcome may independently consume that complete root; it contributes no normal state to compare against a sole normal sibling.
+A no-normal outcome may independently reach its terminating return or explicit fault after consuming that complete root; it contributes no normal state to compare against a sole normal sibling.
 
 ### Equal partial consumption
 
@@ -241,7 +257,7 @@ If two normal outcomes leave different consumed sibling or nested paths, the sta
 
 No structural similarity, equal remaining-frontier shape, or equal number of consumed paths substitutes for exact consumed-path-set equality.
 
-A returning outcome may independently consume a different valid structural path; return cleanup handles the resulting state rather than normalizing it toward a normal sibling.
+A no-normal outcome may independently reach its terminating return or explicit fault after consuming a different valid structural path; its applicable termination cleanup handles that state rather than normalizing it toward a normal sibling.
 
 ### Duplicable uses
 
@@ -269,7 +285,7 @@ With no explicit else arm, the false normal outcome is the unchanged post-condit
 
 When the then arm also completes normally, its normal enclosing structural ownership state MUST equal that unchanged post-condition state for every enclosing binding. Therefore a normally completing then arm may not leave one enclosing binding consumed or partially consumed unless condition evaluation had already established exactly that same state before both outcomes were split or accepted operations inside the then arm restore the post-condition state before normal completion.
 
-When the then arm has no normal continuation because it returns, the omitted-else false outcome is the sole normal successor and no ownership equality is required against the returning then arm.
+When the then arm has no normal continuation because every represented static path through it terminates by return and/or explicit fault, the omitted-else false outcome is the sole normal successor and no ownership equality is required against that no-normal then arm.
 
 ### Zero-field and zero-leaf values
 
@@ -317,7 +333,7 @@ Future source control-flow forms or later extensions may introduce additional ac
 
 A concrete source execution with condition value `true` executes only the then arm. A concrete source execution with condition value `false` executes only the false outcome.
 
-Source validation nevertheless validates both represented outcomes and computes each arm's normal-continuation presence independently of that concrete Bool value. When both outcomes are normal, the exact-state equality requirement applies to both even for a constant condition. When only one outcome is normal, it is the sole static normal successor even if a particular constant Bool execution selects the returning outcome instead.
+Source validation nevertheless validates both represented outcomes and computes each arm's normal-continuation presence independently of that concrete Bool value. When both outcomes are normal, the exact-state equality requirement applies to both even for a constant condition. When only one outcome is normal, it is the sole static normal successor even if a particular constant Bool execution selects the no-normal outcome instead.
 
 This difference between runtime selection and conservative source validation does not introduce nondeterministic source execution.
 
@@ -335,7 +351,7 @@ This revision defines no direct `else if` grammar. Equivalent nested selection m
 
 This conditional statement consumes the result-bearing normal-path completion requirement from `function-execution.md`.
 
-A conditional whose two explicit arms both have no normal continuation because they return has no normal successor. Such a conditional may therefore discharge the remaining result-path obligation without a redundant root terminal return after it.
+A conditional whose two explicit arms both have no normal continuation because every represented path through each arm terminates by return and/or explicit fault has no normal successor. Such a conditional may therefore discharge the remaining result-path obligation without a redundant root terminal return after it. The two arms may both return, both explicitly fault, or use any represented return/explicit-fault mixture that leaves neither arm with a normal continuation.
 
 If exactly one arm has a normal continuation, that sole continuation remains subject to the ordinary result-bearing requirement. A later source-valid result return is required before that path can reach the root closing boundary normally.
 
@@ -353,7 +369,7 @@ After source validation has fixed the condition type, each arm's normal-continua
 4. lower the then arm to one or more Core blocks;
 5. lower explicit else-arm blocks when present, or use the following normal continuation directly as the false target when no else body needs lower execution;
 6. for each normally completing explicit arm, refine that arm's retained source normal cleanup before its normal successor edge;
-7. for each returning arm, terminate its lower path through the existing Core `Return` relation without first emitting that arm's normal cleanup or a normal `Goto` edge;
+7. for each no-normal explicit arm, preserve each represented terminating path's existing source-to-Core refinement—`Return` for a return and `Fault(F_explicit)` for explicit `fault;`—without first emitting that arm's normal cleanup or a normal `Goto` edge;
 8. when two normal outcomes exist, transfer both to one lower normal join before subsequent source statements;
 9. when exactly one normal outcome exists, continue subsequent source lowering from that sole normal path, with or without a dedicated lower join block; and
 10. when zero normal outcomes exist, emit no lower normal join merely to create an unreachable continuation.
@@ -363,6 +379,8 @@ The exact shape or number of Core blocks is not source-observable.
 A compiler temporary used for condition selection is not a source binding. Producer-internal temporaries remain governed by their producer's accepted lowering relation.
 
 A result-producing return whose producer is a direct call may first create the existing call continuation block and then terminate that continuation with Core `Return`; this does not create a second source continuation.
+
+The stable abstract Core defined-fault reason used for source `ExplicitFault` is selected by `function-execution.md` through the accepted [Core defined faults](../core/faults.md) relation. This conditional owner neither chooses an implementation string/code nor defines a second fault-lowering rule.
 
 ## Lower path states do not define the source successor
 
@@ -386,12 +404,12 @@ Source normal-continuation presence, any required source join validity, and the 
 
 For one fixed source-valid represented program and one fixed activation state, conditional runtime selection is deterministic after successful condition evaluation.
 
-The condition producer has its existing deterministic or otherwise accepted source behavior. Once it yields one of the two semantic Bool values, exactly one runtime outcome is selected. That selected outcome may normal-complete, return, fault, or diverge according to its existing owners.
+The condition producer has its existing deterministic or otherwise accepted source behavior. Once it yields one of the two semantic Bool values, exactly one runtime outcome is selected. That selected outcome may normal-complete, return, explicitly fault, yield another defined fault, or diverge according to its existing owners.
 
 Validation of both represented outcomes is a static validity obligation, not runtime nondeterminism.
 
 ## Further boundaries
 
-This revision does not define general expressions, grouping expressions, comparisons, logical operators, arithmetic operators, truthiness, coercions, standalone record-construction conditions, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, match, refutable patterns, catch/recovery, labels, break, continue, source state lattices, path-dependent ownership after a two-normal-outcome join, automatic join cleanup, drop flags, custom destructors, must-consume policy, references, borrows, lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
+This revision does not define general expressions, grouping expressions, comparisons, logical operators, arithmetic operators, truthiness, coercions, standalone record-construction conditions, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, match, refutable patterns, fault payloads, panic/throw syntax, catch/recovery, labels, break, continue, source state lattices, path-dependent ownership after a two-normal-outcome join, automatic join cleanup, drop flags, custom destructors, must-consume policy, references, borrows, lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
 
 Those concerns require their own accepted owners or later extensions and MUST NOT be inferred from the represented conditional relation here.

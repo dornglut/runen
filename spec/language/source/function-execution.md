@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for source function body attachment, body and nested-block statement sequencing, dynamic direct-call activations, direct-call argument/result ownership transfer, record-construction field evaluation and transient assembly, producer-backed field-receiver evaluation and transient cleanup, ordinary local initialization, recursive record-destructuring declaration completion including producer-backed scrutinee evaluation and transient cleanup, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, return execution and static normal-continuation presence, recursion/divergence, and defined-fault propagation through direct source calls.
+This document owns the represented source semantics for source function body attachment, body and nested-block statement sequencing, dynamic direct-call activations, direct-call argument/result ownership transfer, record-construction field evaluation and transient assembly, producer-backed field-receiver evaluation and transient cleanup, ordinary local initialization, recursive record-destructuring declaration completion including producer-backed scrutinee evaluation and transient cleanup, whole-binding assignment RHS evaluation and replacement ordering, lexical-scope and activation cleanup, return execution, payload-free explicit-fault execution, static normal-continuation presence, recursion/divergence, and defined-fault propagation through direct source calls.
 
-It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault identity from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity/callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), structural ownership state and remaining frontiers from [Source structural ownership](structural-ownership.md), parameter/local identity, scope, lookup, assignment mutability, whole-binding use, and assignment legality from [Source function-local bindings](local-bindings.md), binding-root and bounded producer-backed field-value production, receiver exact-type facts, selected field paths, duplicate-or-consume consequences, and producer-receiver remaining frontiers from [Source field-value access](field-access.md), and recursive exhaustive record-pattern head/field structure, scrutinee category, binding-leaf order, per-leaf ownership consequences, and producer transient frontier selection from [Source patterns](patterns.md). It does not redefine those owners.
+It consumes program outcomes and recoverable-value separation from [Program behavior](../behavior.md), environment admission and realization separation from [Program lifecycle](../lifecycle.md), defined-fault reason identity and explicit Core fault termination from [Core faults](../core/faults.md), structural destruction and stored-value cleanup from [Core value and storage semantics](../core/value-storage.md), function entity/callable-signature structure from [Source callables](callables.md), source value type equality and record value shape from [Source type foundation](types.md), boolean/integer literal value production from [Source literal semantics](literals.md), structural ownership state and remaining frontiers from [Source structural ownership](structural-ownership.md), parameter/local identity, scope, lookup, assignment mutability, whole-binding use, and assignment legality from [Source function-local bindings](local-bindings.md), binding-root and bounded producer-backed field-value production, receiver exact-type facts, selected field paths, duplicate-or-consume consequences, and producer-receiver remaining frontiers from [Source field-value access](field-access.md), and recursive exhaustive record-pattern head/field structure, scrutinee category, binding-leaf order, per-leaf ownership consequences, and producer transient frontier selection from [Source patterns](patterns.md). It does not redefine those owners.
 
-[Source control flow](control-flow.md) consumes this document's owned-value producer execution, nested-block execution, normal-continuation presence, lexical cleanup, defined-fault propagation, and divergence relations when defining represented statement-level conditionals and their definite normal successor. This document does not redefine conditional selection or conditional ownership joins.
+[Source control flow](control-flow.md) consumes this document's owned-value producer execution, nested-block execution, normal-continuation presence, return and explicit-fault termination, lexical cleanup, defined-fault propagation, and divergence relations when defining represented statement-level conditionals and their definite normal successor. This document does not redefine conditional selection or conditional ownership joins.
 
-The represented concrete function/body/block/value/call/record-construction/field-value/record-destructuring/assignment/conditional/return grammar is owned by [Source concrete syntax](concrete-syntax.md).
+The represented concrete function/body/block/value/call/record-construction/field-value/record-destructuring/assignment/conditional/return/explicit-fault grammar is owned by [Source concrete syntax](concrete-syntax.md).
 
 This document does not define structural ownership mathematics, pattern-head lookup or field accessibility, universal expressions, operators, conditional selection or joins, other general control flow, references, closures, traits, ABI, or an implementation representation.
 
@@ -61,6 +61,8 @@ The represented producer families are:
 `concrete-syntax.md` exposes exactly those five families in `Value`. A record-destructuring declaration is not another `Value` producer: `patterns.md` owns its grouped production of zero or more binding-leaf values. A producer-backed record-pattern scrutinee reuses one existing producer family in a pattern-specific receiving position.
 
 `control-flow.md` reuses a concrete subset of these existing producer families in its `ConditionalValue` receiving position. That use does not create a sixth producer family or alter any producer execution semantics here.
+
+The represented `fault;` form is a terminating `BodyStatement`, not an owned value producer, `Value`, `ConditionalValue`, expression, call, or return-value form. It evaluates no producer merely to select its defined-fault reason.
 
 Future operator, conversion, or other expression owners MAY introduce additional owned value producers without redefining the receiving relations in this document.
 
@@ -286,13 +288,13 @@ This revision defines no field/place assignment, partial-field reinitialization,
 For source validation, every represented statement or lexical block has only the minimum **normal-continuation presence** needed by this source subset:
 
 - **normal continuation present** means the construct establishes exactly one definite ordinary function-local binding environment for a following statement or enclosing normal continuation; and
-- **no normal continuation** means every represented static control-flow path through that construct performs a represented return from the current source function activation.
+- **no normal continuation** means every represented static control-flow path through that construct terminates the current source function activation through a represented return or represented explicit `fault;` statement.
 
-This classification is not a source value, runtime tag, source CFG node, state set, effect, or ownership lattice. Defined faults and divergence remain dynamic execution outcomes and do not form additional static completion alternatives.
+This classification is not a source value, runtime tag, source CFG node, state set, effect, fault set, or ownership lattice. Producer-originating defined faults and divergence remain dynamic execution outcomes and do not form additional static completion alternatives. Represented `fault;` is different because its successful execution is itself an explicit static terminating statement.
 
-For the root function body and each represented `BlockStatement`, the applicable `BodyStatement` sequence is validated and executes strictly in concrete source order while a normal continuation remains present. Every ordinary source-valid local declaration, record-destructuring declaration, assignment, no-result call statement, and normally completing nested block preserves one normal continuation. A represented terminal return has no normal continuation. A represented conditional exposes the normal-continuation presence and, when present, the definite normal environment established by `control-flow.md`.
+For the root function body and each represented `BlockStatement`, the applicable `BodyStatement` sequence is validated and executes strictly in concrete source order while a normal continuation remains present. Every ordinary source-valid local declaration, record-destructuring declaration, assignment, no-result call statement, and normally completing nested block preserves one normal continuation. A represented explicit `fault;` body statement has no normal continuation. A represented terminal return has no normal continuation. A represented conditional exposes the normal-continuation presence and, when present, the definite normal environment established by `control-flow.md`.
 
-A syntactically later `BodyStatement` or terminal `ReturnStatement` in the same containing sequence after a preceding statement with no normal continuation is source-invalid as unreachable. This is a semantic sequencing rule; it does not admit an otherwise unrepresented concrete tail after a terminal return in the same lexical block.
+A syntactically later `BodyStatement` or terminal `ReturnStatement` in the same containing sequence after a preceding statement with no normal continuation is source-invalid as unreachable. This semantic sequencing rule is directly observable for `fault;`, because concrete grammar permits a later body statement after it. It does not admit an otherwise unrepresented concrete tail after a terminal return in the same lexical block.
 
 Root-body execution begins with its first statement after successful parameter transfer. A nested block begins when its statement is reached. A later statement begins only after the preceding statement completes normally.
 
@@ -311,6 +313,8 @@ For whole-binding assignment, complete RHS production, old-value cleanup, replac
 
 For a no-result direct-call statement, complete the call normally before continuing. A valid no-result call statement has no value to discard.
 
+For represented `fault;`, apply the explicit-fault execution relation below. It has no normal continuation and therefore never begins a following statement in the same sequence.
+
 For a nested block:
 
 1. activate its child lexical scope;
@@ -318,7 +322,7 @@ For a nested block:
 3. if the nested block has a normal continuation, normally exit the child scope using lexical-scope cleanup below and expose the resulting enclosing binding environment; and
 4. only after that normal cleanup may the containing sequence continue.
 
-A nested block with no normal continuation performs no independent normal child-scope cleanup: the selected return follows the activation-return cleanup relation below, which cleans every then-active lexical scope exactly once.
+A nested block with no normal continuation performs no independent normal child-scope cleanup. Its selected terminating execution follows either the normal-return activation cleanup relation or the explicit-fault/defined-fault activation cleanup relation below, and every then-active lexical scope is cleaned exactly once by the applicable termination relation.
 
 A block statement produces no source value and introduces no Unit/Void value.
 
@@ -332,7 +336,29 @@ A terminal return in the root body or a nested block begins only after every pre
 
 A represented no-result root body reaching its closing boundary with a normal continuation and without a terminal return performs normal no-result completion.
 
-This sequencing relation introduces no loop, unrestricted mid-block return, unreachable-statement weakening, short-circuit operator, catch, defer, refutable match, or other multi-path control transfer beyond represented terminal returns and the conditional owner consumed above.
+This sequencing relation introduces no loop, unrestricted mid-block return, unreachable-statement weakening, short-circuit operator, catch, defer, refutable match, or other multi-path control transfer beyond represented terminal returns, payload-free explicit `fault;`, and the conditional owner consumed above.
+
+## Explicit fault statement
+
+The represented payload-free source `fault;` statement selects exactly one distinguished source-semantic defined-fault reason whose specification label is **`ExplicitFault`**.
+
+`ExplicitFault` is one semantic fault-reason identity consumed by the defined-fault propagation relation below. It is not a source value or source type and has no source payload, message/string, numeric code, fault-site identity, exception object, backtrace, matching interface, catch interface, stable serialization, ABI identity, or required implementation representation.
+
+Every source-valid execution of `fault;` selects the same distinguished source reason `ExplicitFault`. Different source locations containing `fault;` do not thereby create different fault reasons.
+
+The statement has no operand, required value type, owned-value producer, binding target, result value, or normal continuation. Reaching it after all preceding statements in the same sequence have completed normally:
+
+1. evaluates no owned-value producer and performs no new binding read, move, duplicate, assignment, field selection, call, or value production;
+2. preserves every source ownership transition completed before the statement;
+3. selects exactly `ExplicitFault`;
+4. enters the existing defined-fault propagation relation below with `F = ExplicitFault`; and
+5. produces no ordinary continuation from the current activation.
+
+The statement itself does not diverge after it is reached: it selects a defined fault. Earlier operations may independently fault or diverge before execution reaches the statement.
+
+When `fault;` is reached inside a nested block or conditional arm, that child scope does not first perform ordinary normal lexical cleanup. The defined-fault termination relation cleans every then-active lexical scope innermost through root exactly once and then processes parameters in reverse callable-signature slot order.
+
+This section defines no `fault(...)`, `fault value;`, panic/throw spelling, payload/message/code, catch/recovery, fault value/type, effect signature, or programmatic inspection/comparison of `ExplicitFault`.
 
 ## Source cleanup
 
@@ -396,7 +422,7 @@ If return-value production yields a defined fault before successful result produ
 
 Reaching the normal end of a represented no-result function body is equivalent to normal no-result completion.
 
-A result-bearing represented body MUST NOT have a reachable normal end without a result. This is a normal-path validity requirement, not a requirement for one unconditional concrete root-terminal return. A conditional whose two explicit arms both have no normal continuation may therefore satisfy the result obligation without a following root return. When any represented path still establishes a normal root continuation, that continuation must eventually encounter a source-valid result-bearing return before the root closing boundary.
+A result-bearing represented body MUST NOT have a reachable normal end without a result. This is a normal-path validity requirement, not a requirement for one unconditional concrete root-terminal return. A represented path that terminates by explicit `fault;` is abnormal and therefore requires no result value. A conditional whose two explicit arms both have no normal continuation may therefore satisfy the result obligation without a following root return whether those arms return, explicitly fault, or use a represented mixture of the two. When any represented path still establishes a normal root continuation, that continuation must eventually encounter a source-valid result-bearing return before the root closing boundary.
 
 No implicit result, default result, Unit, or Void source value is introduced.
 
@@ -404,7 +430,7 @@ No implicit result, default result, Unit, or Void source value is introduced.
 
 The represented source subset has no catch boundary.
 
-When an applicable accepted source/Core operation yields defined fault `F` during an activation:
+When an applicable accepted source/Core operation yields defined fault `F`, or when represented `fault;` selects `F = ExplicitFault`, during an activation:
 
 1. preserve every ownership transition completed before `F` was selected;
 2. clean all active lexical scopes innermost through root using each binding's current remaining frontier;
@@ -413,11 +439,11 @@ When an applicable accepted source/Core operation yields defined fault `F` durin
 
 If the fault arises from a directly called callee, the caller's direct-call evaluation yields `F`; with no catch boundary, the caller performs its own fault cleanup and propagates the same fault outward. This continues to the outermost applicable source execution.
 
-“Same defined fault” preserves the semantic fault outcome selected by the initiating operation. This revision defines no payload representation, messages, numeric codes, exception objects, backtraces, panic syntax, or catch syntax.
+“Same defined fault” preserves the semantic fault-reason identity selected by the initiating operation or explicit fault statement. For `fault;`, that identity is exactly `ExplicitFault`. This revision defines no source payload representation, messages, numeric codes, exception objects, backtraces, panic/throw syntax, or catch/recovery syntax beyond the payload-free explicit fault statement defined above.
 
 This propagation is semantic unwinding of source ownership and does not require physical stack unwinding. A realization MAY use another mechanism only when it preserves every applicable cleanup and observable behavior required by the accepted source and Core contracts.
 
-A future catch or panic owner may introduce explicit source forms and extend the applicable propagation relation at those explicit boundaries. No such boundary is represented here.
+A future catch, panic, throw, payload, or other fault owner may introduce explicit source forms and extend the applicable propagation relation at those explicit boundaries. No such boundary is represented here.
 
 Recoverable domain/application failures represented as ordinary values remain ordinary values under `behavior.md`; they do not use this relation merely because they represent failure.
 
@@ -453,6 +479,8 @@ Active caller/callee ownership state and any suspended producer transients persi
 
 A direct binding-root record-destructuring operation has no divergence point after validation. A producer-backed operation may diverge only while evaluating its existing producer; after producer success, field selection/field-receiver completion or pattern leaf production/pattern-transient completion is non-diverging under the applicable owner.
 
+The represented explicit `fault;` statement itself is not a divergence category: once reached, it selects `ExplicitFault` and follows defined-fault termination.
+
 ## Effects boundary
 
 Left-to-right constructor evaluation, left-to-right argument evaluation, source-first assignment RHS evaluation, producer-backed field receiver evaluation before selected-field production, producer-before-pattern evaluation, **depth-first pattern binding-leaf source order**, and concrete body/block statement sequencing fix relative source ordering for any effects that future accepted operation owners make observable.
@@ -467,15 +495,17 @@ Pattern binding-leaf production is non-faulting/non-diverging after source valid
 
 Record assembly after successful initializer evaluation is effect-free. Initializer source order, rather than declaration field order, remains producer-effect ordering authority. Target qualification is resolved statically and adds no runtime effect or ordering point. Pattern-head qualification is likewise resolved before execution and adds no runtime effect or ordering point.
 
+Reaching `fault;` selects a defined-fault reason and terminates through the existing fault relation. It evaluates no ordinary producer and introduces no separate effect ordering beyond its concrete statement position after all preceding normally completed statements.
+
 This revision defines no source effect system, purity, effect inference, speculation legality, or general transformation rules.
 
 ## Concrete grammar and implementation boundary
 
-`concrete-syntax.md` owns represented concrete grammar, including unqualified and qualified record-construction targets and record-pattern heads. `literals.md` owns boolean/integer materialization. `structural-ownership.md` owns structural paths/state/availability/frontiers. `field-access.md` owns binding-root and bounded producer-backed receiver selection, direct field accessibility consumed by field selection, construction initializers, and recursive pattern fields, source-selected final-field duplicate-or-consume production, and producer-receiver remaining-frontier facts. `patterns.md` owns recursive record-pattern head resolution and structure, binding-leaf facts/order, direct-root ownership production, producer-transient ownership transitions, and pattern-transient frontier selection. `local-bindings.md` owns binding identity/scope/lookup/mutability/lifecycle and whole-binding use/assignment legality. `control-flow.md` owns represented conditional selection, arm validation, and definite normal conditional ownership.
+`concrete-syntax.md` owns represented concrete grammar, including unqualified and qualified record-construction targets, record-pattern heads, and the payload-free explicit-fault statement. `literals.md` owns boolean/integer materialization. `structural-ownership.md` owns structural paths/state/availability/frontiers. `field-access.md` owns binding-root and bounded producer-backed receiver selection, direct field accessibility consumed by field selection, construction initializers, and recursive pattern fields, source-selected final-field duplicate-or-consume production, and producer-receiver remaining-frontier facts. `patterns.md` owns recursive record-pattern head resolution and structure, binding-leaf facts/order, direct-root ownership production, producer-transient ownership transitions, and pattern-transient frontier selection. `local-bindings.md` owns binding identity/scope/lookup/mutability/lifecycle and whole-binding use/assignment legality. `control-flow.md` owns represented conditional selection, arm validation, and definite normal conditional ownership.
 
 Floating literals, operators, general expressions, arbitrary assignment places, loops, unrestricted nonterminal-within-block return, arbitrary-receiver members, refutable/rest/shorthand pattern categories, additional producer-backed scrutinee families, and other source forms remain outside this execution relation.
 
-The represented construction, bounded producer-backed field-value, recursive pattern, partial-ownership cleanup, return, and existing producer execution relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, normal-continuation presence, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements and the separately owned conditional requirements through accepted Core semantics rather than use Core representation behavior as source authority.
+The represented construction, bounded producer-backed field-value, recursive pattern, partial-ownership cleanup, return, explicit-fault, and existing producer execution relations are defined entirely by source identities, structural ownership, owned values, source order, transfer, transient ownership, normal-continuation presence, fault-reason identity, and cleanup. They do not add or alter Core operations or destruction rules. Any source-to-Core lowering must refine these source requirements and the separately owned conditional requirements through accepted Core semantics rather than use Core representation behavior as source authority.
 
 Record-construction target qualification and record-pattern-head qualification are fully discharged by source validation. A faithful construction HIR requires only the resolved nominal record identity, resolved initializer field identities/types, validated initializer values, and source location already needed by construction. A faithful pattern HIR requires only the existing resolved top nominal record identity, complete binding-leaf paths/types/ownership facts, scrutinee facts, producer cleanup, and source location. Neither operation needs to retain qualified versus unqualified spelling or Core module/visibility metadata merely for qualification.
 
@@ -485,6 +515,10 @@ A direct-root recursive pattern binding leaf may refine to a mapped source local
 
 A source return may refine to the existing Core `Return` terminator from whichever lower block represents that return point. Normal lexical-scope cleanup and normal `Goto` continuation are emitted only for source paths that actually have a normal continuation; a returning path does not require a synthetic normal join edge. Source normal-continuation presence and source cleanup selection MUST be established before lowering and MUST NOT be reconstructed from Core reachability, path-state worklists, scalar liveness, or initialization state.
 
+A source-valid `fault;` may refine at its corresponding lower control point to the accepted Core explicit-fault terminator `Fault(F_explicit)`, where `F_explicit` is one stable represented Core semantic fault reason chosen to preserve the source reason `ExplicitFault`. This refinement emits no ordinary operand or result and no normal `Goto`/successor merely to continue source sequencing. The stable semantic reason is required; any implementation string, numeric code, allocation, or other carrier used to distinguish that Core reason remains non-normative and is not a source-visible payload.
+
+Source ownership state, active-scope cleanup selection, and the fact that the source statement has no normal continuation are established before lowering. Lowering MUST NOT reconstruct those source facts from Core reachability or path-state behavior. The accepted Core `Fault(F)` termination relation is consumed rather than redefined, and this source feature requires no new Core operation.
+
 Remaining source cleanup may refine to Core destruction only where the lower destruction domain is non-empty. Ending ownership of a zero-leaf source value may refine to no Core `Drop`; emitting an invalid lower destruction operation merely to materialize source ownership is not required.
 
 Compiler temporaries used for producer-backed field receivers or producer-backed pattern scrutinees are not source bindings. Core path state, scalar liveness, copyability, local numbering, and destruction domains are not source field/pattern/structural ownership authority.
@@ -493,4 +527,4 @@ No parser, lossless syntax, typed HIR, Core MIR production lowering, runtime, or
 
 ## Further boundaries
 
-This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, conditional expressions, unequal-state/path-dependent two-normal-outcome conditional joins, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable-match control flow, field assignment/partial-field reinitialization, arbitrary value/expression field receivers beyond the bounded direct-call/record-construction receiver set, general postfix/member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified binding leaves/qualified field names/nested module paths beyond the represented alias-member pair, additional field accessibility classes beyond the represented module-private/exported relation, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, panic payload/catch syntax, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
+This revision does not define floating/other literal semantics, arithmetic/comparison/operator forms, compound assignment, assignment-as-value, conditional expressions, unequal-state/path-dependent two-normal-outcome conditional joins, unrestricted nonterminal-within-block return or arbitrary unreachable tails, loops, refutable-match control flow, field assignment/partial-field reinitialization, arbitrary value/expression field receivers beyond the bounded direct-call/record-construction receiver set, general postfix/member/method access, refutable/rest/shorthand/wildcard/literal/guard/alternative patterns, producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses, general expression/grouping scrutinees, destructuring assignment, qualified binding leaves/qualified field names/nested module paths beyond the represented alias-member pair, additional field accessibility classes beyond the represented module-private/exported relation, references/borrow syntax/lifetimes, indirect calls/function values/closures, generics/traits/coherence, async/tasks or Exec call semantics, effect-system completion, fault payload/message/code values, panic/throw syntax, catch/recovery, ABI/calling convention/FFI/linkage, parser/HIR/Core MIR production code, or backend behavior.
