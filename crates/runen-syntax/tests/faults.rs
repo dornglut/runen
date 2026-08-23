@@ -80,9 +80,12 @@ fn missing_fault_semicolon_reports_and_preserves_following_statement() {
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Semicolon)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Semicolon) })
+    );
     assert_eq!(count_nodes(&parsed, SyntaxKind::FaultStatement), 1);
     assert_eq!(count_nodes(&parsed, SyntaxKind::LocalDeclaration), 1);
 }
@@ -103,19 +106,24 @@ fn fault_is_not_a_value() {
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value) })
+    );
 }
 
 #[test]
 fn return_specific_tail_rejection_is_unchanged() {
     let parsed = parse("fn f() { return; fault; }");
 
-    assert!(parsed
-        .errors()
-        .iter()
-        .any(|error| error.kind() == SyntaxErrorKind::UnexpectedAfterReturn));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| error.kind() == SyntaxErrorKind::UnexpectedAfterReturn)
+    );
     assert_eq!(count_nodes(&parsed, SyntaxKind::ReturnStatement), 1);
     assert_eq!(count_nodes(&parsed, SyntaxKind::FaultStatement), 0);
 }
