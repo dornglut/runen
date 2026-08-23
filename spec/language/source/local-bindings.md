@@ -6,9 +6,9 @@ This document owns the represented source semantics for function-local binding i
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), structural paths, structural ownership state, path availability, consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
 
-Represented binding-rooted field-path selection, direct field accessibility, and final-field duplicate-or-consume value production are owned by [Source field-value access](field-access.md). Represented exhaustive record-pattern selection and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local initialization, assignment replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md). Represented conditional selection and zero/one/two normal-outcome composition are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/return spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented binding-rooted field-path selection, direct field accessibility, and final-field duplicate-or-consume value production are owned by [Source field-value access](field-access.md). Represented exhaustive record-pattern selection and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local initialization, assignment replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md). Represented conditional selection, zero/one/two normal-outcome composition, bounded `while` condition/body selection, and loop backedge-state admission are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/while/return spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define structural ownership mathematics, normal-continuation presence, conditional selection or successor composition, field lookup, pattern structure, general expression evaluation, references, traits, ABI, Core liveness, or an implementation representation.
+This document does not define structural ownership mathematics, normal-continuation presence, conditional or loop selection/successor composition, field lookup, pattern structure, general expression evaluation, references, traits, ABI, Core liveness, or an implementation representation.
 
 ## Function-local binding identity
 
@@ -85,7 +85,7 @@ A represented function body has one root lexical scope. A represented nested blo
 
 The root body braces in `concrete-syntax.md` delimit the root lexical scope. Each concrete `BlockStatement` establishes exactly one child lexical scope containing its enclosed `BodyStatement` sequence and optional terminal `ReturnStatement`, and ending at that block's closing boundary. Recursively nested block statements therefore establish descendant lexical scopes.
 
-Each explicit represented conditional arm is one ordinary `BlockStatement` and therefore one child lexical scope. A then arm and explicit else arm of the same conditional are sibling scopes. An omitted else introduces no synthetic lexical scope under `control-flow.md`.
+Each explicit represented conditional arm is one ordinary `BlockStatement` and therefore one child lexical scope. A then arm and explicit else arm of the same conditional are sibling scopes. An omitted else introduces no synthetic lexical scope under `control-flow.md`. Each represented `while` body is likewise one ordinary `BlockStatement` child scope; repeated dynamic iterations re-enter that same static source scope rather than creating new source binding identities.
 
 The semantic scope tree does not prescribe parser nodes, source ranges, HIR scope identifiers, Core blocks, or physical storage lifetime.
 
@@ -169,9 +169,17 @@ For the represented statement-level conditional, `control-flow.md` owns normal-c
 - when exactly one normal outcome exists, every enclosing binding continues with exactly the state from that sole normal outcome, without comparison against a returning outcome; and
 - when zero normal outcomes exist, there is no following binding state because the conditional has no normal continuation.
 
-This binding owner does not derive a successor state by union, intersection, normalization, widening, lower Core path state, or another merge rule.
+For the represented bounded `while`, `control-flow.md` likewise owns the complete state relation. Let `H` be the enclosing binding environment immediately before condition evaluation and let successful condition validation produce `C`:
 
-Future loops, refutable matches, catch/recovery forms, or other control-flow forms require their own accepted definite-state relations; this document adds none.
+- the false loop outcome continues normally with exactly `C`;
+- the true outcome validates one ordinary child block from `C`;
+- if that body has a normal continuation, then after ordinary child-scope cleanup every enclosing binding identity from `H` MUST have exactly the same structural ownership state as in `H` before a backedge is admitted;
+- a body with no normal continuation contributes no backedge state and requires no backedge-state equality check; and
+- assignment mutability is unchanged: only explicit accepted assignment to a mutable binding may restore complete ownership before a backedge, while immutable bindings receive no implicit restoration.
+
+This binding owner does not derive a successor or backedge state by union, intersection, normalization, widening, lower Core path state, fixed-point iteration, or another merge rule.
+
+Future refutable matches, catch/recovery forms, additional loop forms, or other control-flow forms require their own accepted definite-state relations; this document adds none beyond the bounded `while` relation owned by `control-flow.md`.
 
 ## Ordinary whole-binding owned-value use
 
@@ -241,7 +249,7 @@ It does not redefine the execution relation owned by `function-execution.md`, in
 - lexical-scope/caller/callee cleanup sequencing; or
 - defined-fault propagation across activations.
 
-It does not redefine represented conditional condition/arm selection or normal-successor composition from `control-flow.md`.
+It does not redefine represented conditional or bounded-`while` condition/body selection, normal-successor composition, or loop backedge admission from `control-flow.md`.
 
 It likewise does not redefine field-path selection/production from `field-access.md`, pattern structure/ownership from `patterns.md`, or structural ownership mathematics from `structural-ownership.md`.
 
@@ -251,8 +259,8 @@ Indirect calls, function values, closures, references/pass modes, broader panic/
 
 This revision does not add or require parser, lossless-syntax, HIR, Core MIR production, runtime, or backend representation.
 
-A faithful implementation MAY retain structural ownership for bindings using resolved field indices or another implementation identity after source field resolution, but those representations are not source semantic identity. Core path state or scalar liveness MUST NOT become the binding's source ownership authority, including when a represented conditional establishes a normal successor.
+A faithful implementation MAY retain structural ownership for bindings using resolved field indices or another implementation identity after source field resolution, but those representations are not source semantic identity. Core path state or scalar liveness MUST NOT become the binding's source ownership authority, including when a represented conditional establishes a normal successor or a represented `while` validates one backedge.
 
 ## Further boundaries
 
-Beyond the represented concrete subset, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, field assignment or partial-field reinitialization, arbitrary member/method lookup, additional refutable/rest/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, loops or their fixed points, catch/recovery joins, references/borrows/lifetime inference, closures/captures, generics, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the represented concrete subset, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, field assignment or partial-field reinitialization, arbitrary member/method lookup, additional refutable/rest/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, additional loop forms or general loop fixed-point inference, catch/recovery joins, references/borrows/lifetime inference, closures/captures, generics, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
