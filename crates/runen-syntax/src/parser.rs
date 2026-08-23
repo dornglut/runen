@@ -697,8 +697,7 @@ impl Parser<'_> {
                 self.builder.finish_node();
             }
             Some(SyntaxKind::Minus) => {
-                let floating =
-                    self.peek_nontrivia(1) == Some(SyntaxKind::DecimalFloatingMagnitude);
+                let floating = self.peek_nontrivia(1) == Some(SyntaxKind::DecimalFloatingMagnitude);
                 self.builder.start_node(
                     if floating {
                         SyntaxKind::DecimalFloatingLiteral
