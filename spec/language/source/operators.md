@@ -4,19 +4,23 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source-semantic operator relations: each represented operator's operand and result source types, successful semantic value transformation, operator-local ownership consequence, and operation-specific source-to-Core refinement boundary.
 
-It consumes the represented source type identities and semantic value domains from [Source type foundation](types.md), including the exact two-value `Bool` domain. Its represented Core refinement consumes Bool-valued conditional branching from [Core control flow](../core/control-flow.md) and constant values plus wholly-vacant non-replacing initialization from [Core value and storage semantics](../core/value-storage.md).
+It consumes the represented source type identities and semantic value domains from [Source type foundation](types.md), including the exact two-value `Bool` domain. Its represented Core refinements consume Bool-valued conditional branching from [Core control flow](../core/control-flow.md) and constant values plus wholly-vacant non-replacing initialization from [Core value and storage semantics](../core/value-storage.md).
 
-[Source concrete syntax](concrete-syntax.md) owns the punctuation and concrete prefix grammar that map to the operator relation defined here. [Source function execution](function-execution.md) consumes this relation when validating and executing the operand producer, propagating its fault or divergence behavior, and transferring a successful operator result into an existing receiving position. [Source control flow](control-flow.md) consumes a completed operator result only through its existing exact-`Bool` `ConditionalValue` relation. This document does not redefine those owners.
+[Source concrete syntax](concrete-syntax.md) owns the punctuation and concrete prefix/equality grammar that map to the operator relations defined here. [Source function execution](function-execution.md) consumes these relations when validating and executing operand producers, sequencing multiple operands, propagating fault or divergence behavior, managing any operation-owned produced operand value that must remain live while a later operand executes, and transferring a successful operator result into an existing receiving position. [Source control flow](control-flow.md) consumes a completed operator result only through its existing exact-`Bool` `ConditionalValue` relation. This document does not redefine those owners.
 
-This revision does not define a universal source expression taxonomy, parser precedence model, implementation HIR shape, runtime operator object, or backend instruction selection.
+This revision does not define a universal source expression taxonomy, parser implementation strategy, implementation HIR layout, runtime operator object, or backend instruction selection.
 
 ## Represented operator family
 
-The represented source operator family contains exactly one operation in this revision: **Boolean logical negation**.
+The represented source operator family contains exactly three operations in this revision:
 
-Boolean logical negation is a prefix value-producing operation. The represented concrete placements and `!` spelling are owned by `concrete-syntax.md`; the semantic operation does not depend on the original punctuation token after source validation.
+- **Boolean logical negation**;
+- **Boolean equality**; and
+- **Boolean inequality**.
 
-No arithmetic, comparison, equality, inequality, short-circuit logical, conversion, cast, compound-assignment, numeric-negation, subtraction, postfix, member, or other operator is introduced by this relation.
+Boolean logical negation is a prefix value-producing operation. Boolean equality and inequality are bounded binary value-producing operations. Their represented concrete placements, `!`, `==`, and `!=` spellings, and the non-associative equality tier are owned by `concrete-syntax.md`; the semantic operations do not depend on the original punctuation tokens after source validation.
+
+No arithmetic, ordering, numeric comparison, structural or record comparison, floating comparison, pointer comparison, short-circuit logical, conversion, cast, compound-assignment, numeric-negation, subtraction, postfix, member, or other operator is introduced by these relations.
 
 ## Boolean logical negation typing
 
@@ -29,6 +33,22 @@ The result source type is intrinsically exactly `Bool`.
 No other source type is accepted as the operand type. In particular, this relation introduces no truthiness, integer-to-Bool conversion, numeric interpretation, coercion, promotion, defaulting, subtyping, structural conversion, or second Bool-like type.
 
 The result type is an intrinsic fact of the operator relation; it is not inferred from the surrounding receiving position. Validation/evaluation sequencing between that intrinsic result fact, the surrounding required type, and the operand producer is owned by `function-execution.md`.
+
+## Boolean equality and inequality typing
+
+Boolean equality and Boolean inequality each have exactly two operands, ordered **left** and **right**, and exactly one result.
+
+For both operations:
+
+- the left operand required source type is exactly intrinsic `Bool`;
+- the right operand required source type is exactly intrinsic `Bool`; and
+- the result source type is intrinsically exactly `Bool`.
+
+No other source type is accepted for either operand. In particular, these operations define no equality, inequality, ordering, or comparison over fixed-width integers, binary floating values, nominal records, raw pointers, future references, functions, or another source value family.
+
+Source type equality from `types.md` is not source value equality. Nominal identity, structural similarity, duplicability, physical representation equality, bit equality, host equality, or backend comparison behavior does not make a value admissible to these Boolean operations.
+
+The intrinsic Bool result is established before operand validation may commit binding ownership consequences. Complete two-operand transactional validation and eager left-to-right execution are owned by `function-execution.md`.
 
 ## Boolean logical negation value relation
 
@@ -45,43 +65,79 @@ Ownership of the successful operand result ends at this operator application. Th
 
 The operation is deterministic. Equal semantic Bool operands produce equal semantic Bool results independently of source spelling, implementation representation, target, backend, optimization level, or host-language behavior.
 
+## Boolean equality value relation
+
+Let `l` and `r` be the successfully produced semantic left and right `Bool` operand values.
+
+Boolean equality consumes both owned operand values exactly once and produces exactly one distinct owned `Bool` result according to this exhaustive table:
+
+| `l` | `r` | result |
+| --- | --- | --- |
+| `false` | `false` | `true` |
+| `false` | `true` | `false` |
+| `true` | `false` | `false` |
+| `true` | `true` | `true` |
+
+Equivalently, the result is `true` exactly when `l` and `r` are the same member of the two-value Bool domain.
+
+This equivalence statement is local to the accepted Bool domain. It does not establish a generic value-equality relation, a structural equality relation, or equality for any other represented source type.
+
+## Boolean inequality value relation
+
+Let `l` and `r` be the successfully produced semantic left and right `Bool` operand values.
+
+Boolean inequality consumes both owned operand values exactly once and produces exactly one distinct owned `Bool` result according to this exhaustive table:
+
+| `l` | `r` | result |
+| --- | --- | --- |
+| `false` | `false` | `false` |
+| `false` | `true` | `true` |
+| `true` | `false` | `true` |
+| `true` | `true` | `false` |
+
+Equivalently, the result is `true` exactly when `l` and `r` are different members of the two-value Bool domain.
+
+The accepted truth tables are semantic authority. A host-language equality/inequality operator, target compare instruction, constant folder, optimizer, or backend convention is not semantic authority for either relation.
+
 ## Operator-local ownership and execution effects
 
 Boolean logical negation receives one already successfully produced owned `Bool` operand, consumes that operand as defined above, and produces one owned `Bool` result.
 
-The logical-negation operation itself:
+Boolean equality and inequality each receive two already successfully produced owned `Bool` operand values, consume both operands exactly once as defined above, and produce one owned `Bool` result.
+
+Each represented operator itself:
 
 - consumes no parameter or local binding directly;
 - duplicates or transfers no binding-owned structural path directly;
 - changes no binding structural-ownership state;
-- creates no separately cleanup-bearing source transient category;
-- creates no source binding, address, reference, or source-visible storage identity;
+- creates no source binding, address, reference, place, or source-visible storage identity;
 - introduces no defined-fault reason;
-- introduces no divergence possibility after successful operand production; and
+- introduces no divergence possibility after all of its required operand values have been produced; and
 - introduces no runtime flag or hidden source state.
 
-Any binding ownership transition, defined fault, divergence, transient lifetime, or other effect needed to produce the operand remains entirely the consequence of that operand producer and its existing owner. `function-execution.md` owns the sequencing and transactional source-validation boundary that determines when those operand consequences commit.
+Any binding ownership transition, defined fault, divergence, transient lifetime, or other effect needed to produce an operand remains the consequence of that operand producer and the sequencing relation in `function-execution.md`.
 
-The successful result is one ordinary owned value of intrinsic type `Bool`. Its owned-value duplicability is the existing intrinsic duplicability classification from `types.md`; this operator introduces no second duplicability or copyability rule.
+For Boolean equality/inequality, successful left production necessarily precedes right production under `function-execution.md`, so the in-progress operation owns the produced left Bool until right production either succeeds, faults, or remains suspended by divergence. That bounded lifetime is an execution/cleanup sequencing fact owned by `function-execution.md`, not a new source binding or storage identity.
+
+A successfully validated represented operator adds no binding structural-ownership transition beyond the committed consequences of its operand producer or producers.
+
+Every successful result is one ordinary owned value of intrinsic type `Bool`. Its owned-value duplicability is the existing intrinsic duplicability classification from `types.md`; these operators introduce no second duplicability or copyability rule.
 
 ## Conditional-use relationship
 
-When a completed Boolean-logical-negation result is used as the condition of a represented `if` or `while`, `control-flow.md` consumes the resulting owned `Bool` exactly like any other admitted `ConditionalValue` result.
+When a completed represented operator result is used as the condition of a represented `if` or `while`, `control-flow.md` consumes the resulting owned `Bool` exactly like any other admitted `ConditionalValue` result.
 
-Logical negation itself changes only the semantic Bool value. It does not change the enclosing binding environment after successful operand production. Consequently, the post-condition binding environment for such a condition is exactly the operand producer's successful post-evaluation binding environment as established by `function-execution.md`.
+Logical negation changes only one successful operand's semantic Bool value. Its post-condition binding environment is exactly the operand producer's successful post-evaluation environment as established by `function-execution.md`.
 
-This relationship does not add truthiness, constant-branch pruning, a source state set, a join/meet/widening relation, or a second conditional-selection rule.
+Boolean equality/inequality eagerly execute the complete left producer and then the complete right producer before producing their Bool result. Their successful post-condition binding environment is therefore exactly the right producer's successful post-evaluation environment after the already-completed left producer consequences. The Bool truth relation adds no further binding transition.
+
+None of these relationships adds truthiness, constant-branch pruning, a source state set, a join/meet/widening relation, implicit restoration, or a second conditional-selection rule.
 
 ## Typed frontend boundary
 
-After successful source validation, a faithful typed frontend must retain enough information to identify:
+After successful source validation, a faithful typed frontend must retain enough information to identify every represented operator and its complete recursively contained operand values with their exact required/result type facts.
 
-- one Boolean logical-negation value producer;
-- its complete recursively contained operand value;
-- exact operand type `Bool`; and
-- exact result type `Bool`.
-
-A minimal typed representation may be equivalent to:
+For Boolean logical negation, a minimal typed representation may be equivalent to:
 
 ```text
 ValueKind::BooleanNot {
@@ -91,13 +147,31 @@ ValueKind::BooleanNot {
 
 where both the outer value and operand have source type `Bool`.
 
-This explanatory shape is not an implementation-layout mandate. Source locations may be retained by diagnostics/tooling but are not part of the operator's semantic identity. Token spelling, a numeric precedence value, associativity metadata, Core block identities, source-CFG identities, source ownership-state sets, and runtime operator tags are not semantic facts required after validation.
+For Boolean equality/inequality, a minimal typed representation may be equivalent to:
 
-A faithful lowerer MUST reject internally inconsistent retained operator facts, such as a non-`Bool` operand or result, rather than repairing them from lower/Core type information.
+```text
+BooleanEqualityRelation::{Equal, NotEqual}
+
+ValueKind::BooleanEquality {
+    relation: BooleanEqualityRelation,
+    left: Box<Value>,
+    right: Box<Value>,
+}
+```
+
+where the outer value, left operand, and right operand all have source type `Bool`.
+
+A faithful implementation MAY instead use two explicit equality/inequality value variants when that retains exactly the same source-semantic facts and no speculative generalized abstraction.
+
+These explanatory shapes are not implementation-layout mandates. Source locations may be retained by diagnostics/tooling but are not part of an operator's semantic identity. Token spelling, numeric precedence values, associativity metadata, Core block identities, source-CFG identities, source ownership-state sets, runtime operator objects, and backend opcodes are not semantic facts required after validation.
+
+A faithful lowerer MUST reject internally inconsistent retained operator facts, including a non-`Bool` result or any non-`Bool` represented operand, rather than repairing them from lower/Core type information.
 
 ## Source-to-Core refinement
 
-Boolean logical negation requires no new Core operation.
+The represented Boolean operators require no new Core operation.
+
+### Boolean logical negation refinement
 
 After the complete source operand has successfully lowered to one fresh Core local containing its owned Bool result, a faithful refinement MAY use the already represented Core control-flow/value-storage relations with this semantic shape:
 
@@ -120,9 +194,39 @@ This refinement is valid under the accepted Core owners because:
 - any operand call fault, operand divergence, or other lack of successful operand completion prevents this negation branch/result sequence from being reached; and
 - recursive logical negations may apply the same relation repeatedly to the previously lowered Bool result.
 
-The source semantic truth relation is the authority for the opposite constants selected on the two branches. A host-language Boolean-negation operator, constant folder, backend instruction, or target convention is not semantic authority.
+The source semantic truth relation is the authority for the opposite constants selected on the two branches.
 
-An implementation MAY use another Core program shape only when it is observationally equivalent under the accepted Core semantics and preserves the source relation above. This section does not introduce a Core `Not` operation, Core numeric operation, reference-machine extension, or backend requirement.
+### Boolean equality and inequality refinement
+
+A faithful equality/inequality lowerer first lowers the complete left producer exactly once and then the complete right producer exactly once. Both lowering operations complete before comparison branching begins. Each produced local MUST have Core Bool type; malformed retained source facts are rejected rather than repaired.
+
+After both Bool operand locals exist, a faithful refinement MAY use this four-leaf truth-table shape:
+
+1. create one fresh Core Bool result local, initially wholly vacant;
+2. create left-true and left-false blocks, four truth-table leaf blocks, and one join block;
+3. terminate the then-current block with `Branch` whose condition is an ownership-transferring `Move` of the left operand local;
+4. in each mutually exclusive left-successor block, terminate with `Branch` whose condition is an ownership-transferring `Move` of the right operand local;
+5. in each of the four truth-table leaf blocks, `Init` the same result local from the semantic Bool constant required by the selected equality or inequality table, then `Goto` the common join;
+6. continue lowering from the join with the result local live and available as the lowered operator result.
+
+This refinement is valid under the accepted Core owners because:
+
+- the source's eager left-to-right producer execution is complete before the first comparison `Branch`;
+- each concrete successful execution moves the left operand local exactly once;
+- after that branch, the right operand local remains live in both independently propagated Core path states;
+- Core path-state validation retains those states independently, so each mutually exclusive left-successor may move the right operand local exactly once under its own incoming state without implying two moves in one concrete execution;
+- each concrete successful execution therefore moves the right operand exactly once;
+- the fresh result local is wholly vacant on every truth-table leaf before that leaf's `Init`;
+- exactly one leaf executes on one concrete successful run and initializes the result exactly once;
+- every reachable join state has both operand locals consumed and the same result local live with Bool type;
+- if left producer execution faults or diverges, right producer execution and the comparison CFG are never reached;
+- if right producer execution faults after left success, no comparison CFG or result is reached and the containing Core activation's existing fault cleanup ends then-live compiler locals, including the local retaining the already-produced left Bool;
+- if right producer execution diverges, the caller remains suspended and the left operand local remains live, matching the source operation's held-left lifetime; and
+- nested represented operators may recursively lower complete operand producers before their enclosing operator constructs its own comparison CFG.
+
+A conforming implementation MAY use another Core program shape only when it is observationally equivalent under the accepted Core semantics and preserves the source relations above. In particular, an implementation may reduce the number of blocks but may not change operand evaluation order, successful operand consumption, truth mapping, fault/divergence behavior, or the one-result relation.
+
+No represented refinement introduces a Core `Not`, `Eq`, `Ne`, numeric operation, comparison operation, reference-machine extension, source/Core state merge, host-language Boolean comparison authority, or backend requirement.
 
 ## Deliberate boundaries
 
@@ -130,11 +234,13 @@ This revision defines no:
 
 - numeric unary negation or subtraction;
 - arithmetic operator;
-- equality, inequality, ordering, or other comparison operator;
+- integer, floating, nominal-record, pointer, reference, function, structural, representation, or generic value equality/inequality;
+- ordering or other comparison operator;
 - `&&`, `||`, short-circuiting, or another logical operator;
 - conversion, cast, coercion, or numeric promotion;
 - grouping or parenthesized expression;
-- general binary precedence or associativity hierarchy;
+- equality chaining or comparison chaining;
+- general binary precedence or associativity hierarchy beyond the one bounded concrete equality tier owned by `concrete-syntax.md`;
 - arbitrary postfix/member/method expression;
 - assignment expression, compound assignment, field assignment, or general place/lvalue operation;
 - source numeric-contract selection or scoping;

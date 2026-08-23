@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean, integer, and decimal floating literal semantics from [Source literal semantics](literals.md); Boolean logical-negation operand/result typing and semantic value transformation from [Source operator semantics](operators.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, Boolean logical-negation operand validation/evaluation, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, loop-transfer cleanup, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, bounded `break`/`continue` target/state admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean, integer, and decimal floating literal semantics from [Source literal semantics](literals.md); Boolean logical-negation and Boolean equality/inequality operand/result typing and semantic value transformation from [Source operator semantics](operators.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, represented Boolean-operator operand validation/evaluation, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, loop-transfer cleanup, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, bounded `break`/`continue` target/state admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -56,16 +56,20 @@ Reserved-key classification uses the lexical identifier key, not original source
 The represented punctuation tokens are exactly:
 
 ```text
-( ) { } : :: , -> - = ; . !
+( ) { } : :: , -> - = == ; . ! !=
 ```
 
-`->` and `::` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens and `->` is never tokenized as `-` followed by unrepresented `>` material.
+`->`, `::`, `==`, and `!=` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens, `->` is never tokenized as `-` followed by unrepresented `>` material, `==` is never tokenized as two `=` tokens, and adjacent `!=` is never tokenized as `!` followed by `=`.
 
 The standalone `-` punctuation token participates only in the represented negative decimal integer and decimal floating literal productions below. It does not by itself define numeric unary negation, subtraction, or another operator.
 
 The standalone `.` punctuation token participates only in the represented `FieldValueUse` production below. The decimal point inside one `DecimalFloatingMagnitude` is consumed as interior material of that single decimal token and is therefore not a `.` punctuation token. The standalone punctuation token does not by itself define floating-point literal spelling, a general member/postfix system, a method call, field assignment, or another operator.
 
-The standalone `!` punctuation token participates only in the represented Boolean logical-negation prefix productions below and maps those forms to the semantic relation in `operators.md`. It reserves no identifier key. This revision defines no `!=` punctuation token or inequality operation. With the current punctuation set, adjacent `!=` is tokenized as `!` followed by `=`, but no represented Boolean-not operand begins with `=`, so that sequence is malformed under the grammar. A later accepted `!=` token may use the existing longest-token rule without changing any currently source-valid spelling.
+The standalone `=` punctuation token retains only its represented declaration/assignment roles. `==` instead participates only in the bounded Boolean equality productions below and maps those forms to the equality semantic relation in `operators.md`.
+
+The standalone `!` punctuation token participates only in the represented Boolean logical-negation prefix productions below. `!=` instead participates only in the bounded Boolean inequality productions and maps those forms to the inequality semantic relation in `operators.md`. None of these punctuation tokens reserves an identifier key.
+
+Before `!=` was represented, adjacent `!=` was malformed as `!` followed by `=`; making the adjacent spelling one longest-match token therefore changes no previously source-valid spelling. Trivia separates tokens: `! =` remains a standalone `!` followed by standalone `=` and is malformed where no represented Boolean-not operand begins with `=`. Likewise `===` is `==` followed by `=` and `!==` is `!=` followed by `=` under longest-token selection; neither sequence is a represented operator form.
 
 This revision defines no standalone `>` token and no other punctuation or operator token.
 
@@ -251,7 +255,9 @@ The represented statement-level conditional has this grammar:
 IfStatement =
     "if" ConditionalValue BlockStatement ("else" BlockStatement)?
 
-ConditionalValue = ConditionalPrefixValue
+ConditionalValue = ConditionalEqualityValue
+ConditionalEqualityValue =
+    ConditionalPrefixValue (EqualityOperator ConditionalPrefixValue)?
 ConditionalPrefixValue =
     ConditionalBooleanNotValue
   | ConditionalValueAtom
@@ -265,27 +271,29 @@ ConditionalValueAtom =
   | FieldValueUse
 ```
 
-`ConditionalValue` deliberately has its own prefix tier rather than reusing unrestricted `PrefixValue`. This preserves the accepted exclusion of a **standalone** `RecordConstruction` at every recursive conditional prefix level.
+`ConditionalValue` deliberately has its own equality and prefix tiers rather than reusing unrestricted ordinary `EqualityValue` or `PrefixValue`. This preserves the accepted exclusion of a **standalone** `RecordConstruction` at every conditional equality operand and recursive prefix depth.
 
-The exclusion is part of normative concrete grammar. The unqualified record-construction form begins with `UserIdentifier "{"`; admitting unrestricted `Value` or unrestricted `PrefixValue` immediately after `if` would make a spelling such as `if flag { ... }` collide with the record-construction token shape. A leading `!` does not delimit its operand and therefore does not remove that ambiguity: `if !flag { ... }` must still parse `flag` as one conditional `IdentifierUse` and the following `{ ... }` as the then `BlockStatement`, not as a standalone construction operand. `ConditionalBooleanNotValue` consequently recurses only through `ConditionalPrefixValue`.
+The exclusion is part of normative concrete grammar. The unqualified record-construction form begins with `UserIdentifier "{"`; admitting unrestricted ordinary `Value` or `PrefixValue` immediately after `if` would make a spelling such as `if flag { ... }` collide with the record-construction token shape. A leading `!` does not delimit its operand and therefore does not remove that ambiguity: `if !flag { ... }` must still parse `flag` as one conditional `IdentifierUse` and the following `{ ... }` as the then `BlockStatement`, not as a standalone construction operand. `ConditionalBooleanNotValue` consequently recurses only through `ConditionalPrefixValue`.
 
-`ConditionalBooleanNotValue` maps to the same Boolean logical-negation semantic relation in `operators.md` as the ordinary-value `BooleanNotValue` defined below. The two concrete grammar placements do not define two source operators. Repeated forms such as `!!flag` or `! ! flag` are recursively represented and associate from the right by grammar nesting.
+The optional equality suffix likewise requires a second `ConditionalPrefixValue`, not an unrestricted ordinary prefix. Consequently the standalone-construction exclusion remains true on both sides of `==` or `!=`, including beneath any number of Boolean-not prefixes. Forms such as `if flag == other { ... }` or `while !flag != !other { ... }` complete the conditional equality value before the following block opener.
 
-Decimal integer and decimal floating literals remain syntactically represented as conditional atoms. Exact condition typing is owned by `control-flow.md`; either numeric literal therefore remains a syntax-valid conditional spelling but is source-invalid because it cannot produce the exact intrinsic `Bool` type. Concrete grammar does not encode that type error. A negated numeric atom, such as `!-1`, is likewise syntactically represented but fails the exact Bool operand rule owned by `operators.md` and `function-execution.md`.
+`ConditionalBooleanNotValue` maps to the same Boolean logical-negation semantic relation in `operators.md` as the ordinary-value `BooleanNotValue` defined below. `ConditionalEqualityValue` with `==` or `!=` maps to the same Boolean equality/inequality relations as the ordinary equality tier. These concrete placements do not define condition-specific operators. Repeated prefix forms such as `!!flag` or `! ! flag` remain recursively represented and associate from the right by grammar nesting; the outer equality tier is not part of that prefix recursion.
+
+Decimal integer and decimal floating literals remain syntactically represented as conditional atoms. Exact condition and operator typing are owned by `control-flow.md`, `operators.md`, and `function-execution.md`. A bare numeric literal remains syntax-valid as a `ConditionalValue` but is source-invalid because it cannot produce the exact intrinsic `Bool` required by control flow. A negated or equality operand numeric atom, such as `!-1` or `1 == 1`, may likewise be syntactically represented while failing the exact Bool operand rule owned by the operator semantics.
 
 A `DirectCall` conditional atom retains both its represented unqualified and `alias::member(...)` target forms. A `FieldValueUse` may use either its binding-root or bounded producer-backed receiver grammar. All lookup, receiver-transient, operator-operand, and producer rules remain owned by their existing semantic owners.
 
-A standalone `RecordConstruction` is not a represented conditional-value atom, including beneath any number of Boolean-not prefixes. A `ProducerFieldValueUse` whose receiver is a `RecordConstruction` is instead one distinct admitted `FieldValueUse` and includes at least one mandatory `.` selector after the constructor's closing `}`. Consequently, forms such as `if Record { ready: true }.ready { ... }` and `if !Record { ready: true }.ready { ... }` remain unambiguous: the complete construction-backed field-value atom contains its mandatory selector, while the later then-arm block begins only after the complete `ConditionalValue`.
+A standalone `RecordConstruction` is not a represented conditional-value atom, including beneath any number of Boolean-not prefixes or on either side of a conditional equality operator. A `ProducerFieldValueUse` whose receiver is a `RecordConstruction` is instead one distinct admitted `FieldValueUse` and includes at least one mandatory `.` selector after the constructor's closing `}`. Consequently, forms such as `if Record { ready: true }.ready { ... }`, `if !Record { ready: true }.ready { ... }`, and `if flag == Record { ready: true }.ready { ... }` remain unambiguous: the complete construction-backed field-value atom contains its mandatory selector, while the later then-arm block begins only after the complete `ConditionalValue`.
 
 The then arm is always one explicit `BlockStatement`. `else` is optional; when present it is followed by exactly one explicit `BlockStatement`. Each explicit arm therefore maps to one ordinary child lexical scope and may contain ordinary `BodyStatement` entries, including `fault;` and, when nested in a represented `while`, `break;` or `continue;`, followed by its own optional terminal `ReturnStatement` only when the preceding body-statement sequence still has a local normal continuation. The omitted-else false outcome and definite normal-successor composition are owned by `control-flow.md`; omission does not synthesize a concrete block or lexical scope.
 
 This revision defines no direct `else if` production. A nested conditional may instead occur as a `BodyStatement` inside an explicit else block, for example the abstract shape `else { if ... { ... } }`.
 
-An `IfStatement` produces no source value and has no trailing semicolon. It does not add a conditional expression, block value, Unit/Void value, pattern condition, guard, truthiness relation, comparison, or additional logical operator.
+An `IfStatement` produces no source value and has no trailing semicolon. It does not add a conditional expression, block value, Unit/Void value, pattern condition, guard, truthiness relation, ordering/numeric comparison, or short-circuit logical operator.
 
 Because `ReturnStatement` is an optional terminal element of `BlockStatement`, a conditional arm may return from the current function. Return remains absent from `BodyStatement`, so this grammar still does not admit an arbitrary nonterminal return followed by more statements in that same arm block. Because `FaultStatement`, `BreakStatement`, and `ContinueStatement` are `BodyStatement` forms, the grammar may represent a following sibling after them; the no-local-normal-continuation rule rejects that sibling semantically.
 
-Runtime condition selection, condition producer ordering, Boolean logical-negation operand execution, arm validation, local normal-continuation composition, normal arm cleanup, loop-transfer behavior, return behavior, explicit-fault behavior, other fault/divergence behavior, and exact structural-ownership-state equality whenever two normal outcomes meet are owned by `control-flow.md`, `function-execution.md`, and `operators.md` under their respective boundaries.
+Runtime condition selection, condition producer ordering, represented Boolean-operator operand execution, arm validation, local normal-continuation composition, normal arm cleanup, loop-transfer behavior, return behavior, explicit-fault behavior, other fault/divergence behavior, and exact structural-ownership-state equality whenever two normal outcomes meet are owned by `control-flow.md`, `function-execution.md`, and `operators.md` under their respective boundaries.
 
 ## While statements
 
@@ -295,13 +303,13 @@ The represented bounded statement-level loop has exactly this grammar:
 WhileStatement = "while" ConditionalValue BlockStatement
 ```
 
-`WhileStatement` reuses the exact `ConditionalValue` nonterminal above. It therefore admits the same recursively prefixed Boolean logical-negation forms and the same literal, identifier-use, direct-call, and bounded field-value atoms while preserving the same standalone-`RecordConstruction` exclusion at every conditional prefix level. The grammar does not introduce a separate loop-condition expression category, truthiness rule, pattern condition, or semantic lookahead rule.
+`WhileStatement` reuses the exact `ConditionalValue` nonterminal above. It therefore admits the same bounded Boolean equality/inequality tier, recursively prefixed Boolean logical-negation forms, and the same literal, identifier-use, direct-call, and bounded field-value atoms while preserving the same standalone-`RecordConstruction` exclusion at every conditional equality operand and prefix depth. The grammar does not introduce a separate loop-condition expression category, truthiness rule, pattern condition, or semantic lookahead rule.
 
 The loop body is exactly one ordinary `BlockStatement` and therefore one child lexical scope under `local-bindings.md`. `WhileStatement` is itself one `BodyStatement`, so loops may nest recursively and may appear inside represented conditional arms or other blocks. The closing body `}` terminates the complete `WhileStatement`; no trailing semicolon is present.
 
 A `WhileStatement` produces no source value. It has no `else` arm, result value, label, iteration binding, pattern, iterator protocol, unconditional-loop spelling, or do/while form. Its body may contain the bounded unlabeled `break;` and `continue;` statements defined below. `while true` is syntactically represented but remains subject to the conservative static false-outcome rule owned by `control-flow.md`.
 
-Exact Bool condition admission, condition ownership effects, the pre-condition environment `H`, post-condition environment `C`, body validation from `C`, exact normal-backedge structural ownership equality with `H`, explicit break/continue target-state admission, the represented false normal successor `C`, no-local-normal-body behavior, dynamic repeated condition/body execution, and source-to-Core cyclic refinement are owned by `control-flow.md` and `function-execution.md`. Boolean logical-negation semantics within a condition remain owned by `operators.md` and add no second loop rule.
+Exact Bool condition admission, condition ownership effects, the pre-condition environment `H`, post-condition environment `C`, body validation from `C`, exact normal-backedge structural ownership equality with `H`, explicit break/continue target-state admission, the represented false normal successor `C`, no-local-normal-body behavior, dynamic repeated condition/body execution, and source-to-Core cyclic refinement are owned by `control-flow.md` and `function-execution.md`. Represented Boolean operator semantics within a condition remain owned by `operators.md` and add no second loop rule.
 
 ## Loop transfer statements
 
@@ -384,9 +392,9 @@ When a producer-backed `FieldValueUse` is the scrutinee, its complete field-valu
 
 The top scrutinee alternatives remain classifiable from their complete token shapes without semantic lookup. A direct root ends after its `UserIdentifier`; a direct call has call syntax; a record construction has constructor syntax; and a field-value use contains one or more `.` selectors after either its binding root or its complete bounded producer receiver. Scrutinee category does not depend on inferred type.
 
-This recursive pattern form introduces no new reserved key. It remains distinguished from `LocalDeclaration` after `let` by concrete token shape: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form; `UserIdentifier "{"` begins an unqualified record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified record pattern. This classification uses bounded token lookahead only and does not consult module lookup or source types. The newly represented `!` punctuation does not participate in record-pattern grammar.
+This recursive pattern form introduces no new reserved key. It remains distinguished from `LocalDeclaration` after `let` by concrete token shape: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form; `UserIdentifier "{"` begins an unqualified record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified record pattern. This classification uses bounded token lookahead only and does not consult module lookup or source types. The represented `!`, `==`, and `!=` punctuation does not participate in record-pattern grammar.
 
-Boolean, decimal integer, and decimal floating literals and Boolean logical-negation values are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, operator value, conversion, arbitrary postfix/member expression, qualified bare module member, or other general `Value` form is admitted as a record-pattern scrutinee.
+Boolean, decimal integer, and decimal floating literals and represented Boolean operator values are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, operator value, conversion, arbitrary postfix/member expression, qualified bare module member, or other general `Value` form is admitted as a record-pattern scrutinee.
 
 Complete recursive pattern validation, binding-leaf ordering, producer evaluation ordering, transient structural ownership/cleanup, grouped binding establishment, and fault/divergence behavior are owned by `patterns.md`, `field-access.md`, `structural-ownership.md`, and `function-execution.md`.
 
@@ -483,7 +491,7 @@ Complete static construction validation precedes initializer ownership consequen
 
 The resulting record value has exactly the declaration-defined field/value shape from `types.md`, independent of initializer source order. Evaluation, transient ownership, defined-fault cleanup, divergence, and final ownership transfer into the selected fields are owned by `function-execution.md` and are unchanged by target qualification. Qualification introduces no runtime module-loading, ABI, linkage, layout, or physical-symbol effect.
 
-Because each initializer contains a `Value`, record construction composes recursively with another record construction as well as the other represented value producers, including Boolean logical negation and bounded producer-backed field-value use.
+Because each initializer contains a `Value`, record construction composes recursively with another record construction as well as the other represented value producers, including represented Boolean operators and bounded producer-backed field-value use.
 
 A complete source-valid record construction may itself be the receiver of one or more field selectors under `FieldValueUse` below. The mandatory selector distinguishes that composite field-value producer from the bare construction producer. The construction target may be either represented target form; a qualified construction does not create a new receiver category.
 
@@ -511,11 +519,11 @@ At least one selector is required after either receiver category. Consequently:
 - a bare `DirectCall` remains the existing direct-call producer; and
 - a bare `RecordConstruction` remains the existing construction producer.
 
-A producer-backed field receiver does not admit an arbitrary `Value`. Boolean, decimal integer, and decimal floating literals, Boolean logical-negation values, a bare `IdentifierUse` as an expression receiver, parenthesized/grouped values, general expressions, methods, references, places, or another universal postfix receiver category are not represented. A qualified call is available only because `QualifiedModuleMember` is already one `DirectCallTarget`; a qualified construction is available only because that same bounded two-part form is now one `RecordConstructionTarget`. A qualified bare module member does not become a field receiver by itself.
+A producer-backed field receiver does not admit an arbitrary `Value`. Boolean, decimal integer, and decimal floating literals, represented Boolean operator values, a bare `IdentifierUse` as an expression receiver, parenthesized/grouped values, general expressions, methods, references, places, or another universal postfix receiver category are not represented. A qualified call is available only because `QualifiedModuleMember` is already one `DirectCallTarget`; a qualified construction is available only because that same bounded two-part form is now one `RecordConstructionTarget`. A qualified bare module member does not become a field receiver by itself.
 
 A selector chain such as `make().outer.inner` is one `ProducerFieldValueUse` with one complete receiver producer and one static selector sequence. It does not recursively reinterpret each intermediate field result as a new arbitrary expression receiver.
 
-Because direct-call arguments and construction initializers contain `Value`, bounded producer-backed field-value uses may compose recursively inside those already represented positions. This recursion does not create grouping or general operator precedence.
+Because direct-call arguments and construction initializers contain `Value`, bounded producer-backed field-value uses may compose recursively inside those already represented positions. This recursion does not create grouping or a general precedence hierarchy.
 
 Exact receiver result-type selection, direct record-field accessibility at every selector step, selector-path resolution, binding-root final-path availability, producer-receiver transient ownership, final-field duplicate-or-consume consequence, remaining-frontier selection, and resulting source type are owned by `field-access.md` and `structural-ownership.md`. A qualified direct-call receiver may therefore yield a foreign exported record whose exported field is selected under that owner without making the field selector itself a qualified module lookup. A qualified record-construction receiver similarly resolves and validates its complete construction before the field-value operation consumes its produced record. This grammar does not duplicate those relations.
 
@@ -525,33 +533,40 @@ The `.` punctuation token in this production has no decimal-literal, method, ass
 
 ## Value forms
 
-The ordinary represented value grammar has one bounded prefix tier:
+The ordinary represented value grammar has one bounded non-associative equality tier above the existing recursive prefix tier:
 
 ```text
-Value           = PrefixValue
-PrefixValue     = BooleanNotValue | ValueAtom
-BooleanNotValue = "!" PrefixValue
-ValueAtom       = Literal
-                | IdentifierUse
-                | DirectCall
-                | RecordConstruction
-                | FieldValueUse
-Literal               = BooleanLiteral | DecimalIntegerLiteral | DecimalFloatingLiteral
-BooleanLiteral        = "true" | "false"
-DecimalIntegerLiteral = "-"? DecimalMagnitude
+Value            = EqualityValue
+EqualityValue    = PrefixValue EqualitySuffix?
+EqualitySuffix   = EqualityOperator PrefixValue
+EqualityOperator = "==" | "!="
+PrefixValue      = BooleanNotValue | ValueAtom
+BooleanNotValue  = "!" PrefixValue
+ValueAtom        = Literal
+                 | IdentifierUse
+                 | DirectCall
+                 | RecordConstruction
+                 | FieldValueUse
+Literal                = BooleanLiteral | DecimalIntegerLiteral | DecimalFloatingLiteral
+BooleanLiteral         = "true" | "false"
+DecimalIntegerLiteral  = "-"? DecimalMagnitude
 DecimalFloatingLiteral = "-"? DecimalFloatingMagnitude
-IdentifierUse         = UserIdentifier
+IdentifierUse          = UserIdentifier
 ```
 
 `ValueAtom` is exactly the five pre-existing value families. It is a grammar factoring for the bounded prefix tier, not a new source value category, primary-expression abstraction, postfix base, place category, or member-receiver system.
 
-`BooleanNotValue` maps to the Boolean logical-negation semantic relation in `operators.md`. Its right-recursive `PrefixValue` operand makes repeated negation such as `!!flag` or `! ! flag` unambiguous and right-associated by grammar nesting. The separate prefix tier is deliberate: later binary-expression work may, if independently accepted, compose above this tier without changing the parse of already represented Boolean-not forms. This revision introduces no such binary tier.
+`BooleanNotValue` maps to the Boolean logical-negation semantic relation in `operators.md`. Its right-recursive `PrefixValue` operand makes repeated negation such as `!!flag` or `! ! flag` unambiguous and right-associated by grammar nesting. Boolean-not recursion does not include `EqualityValue`; consequently prefix binds more tightly than equality. `!a == b` is one equality value whose left operand is `!a`, while `a == !b` has `!b` as its right operand. The prefix form never reparses `!a == b` as logical negation of an equality value.
 
-In ordinary `Value` positions, the operand may be any represented `PrefixValue`, including a standalone `RecordConstruction`. That concrete admission does not make a record value Boolean: `operators.md` requires the logical-negation operand type to be exactly `Bool`, and `function-execution.md` owns transactional operand validation. Consequently a form such as `!Record { ... }` may be syntactically represented in an ordinary value position but is source-invalid as Boolean logical negation.
+`EqualityValue` maps `==` and `!=` to the Boolean equality/inequality semantic relations in `operators.md`. Exactly zero or one `EqualitySuffix` is represented, so forms such as `a == b == c`, `a != b == c`, and `a == b != c` are not represented. This revision therefore introduces no equality associativity or comparison-chain relation.
+
+The equality tier is a bounded grammar factoring, not a universal binary-expression or precedence framework. No grouping production is added. A later independently accepted tighter operator tier may compose between equality and prefix, or a later looser tier may compose above equality, only when its own canonical semantic owner and concrete grammar are accepted; this revision defines neither.
+
+In ordinary `Value` positions, a prefix operand may be any represented `PrefixValue`, including a standalone `RecordConstruction`. That concrete admission does not make a record value Boolean. `operators.md` requires the logical-negation operand and both equality/inequality operands to be exactly `Bool`, while `function-execution.md` owns transactional operand validation. Consequently forms such as `!Record { ... }` or `Record {} == Record {}` may be syntactically represented in an ordinary value position but are source-invalid under the exact Bool operator typing rules.
 
 The represented literal forms map to `literals.md`. `true` and `false` denote the boolean literal forms owned there. A `DecimalIntegerLiteral` supplies its concrete sign and decimal magnitude to the exact mathematical-integer and required-type materialization relation owned there. A `DecimalFloatingLiteral` supplies its concrete sign and one contiguous decimal floating magnitude token to the exact decimal-rational and required-type floating materialization relation owned there. This grammar does not assign an integer or floating default type, abstract literal type, conversion, or arithmetic semantics.
 
-The optional `-` in either represented numeric literal is part of that literal grammar only. Because the sign and following magnitude are distinct grammar tokens, ordinary trivia may occur between them under the general trivia rule above. No trivia may occur inside `DecimalFloatingMagnitude` because it is one token, including around its token-internal decimal point. `-` does not become a general prefix operator merely because `!` is represented separately. In particular, `-!flag` is not a represented `Value`. A spelling such as `!-1` is instead Boolean logical negation whose atom is the already represented signed decimal integer literal and is source-invalid because that operand cannot have type `Bool`.
+The optional `-` in either represented numeric literal is part of that literal grammar only. Because the sign and following magnitude are distinct grammar tokens, ordinary trivia may occur between them under the general trivia rule above. No trivia may occur inside `DecimalFloatingMagnitude` because it is one token, including around its token-internal decimal point. `-` does not become a general prefix operator merely because `!` and the equality tier are represented separately. In particular, `-!flag` is not a represented `Value`. A spelling such as `!-1` is instead Boolean logical negation whose atom is the already represented signed decimal integer literal and is source-invalid because that operand cannot have type `Bool`.
 
 An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-bindings.md`. Its identifier is resolved using the function-local lookup precedence owned there. In this subset, the selected entity MUST be a parameter or ordinary local binding whose complete structural root is fully available under `structural-ownership.md`; another selected entity category does not become a value merely because the context requires one.
 
@@ -565,7 +580,7 @@ A qualified module member without a direct-call argument list, record-constructi
 
 The represented `FaultStatement`, `BreakStatement`, and `ContinueStatement` forms are not admitted by `Value` or `ConditionalValue` and do not create produced-value categories.
 
-This subset has no string, byte, character, aggregate, pointer, or other additional literal form; no scientific-notation, hexadecimal/binary/octal floating form, explicit infinity/NaN literal, `.5`/`1.` floating shorthand, suffix, separator, alternate numeric radix, or leading-plus numeric form; no grouping expression; no operator beyond bounded Boolean logical negation; no general unary or binary expression hierarchy; no conversion; no arbitrary-receiver member/postfix access beyond the bounded field receiver categories above; no assignment expression; no block expression; no closure; and no other value form beyond the represented producers above.
+This subset has no string, byte, character, aggregate, pointer, or other additional literal form; no scientific-notation, hexadecimal/binary/octal floating form, explicit infinity/NaN literal, `.5`/`1.` floating shorthand, suffix, separator, alternate numeric radix, or leading-plus numeric form; no grouping expression; no operator beyond bounded Boolean logical negation and exact-Bool equality/inequality; no general unary or binary expression hierarchy beyond the one bounded equality tier; no conversion; no arbitrary-receiver member/postfix access beyond the bounded field receiver categories above; no assignment expression; no block expression; no closure; and no other value form beyond the represented producers above.
 
 ## Returns and normal completion
 
@@ -618,12 +633,12 @@ The two-part qualification syntax is reused only in the explicitly represented t
 This revision does not define:
 
 - string, byte, character, or other literal syntax beyond the represented boolean, signed decimal integer, and bounded decimal floating forms; decimal scientific notation; hexadecimal/binary/octal floating notation; `.5`/`1.` floating shorthand; explicit infinity or NaN spellings; literal suffixes or digit separators; alternate numeric radices; or a leading-plus numeric form;
-- numeric unary negation, subtraction, arithmetic, equality/inequality, comparison, short-circuit logical, compound-assignment, conversion/cast, or other operator forms beyond represented Boolean logical negation;
-- grouping or general expression grammar, or a binary precedence/associativity hierarchy;
+- numeric unary negation, subtraction, arithmetic, equality/inequality for any source type other than the represented exact-Bool relations, ordering or other comparison, short-circuit logical, compound-assignment, conversion/cast, or other operator forms beyond represented Boolean negation/equality/inequality;
+- grouping or general expression grammar, comparison chaining, or a binary precedence/associativity hierarchy beyond the one bounded non-associative equality tier;
 - assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, destructuring assignment, or general place/lvalue syntax beyond represented whole-binding assignment;
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
 - conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, labels or a label namespace, labeled `break`/`continue`, transfer values, loop values, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch/recovery, or other control-transfer forms beyond represented statement-level `if`, bounded statement-level `while`, bounded unlabeled `break;`/`continue;`, terminal return, and payload-free explicit `fault;`;
-- record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal (including decimal floating), bare `IdentifierUse`-as-value, Boolean logical-negation value, grouping, other operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
+- record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal (including decimal floating), bare `IdentifierUse`-as-value, represented Boolean operator value, grouping, other operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths beyond the represented alias/member pair, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, method-based, or partial record construction, nor a constructor namespace or separate public-constructor capability;
 - arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; field accessibility beyond the represented module-private/exported direct relation; package/friend/protected accessibility; methods; properties; or associated-item lookup;
