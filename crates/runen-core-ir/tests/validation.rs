@@ -1,9 +1,9 @@
 mod support;
 
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Field, FunctionId, LocalDecl, LocalId, MirValidationErrorKind,
-    Operand, Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value,
-    validate_program,
+    BasicBlock, BasicBlockId, Body, BorrowKind, Field, FunctionId, LoanDecl, LoanId, LocalDecl,
+    LocalId, MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 use support::one_function_program;
 
@@ -329,6 +329,56 @@ fn init_after_drop_reinitializes_vacant_storage() {
     );
 
     validate_program(body).expect("Init may begin a later lifetime after explicit destruction");
+}
+
+#[test]
+fn direct_init_remains_blocked_by_active_loan_after_prior_lifetime_ends() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
+    let value = Place::local(LocalId(0));
+    let body = one_function_program(
+        types,
+        Body {
+            locals: vec![
+                LocalDecl::new("value", i64_ty, false),
+                LocalDecl::new("moved", i64_ty, false),
+            ],
+            loans: vec![LoanDecl::new("exclusive", i64_ty)],
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::I64(1)),
+                    },
+                    Statement::Borrow {
+                        loan: LoanId(0),
+                        kind: BorrowKind::Exclusive,
+                        src: value.clone().into(),
+                    },
+                    Statement::Init {
+                        dst: Place::local(LocalId(1)),
+                        src: Operand::Move(PlaceAccess::loan(LoanId(0))),
+                    },
+                    Statement::Init {
+                        dst: value.clone(),
+                        src: Operand::Constant(Value::I64(2)),
+                    },
+                ],
+                Terminator::Return(None),
+            )],
+        },
+    );
+
+    let error = validate_program(body)
+        .expect_err("ending the stored-value lifetime does not end exclusive loan authority");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::DirectAccessConflict {
+            place: value,
+            loan: LoanId(0),
+        }
+    );
 }
 
 #[test]
