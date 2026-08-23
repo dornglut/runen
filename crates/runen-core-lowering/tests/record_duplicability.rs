@@ -34,7 +34,7 @@ fn source_operands(function: &CoreFunction) -> Vec<&Operand> {
         .flat_map(|block| &block.statements)
         .filter_map(|statement| match statement {
             CoreStatement::Init { src, .. } | CoreStatement::Assign { src, .. } => Some(src),
-            CoreStatement::Drop { .. } | CoreStatement::Read { .. } => None,
+            _ => None,
         })
         .collect()
 }
@@ -71,7 +71,6 @@ fn is_field_copy(
         .iter()
         .map(|projection| match projection {
             Projection::Field(field) => *field,
-            _ => panic!("record duplicability test encountered non-field projection"),
         })
         .collect::<Vec<_>>();
     fields == expected_fields
