@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean and integer literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean, integer, and decimal floating literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -18,7 +18,7 @@ The original spelling or extent of trivia MAY be preserved by source tooling. Su
 
 Identifier-form token extent is determined only by `lexical.md`. Reserved-key classification under this document occurs after the complete maximal identifier-form token and its lexical identifier key have been determined. A longer identifier-form token is never split merely because an initial substring would be a reserved key.
 
-Outside trivia, every source scalar participating in this represented grammar MUST belong to one identifier-form token under `lexical.md`, one decimal-magnitude token defined below, or one represented punctuation token below. The `//`, `/*`, and `*/` sequences participate only in the ordinary-comment rules below. Other non-trivia material is malformed source under this concrete subset.
+Outside trivia, every source scalar participating in this represented grammar MUST belong to one identifier-form token under `lexical.md`, one decimal magnitude or decimal floating magnitude token defined below, or one represented punctuation token below. The `//`, `/*`, and `*/` sequences participate only in the ordinary-comment rules below. Other non-trivia material is malformed source under this concrete subset.
 
 ## Reserved identifier keys
 
@@ -59,17 +59,33 @@ The represented punctuation tokens are exactly:
 
 `->` and `::` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens and `->` is never tokenized as `-` followed by unrepresented `>` material.
 
-The standalone `-` punctuation token participates only in the represented negative decimal integer literal production below. It does not by itself define unary negation, subtraction, or another operator. The `.` punctuation token participates only in the represented `FieldValueUse` production below. It does not define floating-point literal spelling, a general member/postfix system, a method call, field assignment, or another operator. This revision defines no standalone `>` token and no other punctuation or operator token.
+The standalone `-` punctuation token participates only in the represented negative decimal integer and decimal floating literal productions below. It does not by itself define unary negation, subtraction, or another operator.
 
-## Decimal magnitude tokens
+The standalone `.` punctuation token participates only in the represented `FieldValueUse` production below. The decimal point inside one `DecimalFloatingMagnitude` is consumed as interior material of that single decimal token and is therefore not a `.` punctuation token. The standalone punctuation token does not by itself define floating-point literal spelling, a general member/postfix system, a method call, field assignment, or another operator. This revision defines no standalone `>` token and no other punctuation or operator token.
 
-A **decimal magnitude token** is one non-empty maximal contiguous sequence of ASCII decimal digits `0` through `9`.
+## Decimal numeric tokens
 
-When token processing begins at an ASCII decimal digit outside trivia or a comment, the token consumes every immediately following ASCII decimal digit and stops before the first other source scalar or the end of the source unit.
+A **decimal magnitude token** is one non-empty maximal contiguous sequence of ASCII decimal digits `0` through `9`, except when the digit-start selection rule below extends that initial digit run into one decimal floating magnitude token.
 
-Only ASCII decimal digits participate in this token form. Leading zeroes are preserved as concrete spelling and have no radix significance. This token form has no suffix, digit separator, binary/octal/hexadecimal prefix, sign, exponent, or decimal point.
+A **decimal floating magnitude token** is one contiguous token with exactly this lexical shape:
 
-The token establishes only concrete decimal spelling. Its mathematical integer meaning, required-type materialization, and representability rules are owned by `literals.md`.
+```text
+ASCII_DECIMAL_DIGIT+ "." ASCII_DECIMAL_DIGIT+
+```
+
+Its decimal point is token-internal. Trivia or comments cannot occur among the token's digits or on either side of that internal decimal point because doing so would split the token.
+
+When token processing begins at an ASCII decimal digit outside trivia or a comment:
+
+1. consume the maximal initial contiguous ASCII decimal digit run;
+2. if that run is immediately followed by `.` and at least one ASCII decimal digit, consume the `.` and the maximal immediately following ASCII decimal digit run and emit one decimal floating magnitude token; otherwise
+3. emit the initial run as one decimal magnitude token, leaving any later `.` to ordinary punctuation tokenization.
+
+Only ASCII decimal digits participate in either decimal token form. Leading zeroes are preserved as concrete spelling and have no radix significance. A decimal floating magnitude also preserves trailing zeroes in its fractional digit run as concrete spelling.
+
+Neither decimal token form contains a sign, suffix, digit separator, binary/octal/hexadecimal prefix, or exponent. A decimal magnitude contains no decimal point. A decimal floating magnitude contains exactly the one required internal decimal point and requires at least one digit on each side; `.5` and `1.` are therefore not decimal floating magnitude tokens.
+
+The token forms establish only concrete decimal spelling. Their exact mathematical integer or decimal-rational meaning, required-type materialization, representability, and floating formation rules are owned by `literals.md`.
 
 ## Ordinary comments
 
@@ -79,13 +95,13 @@ A **block comment** begins with `/*` outside a line comment and ends at its matc
 
 An unterminated block comment is malformed source.
 
-Comment contents do not form identifiers, reserved keys, decimal magnitude tokens, punctuation tokens, or grammar items. Comments have no Runen program semantics.
+Comment contents do not form identifiers, reserved keys, decimal magnitude tokens, decimal floating magnitude tokens, punctuation tokens, or grammar items. Comments have no Runen program semantics.
 
 This revision defines no documentation-comment category or documentation semantics. Spellings such as `///`, `//!`, or `/**` are ordinary comments when they satisfy the rules above.
 
 ## Grammar notation
 
-The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above. `DecimalMagnitude` denotes one decimal magnitude token as defined above.
+The productions below use quoted text for reserved keys or punctuation, `?` for an optional element, `*` for zero or more repetitions, and `|` for alternatives. `UserIdentifier` denotes one user identifier as defined above. `DecimalMagnitude` denotes one decimal magnitude token as defined above. `DecimalFloatingMagnitude` denotes one decimal floating magnitude token as defined above.
 
 Trivia MAY occur around and between the tokens shown by these productions. Line boundaries have no statement-termination role. Semicolons are required exactly where a grammar production includes `;`; a represented `BlockStatement`, `IfStatement`, or `WhileStatement` terminates at its final closing `}` and has no trailing semicolon.
 
@@ -230,6 +246,7 @@ IfStatement =
 ConditionalValue =
     BooleanLiteral
   | DecimalIntegerLiteral
+  | DecimalFloatingLiteral
   | IdentifierUse
   | DirectCall
   | FieldValueUse
@@ -239,7 +256,7 @@ ConditionalValue =
 
 This exclusion is part of normative concrete grammar. The unqualified record-construction form begins with `UserIdentifier "{"`; admitting unrestricted `Value` immediately after `if` would therefore make a spelling such as `if flag { ... }` collide with the record-construction token shape. Under the grammar above, the bare `flag` is one `IdentifierUse` conditional value and the following `{ ... }` begins the then `BlockStatement`. No semantic lookup, inferred type, or parser-only context rule is needed to choose that structure. The exclusion applies equally to a standalone qualified construction; qualification does not create a second conditional producer category.
 
-A decimal integer literal remains syntactically represented as a `ConditionalValue`. Exact condition typing is owned by `control-flow.md`; a decimal integer therefore remains a syntax-valid conditional spelling but is source-invalid when it cannot produce the exact intrinsic `Bool` type. Concrete grammar does not encode that type error.
+Decimal integer and decimal floating literals remain syntactically represented as `ConditionalValue` forms. Exact condition typing is owned by `control-flow.md`; either numeric literal therefore remains a syntax-valid conditional spelling but is source-invalid because it cannot produce the exact intrinsic `Bool` type. Concrete grammar does not encode that type error.
 
 A `DirectCall` conditional value retains both its represented unqualified and `alias::member(...)` target forms. A `FieldValueUse` may use either its binding-root or bounded producer-backed receiver grammar. All lookup, receiver-transient, and producer rules remain owned by their existing semantic owners.
 
@@ -333,7 +350,7 @@ The top scrutinee alternatives remain classifiable from their complete token sha
 
 This recursive pattern form introduces no new reserved key or punctuation. It remains distinguished from `LocalDeclaration` after `let` by concrete token shape: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form; `UserIdentifier "{"` begins an unqualified record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified record pattern. This classification uses bounded token lookahead only and does not consult module lookup or source types.
 
-Boolean and decimal integer literals are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, operator expression, conversion, arbitrary postfix/member expression, qualified bare module member, or other general `Value` form is admitted as a record-pattern scrutinee.
+Boolean, decimal integer, and decimal floating literals are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, operator expression, conversion, arbitrary postfix/member expression, qualified bare module member, or other general `Value` form is admitted as a record-pattern scrutinee.
 
 Complete recursive pattern validation, binding-leaf ordering, producer evaluation ordering, transient structural ownership/cleanup, grouped binding establishment, and fault/divergence behavior are owned by `patterns.md`, `field-access.md`, `structural-ownership.md`, and `function-execution.md`.
 
@@ -458,7 +475,7 @@ At least one selector is required after either receiver category. Consequently:
 - a bare `DirectCall` remains the existing direct-call producer; and
 - a bare `RecordConstruction` remains the existing construction producer.
 
-A producer-backed field receiver does not admit an arbitrary `Value`. Boolean/decimal literals, a bare `IdentifierUse` as an expression receiver, parenthesized/grouped values, general expressions, methods, references, places, or another universal postfix receiver category are not represented. A qualified call is available only because `QualifiedModuleMember` is already one `DirectCallTarget`; a qualified construction is available only because that same bounded two-part form is now one `RecordConstructionTarget`. A qualified bare module member does not become a field receiver by itself.
+A producer-backed field receiver does not admit an arbitrary `Value`. Boolean, decimal integer, and decimal floating literals, a bare `IdentifierUse` as an expression receiver, parenthesized/grouped values, general expressions, methods, references, places, or another universal postfix receiver category are not represented. A qualified call is available only because `QualifiedModuleMember` is already one `DirectCallTarget`; a qualified construction is available only because that same bounded two-part form is now one `RecordConstructionTarget`. A qualified bare module member does not become a field receiver by itself.
 
 A selector chain such as `make().outer.inner` is one `ProducerFieldValueUse` with one complete receiver producer and one static selector sequence. It does not recursively reinterpret each intermediate field result as a new arbitrary expression receiver.
 
@@ -468,21 +485,22 @@ Exact receiver result-type selection, direct record-field accessibility at every
 
 The same `.` selector spelling represents both duplicate and consume outcomes. No second move/extract token is introduced.
 
-The `.` token in this production has no decimal-literal, method, assignment, reference, place/lvalue, general postfix/member, or other operator meaning.
+The `.` punctuation token in this production has no decimal-literal, method, assignment, reference, place/lvalue, general postfix/member, or other operator meaning. The decimal point inside a `DecimalFloatingMagnitude` is instead part of that one decimal token and never reaches this punctuation production.
 
 ## Value forms
 
 ```text
 Value                 = Literal | IdentifierUse | DirectCall | RecordConstruction | FieldValueUse
-Literal               = BooleanLiteral | DecimalIntegerLiteral
+Literal               = BooleanLiteral | DecimalIntegerLiteral | DecimalFloatingLiteral
 BooleanLiteral        = "true" | "false"
 DecimalIntegerLiteral = "-"? DecimalMagnitude
+DecimalFloatingLiteral = "-"? DecimalFloatingMagnitude
 IdentifierUse         = UserIdentifier
 ```
 
-The represented literal forms map to `literals.md`. `true` and `false` denote the boolean literal forms owned there. A `DecimalIntegerLiteral` supplies its concrete sign and decimal magnitude to the exact mathematical-integer and required-type materialization relation owned there. This grammar does not assign an integer default type, abstract literal type, conversion, or arithmetic semantics.
+The represented literal forms map to `literals.md`. `true` and `false` denote the boolean literal forms owned there. A `DecimalIntegerLiteral` supplies its concrete sign and decimal magnitude to the exact mathematical-integer and required-type materialization relation owned there. A `DecimalFloatingLiteral` supplies its concrete sign and one contiguous decimal floating magnitude token to the exact decimal-rational and required-type floating materialization relation owned there. This grammar does not assign an integer or floating default type, abstract literal type, conversion, or arithmetic semantics.
 
-The optional `-` in `DecimalIntegerLiteral` is part of this literal grammar only. It does not establish a unary-negation expression or subtraction operator. Because it and `DecimalMagnitude` are distinct grammar tokens, ordinary trivia may occur between them under the general trivia rule above without changing the denoted signed decimal literal form.
+The optional `-` in either represented numeric literal is part of that literal grammar only. Because the sign and following magnitude are distinct grammar tokens, ordinary trivia may occur between them under the general trivia rule above. No trivia may occur inside `DecimalFloatingMagnitude` because it is one token, including around its token-internal decimal point. These forms do not establish a unary-negation expression or subtraction operator.
 
 An `IdentifierUse` maps to ordinary whole-binding owned-value use under `local-bindings.md`. Its identifier is resolved using the function-local lookup precedence owned there. In this subset, the selected entity MUST be a parameter or ordinary local binding whose complete structural root is fully available under `structural-ownership.md`; another selected entity category does not become a value merely because the context requires one.
 
@@ -496,7 +514,7 @@ A qualified module member without a direct-call argument list, record-constructi
 
 The represented `FaultStatement` is not admitted by `Value` or `ConditionalValue` and does not create a produced-value category.
 
-This subset has no floating, string, byte, character, aggregate, pointer, or other additional literal form; grouping expression; general unary or binary operator; conversion; arbitrary-receiver member/postfix access beyond the bounded field receiver categories above; assignment expression; block expression; closure; or other value form beyond the represented producers above.
+This subset has no string, byte, character, aggregate, pointer, or other additional literal form; no scientific-notation, hexadecimal/binary/octal floating form, explicit infinity/NaN literal, `.5`/`1.` floating shorthand, suffix, separator, alternate numeric radix, or leading-plus numeric form; no grouping expression; no general unary or binary operator; no conversion; no arbitrary-receiver member/postfix access beyond the bounded field receiver categories above; no assignment expression; no block expression; no closure; and no other value form beyond the represented producers above.
 
 ## Returns and normal completion
 
@@ -548,13 +566,13 @@ The two-part qualification syntax is reused only in the explicitly represented t
 
 This revision does not define:
 
-- floating, string, byte, character, or other literal syntax beyond represented boolean and signed decimal integer forms, nor literal suffixes, separators, alternate radices, or decimal-point forms;
+- string, byte, character, or other literal syntax beyond the represented boolean, signed decimal integer, and bounded decimal floating forms; decimal scientific notation; hexadecimal/binary/octal floating notation; `.5`/`1.` floating shorthand; explicit infinity or NaN spellings; literal suffixes or digit separators; alternate numeric radices; or a leading-plus numeric form;
 - arithmetic, comparison, logical, compound-assignment, general unary-negation, subtraction, or other operator forms;
 - grouping or general expression grammar;
 - assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, destructuring assignment, or general place/lvalue syntax beyond represented whole-binding assignment;
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
 - conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, labels, `break`, `continue`, loop values, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch/recovery, or other control-transfer forms beyond represented statement-level `if`, bounded statement-level `while`, terminal return, and payload-free explicit `fault;`;
-- record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal, bare `IdentifierUse`-as-value, grouping, operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
+- record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal (including decimal floating), bare `IdentifierUse`-as-value, grouping, operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths beyond the represented alias/member pair, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, method-based, or partial record construction, nor a constructor namespace or separate public-constructor capability;
 - arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; field accessibility beyond the represented module-private/exported direct relation; package/friend/protected accessibility; methods; properties; or associated-item lookup;

@@ -160,11 +160,9 @@ This capability reflects the conceptual distinction between ownership transfer a
 
 ## Literal and conversion boundary
 
-[Source literal semantics](literals.md) owns represented boolean literal values and required-type materialization of signed decimal integer literals into the fixed-width domains defined here. This type foundation supplies value domains; it does not redefine literal spelling, contextual materialization, representability diagnostics, or owned-value production.
+[Source literal semantics](literals.md) owns represented boolean literal values, required-type materialization of signed decimal integer literals into the fixed-width integer domains defined here, and required-type materialization of represented decimal floating literals into the `F16`/`F32`/`F64` semantic formats defined here. This type foundation supplies source type identities, integer value domains, and floating format parameters; it does not redefine literal spelling, contextual materialization, integer representability diagnostics, decimal-rational interpretation, floating rounding, or owned-value production.
 
-No source floating literal form/materialization relation is defined by this revision.
-
-This document defines no abstract/unbounded integer/float literal type, default literal type, literal suffix semantics, or compile-time-only numeric type. Context-typed integer literal materialization adds no source type.
+This document defines no abstract/unbounded integer/float literal type, default literal type, literal suffix semantics, or compile-time-only numeric type. Context-typed integer or floating literal materialization adds no source type.
 
 This document grants no implicit conversion/coercion/promotion/widening/narrowing/subtyping/numeric defaulting relation between represented source types. Literal materialization is not conversion because the literal datum has no prior concrete source type.
 
@@ -206,6 +204,6 @@ Proving-kernel copyability, path state, scalar liveness, or interior-mutability 
 
 The concrete intrinsic/record forms do not themselves define literal semantics, additional refutable/rest/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
 
-Represented boolean/integer literal semantics are owned by `literals.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; and recursive exhaustive record destructuring by `patterns.md`.
+Represented boolean, decimal integer, and decimal floating literal semantics are owned by `literals.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; and recursive exhaustive record destructuring by `patterns.md`.
 
 Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities/relations defined here.
