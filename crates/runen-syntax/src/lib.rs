@@ -106,6 +106,9 @@ pub enum SyntaxKind {
     ContinueStatement,
     Bang,
     BooleanNotValue,
+    EqEq,
+    BangEq,
+    BooleanEqualityValue,
 }
 
 impl SyntaxKind {
@@ -246,6 +249,9 @@ impl Language for RunenLanguage {
             81 => SyntaxKind::ContinueStatement,
             82 => SyntaxKind::Bang,
             83 => SyntaxKind::BooleanNotValue,
+            84 => SyntaxKind::EqEq,
+            85 => SyntaxKind::BangEq,
+            86 => SyntaxKind::BooleanEqualityValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
