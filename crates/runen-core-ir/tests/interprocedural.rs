@@ -1333,6 +1333,7 @@ fn branch_condition_ub_creates_no_successor_work_item() {
             ],
         ),
     };
+
     validate_program(Program {
         types,
         functions: vec![function],
