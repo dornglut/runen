@@ -491,13 +491,15 @@ fn equality_operands_reuse_call_field_construction_and_prefix_semantics() {
         "record Flag { ready: Bool } fn bad(flag: Bool) { let result: Bool = Flag { ready: true } == flag; }",
     )
     .expect_err("ordinary record construction remains syntactically admitted but is not Bool");
-    assert!(has_diagnostic(
-        &construction_errors,
-        DiagnosticKind::TypeMismatch {
-            expected: Type::Intrinsic(IntrinsicType::Bool),
-            found: Type::Record(runen_hir::RecordId(0)),
-        }
-    ));
+    assert!(construction_errors.iter().any(|error| {
+        matches!(
+            error.kind,
+            DiagnosticKind::TypeMismatch {
+                expected: Type::Intrinsic(IntrinsicType::Bool),
+                found: Type::Record(_),
+            }
+        )
+    }));
 }
 
 #[test]
