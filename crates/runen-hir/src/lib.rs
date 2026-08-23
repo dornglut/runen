@@ -296,12 +296,24 @@ pub enum RecordPatternScrutinee {
     },
 }
 
+/// Retained source-semantic relation for represented Boolean equality values.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BooleanEqualityRelation {
+    Equal,
+    NotEqual,
+}
+
 /// Resolved producer for one typed HIR value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
     Literal(LiteralValue),
     BooleanNot {
         operand: Box<Value>,
+    },
+    BooleanEquality {
+        relation: BooleanEqualityRelation,
+        left: Box<Value>,
+        right: Box<Value>,
     },
     BindingUse {
         binding: BindingId,
