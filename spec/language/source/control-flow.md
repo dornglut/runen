@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for statement-level conditional and bounded-loop control flow: condition admission and selection, validation of represented outcomes, explicit child lexical-scope composition, conditional omitted-else behavior, conditional normal-continuation composition, bounded-`while` backedge admission, definite structural ownership at represented normal successors, and the source-to-Core control-flow refinement boundary.
+This document owns the represented source semantics for statement-level conditional and bounded-loop control flow: condition admission and selection, validation of represented outcomes, explicit child lexical-scope composition, conditional omitted-else behavior, conditional local normal-continuation composition, bounded-`while` backedge admission, bounded unlabeled `break`/`continue` target and target-state admission, definite structural ownership at represented normal successors, and the source-to-Core control-flow refinement boundary.
 
-It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); producer-backed field-value result typing and validation from [Source field-value access](field-access.md); owned-value producers, producer evaluation, lexical-block execution, normal-continuation presence, return execution, explicit-fault execution, cleanup, defined-fault propagation, bounded-loop body execution sequencing, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, assignment mutability, and binding structural lifecycle from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md); and vacant non-replacing initialization/result-destination admission from [Core value and storage semantics](../core/value-storage.md) and [Core functions](../core/functions.md). Concrete `if`/`else`/`while` spelling and the represented `ConditionalValue` grammar are owned by [Source concrete syntax](concrete-syntax.md).
+It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); producer-backed field-value result typing and validation from [Source field-value access](field-access.md); owned-value producers, producer evaluation, lexical-block execution, local normal-continuation presence, return execution, explicit-fault execution, loop-transfer cleanup, lexical cleanup, defined-fault propagation, bounded-loop body execution sequencing, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, assignment mutability, and binding structural lifecycle from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md); and vacant non-replacing initialization/result-destination admission from [Core value and storage semantics](../core/value-storage.md) and [Core functions](../core/functions.md). Concrete `if`/`else`/`while`/`break`/`continue` spelling and the represented `ConditionalValue` grammar are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not redefine owned-value producer semantics, field-receiver semantics, return execution, explicit-fault execution, structural path/state mathematics, binding scope/mutability rules, lexical cleanup order, fault cleanup, Core path state, Core value/storage semantics, or concrete grammar.
+This document does not redefine owned-value producer semantics, field-receiver semantics, return execution, explicit-fault execution, structural path/state mathematics, binding scope/mutability rules, lexical cleanup order, fault cleanup, loop-transfer cleanup ordering, Core path state, Core value/storage semantics, or concrete grammar.
 
 ## Represented conditional statement
 
@@ -20,7 +20,7 @@ The concrete form is owned by `concrete-syntax.md`.
 
 A represented conditional is a statement. It produces no source value, introduces no Unit/Void value, and is not an owned-value producer.
 
-This revision defines no conditional expression, direct `else if` form, pattern condition, guard, match, catch, label, break, continue, or unrestricted nonterminal-within-block return. The separately represented bounded `while` relation is defined below; no other loop form is implied by conditional semantics.
+This revision defines no conditional expression, direct `else if` form, pattern condition, guard, match, catch, label, or unrestricted nonterminal-within-block return. The separately represented bounded `while` and bounded unlabeled loop-transfer relations are defined below; no other loop or transfer form is implied by conditional semantics.
 
 ## Conditional-value admission
 
@@ -65,7 +65,7 @@ In particular:
 - a condition spelled as the literal `true` does not exempt the false outcome—explicit else arm or omitted-else outcome—from source validity; and
 - a condition spelled as the literal `false` does not exempt the then arm from source validation.
 
-An explicit arm that contains a represented terminal return or explicit `fault;` is still validated in full even when a constant condition would prevent that arm from executing in one concrete run.
+An explicit arm that contains a represented terminal return, explicit `fault;`, or source-valid loop transfer is still validated in full even when a constant condition would prevent that arm from executing in one concrete run.
 
 This is a source-validity rule. It does not assert that both outcomes execute in one concrete activation and does not create an unknown or three-valued Bool.
 
@@ -85,7 +85,7 @@ When execution reaches one represented conditional statement:
 
 A producer-backed field-value condition reaches step 3 only after its complete producer-specific field-receiver lifecycle has finished under `function-execution.md`; this conditional relation does not define a second receiver lifecycle.
 
-Conditional selection itself performs no additional binding read, move, duplicate, assignment, structural consumption, cleanup, call, fault selection, return, or hidden source state transition beyond ending ownership of the successful Bool condition transient used for selection.
+Conditional selection itself performs no additional binding read, move, duplicate, assignment, structural consumption, cleanup, call, fault selection, return, loop transfer, or hidden source state transition beyond ending ownership of the successful Bool condition transient used for selection.
 
 The represented condition is therefore evaluated once even though source validation considers both outcomes.
 
@@ -100,7 +100,7 @@ If condition evaluation yields one defined fault `F` before successful Bool prod
 
 The conditional statement does not add a second fault cleanup boundary.
 
-A condition producer's ability to yield a defined fault is a dynamic execution possibility. It does not by itself change the conditionally selected arms' static normal-continuation classification.
+A condition producer's ability to yield a defined fault is a dynamic execution possibility. It does not by itself change the conditionally selected arms' static local normal-continuation classification.
 
 ## Condition divergence
 
@@ -108,11 +108,11 @@ If condition evaluation diverges before successful Bool production:
 
 - no explicit conditional arm begins;
 - no conditional normal successor is selected; and
-- no lexical-scope, activation, or conditional cleanup occurs merely because execution remains suspended.
+- no lexical-scope, activation, conditional, or loop-transfer cleanup occurs merely because execution remains suspended.
 
 Producer-owned transients and completed ownership transitions persist exactly as required by their existing owners.
 
-Divergence is likewise a dynamic execution possibility and does not create a static no-normal outcome for an otherwise normally continuable represented construct.
+Divergence is likewise a dynamic execution possibility and does not create a static no-local-normal outcome for an otherwise normally continuable represented construct.
 
 ## Explicit arm lexical scopes
 
@@ -126,14 +126,14 @@ Consequently:
 - bindings introduced in one arm do not survive the normal end of that arm;
 - sibling arms MAY independently introduce the same lexical identifier key because their scopes do not overlap;
 - neither arm may introduce a key that illegally shadows an active enclosing function-local binding;
-- ordinary locals, record-pattern bindings, nested blocks, assignments, calls, explicit fault statements, represented bounded `while`, and the arm's optional terminal return retain their existing semantics; and
+- ordinary locals, record-pattern bindings, nested blocks, assignments, calls, explicit fault statements, represented bounded `while`, source-valid bounded `break;`/`continue;`, and the arm's optional terminal return retain their existing semantics; and
 - nested represented conditionals may occur because `IfStatement` is itself a represented body statement inside an arm block.
 
 This document does not create an abstract source-visible branch-scope identity beyond the ordinary child lexical scopes already owned by `local-bindings.md`.
 
 ## Explicit arm normal completion
 
-When an explicit arm has a normal continuation and the selected execution reaches that normal completion:
+When an explicit arm has a local normal continuation and the selected execution reaches that normal completion:
 
 1. finish its contained body-statement sequence under `function-execution.md`;
 2. normally exit that child lexical scope;
@@ -146,7 +146,7 @@ Normal cleanup of one arm does not itself clean or reset enclosing bindings mere
 
 ## Explicit arm return and explicit fault
 
-When source validation determines that an explicit arm has no normal continuation because every represented static path through that arm terminates the current source function activation by a represented return and/or explicit `fault;`, that arm contributes no normal enclosing outcome to the conditional.
+When source validation determines that an explicit arm has no local normal continuation, that arm contributes no normal enclosing outcome to the conditional. Return and explicit fault are activation-terminating ways to establish such an outcome; bounded loop transfers are handled separately below.
 
 At runtime, when the selected arm reaches a represented return:
 
@@ -167,19 +167,34 @@ At runtime, when the selected arm reaches represented `fault;`:
 
 A path that explicitly faults may therefore reach the fault statement with an enclosing binding fully available, partially consumed, or unavailable according to preceding source-valid operations. That state does not have to equal a normal sibling outcome because the explicitly faulting path contributes no normal successor state.
 
-These rules do not introduce path-dependent ownership at a normal successor because return and explicit-fault terminations contribute no normal successor state.
+These rules do not introduce path-dependent ownership at a normal successor because activation-terminating paths contribute no normal successor state.
+
+## Explicit arm loop transfer
+
+A source-valid `break;` or `continue;` reached inside an explicit conditional arm likewise gives that execution no **local** normal arm outcome, but it does not terminate the function activation merely for that reason.
+
+The transfer statement independently selects the nearest enclosing represented `while` and MUST satisfy the applicable exact target-state rule below before the containing conditional can be source-valid. Its exited-scope cleanup is owned by `function-execution.md` and includes the active arm scope plus every intervening active child scope through the target loop body scope.
+
+The transfer path contributes no normal enclosing environment to the conditional's ordinary local successor composition. Consequently:
+
+- one transfer arm and one locally normal arm leave the normal arm as the conditional's sole normal outcome;
+- both explicit arms transferring leave the conditional with no local normal continuation, including when one arm breaks and the other continues;
+- an omitted else remains one normal false outcome, so a transfer-only then arm with omitted else leaves that false outcome as the sole normal successor; and
+- a transfer arm's enclosing structural state is not compared with a normal sibling merely to form a conditional join, because the transfer has already proved exact validity at its loop target.
+
+The conditional does not merge break and continue destinations, create an abrupt-completion lattice, or reconstruct their target facts from lower CFG edges. Their distinct retained statements and nearest-loop lexical context remain sufficient for faithful lowering.
 
 ## Producer-originating arm fault and divergence
 
-If execution of an accepted producer or other operation inside the selected arm yields a defined fault before the represented successful statement structure reaches its normal continuation, that concrete execution produces no normal enclosing outcome.
+If execution of an accepted producer or other operation inside the selected arm yields a defined fault before the represented successful statement structure reaches its local normal continuation or loop transfer, that concrete execution produces no normal enclosing outcome.
 
 The active child scope participates exactly once in the existing activation fault cleanup from `function-execution.md`. It does not first perform independent normal arm cleanup and then fault cleanup.
 
-Such a producer-originating fault possibility does **not** by itself remove the arm's static normal continuation. Static completion follows the represented statement/control structure under `function-execution.md`; a producer that may fault dynamically still contributes its ordinary successful continuation when one is represented.
+Such a producer-originating fault possibility does **not** by itself remove the arm's static local normal continuation. Static completion follows the represented statement/control structure under `function-execution.md`; a producer that may fault dynamically still contributes its ordinary successful continuation when one is represented.
 
-If execution inside the selected arm diverges, that concrete execution produces no runtime normal outcome and performs no normal arm or successor cleanup merely because execution remains suspended.
+If execution inside the selected arm diverges, that concrete execution produces no runtime normal outcome and performs no normal arm, successor, or loop-transfer cleanup merely because execution remains suspended.
 
-Divergence likewise does not alter static normal-continuation presence under this revision. The represented explicit `fault;` statement is different: it is a static no-normal body statement because its successful execution is exactly defined-fault termination rather than an ordinary continuation.
+Divergence likewise does not alter static local normal-continuation presence under this revision. The represented explicit `fault;`, `break;`, and `continue;` statements are different: successful execution of each has no local fallthrough by definition.
 
 ## Omitted else
 
@@ -205,22 +220,24 @@ Let `E` be the post-condition function-local binding environment.
 
 Each explicit arm is source-validated from its own copy of `E`. An omitted else uses unchanged `E` as its normal false outcome.
 
-After normal completion and local cleanup of an explicit arm that has a normal continuation, its normal outcome contains only the binding identities belonging to `E`. An arm with no normal continuation contributes no enclosing environment for normal-successor composition.
+After normal completion and local cleanup of an explicit arm that has a local normal continuation, its normal outcome contains only the binding identities belonging to `E`. An arm with no local normal continuation contributes no enclosing environment for normal-successor composition; its return, explicit fault, or loop transfer follows its own target relation.
 
 Binding identity, declared type, and assignment-mutability classification are unchanged by conditional branching itself. Where two normal outcomes meet, the conditional therefore compares each enclosing binding's structural ownership state.
 
-## Conditional normal-continuation composition
+## Conditional local normal-continuation composition
 
-After both represented outcomes have been source-validated, compose only their **normal** outcomes:
+After both represented outcomes have been source-validated, compose only their **local normal** outcomes:
 
 - **two normal outcomes:** the conditional has a normal successor only when the exact structural-ownership-state equality rule below succeeds for every binding in `E`; the equal common state is the one definite normal successor;
-- **exactly one normal outcome:** that sole outcome is the conditional's one definite normal successor without any ownership-equality comparison against the no-normal outcome;
-- **zero normal outcomes:** the conditional has no normal continuation and no normal join; and
+- **exactly one normal outcome:** that sole outcome is the conditional's one definite normal successor without any ownership-equality comparison against the no-local-normal outcome;
+- **zero normal outcomes:** the conditional has no local normal continuation and no normal join; and
 - **omitted else:** the false outcome is always normal, so a conditional without explicit else always has at least one normal outcome.
 
-This is only composition of the two-case normal-continuation-presence relation from `function-execution.md`. It introduces no source state set, completion lattice, maybe-owned state, implicit cleanup edge, or runtime completion tag.
+This is only composition of the local-fallthrough relation from `function-execution.md`. It introduces no source state set, completion lattice, maybe-owned state, implicit cleanup edge, or runtime completion tag.
 
 A sole normal outcome is not a union, intersection, widening, or normalization of branch states. It is exactly the enclosing environment produced by that one normally completing outcome after its ordinary arm-local cleanup.
+
+A zero-local-normal conditional does not by itself imply function-activation termination. It may be activation-terminating when all paths return/fault, or it may occur inside a represented loop where all paths perform source-valid loop transfers. The enclosing control owner determines those destinations.
 
 ## Exact structural-ownership state equality for two normal outcomes
 
@@ -237,7 +254,7 @@ When two normal outcomes exist and any enclosing binding has unequal normal outc
 
 The equality requirement is semantic equality of source structural state. It is not equality of runtime scalar values, record values, Core local state, parser nodes, HIR data structures, compiler hashes, or physical storage.
 
-No equality comparison is performed between a normal outcome and an outcome that has no normal continuation because its represented static path terminates by return and/or explicit fault.
+No equality comparison is performed between a normal outcome and an outcome that has no local normal continuation. A return, explicit fault, or loop transfer instead obeys its independently established destination/cleanup relation.
 
 ## Definite-state consequences
 
@@ -249,7 +266,7 @@ If both normal outcomes consume the complete root of the same enclosing non-dupl
 
 If two normal outcomes exist and one consumes the complete root while the other leaves it fully available, the states differ and the conditional is source-invalid.
 
-A no-normal outcome may independently reach its terminating return or explicit fault after consuming that complete root; it contributes no normal state to compare against a sole normal sibling.
+A no-local-normal outcome is not compared against a normal sibling. Return/fault cleanup or a source-valid loop-transfer target relation consumes that path's actual then-current state as applicable.
 
 ### Equal partial consumption
 
@@ -259,7 +276,7 @@ If two normal outcomes leave different consumed sibling or nested paths, the sta
 
 No structural similarity, equal remaining-frontier shape, or equal number of consumed paths substitutes for exact consumed-path-set equality.
 
-A no-normal outcome may independently reach its terminating return or explicit fault after consuming a different valid structural path; its applicable termination cleanup handles that state rather than normalizing it toward a normal sibling.
+A no-local-normal outcome may independently reach its return/fault/loop-transfer destination after different valid structural operations; the applicable destination relation handles that path rather than normalizing it toward a normal sibling.
 
 ### Duplicable uses
 
@@ -287,7 +304,7 @@ With no explicit else arm, the false normal outcome is the unchanged post-condit
 
 When the then arm also completes normally, its normal enclosing structural ownership state MUST equal that unchanged post-condition state for every enclosing binding. Therefore a normally completing then arm may not leave one enclosing binding consumed or partially consumed unless condition evaluation had already established exactly that same state before both outcomes were split or accepted operations inside the then arm restore the post-condition state before normal completion.
 
-When the then arm has no normal continuation because every represented static path through it terminates by return and/or explicit fault, the omitted-else false outcome is the sole normal successor and no ownership equality is required against that no-normal then arm.
+When the then arm has no local normal continuation, the omitted-else false outcome is the sole normal successor and no ownership equality is required against that then arm. The then path independently obeys return, fault, or loop-transfer validity as applicable.
 
 ### Zero-field and zero-leaf values
 
@@ -299,11 +316,11 @@ Their source ownership state MUST NOT be inferred from whether a Core representa
 
 After a conditional with one valid normal successor, every represented enclosing binding has exactly one committed structural ownership state: either the equal state of two normal outcomes or the exact state of the sole normal outcome.
 
-Subsequent whole-binding use, field-value use, record-pattern use, assignment, nested conditional, bounded `while`, lexical cleanup, return cleanup, or fault cleanup consumes that one ordinary state through its existing source owner.
+Subsequent whole-binding use, field-value use, record-pattern use, assignment, nested conditional, bounded `while`, lexical cleanup, return cleanup, loop transfer, or fault cleanup consumes that one ordinary state through its existing source owner.
 
 No post-successor operation performs a second conditional-state analysis merely because the value was previously used inside a represented conditional.
 
-A conditional with zero normal outcomes admits no subsequent statement in the same containing sequence under `function-execution.md`.
+A conditional with zero local normal outcomes admits no subsequent statement in the same containing sequence under `function-execution.md`; any source-valid non-local destinations are already represented by its selected return/fault/loop-transfer paths.
 
 ## No implicit join normalization
 
@@ -323,11 +340,11 @@ When exactly one normal outcome exists, using that outcome directly is not norma
 
 This avoids introducing path-specific source destruction timing as an implicit consequence of merely reaching a branch successor.
 
-## No conditional ownership flags
+## No conditional ownership or completion flags
 
-This revision introduces no source drop flag, runtime moved-state flag, hidden path tag, conditional cleanup bit, or source-visible ownership test.
+This revision introduces no source drop flag, runtime moved-state flag, hidden path tag, conditional cleanup bit, runtime completion tag, or source-visible ownership test.
 
-Every binding that reaches a represented normal continuation has one definite structural ownership state fixed statically by the rules above.
+Every binding that reaches a represented normal continuation has one definite structural ownership state fixed statically by the rules above. Loop-transfer destinations likewise require one exact statically established target state rather than a runtime ownership classification.
 
 Future source control-flow forms or later extensions may introduce additional accepted relations only through their own normative changes. Their existence MUST NOT retroactively alter the semantics of two-normal-outcome conditionals already accepted by the exact-state relation.
 
@@ -335,7 +352,7 @@ Future source control-flow forms or later extensions may introduce additional ac
 
 A concrete source execution with condition value `true` executes only the then arm. A concrete source execution with condition value `false` executes only the false outcome.
 
-Source validation nevertheless validates both represented outcomes and computes each arm's normal-continuation presence independently of that concrete Bool value. When both outcomes are normal, the exact-state equality requirement applies to both even for a constant condition. When only one outcome is normal, it is the sole static normal successor even if a particular constant Bool execution selects the no-normal outcome instead.
+Source validation nevertheless validates both represented outcomes and computes each arm's local normal-continuation presence independently of that concrete Bool value. When both outcomes are normal, the exact-state equality requirement applies to both even for a constant condition. When only one outcome is normal, it is the sole static normal successor even if a particular constant Bool execution selects a no-local-normal return/fault/transfer outcome instead.
 
 This difference between runtime selection and conservative source validation does not introduce nondeterministic source execution.
 
@@ -343,9 +360,9 @@ This difference between runtime selection and conservative source validation doe
 
 A represented conditional may occur inside any explicit arm block because it is a body statement under `concrete-syntax.md`.
 
-The inner conditional independently establishes zero or one definite normal successor by the composition rules above. If it has one, the containing arm may continue from exactly that state. If it has none, no later statement or terminal return in that same arm sequence is source-valid.
+The inner conditional independently establishes zero or one definite local normal successor by the composition rules above. If it has one, the containing arm may continue from exactly that state. If it has none, no later statement or terminal return in that same arm sequence is source-valid; any represented return/fault/loop-transfer destination remains independently controlling.
 
-Consequently, nested conditionals compose recursively through normal-continuation presence without a general source CFG or state-set relation.
+Consequently, nested conditionals compose recursively through local normal-continuation presence without a general source CFG or state-set relation.
 
 This revision defines no direct `else if` grammar. Equivalent nested selection may be written only through the represented explicit block nesting admitted by `concrete-syntax.md`.
 
@@ -353,7 +370,7 @@ This revision defines no direct `else if` grammar. Equivalent nested selection m
 
 One represented source `while` statement consists of exactly one represented `ConditionalValue` and exactly one explicit body `BlockStatement` under `concrete-syntax.md`.
 
-The `while` is statement-only. It produces no source value, introduces no Unit/Void value, and is not an owned-value producer. It has no represented `else`, `break`, `continue`, label, result value, iteration binding, pattern condition, iterator protocol, or unconditional-loop form.
+The `while` is statement-only. It produces no source value, introduces no Unit/Void value, and is not an owned-value producer. It has no represented `else`, label, result value, iteration binding, pattern condition, iterator protocol, or unconditional-loop form. Its body may contain the bounded unlabeled `break;` and `continue;` statements defined below.
 
 The condition consumes the exact same admission/type/producer relation defined above: its result type MUST be exactly intrinsic `Bool`, standalone record construction remains excluded by grammar, and all existing producer validation and transactional ownership rules apply unchanged.
 
@@ -371,17 +388,17 @@ The represented false outcome is always one static normal outcome carrying exact
 
 The represented true outcome validates the explicit body from a semantically identical copy of `C` as one ordinary child lexical block under `local-bindings.md` and `function-execution.md`.
 
-Condition evaluation introduces no new function-local binding identity. Consequently every enclosing identity in `H` is present in `C` and remains present after ordinary normal completion/cleanup of the body. Body-local bindings have ended before any backedge comparison.
+Condition evaluation introduces no new function-local binding identity. Consequently every enclosing identity in `H` is present in `C` and remains present after ordinary normal completion/cleanup of the body or after an admitted loop transfer. Body-local bindings end before ordinary backedge comparison or as part of transfer cleanup and are not target-state dimensions.
 
 ## While normal-backedge admission
 
-If the body has a normal continuation, the `while` admits that normal outcome as a backedge **only** when every enclosing binding identity from `H` has exactly the same structural ownership state after ordinary body-scope normal cleanup as it had in `H`.
+If the body has a local normal continuation, the `while` admits that normal outcome as a backedge **only** when every enclosing binding identity from `H` has exactly the same structural ownership state after ordinary body-scope normal cleanup as it had in `H`.
 
 For one binding, equality is exactly equality of the prefix-free consumed-path set under `structural-ownership.md`. Binding identity, declared source type, and assignment-mutability classification are required to remain the same enclosing facts and are not reconstructed or merged.
 
 The comparison is deliberately against `H`, not `C`. The condition will execute again after a normal backedge; therefore the body must restore whatever enclosing structural ownership the next condition evaluation requires to begin from the same accepted loop-head state. A condition may itself transform `H` to a different `C` each iteration through its existing producer ownership consequences.
 
-If any enclosing binding's normal post-body structural ownership state differs from its state in `H`, the `while` is source-invalid with no admitted backedge and no committed post-loop state.
+If any enclosing binding's normal post-body structural ownership state differs from its state in `H`, the `while` is source-invalid with no admitted ordinary backedge and no committed post-loop state.
 
 This is exact state equality, not equality of runtime values. A mutable enclosing binding may therefore hold a different runtime value after the body while still satisfying the backedge when its structural ownership state equals `H`.
 
@@ -389,15 +406,78 @@ A successful represented whole-binding assignment may explicitly restore complet
 
 A body-local binding never participates in this equality because ordinary normal body-scope cleanup ends it before comparison. Re-entering the same static body on a later dynamic iteration does not create a new source binding identity; it creates a new dynamic value owned by that same static binding identity while the child scope is active.
 
-## While body with no normal continuation
+## Nearest enclosing loop target
 
-If the represented body has no normal continuation under `function-execution.md`, it contributes no normal backedge state and requires no equality comparison against `H`.
+Every source-valid `break;` or `continue;` is lexically contained in at least one represented `while` body.
 
-Return and explicit-fault termination use the actual then-current body/enclosing structural states through their existing activation cleanup relations. A returning or faulting body path is not normalized toward `H` merely because it occurs syntactically inside a loop.
+The target is exactly the nearest enclosing represented `while` whose body lexical scope contains the transfer point. Ordinary nested blocks and conditional arm scopes do not become transfer targets. While execution is inside a nested represented loop, that inner loop is the target of an unlabeled transfer from its body and shadows any outer loop for this purpose.
 
-A producer-originating defined fault or divergence inside an otherwise normally continuable body remains a dynamic possibility and does not remove that body's represented normal continuation. The backedge equality requirement still applies to the successful normal body path.
+Target selection is a static source lexical/control fact. It is independent of parser node identity, HIR/Core block numbering, dynamic iteration count, runtime stack layout, or physical branch structure.
 
-Regardless of whether the body has a normal continuation, the represented false condition outcome remains a static normal successor with environment exactly `C`.
+An occurrence with no enclosing represented `while` is source-invalid. This revision defines no label namespace, labeled transfer, dynamic target selection, or transfer to a non-nearest enclosing loop.
+
+## Loop-transfer exited scopes and cleanup boundary
+
+For one admitted transfer to target loop `L`, the exited lexical scopes are every then-active source lexical scope from the scope containing the transfer point outward through and including `L`'s body lexical scope, stopping before the lexical scope containing the `while` statement itself.
+
+Thus a transfer directly in the loop body exits exactly that body scope; a transfer in nested blocks or a conditional arm exits those active descendant scopes innermost-first and then the target body scope; and an inner-loop transfer does not exit the outer loop body.
+
+`function-execution.md` owns the actual cleanup ordering and remaining-frontier cleanup of those exited scopes. The transfer-state comparisons below concern only the enclosing identities represented by the selected loop's `H`/`C`; body/descendant locals are not target-state dimensions and receive no separate normalization rule.
+
+Transfer cleanup MUST NOT consume, reset, or otherwise change an enclosing `H`/`C` binding merely to force target-state equality. Any required restoration of such a binding must have been established by an ordinary accepted source operation before the transfer.
+
+## Continue admission
+
+For nearest target loop `L`, let `H_L` be that loop's already-defined loop-head environment.
+
+After the source-valid operations preceding the transfer, and independently of cleanup of body/descendant locals, `continue;` is admitted only when every binding identity belonging to `H_L` has exactly the same structural ownership state as in `H_L`.
+
+The equality relation is exactly the same prefix-free consumed-path-state equality used for an ordinary normal backedge. Binding identity, declared type, and assignment-mutability classification remain the same enclosing facts.
+
+If any enclosing binding state differs, the `continue;` is source-invalid. The language does not repair the state through implicit cleanup, assignment, reset, union, intersection, widening, or a runtime ownership flag.
+
+A mutable enclosing binding may contain a different runtime value while satisfying the target relation because target equality is structural ownership equality, not runtime value equality. A successful ordinary whole-binding assignment may restore complete ownership before the transfer when source-valid. An immutable binding receives no implicit restoration.
+
+## Break admission
+
+For nearest target loop `L`, let `C_L` be that loop's already-defined successful post-condition environment and definite post-loop environment.
+
+After the source-valid operations preceding the transfer, and independently of cleanup of body/descendant locals, `break;` is admitted only when every enclosing binding identity belonging to `C_L` has exactly the same structural ownership state as in `C_L`.
+
+If any enclosing state differs, the `break;` is source-invalid. No implicit edge cleanup/reset/normalization is performed to force equality.
+
+The target is deliberately `C_L`, not `H_L`. The existing `while` relation already establishes `C_L` as the one definite structural ownership environment after the loop's normal false exit. Requiring every explicit break path to establish exactly that same state preserves one definite post-loop source environment without adding a join, union, intersection, maybe-owned state, or runtime flag.
+
+Runtime values in mutable bindings need not equal values from a condition-false execution when structural ownership equals `C_L`. `break;` does not synthesize or claim that the condition evaluated false.
+
+## Loop-transfer execution
+
+On successful dynamic execution of an admitted `continue;`:
+
+1. perform the exited-scope cleanup owned by `function-execution.md` exactly once;
+2. transfer to the selected loop's condition point; and
+3. let the ordinary `while` relation perform the next condition evaluation exactly once.
+
+`continue;` itself does not evaluate the condition, produce/consume a Bool, or create a source-visible iteration identity.
+
+On successful dynamic execution of an admitted `break;`:
+
+1. perform the exited-scope cleanup owned by `function-execution.md` exactly once; and
+2. transfer directly to the selected loop's existing post-loop continuation with structural ownership environment `C_L`.
+
+`break;` does not re-evaluate the condition and does not synthesize a false condition result. Its execution may therefore have different effects from a later condition-false exit even though both reach the same definite structural ownership environment.
+
+Both statements have no local fallthrough in their immediate source sequence. They are not return/fault termination of the current activation; the selected enclosing loop consumes their non-local destination.
+
+## While body with no local normal continuation
+
+If the represented body has no local normal continuation under `function-execution.md`, it contributes no ordinary normal backedge state and requires no body-wide equality comparison against `H`.
+
+Return and explicit-fault termination use the actual then-current body/enclosing structural states through their existing activation cleanup relations. An admitted `break;` or `continue;` path instead must already have satisfied its own exact `C` or `H` target-state relation and performs transfer cleanup rather than ordinary body normal cleanup.
+
+A producer-originating defined fault or divergence inside an otherwise locally normally continuable body remains a dynamic possibility and does not remove that body's represented local normal continuation. The ordinary backedge equality requirement still applies to the successful normal body path.
+
+Regardless of whether the body has a local normal continuation, the represented false condition outcome remains a static normal successor with environment exactly `C`.
 
 ## While validation does not constant-prune
 
@@ -419,10 +499,12 @@ For a source-valid represented `while`, runtime execution follows `function-exec
 4. if false, take the post-loop normal continuation without activating the body scope;
 5. if true, activate and execute the ordinary child body block;
 6. if the body completes normally, perform its ordinary normal child-scope cleanup and then repeat from condition evaluation;
-7. if the body returns or explicitly faults, follow the existing activation termination relation without a separate normal body cleanup/backedge; and
-8. if condition/body execution faults through another accepted producer or diverges, preserve the existing fault/divergence semantics without inventing a normal backedge or exit.
+7. if the body executes an admitted `continue;`, perform its transfer cleanup and repeat from condition evaluation without a second normal body cleanup;
+8. if the body executes an admitted `break;`, perform its transfer cleanup and continue after the selected loop without re-evaluating the condition or performing normal body cleanup;
+9. if the body returns or explicitly faults, follow the existing activation termination relation without a separate normal body cleanup/backedge; and
+10. if condition/body execution faults through another accepted producer or diverges, preserve the existing fault/divergence semantics without inventing a normal backedge or exit.
 
-Each successful normal iteration therefore evaluates the condition once. A direct-call condition performs a fresh dynamic call on each visit to the condition point; no loop-invariant hoisting or memoization authority is implied.
+Each successful normal or continue backedge therefore reaches one fresh condition evaluation. A direct-call condition performs a fresh dynamic call on each such visit to the condition point; no loop-invariant hoisting or memoization authority is implied.
 
 ## While post-loop environment
 
@@ -430,15 +512,17 @@ For every source-valid represented `while`, the definite normal post-loop enviro
 
 The backedge-restored `H` state is **not** the post-loop state. A condition producer's ownership effects remain effective on the false execution that exits the loop.
 
-No body state is merged into `C`: a normal body state must already equal `H` to be admitted as a backedge, while a no-normal body contributes no normal state. Subsequent source operations consume `C` directly through their existing single-state owners.
+An admitted explicit `break;` also reaches the post-loop continuation only after proving exact structural ownership equality with `C`. The break path need not have executed a false condition and may carry different runtime values/effects while preserving that structural state.
 
-This distinction is required for condition producers that consume or otherwise transform enclosing ownership before producing Bool. It is not observable for condition producers whose ownership effects leave `H` and `C` structurally equal.
+No ordinary body state is merged into `C`: a normal body state must already equal `H` to be admitted as a backedge, while a no-local-normal body contributes no ordinary backedge state. A break path independently equals `C`; a continue path independently equals `H`. Subsequent source operations consume `C` directly through their existing single-state owners.
+
+This distinction is required for condition producers that consume or otherwise transform enclosing ownership before producing Bool. It is not observable in structural state for condition producers whose ownership effects leave `H` and `C` equal, though condition execution/effects remain semantically distinct from explicit break.
 
 ## No loop state lattice or fixed point
 
-The bounded `while` relation requires no source ownership state set, may-be-owned state, join/meet, widening, fixed-point iteration, source CFG, SSA construction, runtime moved/drop/iteration flag, implicit backedge cleanup, or hidden lifetime generation.
+The bounded `while` and loop-transfer relations require no source ownership state set, may-be-owned state, join/meet, widening, fixed-point iteration, source CFG, SSA construction, runtime moved/drop/iteration/completion flag, implicit backedge/transfer cleanup of enclosing values, or hidden lifetime generation.
 
-Validation checks one exact condition transition `H -> C`, one body validation from `C`, and—when the body is normal—one exact equality proof from the cleaned body outcome back to `H`. Repeated runtime execution is justified by that invariant; source validation does not enumerate iterations.
+Validation checks one exact condition transition `H -> C`, one body validation from `C`, one exact equality proof from each ordinary normal cleaned-body outcome back to `H`, and one exact `H`/`C` proof at each represented continue/break transfer respectively. Repeated runtime execution is justified by those invariants; source validation does not enumerate iterations.
 
 Lower Core CFG path states remain proving/implementation facts and do not become source loop ownership authority.
 
@@ -446,29 +530,33 @@ Lower Core CFG path states remain proving/implementation facts and do not become
 
 A represented `IfStatement` or `WhileStatement` may occur inside any represented child block where `BodyStatement` is admitted.
 
-An inner conditional first establishes its definite normal successor when one exists; that state becomes the ordinary state for later statements in the containing loop body before the outer backedge comparison. An inner bounded `while` likewise exposes its definite `C` post-loop state to the containing sequence.
+An inner conditional first establishes its definite local normal successor when one exists; that state becomes the ordinary state for later statements in the containing loop body before the outer backedge comparison. A no-local-normal inner conditional may instead consist of source-valid return/fault/loop-transfer paths and admits no later sibling in that immediate sequence.
 
-A nested construct with no normal continuation prevents later siblings in that same block under `function-execution.md`. A `while` itself always retains its static false normal continuation, so a represented `while` never becomes a no-normal statement merely from a constant condition.
+An inner bounded `while` exposes its definite `C` post-loop state to the containing sequence whether it reaches that state through its false condition or an admitted inner break. An inner continue never reaches the outer body continuation; it returns only to the inner condition point. Neither inner transfer targets the outer loop while the inner loop remains the nearest enclosing represented loop.
 
-These compositions require no general source CFG or state-set merge beyond the exact relations already defined here.
+After an inner loop completes to its definite `C`, later outer-body operations may independently establish the outer `H` or `C` state required by a subsequent outer continue/break.
+
+These compositions require no general source CFG, completion lattice, or state-set merge beyond the exact relations already defined here.
 
 ## Result-bearing function boundary
 
 The represented control-flow statements consume the result-bearing normal-path completion requirement from `function-execution.md`.
 
-A conditional whose two explicit arms both have no normal continuation because every represented path through each arm terminates by return and/or explicit fault has no normal successor. Such a conditional may therefore discharge the remaining result-path obligation without a redundant root terminal return after it. The two arms may both return, both explicitly fault, or use any represented return/explicit-fault mixture that leaves neither arm with a normal continuation.
+A conditional whose two explicit arms both terminate the current function activation by represented return and/or explicit fault has no local normal successor and may therefore discharge the remaining result-path obligation without a redundant root terminal return after it. The two arms may both return, both explicitly fault, or use any represented return/explicit-fault mixture that leaves neither arm with local fallthrough.
 
-If exactly one conditional arm has a normal continuation, that sole continuation remains subject to the ordinary result-bearing requirement. A later source-valid result return is required before that path can reach the root closing boundary normally.
+A conditional with no local normal continuation because its paths instead perform loop transfers does **not** by itself terminate the function activation and does not independently discharge a result obligation. Such transfers are source-valid only inside an enclosing represented loop, which consumes their destinations; that `while` still has its represented false normal outcome.
 
-A conditional without explicit else always has the omitted-else normal false outcome and therefore cannot by itself eliminate every normal root path.
+If exactly one conditional arm has a local normal continuation, that sole continuation remains subject to the ordinary result-bearing requirement. A later source-valid result return is required before that path can reach the root closing boundary normally unless an enclosing control transfer redirects it first.
 
-A represented bounded `while`, including `while true`, always has its represented false normal outcome and therefore also cannot by itself eliminate every normal root path or satisfy a missing-result obligation. A result-bearing path continuing after the loop still requires a source-valid result return before normal root completion.
+A conditional without explicit else always has the omitted-else normal false outcome and therefore cannot by itself eliminate every local normal path.
+
+A represented bounded `while`, including `while true` and including bodies containing break/continue, always has its represented false normal outcome and therefore cannot by itself eliminate every normal root path or satisfy a missing-result obligation. A result-bearing path continuing after the loop still requires a source-valid result return before normal root completion.
 
 ## Conditional source/Core refinement
 
 A faithful source-to-Core lowering MAY refine one source-valid represented conditional to the accepted Bool-valued `Branch` relation in [Core control flow](../core/control-flow.md).
 
-After source validation has fixed the condition type, each arm's normal-continuation presence, and any required two-normal-outcome source ownership equality, a lowering may:
+After source validation has fixed the condition type, each arm's local normal-continuation presence, any required two-normal-outcome source ownership equality, and any nested loop-transfer target/cleanup facts, a lowering may:
 
 1. lower the existing condition producer exactly once under that producer's accepted lowering relation;
 2. materialize its Bool result in a compiler-owned Core temporary when useful;
@@ -476,12 +564,12 @@ After source validation has fixed the condition type, each arm's normal-continua
 4. lower the then arm to one or more Core blocks;
 5. lower explicit else-arm blocks when present, or use the following normal continuation directly as the false target when no else body needs lower execution;
 6. for each normally completing explicit arm, refine that arm's retained source normal cleanup before its normal successor edge;
-7. for each no-normal explicit arm, preserve each represented terminating path's existing source-to-Core refinement—`Return` for a return and `Fault(F_explicit)` for explicit `fault;`—without first emitting that arm's normal cleanup or a normal `Goto` edge;
+7. for each no-local-normal explicit path, preserve its existing non-local refinement: `Return` for a return, `Fault(F_explicit)` for explicit `fault;`, retained transfer cleanup plus `Goto` to the selected loop header for `continue;`, or retained transfer cleanup plus `Goto` to the selected loop post-loop block for `break;`, without first emitting ordinary normal arm cleanup;
 8. when two normal outcomes exist, transfer both to one lower normal join before subsequent source statements;
 9. when exactly one normal outcome exists, continue subsequent source lowering from that sole normal path, with or without a dedicated lower join block; and
-10. when zero normal outcomes exist, emit no lower normal join merely to create an unreachable continuation.
+10. when zero local normal outcomes exist, emit no lower normal join merely to create an unreachable local continuation.
 
-The exact shape or number of Core blocks is not source-observable.
+The exact shape or number of Core blocks is not source-observable. A loop transfer's selected Core block is a lower refinement of its source lexical target, not source-semantic block identity.
 
 A compiler temporary used for condition selection is not a source binding. Producer-internal temporaries remain governed by their producer's accepted lowering relation.
 
@@ -493,23 +581,25 @@ The stable abstract Core defined-fault reason used for source `ExplicitFault` is
 
 A faithful lowering MAY refine one source-valid represented bounded `while` using only the already accepted Core CFG, value, call, and vacant initialization semantics.
 
-After source validation has fixed exact Bool condition typing, retained condition/body HIR, body normal-continuation presence/cleanup, and any required H-state backedge equality, a lowering may:
+After source validation has fixed exact Bool condition typing, retained condition/body HIR, body local normal-continuation presence/cleanup, any required H-state ordinary backedge equality, and all retained loop-transfer target/cleanup facts, a lowering may:
 
 1. terminate the current predecessor with `Goto` to one fresh condition-header block;
 2. lower the retained condition producer from that header through its existing lowering relation;
 3. after successful condition production, terminate the resulting condition block with one Core Bool `Branch` whose true target is a fresh body-entry block and false target is a fresh post-loop block;
 4. lower the ordinary child body from the body entry using its existing block lowering relation;
-5. when the body has a normal continuation, emit its retained ordinary normal cleanup before terminating that normal path with `Goto` back to the condition header;
-6. when the body has no normal continuation, preserve its existing `Return`/`Fault`/other terminating lower paths and emit no synthetic backedge; and
-7. continue lowering following source only from the post-loop false block.
+5. when the body has a local normal continuation, emit its retained ordinary normal cleanup before terminating that normal path with `Goto` back to the condition header;
+6. for each admitted `continue;`, emit its retained transfer cleanup and `Goto` the selected nearest loop's condition header without a synthetic normal cleanup/backedge;
+7. for each admitted `break;`, emit its retained transfer cleanup and `Goto` the selected nearest loop's post-loop block without a synthetic false condition or normal cleanup;
+8. preserve existing `Return`/`Fault`/other terminating lower paths without synthetic normal backedges; and
+9. continue lowering following source only from the post-loop block.
 
 A direct-call condition may create its existing call continuation block before the Core `Branch`; the call's result destination and condition temporary remain compiler-owned storage. The loop relation requires no second call or branch operation.
 
-The accepted Core vacant non-replacing `Init` relation and result-bearing direct-call destination relation permit one fixed compiler/source local that is Dead or otherwise wholly vacant on a later cycle to begin a new stored-value lifetime without changing its dynamic storage-instance identity. Lowering may therefore reuse statically allocated body locals and condition/result temporaries across cycle visits when Core validation proves the required vacancy/authority. This is a lower proving fact, not source assignment mutability or source ownership restoration.
+The accepted Core vacant non-replacing `Init` relation and result-bearing direct-call destination relation permit one fixed compiler/source local that is Dead or otherwise wholly vacant on a later cycle to begin a new stored-value lifetime without changing its dynamic storage-instance identity. Lowering may therefore reuse statically allocated body locals and condition/result temporaries across normal or continue cycle visits when Core validation proves the required vacancy/authority. This is a lower proving fact, not source assignment mutability or source ownership restoration.
 
-No new Core operation, Core state lattice, source/Core loop flag, runtime moved flag, dynamic slot identity, or hidden lifetime-generation mechanism is required.
+No new Core operation, Core state lattice, source/Core loop flag, runtime moved flag, dynamic slot identity, or hidden lifetime-generation mechanism is required. Existing Core `Goto` is sufficient for both loop transfers after source cleanup/target validity has been retained.
 
-The exact Core block identities/count remain implementation facts. The semantic requirements are the predecessor-before-header edge, per-visit condition execution, correct Branch targets, normal body cleanup before backedge, absence of a synthetic backedge for no-normal body paths, and continuation of following source from the false path.
+The exact Core block identities/count remain implementation facts. The semantic requirements are the predecessor-before-header edge, per-visit condition execution, correct Branch targets, ordinary normal body cleanup before ordinary backedge, transfer cleanup before transfer `Goto`, nearest-loop target preservation, absence of a synthetic ordinary backedge for no-local-normal body paths, and continuation of following source from the post-loop block.
 
 ## Lower path states do not define source control flow
 
@@ -517,7 +607,7 @@ Core CFG validation may preserve multiple distinct implementation states at a lo
 
 For a conditional, a source local declared only in the then-arm child scope may be represented by one Core local that is Dead after normal then-arm cleanup but Never-initialized on a false execution that never entered that arm. Those distinct lower states remain valid implementation facts under Core control flow.
 
-For a bounded `while`, one static body local or compiler temporary may be Never-initialized before the first body/condition visit and Dead on a later cycle after its prior value was moved/dropped/cleaned. Accepted Core vacant initialization admits the later new lifetime when the selected destination is wholly vacant; source validity still comes only from the source loop relation above.
+For a bounded `while`, one static body local or compiler temporary may be Never-initialized before the first body/condition visit and Dead on a later cycle after its prior value was moved/dropped/cleaned. Accepted Core vacant initialization admits the later new lifetime when the selected destination is wholly vacant; source validity still comes only from the source loop and transfer relations above.
 
 These lower differences do not make ended body/arm locals visible after their source scopes and do not create path-dependent source ownership for enclosing bindings.
 
@@ -525,23 +615,25 @@ Lowering MUST NOT:
 
 - use Core path-state union/intersection to reconstruct source structural ownership;
 - accept an unequal two-normal-outcome conditional join merely because every lower continuation operation happens to validate under multiple Core states;
-- accept a bounded-`while` backedge whose source enclosing state differs from `H` merely because Core cyclic path states validate;
-- invent a source normal successor from lower reachability after source validation determined none;
-- infer source cleanup from lower scalar liveness; or
+- accept a bounded-`while` ordinary/continue backedge whose source enclosing state differs from `H` merely because Core cyclic path states validate;
+- accept a break whose source enclosing state differs from `C` merely because its lower `Goto` validates;
+- redirect a source loop transfer to a non-nearest loop based on lower block convenience;
+- invent a source local normal successor from lower reachability after source validation determined none;
+- infer source normal or transfer cleanup from lower scalar liveness; or
 - turn Core worklist behavior into source semantic authority.
 
-Source normal-continuation presence, conditional join validity, bounded-loop backedge validity, and definite source successor states are established before lowering by this document, `function-execution.md`, `local-bindings.md`, and `structural-ownership.md`.
+Source local normal-continuation presence, conditional join validity, bounded-loop ordinary/explicit transfer validity, transfer target selection, and definite source successor states are established before lowering by this document, `function-execution.md`, `local-bindings.md`, and `structural-ownership.md`.
 
 ## Determinism
 
-For one fixed source-valid represented program and one fixed activation state, conditional and bounded-`while` runtime selection is deterministic after successful condition evaluation.
+For one fixed source-valid represented program and one fixed activation state, conditional and bounded-`while` runtime selection and bounded loop-transfer target selection are deterministic.
 
-The condition producer has its existing deterministic or otherwise accepted source behavior. Once it yields one of the two semantic Bool values, exactly one runtime outcome is selected. A selected conditional arm or `while` body may normal-complete, return, explicitly fault, yield another defined fault, or diverge according to its existing owners. A false `while` condition selects only the post-loop continuation; a normal true body returns only to the next condition evaluation.
+The condition producer has its existing deterministic or otherwise accepted source behavior. Once it yields one of the two semantic Bool values, exactly one runtime outcome is selected. A selected conditional arm or `while` body may normal-complete, return, explicitly fault, execute the uniquely selected nearest-loop break/continue transfer, yield another defined fault, or diverge according to its existing owners. A false `while` condition selects only the post-loop continuation; a normal true body or continue returns only to the selected loop's next condition evaluation; break reaches only the selected loop's post-loop continuation.
 
-Validation of both represented conditional outcomes and of the represented `while` false/body relations is a static validity obligation, not runtime nondeterminism.
+Validation of both represented conditional outcomes, the represented `while` false/body relations, and every explicit transfer target-state relation is a static validity obligation, not runtime nondeterminism.
 
 ## Further boundaries
 
-This revision does not define general expressions, grouping expressions, comparisons, logical operators, arithmetic operators, truthiness, coercions, standalone record-construction conditions, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, loop values, match, refutable patterns, fault payloads, panic/throw syntax, catch/recovery, labels, break, continue, source state lattices, general loop fixed-point inference, path-dependent ownership after a two-normal-outcome join or bounded-while backedge, automatic join/backedge cleanup, drop flags, custom destructors, must-consume policy, references, borrows, lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
+This revision does not define general expressions, grouping expressions, comparisons, logical operators, arithmetic operators, truthiness, coercions, standalone record-construction conditions, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, loop values, match, refutable patterns, fault payloads, panic/throw syntax, catch/recovery, labels or a label namespace, labeled transfer, break/continue values, transfer to a non-nearest loop, source state/completion lattices, general loop fixed-point inference, path-dependent ownership after a two-normal-outcome join or bounded-while target, automatic join/backedge/transfer normalization of enclosing bindings, drop flags, custom destructors, must-consume policy, references, borrows, lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
 
-Those concerns require their own accepted owners or later extensions and MUST NOT be inferred from the represented conditional or bounded-`while` relations here.
+Those concerns require their own accepted owners or later extensions and MUST NOT be inferred from the represented conditional, bounded-`while`, or bounded unlabeled loop-transfer relations here.
