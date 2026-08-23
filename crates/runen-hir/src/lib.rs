@@ -336,6 +336,9 @@ pub enum Statement {
         arguments: Vec<Value>,
         location: SourceLocation,
     },
+    Fault {
+        location: SourceLocation,
+    },
     Block(Block),
     If {
         condition: Value,
