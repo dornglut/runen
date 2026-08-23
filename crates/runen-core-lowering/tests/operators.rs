@@ -587,8 +587,7 @@ fn lowering_rejects_non_bool_retained_boolean_equality_right_fact() {
 
 #[test]
 fn nested_prefix_operands_preserve_current_block_before_equality_cfg() {
-    let lowered =
-        lower_source("fn f(left: Bool, right: Bool) -> Bool { return !left == !right; }");
+    let lowered = lower_source("fn f(left: Bool, right: Bool) -> Bool { return !left == !right; }");
     let f = function(lowered.as_program(), "f");
 
     assert_eq!(
