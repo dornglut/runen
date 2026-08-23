@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean, integer, and decimal floating literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean, integer, and decimal floating literal semantics from [Source literal semantics](literals.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, loop-transfer cleanup, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, bounded `break`/`continue` target/state admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -34,6 +34,8 @@ The represented concrete subset reserves exactly these lexical identifier keys:
 - `if`;
 - `else`;
 - `while`;
+- `break`;
+- `continue`;
 - `import`;
 - `export`;
 - `true`;
@@ -47,7 +49,7 @@ A **user identifier** is an identifier-form token under `lexical.md` whose lexic
 
 A reserved key is not legal where the grammar requires a user identifier. This revision reserves no other identifier key and defines no escaping mechanism for a reserved key.
 
-Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality. In particular, longer identifier-form tokens such as `mutable`, `trueish`, `falsehood`, `ifonly`, `whiled`, and `faulty` are each one complete identifier token and are not split because they begin with a reserved key.
+Reserved-key classification uses the lexical identifier key, not original source spelling. It does not change identifier formation, Unicode normalization, or identifier-key equality. In particular, longer identifier-form tokens such as `mutable`, `trueish`, `falsehood`, `ifonly`, `whiled`, `breakable`, `continued`, and `faulty` are each one complete identifier token and are not split because they begin with a reserved key.
 
 ## Punctuation tokens
 
@@ -219,6 +221,8 @@ BodyStatement  = LocalDeclaration
                | AssignmentStatement
                | CallStatement
                | FaultStatement
+               | BreakStatement
+               | ContinueStatement
                | BlockStatement
                | IfStatement
                | WhileStatement
@@ -227,13 +231,13 @@ BlockStatement = "{" BodyStatement* ReturnStatement? "}"
 
 `ReturnStatement` is not a `BodyStatement`. It appears only as the optional terminal element of the immediately containing root `Body` or nested `BlockStatement`. Consequently, concrete source cannot place another `BodyStatement` or second `ReturnStatement` after that return in the same lexical block.
 
-`FaultStatement` is deliberately a `BodyStatement`. Concrete grammar may therefore represent another `BodyStatement` or the optional terminal `ReturnStatement` after `fault;`; `function-execution.md` rejects any such later sibling semantically because `fault;` has no normal continuation. This deliberate asymmetry reuses the ordinary statement-sequencing rule instead of adding a second terminal-statement grammar category.
+`FaultStatement`, `BreakStatement`, and `ContinueStatement` are deliberately `BodyStatement` forms. Concrete grammar may therefore represent another `BodyStatement` or the optional terminal `ReturnStatement` after one of them; `function-execution.md` rejects any such later sibling semantically because the preceding statement has no local normal continuation. This deliberate asymmetry reuses the ordinary statement-sequencing rule instead of adding a generalized terminal-statement grammar category.
 
 A represented `BlockStatement` is statement-only and produces no source value. Its closing `}` is the complete statement terminator; no trailing semicolon is present. Its `BodyStatement` sequence may be empty, its optional terminal return may be absent, and block statements may nest recursively because `BlockStatement` is itself a `BodyStatement`.
 
-A terminal return inside a nested block terminates the current source function activation under `function-execution.md`; it does not merely break out of that block. A `fault;` reached inside a nested block likewise terminates the current activation abnormally through the defined-fault relation rather than merely exiting that block. The block form still does not create a block expression, tail value, Unit/Void value, label, break, continue, or catch form. Conditional and bounded-loop selection are introduced only by `IfStatement` and `WhileStatement` below.
+A terminal return inside a nested block terminates the current source function activation under `function-execution.md`; it does not merely exit that block. A `fault;` reached inside a nested block likewise terminates the current activation abnormally through the defined-fault relation. A source-valid `break;` or `continue;` reached inside a represented loop exits the active child lexical scopes required by its nearest enclosing `while` target under `function-execution.md` and `control-flow.md`. The block form itself still does not create a block expression, tail value, Unit/Void value, label, or catch form. Conditional and bounded-loop selection are introduced only by `IfStatement` and `WhileStatement` below, and loop transfer only by the explicit statements defined below.
 
-Each `BlockStatement` maps to exactly one child lexical scope under `local-bindings.md`. Execution order, normal-continuation presence, normal child-scope cleanup, return cleanup, explicit-fault/defined-fault cleanup and propagation, and divergence consequences are owned by `function-execution.md`. When a block is a conditional arm or represented `while` body, `control-flow.md` owns its relationship to the applicable selection, successor, and backedge rules.
+Each `BlockStatement` maps to exactly one child lexical scope under `local-bindings.md`. Execution order, normal-continuation presence, normal child-scope cleanup, loop-transfer cleanup, return cleanup, explicit-fault/defined-fault cleanup and propagation, and divergence consequences are owned by `function-execution.md`. When a block is a conditional arm or represented `while` body, `control-flow.md` owns its relationship to the applicable selection, successor, backedge, and loop-transfer target/state rules.
 
 ## Conditional statements
 
@@ -262,15 +266,15 @@ A `DirectCall` conditional value retains both its represented unqualified and `a
 
 A standalone `RecordConstruction` is not a represented conditional-value spelling in this revision. A `ProducerFieldValueUse` whose receiver is a `RecordConstruction` is instead one distinct `FieldValueUse` and includes at least one mandatory `.` selector after the constructor's closing `}`. Consequently, forms such as `if Record { ready: true }.ready { ... }` and `if dep::Record { ready: true }.ready { ... }` do not make `if flag { ... }` ambiguous: the construction receiver is complete before the mandatory selector and the later then-arm block begins only after the complete `ConditionalValue`.
 
-The then arm is always one explicit `BlockStatement`. `else` is optional; when present it is followed by exactly one explicit `BlockStatement`. Each explicit arm therefore maps to one ordinary child lexical scope and may contain ordinary `BodyStatement` entries, including `fault;`, followed by its own optional terminal `ReturnStatement` when the preceding body-statement sequence still has a normal continuation. The omitted-else false outcome and definite normal-successor composition are owned by `control-flow.md`; omission does not synthesize a concrete block or lexical scope.
+The then arm is always one explicit `BlockStatement`. `else` is optional; when present it is followed by exactly one explicit `BlockStatement`. Each explicit arm therefore maps to one ordinary child lexical scope and may contain ordinary `BodyStatement` entries, including `fault;` and, when nested in a represented `while`, `break;` or `continue;`, followed by its own optional terminal `ReturnStatement` only when the preceding body-statement sequence still has a local normal continuation. The omitted-else false outcome and definite normal-successor composition are owned by `control-flow.md`; omission does not synthesize a concrete block or lexical scope.
 
 This revision defines no direct `else if` production. A nested conditional may instead occur as a `BodyStatement` inside an explicit else block, for example the abstract shape `else { if ... { ... } }`.
 
 An `IfStatement` produces no source value and has no trailing semicolon. It does not add a conditional expression, block value, Unit/Void value, pattern condition, guard, truthiness relation, comparison, or logical operator.
 
-Because `ReturnStatement` is an optional terminal element of `BlockStatement`, a conditional arm may return from the current function. Return remains absent from `BodyStatement`, so this grammar still does not admit an arbitrary nonterminal return followed by more statements in that same arm block. Because `FaultStatement` is a `BodyStatement`, the grammar may represent a following sibling after `fault;`; the no-normal-continuation rule rejects that sibling semantically.
+Because `ReturnStatement` is an optional terminal element of `BlockStatement`, a conditional arm may return from the current function. Return remains absent from `BodyStatement`, so this grammar still does not admit an arbitrary nonterminal return followed by more statements in that same arm block. Because `FaultStatement`, `BreakStatement`, and `ContinueStatement` are `BodyStatement` forms, the grammar may represent a following sibling after them; the no-local-normal-continuation rule rejects that sibling semantically.
 
-Runtime condition selection, condition producer ordering, arm validation, normal-continuation composition, normal arm cleanup, return behavior, explicit-fault behavior, other fault/divergence behavior, and exact structural-ownership-state equality whenever two normal outcomes meet are owned by `control-flow.md` and `function-execution.md`.
+Runtime condition selection, condition producer ordering, arm validation, local normal-continuation composition, normal arm cleanup, loop-transfer behavior, return behavior, explicit-fault behavior, other fault/divergence behavior, and exact structural-ownership-state equality whenever two normal outcomes meet are owned by `control-flow.md` and `function-execution.md`.
 
 ## While statements
 
@@ -284,9 +288,30 @@ WhileStatement = "while" ConditionalValue BlockStatement
 
 The loop body is exactly one ordinary `BlockStatement` and therefore one child lexical scope under `local-bindings.md`. `WhileStatement` is itself one `BodyStatement`, so loops may nest recursively and may appear inside represented conditional arms or other blocks. The closing body `}` terminates the complete `WhileStatement`; no trailing semicolon is present.
 
-A `WhileStatement` produces no source value. It has no `else` arm, result value, label, `break`, `continue`, iteration binding, pattern, iterator protocol, unconditional-loop spelling, or do/while form. `while true` is syntactically represented but remains subject to the conservative static false-outcome rule owned by `control-flow.md`.
+A `WhileStatement` produces no source value. It has no `else` arm, result value, label, iteration binding, pattern, iterator protocol, unconditional-loop spelling, or do/while form. Its body may contain the bounded unlabeled `break;` and `continue;` statements defined below. `while true` is syntactically represented but remains subject to the conservative static false-outcome rule owned by `control-flow.md`.
 
-Exact Bool condition admission, condition ownership effects, the pre-condition environment `H`, post-condition environment `C`, body validation from `C`, exact normal-backedge structural ownership equality with `H`, the represented false normal successor `C`, no-normal-body behavior, dynamic repeated condition/body execution, and source-to-Core cyclic refinement are owned by `control-flow.md` and `function-execution.md`.
+Exact Bool condition admission, condition ownership effects, the pre-condition environment `H`, post-condition environment `C`, body validation from `C`, exact normal-backedge structural ownership equality with `H`, explicit break/continue target-state admission, the represented false normal successor `C`, no-local-normal-body behavior, dynamic repeated condition/body execution, and source-to-Core cyclic refinement are owned by `control-flow.md` and `function-execution.md`.
+
+## Loop transfer statements
+
+The represented bounded loop-transfer statements have exactly these forms:
+
+```text
+BreakStatement    = "break" ";"
+ContinueStatement = "continue" ";"
+```
+
+Both are statement-only and produce no source value. They introduce no Unit/Void value, owned-value producer, operand, result, or expression category.
+
+The concrete grammar admits either form wherever `BodyStatement` is admitted. Source validity requires the statement to be lexically nested in the body of at least one represented `while`; `control-flow.md` selects the nearest enclosing represented `while` as the transfer target and rejects an occurrence with no such target. This is semantic target validation, not context-sensitive keyword or grammar classification.
+
+`break;` exits to that loop's represented post-loop continuation subject to the exact target-state rule in `control-flow.md`. `continue;` transfers to that loop's condition point subject to the exact loop-head-state rule there. `function-execution.md` owns cleanup of every active child lexical scope exited by either transfer before control changes.
+
+An inner represented `while` is the nearest target for transfers lexically inside its body. Ordinary blocks and conditional arms do not establish transfer targets.
+
+Because both forms are `BodyStatement`s, concrete grammar may represent another statement or terminal return later in the same immediate block. Such later syntax is source-invalid as unreachable because each transfer has no local normal continuation in that sequence.
+
+This revision defines no label declaration/use, labeled transfer, transfer value, loop result, `break Value;`, `continue Value;`, alternate transfer key, or transfer to an outer loop while a nearer represented loop encloses the statement.
 
 ## Ordinary local declarations
 
@@ -414,7 +439,7 @@ The only represented spelling in this revision is exactly `fault;` modulo ordina
 
 Because `fault` is globally reserved after complete maximal identifier formation, it cannot be used where `UserIdentifier` is required. Longer identifier-form tokens such as `faulty` remain ordinary user identifiers when they otherwise satisfy `lexical.md`.
 
-`function-execution.md` owns the statement's no-normal-continuation classification, active-scope/parameter cleanup, same-fault propagation, and source-to-Core refinement. This grammar introduces no Core operation or implementation fault representation.
+`function-execution.md` owns the statement's no-local-normal-continuation classification, active-scope/parameter cleanup, same-fault propagation, and source-to-Core refinement. This grammar introduces no Core operation or implementation fault representation.
 
 ## Record construction
 
@@ -512,7 +537,7 @@ A `FieldValueUse` maps to the bounded binding-root/producer-backed relation abov
 
 A qualified module member without a direct-call argument list, record-construction body, or record-pattern body is not an `IdentifierUse` value and is not a record-pattern scrutinee under this subset. Module aliases and module-level declarations do not become source values.
 
-The represented `FaultStatement` is not admitted by `Value` or `ConditionalValue` and does not create a produced-value category.
+The represented `FaultStatement`, `BreakStatement`, and `ContinueStatement` forms are not admitted by `Value` or `ConditionalValue` and do not create produced-value categories.
 
 This subset has no string, byte, character, aggregate, pointer, or other additional literal form; no scientific-notation, hexadecimal/binary/octal floating form, explicit infinity/NaN literal, `.5`/`1.` floating shorthand, suffix, separator, alternate numeric radix, or leading-plus numeric form; no grouping expression; no general unary or binary operator; no conversion; no arbitrary-receiver member/postfix access beyond the bounded field receiver categories above; no assignment expression; no block expression; no closure; and no other value form beyond the represented producers above.
 
@@ -530,7 +555,7 @@ In a no-result function, every represented `ReturnStatement` must be `return;`. 
 
 `return;` is invalid in a result-bearing function. `return Value;` is invalid in a no-result function.
 
-A result-bearing function is not required syntactically to end with one root `return Value;`. Instead, `function-execution.md` requires that no represented path reach the root closing boundary normally without a valid result-bearing return. A represented path may instead terminate abnormally through `fault;` and then needs no result value. A conditional whose two explicit arms both have no normal continuation may therefore eliminate the root normal continuation when those arms return, explicitly fault, or use a represented mixture of the two. A represented `while`, including `while true`, always retains its statically represented false normal continuation under `control-flow.md` and therefore cannot by itself discharge the missing-result obligation.
+A result-bearing function is not required syntactically to end with one root `return Value;`. Instead, `function-execution.md` requires that no represented path reach the root closing boundary normally without a valid result-bearing return. A represented path may instead terminate abnormally through `fault;` and then needs no result value. A conditional whose two explicit arms both terminate the activation by return and/or explicit fault may therefore eliminate the root normal continuation without a redundant root return. A conditional whose local fallthrough is absent only because its paths perform loop transfers is meaningful only inside an enclosing `while` and does not by itself terminate the function activation. A represented `while`, including `while true`, always retains its statically represented false normal continuation under `control-flow.md` and therefore cannot by itself discharge the missing-result obligation.
 
 This subset defines no tail-expression return, no return as a `BodyStatement`, and no arbitrary nonterminal return followed by another statement in the same lexical block.
 
@@ -571,7 +596,7 @@ This revision does not define:
 - grouping or general expression grammar;
 - assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, destructuring assignment, or general place/lvalue syntax beyond represented whole-binding assignment;
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
-- conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, labels, `break`, `continue`, loop values, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch/recovery, or other control-transfer forms beyond represented statement-level `if`, bounded statement-level `while`, terminal return, and payload-free explicit `fault;`;
+- conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, labels or a label namespace, labeled `break`/`continue`, transfer values, loop values, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch/recovery, or other control-transfer forms beyond represented statement-level `if`, bounded statement-level `while`, bounded unlabeled `break;`/`continue;`, terminal return, and payload-free explicit `fault;`;
 - record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal (including decimal floating), bare `IdentifierUse`-as-value, grouping, operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths beyond the represented alias/member pair, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
 - inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, method-based, or partial record construction, nor a constructor namespace or separate public-constructor capability;
