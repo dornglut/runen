@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Fault, Function, LocalDecl, LocalId, Operand, Place, Program,
-    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    BasicBlock, BasicBlockId, Body, Fault, Function, LocalDecl, LocalId, Place, Program, ScalarType,
+    Statement, Terminator, TypeDef, TypeTable, validate_program,
 };
 
 fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -87,6 +87,4 @@ fn explicit_fault_has_no_operand_or_target_to_validate() {
         functions: vec![function],
     })
     .expect("Fault(F) needs neither an operand nor a target block");
-
-    let _ = Operand::Constant(Value::Bool(true));
 }
