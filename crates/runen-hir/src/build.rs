@@ -2787,7 +2787,7 @@ fn round_decimal_binary(
 fn greatest_exponent_not_above(datum: &DecimalDatum, mut low: i32, mut high: i32) -> i32 {
     while low < high {
         let mid = low + (high - low + 1) / 2;
-        if compare_decimal_to_dyadic(datum, 1, mid) != Ordering::Greater {
+        if compare_decimal_to_dyadic(datum, 1, mid) != Ordering::Less {
             low = mid;
         } else {
             high = mid - 1;
@@ -2804,7 +2804,7 @@ fn greatest_significand_not_above(
 ) -> u64 {
     while low < high {
         let mid = low + (high - low + 1) / 2;
-        if compare_decimal_to_dyadic(datum, mid, exponent) != Ordering::Greater {
+        if compare_decimal_to_dyadic(datum, mid, exponent) != Ordering::Less {
             low = mid;
         } else {
             high = mid - 1;
