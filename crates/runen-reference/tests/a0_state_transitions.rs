@@ -357,6 +357,7 @@ fn later_vacant_init_preserves_raw_pointer_storage_identity() {
     let i64_ty = types.push(TypeDef::scalar("i64", ScalarType::I64));
     let pointer_ty = types.push(TypeDef::raw_pointer("i64_ptr", i64_ty));
     let target = Place::local(LocalId(0));
+    let before = Place::local(LocalId(1));
 
     let program = one_block(
         types,
@@ -371,7 +372,7 @@ fn later_vacant_init_preserves_raw_pointer_storage_identity() {
                 src: Operand::Constant(Value::I64(1)),
             },
             Statement::Init {
-                dst: Place::local(LocalId(1)),
+                dst: before.clone(),
                 src: Operand::AddressOf(target.clone().into()),
             },
             Statement::Drop {
@@ -381,6 +382,9 @@ fn later_vacant_init_preserves_raw_pointer_storage_identity() {
                 dst: target.clone(),
                 src: Operand::Constant(Value::I64(2)),
             },
+            Statement::RawRead {
+                pointer: before.into(),
+            },
             Statement::Init {
                 dst: Place::local(LocalId(2)),
                 src: Operand::AddressOf(target.into()),
@@ -389,16 +393,24 @@ fn later_vacant_init_preserves_raw_pointer_storage_identity() {
     );
 
     let report = defined_report(program);
-    let pointers = event_kinds(&report.verification_events)
-        .into_iter()
+    let events = event_kinds(&report.verification_events);
+    let pointers = events
+        .iter()
         .filter_map(|event| match event {
-            VerificationEventKind::AddressOf { pointer, .. } => Some(pointer),
+            VerificationEventKind::AddressOf { pointer, .. } => Some(pointer.clone()),
             _ => None,
         })
         .collect::<Vec<_>>();
 
     assert_eq!(pointers.len(), 2);
     assert_eq!(pointers[0], pointers[1]);
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| matches!(event, VerificationEventKind::RawRead { .. }))
+            .count(),
+        1
+    );
 }
 
 #[test]
