@@ -2,7 +2,9 @@ use runen_core_ir::{
     LocalId, Operand, PlaceAccess, Statement as CoreStatement, Terminator, ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Statement as HirStatement, Type, build_typed_hir};
+use runen_hir::{
+    IntrinsicType, ModuleId, SourceUnit, Statement as HirStatement, Type, build_typed_hir,
+};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -205,7 +207,8 @@ fn following_source_is_lowered_only_on_false_continuation() {
     let Terminator::Goto(header) = f.body.blocks[0].terminator else {
         panic!("entry Goto header");
     };
-    let Terminator::Branch { false_target, .. } = f.body.blocks[header.0 as usize].terminator else {
+    let Terminator::Branch { false_target, .. } = f.body.blocks[header.0 as usize].terminator
+    else {
         panic!("header Branch");
     };
 
