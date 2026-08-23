@@ -249,6 +249,8 @@ impl TypeMap {
     }
 }
 
+const EXPLICIT_FAULT_CODE: &str = "source.explicit";
+
 const INTRINSICS: [(hir::IntrinsicType, core::ScalarType, &str); 12] = [
     (hir::IntrinsicType::Bool, core::ScalarType::Bool, "Bool"),
     (hir::IntrinsicType::I8, core::ScalarType::I8, "I8"),
@@ -364,7 +366,9 @@ impl<'a> FunctionLowerer<'a> {
                         self.register_source_locals(&else_block.statements)?;
                     }
                 }
-                hir::Statement::Assignment { .. } | hir::Statement::Call { .. } => {}
+                hir::Statement::Assignment { .. }
+                | hir::Statement::Call { .. }
+                | hir::Statement::Fault { .. } => {}
             }
         }
         Ok(())
@@ -464,6 +468,11 @@ impl<'a> FunctionLowerer<'a> {
                 } => {
                     self.lower_call(*function, arguments, None)?;
                 }
+                hir::Statement::Fault { .. } => {
+                    self.terminate_current(core::Terminator::Fault(core::Fault::new(
+                        EXPLICIT_FAULT_CODE,
+                    )))?;
+                }
                 hir::Statement::Block(block) => self.lower_block(block)?,
                 hir::Statement::If {
                     condition,
@@ -480,6 +489,7 @@ impl<'a> FunctionLowerer<'a> {
 
     fn statement_has_normal_continuation(statement: &hir::Statement) -> bool {
         match statement {
+            hir::Statement::Fault { .. } => false,
             hir::Statement::Block(block) => block.has_normal_continuation,
             hir::Statement::If {
                 then_block,

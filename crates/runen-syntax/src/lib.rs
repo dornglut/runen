@@ -94,6 +94,8 @@ pub enum SyntaxKind {
     KwElse,
     IfStatement,
     KwCopy,
+    KwFault,
+    FaultStatement,
 }
 
 impl SyntaxKind {
@@ -216,6 +218,8 @@ impl Language for RunenLanguage {
             69 => SyntaxKind::KwElse,
             70 => SyntaxKind::IfStatement,
             71 => SyntaxKind::KwCopy,
+            72 => SyntaxKind::KwFault,
+            73 => SyntaxKind::FaultStatement,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -396,6 +400,7 @@ pub(crate) fn reserved_identifier_kind(key: &str) -> Option<SyntaxKind> {
         "let" => Some(SyntaxKind::KwLet),
         "mut" => Some(SyntaxKind::KwMut),
         "return" => Some(SyntaxKind::KwReturn),
+        "fault" => Some(SyntaxKind::KwFault),
         "if" => Some(SyntaxKind::KwIf),
         "else" => Some(SyntaxKind::KwElse),
         "import" => Some(SyntaxKind::KwImport),

@@ -961,6 +961,9 @@ fn validate_body_statement(
         SyntaxKind::CallStatement => {
             validate_call_statement(header, node, context, bindings, diagnostics)
         }
+        SyntaxKind::FaultStatement => Some(Statement::Fault {
+            location: location(header.unit, node),
+        }),
         SyntaxKind::BlockStatement => Some(validate_block(
             header,
             node,
@@ -981,6 +984,7 @@ fn validate_body_statement(
 
 fn statement_has_normal_continuation(statement: &Statement) -> bool {
     match statement {
+        Statement::Fault { .. } => false,
         Statement::Block(block) => block.has_normal_continuation,
         Statement::If {
             then_block,
@@ -1047,6 +1051,7 @@ fn validate_block(
                 }
                 Statement::Assignment { .. }
                 | Statement::Call { .. }
+                | Statement::Fault { .. }
                 | Statement::Block(_)
                 | Statement::If { .. } => {}
             }
