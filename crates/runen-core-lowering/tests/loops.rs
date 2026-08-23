@@ -397,7 +397,7 @@ fn partial_transfer_cleanup_uses_existing_projected_core_drop_only() {
          }",
     );
     let f = function(lowered.as_program(), "f");
-    let Terminator::Goto(header) = f.body.blocks[0].terminator else {
+    let Terminator::Goto(_) = f.body.blocks[0].terminator else {
         panic!("entry Goto header");
     };
     let branch_block = f
@@ -515,6 +515,19 @@ fn transfer_and_normal_conditional_arm_lower_without_completion_lattice() {
     lower_source("fn f(a: Bool, b: Bool) { while a { if b { continue; } else {} } }");
     lower_source("fn f(a: Bool, b: Bool) { while a { if b { break; } else { continue; } } }");
     lower_source("fn f(a: Bool, b: Bool) { while a { if b { break; } } }");
+}
+
+#[test]
+fn mutable_assignment_can_restore_break_continuation_state() {
+    lower_source(
+        "record Ticket { value: I64 } \
+         fn make() -> Ticket { return Ticket { value: 1 }; } \
+         fn sink(value: Ticket) {} \
+         fn f(flag: Bool) { \
+             let mut value: Ticket = make(); \
+             while flag { sink(value); value = make(); break; } \
+         }",
+    );
 }
 
 #[test]
