@@ -55,9 +55,11 @@ pub enum MirValidationErrorKind {
     RawReadRequiresPointer(TypeId),
     RawMoveRequiresPointer(TypeId),
     RawAssignRequiresPointer(TypeId),
+    IntegerAddRequiresInteger(TypeId),
     AssignToImmutable(LocalId),
     InteriorMutationRequiresMarkedRegion(Place),
     InitRequiresVacant(Place),
+    IntegerAddRequiresVacant(Place),
     CallResultRequiresVacant(Place),
     UseOfUninitialized(Place),
     DropOfUninitialized(Place),
@@ -433,6 +435,22 @@ fn is_bool_type(types: &TypeTable, ty: TypeId) -> bool {
     )
 }
 
+fn is_integer_type(types: &TypeTable, ty: TypeId) -> bool {
+    matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(
+            ScalarType::I8
+                | ScalarType::I16
+                | ScalarType::I32
+                | ScalarType::I64
+                | ScalarType::U8
+                | ScalarType::U16
+                | ScalarType::U32
+                | ScalarType::U64
+        ))
+    )
+}
+
 fn validate_static_statement(
     types: &TypeTable,
     body: &Body,
@@ -443,6 +461,17 @@ fn validate_static_statement(
         Statement::Init { dst, src } => {
             let expected = place_type(types, body, dst, point)?;
             validate_operand_type(types, body, src, expected, point)
+        }
+        Statement::IntegerAdd { dst, left, right } => {
+            let expected = place_type(types, body, dst, point)?;
+            if !is_integer_type(types, expected) {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::IntegerAddRequiresInteger(expected),
+                ));
+            }
+            validate_operand_type(types, body, left, expected, point)?;
+            validate_operand_type(types, body, right, expected, point)
         }
         Statement::Borrow { loan, src, .. } => {
             let declaration = loan_decl(body, *loan, point)?;
@@ -1003,6 +1032,28 @@ fn validate_state_statement(
             else {
                 return Ok(DefinedStep::NoDefinedContinuation);
             };
+            write_validation_value(types, dst_ty, place_state_mut(locals, dst), value);
+        }
+        Statement::IntegerAdd { dst, left, right } => {
+            authorize_direct_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
+            if !place_state(locals, dst).wholly_vacant() {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::IntegerAddRequiresVacant(dst.clone()),
+                ));
+            }
+            let dst_ty = place_type(types, body, dst, point)?;
+            let DefinedStep::Continue(_) =
+                validate_operand_state(types, body, locals, active_loans, left, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
+            let DefinedStep::Continue(_) =
+                validate_operand_state(types, body, locals, active_loans, right, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
+            let value = unknown_validation_value(types, dst_ty);
             write_validation_value(types, dst_ty, place_state_mut(locals, dst), value);
         }
         Statement::Borrow { loan, kind, src } => {
