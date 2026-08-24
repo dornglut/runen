@@ -285,18 +285,9 @@ fn lowering_rejects_integer_mul_operand_type_facts_that_do_not_match_result() {
 fn source_to_hir_to_core_to_reference_proves_multiplication_and_tier_ordering() {
     for (source, expected) in [
         ("fn f() -> I8 { return 6 * 7; }", CoreValue::I8(42)),
-        (
-            "fn f() -> I8 { return 127 * 2; }",
-            CoreValue::I8(-2),
-        ),
-        (
-            "fn f() -> I8 { return -128 * 2; }",
-            CoreValue::I8(0),
-        ),
-        (
-            "fn f() -> U8 { return 255 * 2; }",
-            CoreValue::U8(254),
-        ),
+        ("fn f() -> I8 { return 127 * 2; }", CoreValue::I8(-2)),
+        ("fn f() -> I8 { return -128 * 2; }", CoreValue::I8(0)),
+        ("fn f() -> U8 { return 255 * 2; }", CoreValue::U8(254)),
         ("fn f() -> I8 { return 6 * -7; }", CoreValue::I8(-42)),
         ("fn f() -> I8 { return 2 + 3 * 4; }", CoreValue::I8(14)),
         ("fn f() -> I8 { return 2 * 3 + 4; }", CoreValue::I8(10)),
