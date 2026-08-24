@@ -58,7 +58,8 @@ fn plus_does_not_create_unary_increment_or_compound_assignment_forms() {
 
 #[test]
 fn addition_is_bounded_between_prefix_and_equality() {
-    let source = "fn f(a: I8, b: I8, c: Bool) { let sum: I8 = !a + b; let compared: Bool = a + b == c; }";
+    let source =
+        "fn f(a: I8, b: I8, c: Bool) { let sum: I8 = !a + b; let compared: Bool = a + b == c; }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -94,7 +95,8 @@ fn ungrouped_addition_chains_are_invalid_but_grouped_nesting_is_represented() {
     assert!(!chained.errors().is_empty());
     assert_eq!(count(&chained, SyntaxKind::IntegerAddValue), 1);
 
-    let source = "fn good(a: I8, b: I8, c: I8) { let left: I8 = (a + b) + c; let right: I8 = a + (b + c); }";
+    let source =
+        "fn good(a: I8, b: I8, c: I8) { let left: I8 = (a + b) + c; let right: I8 = a + (b + c); }";
     let grouped = parse(source);
     assert_eq!(grouped.text(), source);
     assert!(grouped.errors().is_empty(), "{:?}", grouped.errors());
@@ -139,7 +141,8 @@ fn addition_does_not_widen_field_receivers_or_pattern_scrutinees() {
     assert_eq!(count(&field, SyntaxKind::FieldValueUse), 0);
     assert_eq!(count(&field, SyntaxKind::IntegerAddValue), 1);
 
-    let pattern_source = "record Pair { left: I8 } fn bad(a: Pair, b: Pair) { let Pair { left: x } = a + b; }";
+    let pattern_source =
+        "record Pair { left: I8 } fn bad(a: Pair, b: Pair) { let Pair { left: x } = a + b; }";
     let pattern = parse(pattern_source);
     assert_eq!(pattern.text(), pattern_source);
     assert!(!pattern.errors().is_empty());
