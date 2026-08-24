@@ -97,7 +97,7 @@ Plain integer addition consumes both owned operand values exactly once. It first
 x = l + r
 ```
 
-and then produces exactly one distinct owned result of source type `T` by applying the plain fixed-width modulo-`2^N` signed/unsigned mapping owned by `core/numerics/integers.md` for the width and signedness corresponding to `T`.
+and then produces exactly one distinct owned result of source type `T` by applying the plain fixed-width modulo-`2^N` signed/unsigned mapping owned by `../core/numerics/integers.md` for the width and signedness corresponding to `T`.
 
 There is no intermediate fixed-width truncation before the exact sum. If `x` lies outside the value interval of `T`, the accepted plain-overflow mapping determines the wrapped semantic result; overflow does not by itself select a source fault, undefined behavior, checked outcome, or saturated result.
 
@@ -234,7 +234,7 @@ A faithful lowerer MUST reject internally inconsistent retained operator facts r
 
 ## Source-to-Core refinement
 
-The represented Boolean operators require no new Core operation. Plain fixed-width integer addition refines to exactly the represented Core `IntegerAdd` relation owned by `core/value-storage.md` and its numerical relation in `core/numerics/integers.md`.
+The represented Boolean operators require no new Core operation. Plain fixed-width integer addition refines to exactly the represented Core `IntegerAdd` relation owned by `../core/value-storage.md` and its numerical relation in `../core/numerics/integers.md`.
 
 ### Plain fixed-width integer addition refinement
 
