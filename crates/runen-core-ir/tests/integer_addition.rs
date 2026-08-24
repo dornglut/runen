@@ -2,8 +2,8 @@ mod support;
 
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement, Terminator,
-    TypeDef, TypeId, TypeTable, Value, validate_program,
+    MirValidationErrorKind, Operand, Place, PlaceAccess, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 use support::one_function_program;
 
@@ -50,7 +50,11 @@ fn integer_add_accepts_all_eight_scalar_kinds_and_immutable_vacant_destinations(
 
 #[test]
 fn integer_add_rejects_non_integer_destination_with_specific_error() {
-    for scalar in [ScalarType::Bool, ScalarType::F32, ScalarType::TrackedFixture] {
+    for scalar in [
+        ScalarType::Bool,
+        ScalarType::F32,
+        ScalarType::TrackedFixture,
+    ] {
         let mut types = TypeTable::new();
         let ty = types.push(TypeDef::scalar("not-integer", scalar));
         let program = one_block(
@@ -235,5 +239,6 @@ fn integer_add_result_becomes_live_once_after_both_operands() {
         ],
     );
 
-    validate_program(program).expect("successful IntegerAdd initializes its destination exactly once");
+    validate_program(program)
+        .expect("successful IntegerAdd initializes its destination exactly once");
 }
