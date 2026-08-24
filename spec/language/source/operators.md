@@ -259,7 +259,7 @@ This refinement is valid under the accepted Core owners because:
 - successful `IntegerAdd` leaves exactly the result local live and introduces no comparison branch, join, fault, or divergence; and
 - nested represented additions may recursively lower complete operand producers before their enclosing addition emits its own one Core `IntegerAdd`.
 
-A conforming implementation MAY use another Core program shape only when it is observationally equivalent under the accepted Core semantics and preserves the exact source type, left-to-right producer ordering, successful operand consumption, ownership/fault/divergence behavior, plain-overflow result, and one-result relation. It may not replace the accepted semantics with host arithmetic assumptions or implicit conversions.
+An implementation MAY represent this exact refinement differently internally, but the represented Core semantic program for one source addition MUST still lower the complete left producer, then the complete right producer, create one fresh wholly-vacant result local, apply exactly one `IntegerAdd` to that local, and add no Core branch or join solely for the addition. It MUST preserve the exact source type, successful operand consumption, ownership/fault/divergence behavior, and plain-overflow result, and MUST NOT replace the accepted semantics with host arithmetic assumptions or implicit conversions.
 
 ### Boolean logical negation refinement
 
@@ -288,7 +288,7 @@ The source semantic truth relation is the authority for the opposite constants s
 
 ### Boolean equality and inequality refinement
 
-A faithful equality/inequality lowerer first lowers the complete left producer exactly once and then the complete right producer exactly once. Both lowering operations complete before comparison branching begins. Each produced local MUST have Core Bool type; malformed retained source facts are rejected rather than repaired.
+A faithful equality/inequality lowerer first lowers the complete left producer exactly once and then lowers the complete right producer exactly once. Both lowering operations complete before comparison branching begins. Each produced local MUST have Core Bool type; malformed retained source facts are rejected rather than repaired.
 
 After both Bool operand locals exist, a faithful refinement MAY use this four-leaf truth-table shape:
 
