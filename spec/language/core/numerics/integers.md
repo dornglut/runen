@@ -25,6 +25,37 @@ Selecting an explicit checked, wrapping, saturating, or other overflow mode is n
 
 The modular result above is a semantic value-domain rule. It does not require a physical integer representation, byte layout, ABI representation, or address-level interpretation.
 
+## Plain fixed-width integer addition
+
+This revision represents exactly one concrete plain fixed-width arithmetic operation: **integer addition**.
+
+Its represented operand and result scalar kinds are exactly:
+
+- signed fixed-width integer kinds `I8`, `I16`, `I32`, and `I64`; and
+- unsigned fixed-width integer kinds `U8`, `U16`, `U32`, and `U64`.
+
+For one selected fixed-width integer kind of width `N`, let `l` and `r` be two semantic integer values of that same kind. The **exact mathematical addition result** is the mathematical integer
+
+```text
+x = l + r
+```
+
+with no intermediate fixed-width truncation, host overflow, backend overflow flag, or physical representation involved in forming `x`.
+
+The successful **plain fixed-width addition result** is then exactly the value of that same selected fixed-width integer kind obtained by applying the plain fixed-width overflow mapping above to `x`.
+
+Consequently addition is total over every pair of values in one represented fixed-width integer domain. An exact sum outside the destination interval wraps by the accepted modulo-`2^N` mapping; it does not by itself produce a defined fault, undefined behavior, checked-overflow outcome, or saturated value.
+
+This numerical relation does not make distinct Core type identities interchangeable merely because they have the same scalar kind. The Core operation that consumes this relation owns exact operand/destination type-identity validation and result storage. Likewise, source-language typing and `+` spelling are owned by their source semantic and concrete-syntax owners rather than by this Core numerical relation.
+
+The represented Core operation consuming this relation evaluates its two operands left-to-right and writes the resulting value through the non-replacing destination relation owned by [Core value and storage semantics](../value-storage.md). Those operand-access, storage, lifetime, and initialization rules are not duplicated here.
+
+The addition step after both semantic operand values are available is deterministic, non-faulting, and non-diverging. It introduces no borrow, reference, pointer, storage identity, layout, ABI, target, instruction-selection, or source-visible contract-selection fact.
+
+A conforming implementation MAY use native arithmetic only when it preserves the exact mathematical-addition-plus-plain-overflow relation above. Host signed-overflow behavior, backend `nsw`/`nuw`-like assumptions, debug/release mode, instruction width, or physical two's-complement representation is never semantic authority.
+
+This represented operation defines no subtraction, multiplication, division, remainder, shift, bitwise operation, comparison, floating operation, vector operation, conversion, constant-evaluation rule, checked addition, saturating addition, or explicitly wrapping addition.
+
 ## Explicit checked overflow
 
 An **explicit checked fixed-width integer arithmetic operation** is one whose applicable operation contract selects checked overflow behavior.
