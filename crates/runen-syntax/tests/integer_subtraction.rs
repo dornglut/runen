@@ -45,7 +45,13 @@ fn arrow_remains_longest_match_and_no_new_minus_token_exists() {
 
     let kinds = nontrivia_kinds(&parsed);
     assert!(kinds.contains(&SyntaxKind::Arrow));
-    assert_eq!(kinds.iter().filter(|kind| **kind == SyntaxKind::Minus).count(), 1);
+    assert_eq!(
+        kinds
+            .iter()
+            .filter(|kind| **kind == SyntaxKind::Minus)
+            .count(),
+        1
+    );
 }
 
 #[test]
