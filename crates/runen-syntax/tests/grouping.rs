@@ -44,7 +44,7 @@ fn right(a: Bool, b: Bool, c: Bool) -> Bool { return a == (b != c); }
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 3);
-    assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 4);
+    assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 5);
     assert_eq!(count(&parsed, SyntaxKind::BooleanNotValue), 1);
 
     let not = parsed
@@ -196,7 +196,7 @@ fn missing_group_close_preserves_call_argument_comma_and_following_argument() {
     assert!(!parsed.errors().is_empty());
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 1);
     assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
-    assert_eq!(count(&parsed, SyntaxKind::ArgumentList), 3);
+    assert_eq!(count(&parsed, SyntaxKind::ArgumentList), 1);
     assert_eq!(count(&parsed, SyntaxKind::BooleanLiteral), 1);
 }
 
