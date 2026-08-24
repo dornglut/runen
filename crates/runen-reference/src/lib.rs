@@ -8,6 +8,7 @@ use runen_core_ir::{LoanId, StorageRegion};
 pub enum VerificationWriteKind {
     Init,
     IntegerAdd,
+    IntegerSub,
     Assign,
     InteriorAssign,
     RawAssign,
