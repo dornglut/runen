@@ -202,7 +202,10 @@ fn signed_literal_right_operand_is_retained_as_existing_literal_hir() {
         .and_then(|returned| returned.value.as_ref())
         .expect("return value");
     let (_, right) = integer_sub(value, IntrinsicType::I8);
-    assert!(matches!(right.kind, ValueKind::Literal(runen_hir::LiteralValue::I8(-1))));
+    assert!(matches!(
+        right.kind,
+        ValueKind::Literal(runen_hir::LiteralValue::I8(-1))
+    ));
 }
 
 #[test]
