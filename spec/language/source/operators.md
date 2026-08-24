@@ -4,25 +4,26 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source-semantic operator relations: each represented operator's operand and result source types, successful semantic value transformation, operator-local ownership consequence, and operation-specific source-to-Core refinement boundary.
 
-It consumes the represented source type identities and semantic value domains from [Source type foundation](types.md), including the exact two-value `Bool` domain and the represented fixed-width integer domains. Plain fixed-width integer addition and subtraction consume the exact mathematical operation-specific and modulo-overflow value relations from [Core integer semantics](../core/numerics/integers.md). Their represented Core refinements consume Bool-valued conditional branching from [Core control flow](../core/control-flow.md) and constant values, wholly-vacant non-replacing initialization, and represented Core `IntegerAdd`/`IntegerSub` result initialization from [Core value and storage semantics](../core/value-storage.md).
+It consumes the represented source type identities and semantic value domains from [Source type foundation](types.md), including the exact two-value `Bool` domain and the represented fixed-width integer domains. Plain fixed-width integer addition, subtraction, and multiplication consume the exact mathematical operation-specific and modulo-overflow value relations from [Core integer semantics](../core/numerics/integers.md). Their represented Core refinements consume Bool-valued conditional branching from [Core control flow](../core/control-flow.md) and constant values, wholly-vacant non-replacing initialization, and represented Core `IntegerAdd`/`IntegerSub`/`IntegerMul` result initialization from [Core value and storage semantics](../core/value-storage.md).
 
-[Source concrete syntax](concrete-syntax.md) owns the punctuation, concrete prefix/additive/equality grammar, and bounded contextual grouping grammar that map source forms to the operator relations defined here. [Source function execution](function-execution.md) consumes these relations when validating and executing operand producers, sequencing multiple operands, propagating fault or divergence behavior, managing any operation-owned produced operand value that must remain live while a later operand executes, transparently executing any surrounding grouped-value wrapper, and transferring a successful operator result into an existing receiving position. [Source control flow](control-flow.md) consumes a completed operator result only through its existing exact-`Bool` `ConditionalValue` relation. This document does not redefine those owners.
+[Source concrete syntax](concrete-syntax.md) owns the punctuation, concrete prefix/multiplicative/additive/equality grammar, and bounded contextual grouping grammar that map source forms to the operator relations defined here. [Source function execution](function-execution.md) consumes these relations when validating and executing operand producers, sequencing multiple operands, propagating fault or divergence behavior, managing any operation-owned produced operand value that must remain live while a later operand executes, transparently executing any surrounding grouped-value wrapper, and transferring a successful operator result into an existing receiving position. [Source control flow](control-flow.md) consumes a completed operator result only through its existing exact-`Bool` `ConditionalValue` relation. This document does not redefine those owners.
 
 This revision does not define a universal source expression taxonomy, parser implementation strategy, implementation HIR layout, runtime operator object, or backend instruction selection.
 
 ## Represented operator family
 
-The represented source operator family contains exactly five operations in this revision:
+The represented source operator family contains exactly six operations in this revision:
 
 - **Boolean logical negation**;
+- **plain fixed-width integer multiplication**;
 - **plain fixed-width integer addition**;
 - **plain fixed-width integer subtraction**;
 - **Boolean equality**; and
 - **Boolean inequality**.
 
-Boolean logical negation is a prefix value-producing operation. Plain fixed-width integer addition/subtraction and Boolean equality/inequality are bounded binary value-producing operations. Their represented concrete placements, `!`, `+`, binary `-`, `==`, and `!=` spellings, bounded additive/equality tiers, and grouping relationship are owned by `concrete-syntax.md`; the semantic operations do not depend on the original punctuation tokens after source validation.
+Boolean logical negation is a prefix value-producing operation. Plain fixed-width integer multiplication, addition, subtraction, and Boolean equality/inequality are bounded binary value-producing operations. Their represented concrete placements, `!`, `*`, `+`, binary `-`, `==`, and `!=` spellings, bounded multiplicative/additive/equality tiers, and grouping relationship are owned by `concrete-syntax.md`; the semantic operations do not depend on the original punctuation tokens after source validation.
 
-No arithmetic beyond the represented plain fixed-width integer addition and subtraction, ordering, numeric comparison, structural or record comparison, floating comparison, pointer comparison, short-circuit logical, conversion, cast, compound-assignment, numeric-negation, postfix, member, or other operator is introduced by these relations.
+No arithmetic beyond the represented plain fixed-width integer multiplication, addition, and subtraction, ordering, numeric comparison, structural or record comparison, floating comparison, pointer comparison, short-circuit logical, conversion, cast, compound-assignment, numeric-negation, postfix, member, or other operator is introduced by these relations.
 
 ## Boolean logical negation typing
 
@@ -75,6 +76,27 @@ When `T` is admitted:
 The operand types do not independently infer, choose, or alter `T`. A surrounding non-integer required type makes the subtraction source-invalid before operand validation may commit a binding ownership consequence. A surrounding integer type different from an operand producer's own exact type causes that operand to fail its existing exact required-type validation rather than causing a conversion or promotion.
 
 This relation defines no mixed-width or mixed-signedness arithmetic, integer promotion, widening, narrowing, coercion, conversion, default numeric type, overload resolution, trait dispatch, generic arithmetic, or result-type inference from operand syntax. Decimal integer literals may materialize as `T` only through their existing context-required literal relation; subtraction introduces no second literal-typing rule and does not reinterpret the accepted signed-literal relation.
+
+The context-directed result/operand requirement and complete two-operand transactional validation/eager execution are consumed by `function-execution.md`.
+
+## Plain fixed-width integer multiplication typing
+
+Plain fixed-width integer multiplication has exactly two operands, ordered **left** and **right**, and exactly one result.
+
+Like represented addition and subtraction, multiplication is deliberately **context-directed by one exact surrounding required source type**. Let `T` be that required type. Multiplication is source-admissible only when `T` is exactly one of these intrinsic source types:
+
+- `I8`, `I16`, `I32`, or `I64`; or
+- `U8`, `U16`, `U32`, or `U64`.
+
+When `T` is admitted:
+
+- the left operand required source type is exactly `T`;
+- the right operand required source type is exactly `T`; and
+- the successful result source type is exactly `T`.
+
+The operand types do not independently infer, choose, or alter `T`. A surrounding non-integer required type makes multiplication source-invalid before operand validation may commit a binding ownership consequence. A surrounding integer type different from an operand producer's own exact type causes that operand to fail its existing exact required-type validation rather than causing a conversion or promotion.
+
+This relation defines no mixed-width or mixed-signedness arithmetic, integer promotion, widening, narrowing, coercion, conversion, default numeric type, overload resolution, trait dispatch, generic arithmetic, or result-type inference from operand syntax. Decimal integer literals may materialize as `T` only through their existing context-required literal relation; multiplication introduces no second literal-typing rule and does not reinterpret the accepted signed-literal relation.
 
 The context-directed result/operand requirement and complete two-operand transactional validation/eager execution are consumed by `function-execution.md`.
 
@@ -145,6 +167,24 @@ This relation is total after two valid `T` operand values have been produced. It
 
 The relation does not define general unary negation, a source checked/saturating/explicitly wrapping mode, floating subtraction, multiplication, division, remainder, shifts, bitwise operations, conversions, or numeric comparison.
 
+## Plain fixed-width integer multiplication value relation
+
+Let `T` be the admitted exact fixed-width integer source type selected by the surrounding required type, and let `l` and `r` be the two successfully produced semantic operand values of `T`.
+
+Plain integer multiplication consumes both owned operand values exactly once. It first forms the exact mathematical integer product
+
+```text
+x = l * r
+```
+
+and then produces exactly one distinct owned result of source type `T` by applying the plain fixed-width modulo-`2^N` signed/unsigned mapping owned by `../core/numerics/integers.md` for the width and signedness corresponding to `T`.
+
+There is no intermediate fixed-width truncation before the exact product. If `x` lies outside the value interval of `T`, the accepted plain-overflow mapping determines the wrapped semantic result; overflow does not by itself select a source fault, undefined behavior, checked outcome, or saturated result.
+
+This relation is total after two valid `T` operand values have been produced. Its result is independent of host integer overflow, physical representation, optimizer assumptions, debug/release configuration, backend flags, or target instructions.
+
+The relation does not define a source checked/saturating/explicitly wrapping mode, floating multiplication, division, remainder, shifts, bitwise operations, conversions, numeric comparison, dereference, or another meaning of `*`.
+
 ## Boolean equality value relation
 
 Let `l` and `r` be the successfully produced semantic left and right `Bool` operand values.
@@ -187,6 +227,8 @@ Plain fixed-width integer addition receives two already successfully produced ow
 
 Plain fixed-width integer subtraction likewise receives two already successfully produced owned values of the same admitted fixed-width integer source type `T`, consumes both operands exactly once as defined above, and produces one owned `T` result.
 
+Plain fixed-width integer multiplication likewise receives two already successfully produced owned values of the same admitted fixed-width integer source type `T`, consumes both operands exactly once as defined above, and produces one owned `T` result.
+
 Boolean equality and inequality each receive two already successfully produced owned `Bool` operand values, consume both operands exactly once as defined above, and produce one owned `Bool` result.
 
 Each represented operator itself:
@@ -201,7 +243,7 @@ Each represented operator itself:
 
 Any binding ownership transition, defined fault, divergence, transient lifetime, or other effect needed to produce an operand remains the consequence of that operand producer and the sequencing relation in `function-execution.md`.
 
-For each represented binary operator, successful left production necessarily precedes right production under `function-execution.md`, so the in-progress operation owns the produced left value until right production either succeeds, faults, or remains suspended by divergence. For equality/inequality that value is `Bool`; for integer addition/subtraction it is the selected exact integer type `T`. That bounded lifetime is an execution/cleanup sequencing fact owned by `function-execution.md`, not a new source binding or storage identity.
+For each represented binary operator, successful left production necessarily precedes right production under `function-execution.md`, so the in-progress operation owns the produced left value until right production either succeeds, faults, or remains suspended by divergence. For equality/inequality that value is `Bool`; for integer addition/subtraction/multiplication it is the selected exact integer type `T`. That bounded lifetime is an execution/cleanup sequencing fact owned by `function-execution.md`, not a new source binding or storage identity.
 
 A successfully validated represented operator adds no binding structural-ownership transition beyond the committed consequences of its operand producer or producers.
 
@@ -209,11 +251,11 @@ Every successful result is one ordinary owned value of its operator's exact resu
 
 ## Contextual grouping relationship
 
-Parenthesized grouping is concrete syntax around one already represented value producer; it is not a sixth operator and defines no operator-local type, value, ownership, fault, divergence, or Core relation. `concrete-syntax.md` owns the ordinary and conditional grouped-value grammar, and `function-execution.md` owns its semantic transparency.
+Parenthesized grouping is concrete syntax around one already represented value producer; it is not a seventh operator and defines no operator-local type, value, ownership, fault, divergence, or Core relation. `concrete-syntax.md` owns the ordinary and conditional grouped-value grammar, and `function-execution.md` owns its semantic transparency.
 
 When a group contains a represented operator, the contained operator retains exactly its typing, semantic value relation, operand ordering, ownership consequences, held-left lifetime where applicable, fault/divergence behavior, and source-to-Core refinement defined in this document. The parentheses add no operator step before, between, or after those relations.
 
-Grouping may make explicit a syntax-tree nesting that the unparenthesized bounded grammar does not represent. For example, `!(a == b)` contains one grouped equality value as the operand of logical negation, `(a == b) == c` contains one grouped inner equality as the left operand of an outer equality, and `a == (b != c)` contains one grouped inner inequality as the right operand. For additive operators, `(a + b) - c`, `(a - b) + c`, `a - (b - c)`, and `a + (b - c)` contain explicitly grouped inner additive values and do not make mixed or repeated ungrouped additive chains represented. These forms introduce neither equality nor additive associativity or chaining.
+Grouping may make explicit a syntax-tree nesting that the unparenthesized bounded grammar does not represent. For example, `!(a == b)` contains one grouped equality value as the operand of logical negation, `(a == b) == c` contains one grouped inner equality as the left operand of an outer equality, and `a == (b != c)` contains one grouped inner inequality as the right operand. For additive operators, `(a + b) - c`, `(a - b) + c`, `a - (b - c)`, and `a + (b - c)` contain explicitly grouped inner additive values. For multiplication, `(a * b) * c` and `a * (b * c)` explicitly represent repeated multiplication that the ungrouped multiplicative tier does not admit. Mixed-tier forms such as `(a + b) * c` and `a * (b + c)` explicitly override the ungrouped multiplicative-over-additive nesting. None of these forms introduces associativity or chaining.
 
 No precedence number, associativity metadata, grouping operator identity, runtime parenthesis object, or Core grouping operation follows from this concrete nesting. A faithful typed frontend may erase the grouping wrapper while retaining the already required contained operator/value facts.
 
@@ -225,7 +267,7 @@ Logical negation changes only one successful operand's semantic Bool value. Its 
 
 Boolean equality/inequality eagerly execute the complete left producer and then the complete right producer before producing their Bool result. Their successful post-condition binding environment is therefore exactly the right producer's successful post-evaluation environment after the already-completed left producer consequences. The Bool truth relation adds no further binding transition.
 
-The concrete conditional grammar may syntactically contain the bounded additive tier so that one grammar hierarchy remains explicit and context-preserving. Plain integer addition or subtraction nevertheless cannot satisfy the condition's surrounding exact required type `Bool`. `function-execution.md` therefore rejects such an additive operation at outer required-type admission before either operand is validated in a way that may commit ownership. No completed integer-add or integer-sub result reaches conditional selection.
+The concrete conditional grammar may syntactically contain the bounded multiplicative and additive tiers so that one grammar hierarchy remains explicit and context-preserving. Plain integer multiplication, addition, or subtraction nevertheless cannot satisfy the condition's surrounding exact required type `Bool`. `function-execution.md` therefore rejects such an integer arithmetic operation at outer required-type admission before either operand is validated in a way that may commit ownership. No completed integer-mul, integer-add, or integer-sub result reaches conditional selection.
 
 None of these relationships adds truthiness, constant-branch pruning, a source state set, a join/meet/widening relation, implicit restoration, or a second conditional-selection rule.
 
@@ -265,6 +307,17 @@ ValueKind::IntegerSub {
 
 where the outer value, left operand, and right operand all carry the same exact admitted fixed-width integer source type `T` selected by the surrounding receiving requirement.
 
+For plain fixed-width integer multiplication, a minimal typed representation may be equivalent to:
+
+```text
+ValueKind::IntegerMul {
+    left: Box<Value>,
+    right: Box<Value>,
+}
+```
+
+where the outer value, left operand, and right operand all carry the same exact admitted fixed-width integer source type `T` selected by the surrounding receiving requirement.
+
 For Boolean equality/inequality, a minimal typed representation may be equivalent to:
 
 ```text
@@ -283,11 +336,11 @@ A faithful implementation MAY instead use another explicit typed layout when it 
 
 These explanatory shapes are not implementation-layout mandates. Source locations may be retained by diagnostics/tooling but are not part of an operator's semantic identity. Token spelling, numeric precedence values, associativity metadata, grouping delimiters, Core block identities, source-CFG identities, source ownership-state sets, runtime operator objects, and backend opcodes are not semantic facts required after validation.
 
-A faithful lowerer MUST reject internally inconsistent retained operator facts rather than repairing them from lower/Core type information. This includes a non-`Bool` Boolean operator result or operand, an integer-add or integer-sub result whose type is not one of the eight admitted fixed-width integer types, or integer-add/integer-sub operands whose retained exact source type differs from the retained operation result type.
+A faithful lowerer MUST reject internally inconsistent retained operator facts rather than repairing them from lower/Core type information. This includes a non-`Bool` Boolean operator result or operand, an integer-add/integer-sub/integer-mul result whose type is not one of the eight admitted fixed-width integer types, or integer-add/integer-sub/integer-mul operands whose retained exact source type differs from the retained operation result type.
 
 ## Source-to-Core refinement
 
-The represented Boolean operators require no new Core operation. Plain fixed-width integer addition refines to exactly the represented Core `IntegerAdd` relation, and plain fixed-width integer subtraction refines to exactly the distinct represented Core `IntegerSub` relation, both owned by `../core/value-storage.md` with their numerical relations in `../core/numerics/integers.md`.
+The represented Boolean operators require no new Core operation. Plain fixed-width integer addition refines to exactly the represented Core `IntegerAdd` relation, plain fixed-width integer subtraction refines to exactly the distinct represented Core `IntegerSub` relation, and plain fixed-width integer multiplication refines to exactly the distinct represented Core `IntegerMul` relation, all owned by `../core/value-storage.md` with their numerical relations in `../core/numerics/integers.md`.
 
 ### Plain fixed-width integer addition refinement
 
@@ -338,6 +391,31 @@ This refinement is valid under the accepted Core owners because:
 - nested represented additive operators may recursively lower complete operand producers before their enclosing operation emits its own one Core `IntegerAdd` or `IntegerSub`.
 
 An implementation MAY represent this exact refinement differently internally, but the represented Core semantic program for one source subtraction MUST still lower the complete left producer, then the complete right producer, create one fresh wholly-vacant result local, apply exactly one `IntegerSub` to that local, and add no Core branch or join solely for the subtraction. It MUST preserve the exact source type, successful operand consumption, ownership/fault/divergence behavior, and plain-overflow result, and MUST NOT replace the accepted semantics with host arithmetic assumptions, implicit conversions, unary-negation rewriting, or a speculative generic arithmetic opcode.
+
+### Plain fixed-width integer multiplication refinement
+
+A faithful integer-mul lowerer first lowers the complete left producer exactly once and then lowers the complete right producer exactly once from the successful left continuation. The lowered operand locals MUST carry the same exact Core type identity corresponding to the admitted source type `T`; malformed retained source facts are rejected rather than converted or repaired.
+
+After both operand-producer lowerings succeed:
+
+1. create one fresh Core result local of that same exact Core integer type identity; the local is initially wholly vacant;
+2. emit exactly one represented Core `IntegerMul` whose destination is that result local, whose left operand is an ownership-transferring `Move` of the left operand-result local, and whose right operand is an ownership-transferring `Move` of the right operand-result local; and
+3. continue lowering with the result local live and available as the lowered source multiplication result.
+
+This refinement is valid under the accepted Core owners because:
+
+- source left-producer execution completes before source right-producer execution begins;
+- the lowered left result local remains live while the complete right producer lowers/executes, representing the source operation's held-left value;
+- if left producer execution faults or diverges, right producer execution and `IntegerMul` are never reached;
+- if right producer execution faults after left success, `IntegerMul` is never reached and the existing Core activation fault cleanup ends then-live compiler locals, including the local retaining the produced left integer value;
+- if right producer execution diverges, the caller remains suspended and the left operand-result local remains live;
+- once both producers succeed, `IntegerMul` evaluates its two `Move` operands left-to-right, consuming each produced operand local exactly once;
+- the fresh result local satisfies the operation's wholly-vacant non-replacing destination rule;
+- the Core numerical relation computes the exact mathematical product and accepted plain fixed-width result for the same type `T`;
+- successful `IntegerMul` leaves exactly the result local live and introduces no comparison branch, join, fault, or divergence; and
+- nested represented multiplicative, additive, or mixed-tier operators may recursively lower complete operand producers before their enclosing arithmetic operation emits its own distinct Core operation.
+
+An implementation MAY represent this exact refinement differently internally, but the represented Core semantic program for one source multiplication MUST still lower the complete left producer, then the complete right producer, create one fresh wholly-vacant result local, apply exactly one `IntegerMul` to that local, and add no Core branch or join solely for multiplication. It MUST preserve the exact source type, successful operand consumption, ownership/fault/divergence behavior, and plain-overflow result, and MUST NOT replace the accepted semantics with host arithmetic assumptions, implicit conversions, or a speculative generic arithmetic opcode.
 
 ### Boolean logical negation refinement
 
@@ -394,23 +472,23 @@ This refinement is valid under the accepted Core owners because:
 
 A conforming implementation MAY use another Core program shape only when it is observationally equivalent under the accepted Core semantics and preserves the source relations above. In particular, an implementation may reduce the number of blocks but may not change operand evaluation order, successful operand consumption, truth mapping, fault/divergence behavior, or the one-result relation.
 
-The Boolean refinements introduce no Core `Not`, `Eq`, `Ne`, comparison operation, grouping operation, reference-machine extension, source/Core state merge, host-language Boolean comparison authority, or backend requirement. The integer-add and integer-sub refinements introduce exactly their distinct represented Core `IntegerAdd` and `IntegerSub` operations and no additional Core control-flow or numeric operation.
+The Boolean refinements introduce no Core `Not`, `Eq`, `Ne`, comparison operation, grouping operation, reference-machine extension, source/Core state merge, host-language Boolean comparison authority, or backend requirement. The integer-add, integer-sub, and integer-mul refinements introduce exactly their distinct represented Core `IntegerAdd`, `IntegerSub`, and `IntegerMul` operations and no additional Core control-flow or numeric operation.
 
 ## Deliberate boundaries
 
 This revision defines no:
 
 - general numeric unary negation;
-- arithmetic operator other than plain same-type fixed-width integer addition and subtraction;
-- floating-point addition/subtraction or mixed-width/mixed-signedness integer arithmetic;
-- checked, saturating, or explicitly wrapping source addition/subtraction mode;
+- arithmetic operator other than plain same-type fixed-width integer multiplication, addition, and subtraction;
+- floating-point multiplication/addition/subtraction or mixed-width/mixed-signedness integer arithmetic;
+- checked, saturating, or explicitly wrapping source multiplication/addition/subtraction mode;
 - integer, floating, nominal-record, pointer, reference, function, structural, representation, or generic value equality/inequality;
 - ordering or other comparison operator;
 - `&&`, `||`, short-circuiting, or another logical operator;
 - conversion, cast, coercion, numeric promotion, or operand-derived/default arithmetic typing;
 - Unit/tuple grouping form or general expression system beyond the bounded contextual grouping grammar owned by `concrete-syntax.md`;
-- ungrouped additive chaining, equality chaining, or comparison chaining;
-- general binary precedence or associativity hierarchy beyond the bounded additive and equality tiers owned by `concrete-syntax.md`;
+- ungrouped multiplicative chaining, additive chaining, equality chaining, or comparison chaining;
+- general binary precedence or associativity hierarchy beyond the bounded multiplicative, additive, and equality tiers owned by `concrete-syntax.md`;
 - arbitrary postfix/member/method expression;
 - assignment expression, compound assignment, field assignment, or general place/lvalue operation;
 - source numeric-contract selection or scoping;
