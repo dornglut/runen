@@ -288,7 +288,7 @@ The source semantic truth relation is the authority for the opposite constants s
 
 ### Boolean equality and inequality refinement
 
-A faithful equality/inequality lowerer first lowers the complete left producer exactly once and then lowers the complete right producer exactly once. Both lowering operations complete before comparison branching begins. Each produced local MUST have Core Bool type; malformed retained source facts are rejected rather than repaired.
+A faithful equality/inequality lowerer first lowers the complete left producer exactly once and then the complete right producer exactly once. Both lowering operations complete before comparison branching begins. Each produced local MUST have Core Bool type; malformed retained source facts are rejected rather than repaired.
 
 After both Bool operand locals exist, a faithful refinement MAY use this four-leaf truth-table shape:
 
