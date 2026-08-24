@@ -191,10 +191,8 @@ fn f(value: Ticket) {
     .expect_err("the contained direct call consumes its Ticket argument once");
     assert_eq!(unavailable_count(&errors), 1);
 
-    build(
-        "fn f(flag: Bool) { let grouped: Bool = (((flag))); let still_available: Bool = flag; }",
-    )
-    .expect("grouping adds no consumption to a duplicable binding use");
+    build("fn f(flag: Bool) { let grouped: Bool = (((flag))); let still_available: Bool = flag; }")
+        .expect("grouping adds no consumption to a duplicable binding use");
 }
 
 #[test]
