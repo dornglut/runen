@@ -480,10 +480,6 @@ A terminal return in the root body or a nested block begins only after every pre
 
 A represented no-result root body reaching its closing boundary with a local normal continuation and without a terminal return performs normal no-result completion.
 
-A result-bearing represented body MUST NOT have a reachable normal end without a result. This is a normal-path validity requirement, not a requirement for one unconditional concrete root-terminal return. A represented path that terminates by explicit `fault;` is abnormal and therefore requires no result value. A conditional whose two explicit arms both terminate the activation may therefore satisfy the result obligation without a following root return whether those arms return, explicitly fault, or use a represented mixture of the two. A conditional with no local fallthrough only because its paths perform loop transfers does not terminate the activation and cannot independently satisfy the result obligation. A represented bounded `while` always retains its statically represented false local normal continuation under `control-flow.md`, including for literal `true` and regardless of admitted transfers in its body, so the loop alone does not discharge the result obligation. When any represented path still establishes a normal root continuation, that continuation must eventually encounter a source-valid result-bearing return before the root closing boundary.
-
-No implicit result, default result, Unit, or Void source value is introduced.
-
 This sequencing relation introduces no unrestricted mid-block return, unreachable-statement weakening, short-circuit operator, catch, defer, refutable match, additional loop form, labeled transfer, transfer value, or other multi-path/cyclic control transfer beyond represented terminal returns, payload-free explicit `fault;`, bounded unlabeled `break;`/`continue;`, statement-level conditional, and bounded `while` owners consumed above.
 
 ## Explicit fault statement
@@ -560,7 +556,7 @@ This revision introduces no custom source destructor body, source `drop` ability
 
 When execution normally exits a represented lexical scope, consider all local bindings declared directly in that scope in **reverse local declaration order**. This includes ordinary locals and bindings introduced by recursive record-destructuring declarations.
 
-For each binding, select its then-current complete-root remaining frontier under `structural-ownership.md` and clean every frontier member in canonical order.
+For each binding, select its then-current complete-root remaining ownership frontier under `structural-ownership.md` and clean every frontier member in canonical order.
 
 For one record-destructuring declaration, `patterns.md` defines depth-first binding-leaf source order as the declaration order of the introduced bindings. Reverse local declaration cleanup therefore visits later binding leaves before earlier leaves, independently of record structural field order.
 
