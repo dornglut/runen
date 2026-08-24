@@ -60,7 +60,10 @@ fn standalone_star_is_lossless_without_disturbing_comment_delimiters() {
 #[test]
 fn slash_remains_unsupported_and_double_star_and_star_equals_are_not_operators() {
     let slash = parse("fn f(a: I64, b: I64) -> I64 { return a / b; }");
-    assert_eq!(slash.text(), "fn f(a: I64, b: I64) -> I64 { return a / b; }");
+    assert_eq!(
+        slash.text(),
+        "fn f(a: I64, b: I64) -> I64 { return a / b; }"
+    );
     assert!(
         slash
             .errors()
@@ -180,14 +183,14 @@ fn multiplication_preserves_signed_literal_and_prefix_boundaries() {
         .expect("multiplication");
     assert_eq!(
         mul.children().map(|node| node.kind()).collect::<Vec<_>>(),
-        [
-            SyntaxKind::IdentifierUse,
-            SyntaxKind::DecimalIntegerLiteral,
-        ]
+        [SyntaxKind::IdentifierUse, SyntaxKind::DecimalIntegerLiteral,]
     );
 
     let prefix = parse("fn f(a: I64, b: I64) -> Bool { return !a * b; }");
-    assert_eq!(prefix.text(), "fn f(a: I64, b: I64) -> Bool { return !a * b; }");
+    assert_eq!(
+        prefix.text(),
+        "fn f(a: I64, b: I64) -> Bool { return !a * b; }"
+    );
     assert!(prefix.errors().is_empty(), "{:?}", prefix.errors());
     let mul = prefix
         .syntax()
@@ -202,9 +205,8 @@ fn multiplication_preserves_signed_literal_and_prefix_boundaries() {
 
 #[test]
 fn conditional_multiplication_keeps_standalone_record_construction_excluded() {
-    let valid = parse(
-        "record Box { value: I64 } fn f(a: I64) { if Box { value: 2 }.value * a {} }",
-    );
+    let valid =
+        parse("record Box { value: I64 } fn f(a: I64) { if Box { value: 2 }.value * a {} }");
     assert_eq!(
         valid.text(),
         "record Box { value: I64 } fn f(a: I64) { if Box { value: 2 }.value * a {} }"
