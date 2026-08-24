@@ -66,8 +66,7 @@ fn integer_sub_rejects_non_integer_destination_with_specific_error() {
                 right: Operand::Constant(Value::Bool(false)),
             }],
         );
-        let error =
-            validate_program(program).expect_err("non-integer destination must fail first");
+        let error = validate_program(program).expect_err("non-integer destination must fail first");
         assert_eq!(
             error.kind,
             MirValidationErrorKind::IntegerSubRequiresInteger(ty)
