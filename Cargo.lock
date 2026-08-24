@@ -52,6 +52,7 @@ version = "0.0.0"
 dependencies = [
  "runen-core-ir",
  "runen-hir",
+ "runen-reference",
  "runen-syntax",
 ]
 
@@ -96,7 +97,7 @@ checksum = "08d43f7aa6b08d49f382cde6a7982047c3426db949b1424bc4b7ec9ae12c6ce2"
 name = "text-size"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f18aa187839b2bdb1ad2fa35ead8c4c2976b64e4363c386d45ac0f7ee85c9233"
+checksum = "f18aa187839b8c2976b64e4363c386d45ac0f7ee85c9233"
 
 [[package]]
 name = "tinyvec"
