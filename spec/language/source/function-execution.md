@@ -556,7 +556,7 @@ This revision introduces no custom source destructor body, source `drop` ability
 
 When execution normally exits a represented lexical scope, consider all local bindings declared directly in that scope in **reverse local declaration order**. This includes ordinary locals and bindings introduced by recursive record-destructuring declarations.
 
-For each binding, select its then-current complete-root remaining ownership frontier under `structural-ownership.md` and clean every frontier member in canonical order.
+For each binding, select its then-current complete-root remaining frontier under `structural-ownership.md` and clean every frontier member in canonical order.
 
 For one record-destructuring declaration, `patterns.md` defines depth-first binding-leaf source order as the declaration order of the introduced bindings. Reverse local declaration cleanup therefore visits later binding leaves before earlier leaves, independently of record structural field order.
 
