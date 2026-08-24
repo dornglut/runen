@@ -78,8 +78,16 @@ fn integer_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
     assert_ne!(left_local, right_local);
     assert_ne!(dst.local, left_local);
     assert_ne!(dst.local, right_local);
-    assert!(f.body.locals[left_local.0 as usize].name.starts_with("$tmp"));
-    assert!(f.body.locals[right_local.0 as usize].name.starts_with("$tmp"));
+    assert!(
+        f.body.locals[left_local.0 as usize]
+            .name
+            .starts_with("$tmp")
+    );
+    assert!(
+        f.body.locals[right_local.0 as usize]
+            .name
+            .starts_with("$tmp")
+    );
     assert!(f.body.locals[dst.local.0 as usize].name.starts_with("$tmp"));
     assert!(left_local.0 < right_local.0);
     assert!(right_local.0 < dst.local.0);
@@ -88,7 +96,10 @@ fn integer_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
         panic!("addition result must feed the function return");
     };
     assert_eq!(moved_local(returned), Some(dst.local));
-    assert!(!matches!(f.body.blocks[0].terminator, Terminator::Branch { .. }));
+    assert!(!matches!(
+        f.body.blocks[0].terminator,
+        Terminator::Branch { .. }
+    ));
 }
 
 #[test]
@@ -234,10 +245,7 @@ fn lowering_rejects_integer_add_operand_type_facts_that_do_not_match_result() {
 fn source_to_hir_to_core_to_reference_proves_in_range_and_wrapping_results() {
     for (source, expected) in [
         ("fn f() -> I8 { return 40 + 2; }", CoreValue::I8(42)),
-        (
-            "fn f() -> I8 { return 127 + 1; }",
-            CoreValue::I8(i8::MIN),
-        ),
+        ("fn f() -> I8 { return 127 + 1; }", CoreValue::I8(i8::MIN)),
         ("fn f() -> U8 { return 255 + 1; }", CoreValue::U8(0)),
     ] {
         let report = execute_source(source, "f");
