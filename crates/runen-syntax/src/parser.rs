@@ -674,7 +674,11 @@ impl Parser<'_> {
     fn parse_multiplicative_value(&mut self, context: ValueContext) {
         let checkpoint = self.builder.checkpoint();
         self.parse_value_in(context);
-        if self.at(SyntaxKind::Star) {
+        if self.at(SyntaxKind::Star)
+            && self
+                .peek_nontrivia(1)
+                .is_some_and(SyntaxKind::is_value_start)
+        {
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::IntegerMulValue.into());
             self.bump();
