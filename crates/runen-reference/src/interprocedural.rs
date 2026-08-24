@@ -141,6 +141,20 @@ impl RuntimeValue {
         }
     }
 
+    fn wrapping_integer_sub(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::I8(left), Self::I8(right)) => Self::I8(left.wrapping_sub(right)),
+            (Self::I16(left), Self::I16(right)) => Self::I16(left.wrapping_sub(right)),
+            (Self::I32(left), Self::I32(right)) => Self::I32(left.wrapping_sub(right)),
+            (Self::I64(left), Self::I64(right)) => Self::I64(left.wrapping_sub(right)),
+            (Self::U8(left), Self::U8(right)) => Self::U8(left.wrapping_sub(right)),
+            (Self::U16(left), Self::U16(right)) => Self::U16(left.wrapping_sub(right)),
+            (Self::U32(left), Self::U32(right)) => Self::U32(left.wrapping_sub(right)),
+            (Self::U64(left), Self::U64(right)) => Self::U64(left.wrapping_sub(right)),
+            _ => unreachable!("validated IntegerSub has matching fixed-width integer operands"),
+        }
+    }
+
     fn into_public_value(self) -> Value {
         match self {
             Self::Bool(value) => Value::Bool(value),
@@ -502,6 +516,9 @@ impl Machine {
             Statement::IntegerAdd { dst, left, right } => {
                 self.integer_add(frame_index, dst, left, right)
             }
+            Statement::IntegerSub { dst, left, right } => {
+                self.integer_sub(frame_index, dst, left, right)
+            }
             Statement::Borrow { loan, kind, src } => {
                 self.begin_borrow(frame_index, *loan, *kind, src);
                 Ok(())
@@ -583,6 +600,37 @@ impl Machine {
             VerificationEventKind::Write {
                 place: dst.clone(),
                 kind: VerificationWriteKind::IntegerAdd,
+            },
+        );
+        Ok(())
+    }
+
+    fn integer_sub(
+        &mut self,
+        frame_index: usize,
+        dst: &Place,
+        left: &Operand,
+        right: &Operand,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        let dst_ty = self.place_type(frame_index, dst);
+        let left = self.evaluate_operand(frame_index, left)?;
+        let right = self.evaluate_operand(frame_index, right)?;
+        let value = RuntimeValue::wrapping_integer_sub(left, right);
+        {
+            let types = &self.program.as_program().types;
+            let frame = &mut self.frames[frame_index];
+            write_value(
+                types,
+                dst_ty,
+                place_state_mut(&mut frame.locals, dst),
+                value,
+            );
+        }
+        self.record(
+            frame_index,
+            VerificationEventKind::Write {
+                place: dst.clone(),
+                kind: VerificationWriteKind::IntegerSub,
             },
         );
         Ok(())

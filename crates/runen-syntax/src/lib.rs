@@ -112,6 +112,7 @@ pub enum SyntaxKind {
     GroupedValue,
     Plus,
     IntegerAddValue,
+    IntegerSubValue,
 }
 
 impl SyntaxKind {
@@ -259,6 +260,7 @@ impl Language for RunenLanguage {
             87 => SyntaxKind::GroupedValue,
             88 => SyntaxKind::Plus,
             89 => SyntaxKind::IntegerAddValue,
+            90 => SyntaxKind::IntegerSubValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

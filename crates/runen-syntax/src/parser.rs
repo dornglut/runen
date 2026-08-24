@@ -658,9 +658,13 @@ impl Parser<'_> {
     fn parse_additive_value(&mut self, context: ValueContext) {
         let checkpoint = self.builder.checkpoint();
         self.parse_value_in(context);
-        if self.at(SyntaxKind::Plus) {
-            self.builder
-                .start_node_at(checkpoint, SyntaxKind::IntegerAddValue.into());
+        let operation = match self.current() {
+            Some(SyntaxKind::Plus) => Some(SyntaxKind::IntegerAddValue),
+            Some(SyntaxKind::Minus) => Some(SyntaxKind::IntegerSubValue),
+            _ => None,
+        };
+        if let Some(operation) = operation {
+            self.builder.start_node_at(checkpoint, operation.into());
             self.bump();
             self.parse_value_in(context);
             self.builder.finish_node();

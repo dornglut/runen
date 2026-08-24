@@ -999,6 +999,59 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(result)
             }
+            hir::ValueKind::IntegerSub { left, right } => {
+                let integer_ty = value.ty;
+                if !matches!(
+                    integer_ty,
+                    hir::Type::Intrinsic(
+                        hir::IntrinsicType::I8
+                            | hir::IntrinsicType::I16
+                            | hir::IntrinsicType::I32
+                            | hir::IntrinsicType::I64
+                            | hir::IntrinsicType::U8
+                            | hir::IntrinsicType::U16
+                            | hir::IntrinsicType::U32
+                            | hir::IntrinsicType::U64
+                    )
+                ) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Integer-sub result type is not a fixed-width integer",
+                    ));
+                }
+                if left.ty != integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Integer-sub left operand type does not match result type",
+                    ));
+                }
+                if right.ty != integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Integer-sub right operand type does not match result type",
+                    ));
+                }
+
+                let core_integer_ty = self.types.get(integer_ty)?;
+                let left_local = self.lower_value(left)?;
+                if self.local_type(left_local)? != core_integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Integer-sub left operand temporary type does not match result type",
+                    ));
+                }
+
+                let right_local = self.lower_value(right)?;
+                if self.local_type(right_local)? != core_integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Integer-sub right operand temporary type does not match result type",
+                    ));
+                }
+
+                let result = self.push_temporary(integer_ty)?;
+                self.push_statement(core::Statement::IntegerSub {
+                    dst: core::Place::local(result),
+                    left: core::Operand::Move(core::Place::local(left_local).into()),
+                    right: core::Operand::Move(core::Place::local(right_local).into()),
+                });
+                Ok(result)
+            }
             hir::ValueKind::BooleanNot { operand } => {
                 let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
                 if value.ty != bool_ty {

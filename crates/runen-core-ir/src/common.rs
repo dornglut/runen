@@ -519,6 +519,12 @@ pub enum Statement {
         left: Operand,
         right: Operand,
     },
+    /// Plain fixed-width integer subtraction into wholly vacant direct storage.
+    IntegerSub {
+        dst: Place,
+        left: Operand,
+        right: Operand,
+    },
     /// Begins a root borrow from direct access or a child borrow from loan access.
     Borrow {
         loan: LoanId,
