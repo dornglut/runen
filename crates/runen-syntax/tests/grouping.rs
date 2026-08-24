@@ -151,10 +151,14 @@ fn empty_tuple_like_and_category_widening_forms_remain_invalid() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly valid: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly valid: {source}"
+        );
     }
 
-    let field = parse("record Flag { ready: Bool } fn bad(root: Flag) { let value: Bool = (root).ready; }");
+    let field =
+        parse("record Flag { ready: Bool } fn bad(root: Flag) { let value: Bool = (root).ready; }");
     assert_eq!(count(&field, SyntaxKind::FieldValueUse), 0);
 
     let indirect = parse("fn bad(f: Bool, x: Bool) { let value: Bool = (f)(x); }");
@@ -198,22 +202,21 @@ fn missing_group_close_preserves_call_argument_comma_and_following_argument() {
 
 #[test]
 fn missing_group_close_preserves_statement_semicolons() {
-    let declaration =
-        "fn f(flag: Bool) { let first: Bool = (flag; let second: Bool = true; }";
+    let declaration = "fn f(flag: Bool) { let first: Bool = (flag; let second: Bool = true; }";
     let parsed = parse(declaration);
     assert_eq!(parsed.text(), declaration);
     assert!(!parsed.errors().is_empty());
     assert_eq!(count(&parsed, SyntaxKind::LocalDeclaration), 2);
 
-    let assignment = "fn f(flag: Bool) { let mut value: Bool = true; value = (flag; let after: Bool = true; }";
+    let assignment =
+        "fn f(flag: Bool) { let mut value: Bool = true; value = (flag; let after: Bool = true; }";
     let parsed = parse(assignment);
     assert_eq!(parsed.text(), assignment);
     assert!(!parsed.errors().is_empty());
     assert_eq!(count(&parsed, SyntaxKind::AssignmentStatement), 1);
     assert_eq!(count(&parsed, SyntaxKind::LocalDeclaration), 2);
 
-    let returned =
-        "fn f(flag: Bool) -> Bool { return (flag; } fn g() -> Bool { return true; }";
+    let returned = "fn f(flag: Bool) -> Bool { return (flag; } fn g() -> Bool { return true; }";
     let parsed = parse(returned);
     assert_eq!(parsed.text(), returned);
     assert!(!parsed.errors().is_empty());
