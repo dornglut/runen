@@ -113,6 +113,33 @@ fn non_integer_outer_requirement_rejects_before_operand_validation_or_consumptio
 }
 
 #[test]
+fn failed_left_operand_commits_no_speculative_consumption() {
+    let errors = build(
+        "record Ticket {} \
+         fn malformed(value: Ticket, number: I8) -> I8 { return number; } \
+         fn sink(value: Ticket) {} \
+         fn f(value: Ticket) { \
+             let product: I8 = malformed(value, true) * 2; \
+             sink(value); \
+         }",
+    )
+    .expect_err("left operand validation must fail after a speculative first argument");
+
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Intrinsic(IntrinsicType::I8),
+            found: Type::Intrinsic(IntrinsicType::Bool),
+        }
+    ));
+    assert_eq!(
+        unavailable_count(&errors),
+        0,
+        "failed left operand must not commit its speculative consumption"
+    );
+}
+
+#[test]
 fn failed_right_operand_rolls_back_left_operand_consumption() {
     let errors = build(
         "record Ticket {} \
