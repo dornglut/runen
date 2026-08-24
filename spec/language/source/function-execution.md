@@ -359,7 +359,7 @@ For duplicable `x = x`, RHS evaluation duplicates the complete old value, leavin
 
 For non-duplicable `x = x`, RHS evaluation consumes the complete old value, leaving no old target-owned frontier; replacement transfers the produced value back into `x` without duplicate cleanup.
 
-If the RHS consumes only a non-duplicable subvalue of `x`, the target becomes partial before replacement. Its canonical remaining frontier then contains exactly the maximal still-owned disjoint subvalues; replacement cleans those and never re-cleans the consumed path.
+If the RHS consumes only a non-duplicable subvalue of `x`, the target becomes partial before replacement. Its canonical remaining frontier then contains exactly the maximal still-owned disjoint source subvalues; replacement cleans those and never re-cleans the consumed path.
 
 The same ordering applies when direct-call argument evaluation, record-construction initializer evaluation, producer-backed field-receiver evaluation, or another represented producer consumes the complete target or one of its structural subvalues before a later operation successfully produces the replacement value. A grouping wrapper around such a producer adds no second ownership or ordering point.
 
