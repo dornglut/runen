@@ -2,9 +2,9 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, non-replacing result storage for represented Core integer addition, assignment, destruction domains, and cleanup.
+This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, non-replacing result storage for represented Core integer addition and subtraction, assignment, destruction domains, and cleanup.
 
-The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical and plain-overflow value relation consumed by represented fixed-width integer addition is owned by [Core integer semantics](numerics/integers.md).
+The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical and plain-overflow value relations consumed by represented fixed-width integer addition and subtraction are owned by [Core integer semantics](numerics/integers.md).
 
 ## Terms
 
@@ -118,7 +118,7 @@ A stored-value lifetime ends when the stored value is consumed by move, destroye
 
 `Read` and `Copy` do not end the source stored-value lifetime.
 
-`Init` and represented `IntegerAdd` result initialization may begin either the first stored-value lifetime or a later stored-value lifetime in vacant storage. Ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
+`Init` and represented `IntegerAdd`/`IntegerSub` result initialization may begin either the first stored-value lifetime or a later stored-value lifetime in vacant storage. Ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
 
 The current revision defines stored-value lifetime at scalar storage leaves. Aggregate initialization and liveness are derived recursively from the states of those leaves; an aggregate does not acquire a separate hidden lifetime identity.
 
@@ -236,6 +236,55 @@ Because `dst` was wholly vacant at admission, the result write has an empty dest
 After both operand values have been produced, the arithmetic/result-write portion is finite, deterministic, non-faulting, and non-diverging under the represented Core semantics. The operation introduces no new borrow interval, reference value, pointer provenance, cleanup category, storage identity, assignment-mutability rule, interior-mutability rule, fault reason, control-flow edge, layout/ABI promise, runtime flag, or backend-visible semantic fact.
 
 The operation consumes only the plain fixed-width integer-add value relation from `numerics/integers.md`. It does not represent checked, saturating, or explicitly wrapping addition, another arithmetic or comparison operation, a conversion, a source numeric-contract selection, or a constant-folding requirement.
+
+## Plain fixed-width integer subtraction result initialization
+
+The represented Core proving relation contains one distinct plain fixed-width integer-subtract operation, normatively written here as:
+
+```text
+IntegerSub {
+    dst: Place,
+    left: Operand,
+    right: Operand,
+}
+```
+
+This semantic spelling identifies the represented Core operation. It does not require one particular implementation enum, generic arithmetic opcode, instruction encoding, backend opcode, or physical machine instruction.
+
+Let `D` be the exact Core type identity of `dst`. A valid `IntegerSub` requires all of the following static type facts before execution:
+
+- `D` denotes a scalar type whose scalar kind is exactly one of `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, or `U64`;
+- every place-derived left or right operand produces a value whose selected Core type identity is exactly `D`;
+- a constant operand is admitted only when its semantic value matches `D` under the existing type-table value-matching relation; and
+- no equality of scalar kind alone makes two distinct Core type identities interchangeable for an operand.
+
+An `AddressOf` operand therefore cannot satisfy this operation's fixed-width integer operand requirement. Any applicable `Move`, `Copy`, `RawMove`, or other represented operand form retains its own existing access, liveness, copyability, provenance, and ownership-transfer requirements while also producing the exact required type `D`.
+
+`IntegerSub` reuses the non-replacing destination lifecycle of `Init` and `IntegerAdd` rather than defining a second storage model. Before either operand is evaluated:
+
+1. resolve `dst` as direct storage under the existing place/type rules;
+2. require the exclusive direct-storage authority that ordinary `Init` and `IntegerAdd` require under `borrowing.md`; and
+3. require `dst` to be wholly vacant.
+
+These destination preconditions are fixed at operation admission before left-operand evaluation. Operand evaluation cannot make an initially Live or insufficiently authorized destination retrospectively admissible to that same operation. Ordinary assignment mutability is not required, exactly as for `Init` and `IntegerAdd`.
+
+After destination admission, execution is exactly:
+
+1. evaluate `left` completely under its existing `Operand` semantics with required Core type identity `D`;
+2. preserve all state consequences of that operand evaluation;
+3. evaluate `right` completely under its existing `Operand` semantics with required Core type identity `D` in the resulting state;
+4. preserve all state consequences of that operand evaluation;
+5. consume the two produced semantic fixed-width integer operand values to compute the exact plain subtraction result owned by `numerics/integers.md` for the scalar kind of `D`;
+6. write exactly that one result into `dst`; and
+7. mark the written scalar destination Live, beginning a new stored-value lifetime there.
+
+The left operand is therefore evaluated before the right operand. `Move`, `Copy`, raw-pointer operand access, and all other operand-local effects remain exactly those of the existing operand relation; `IntegerSub` does not duplicate or weaken them. A source place moved by the left operand is already Dead when the right operand is evaluated. A right operand cannot read, copy, or move such a place unless an independent represented operation has legally restored its value beforehand.
+
+Because `dst` was wholly vacant at admission, the result write has an empty destruction domain and performs no replacement destruction. The write has the same stored-value-lifetime and storage-instance consequences as successful non-replacing `Init` and `IntegerAdd`: it begins the destination stored-value lifetime without changing the destination storage extent or storage-instance identity.
+
+After both operand values have been produced, the subtraction/result-write portion is finite, deterministic, non-faulting, and non-diverging under the represented Core semantics. The operation introduces no new borrow interval, reference value, pointer provenance, cleanup category, storage identity, assignment-mutability rule, interior-mutability rule, fault reason, control-flow edge, layout/ABI promise, numeric-contract fact, runtime flag, or backend-visible semantic fact.
+
+The operation consumes only the plain fixed-width integer-subtract value relation from `numerics/integers.md`. It does not represent checked, saturating, or explicitly wrapping subtraction, another arithmetic or comparison operation, a conversion, a source numeric-contract selection, a constant-folding requirement, or a generic arithmetic instruction family.
 
 ## Read
 
@@ -375,15 +424,15 @@ For a fixed validated Core program using only the semantics defined here, state 
 
 The actual verification token chosen to represent a storage-instance identity is not program-observable. Semantics depend on instance distinction and stability, not on a particular integer assignment.
 
-The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state and no new path-state component beyond the storage transitions it already performs. `IntegerAdd` likewise introduces no hidden storage-state component beyond its two operand consequences and one non-replacing result initialization.
+The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state and no new path-state component beyond the storage transitions it already performs. `IntegerAdd` and `IntegerSub` likewise introduce no hidden storage-state component beyond their two operand consequences and one non-replacing result initialization.
 
 The semantics defined here do not depend on physical addresses, host arithmetic or destruction behavior, container iteration order, physical scheduling, or backend behavior.
 
 ## Separate semantic owners
 
-This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add relation, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add and integer-subtract relations, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
 
-Raw-pointer type/value formation and provenance derived from the storage-instance identity defined here are owned by [Core pointers and provenance](pointers.md). That pointer specification does not change the storage extent or stored-value lifetime rules in this document. Fixed-width integer arithmetic value relations are owned by [Core integer semantics](numerics/integers.md); this document owns only the represented operation's operand/storage/lifetime consequences.
+Raw-pointer type/value formation and provenance derived from the storage-instance identity defined here are owned by [Core pointers and provenance](pointers.md). That pointer specification does not change the storage extent or stored-value lifetime rules in this document. Fixed-width integer arithmetic value relations are owned by [Core integer semantics](numerics/integers.md); this document owns only the represented operations' operand/storage/lifetime consequences.
 
 This revision defines only proving-kernel interior-mutability capability and replacement semantics; it does not define source spelling, library abstractions, dynamic borrow guards, synchronization mechanisms, or which future public types expose that capability.
 
