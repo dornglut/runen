@@ -310,6 +310,10 @@ pub enum ValueKind {
     BooleanNot {
         operand: Box<Value>,
     },
+    IntegerAdd {
+        left: Box<Value>,
+        right: Box<Value>,
+    },
     BooleanEquality {
         relation: BooleanEqualityRelation,
         left: Box<Value>,
@@ -495,6 +499,7 @@ pub enum DiagnosticKind {
     ExpectedFunction,
     ArgumentCount { expected: usize, found: usize },
     TypeMismatch { expected: Type, found: Type },
+    IntegerAdditionRequiresInteger { required: Type },
     IntegerLiteralRequiresInteger { required: Type },
     IntegerLiteralOutOfRange { required: Type },
     FloatingLiteralRequiresFloating { required: Type },
