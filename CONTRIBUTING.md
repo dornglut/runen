@@ -9,6 +9,14 @@ This document owns the repository contribution process. Documentation ownership 
 3. Identify the artifact that owns the concern being changed.
 4. Keep the change inside the owning issue's semantic and implementation scope.
 
+## Licensing and inbound contributions
+
+Runen's intended commercial dual-licensing model is described in [LICENSING.md](LICENSING.md). Any separate commercial grant depends on sufficient rights held by the granting copyright holder(s).
+
+Until reviewed inbound contribution terms exist that preserve the commercial relicensing path, external pull requests that add tracked repository content are not accepted, including code, documentation, tests, examples, build scripts, or assets.
+
+Issue reports, design discussion, reviews, reproducible cases supplied through discussion, and other participation that does not add third-party repository content remain welcome.
+
 ## Change discipline
 
 Change the canonical owner rather than copying its rules into another document or package.
