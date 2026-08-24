@@ -82,9 +82,8 @@ fn simple_grouping_adds_no_core_blocks_locals_statements_or_control_operations()
 
 #[test]
 fn grouped_call_lowers_exactly_once_through_the_existing_call_relation() {
-    let plain = lower_source(
-        "fn ready() -> Bool { return true; } fn f() -> Bool { return ready(); }",
-    );
+    let plain =
+        lower_source("fn ready() -> Bool { return true; } fn f() -> Bool { return ready(); }");
     let grouped = lower_source(
         "fn ready() -> Bool { return true; } fn f() -> Bool { return (((ready()))); }",
     );
