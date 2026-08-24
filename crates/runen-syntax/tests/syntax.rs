@@ -135,7 +135,7 @@ fn handles_nested_and_unterminated_block_comments() {
 
 #[test]
 fn unsupported_concrete_text_is_retained_as_error_tokens() {
-    let source = "fn a() { let x: I64 = 42; + . }";
+    let source = "fn a() { let x: I64 = 42; @ . }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(

@@ -7,6 +7,7 @@ use runen_core_ir::{LoanId, StorageRegion};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VerificationWriteKind {
     Init,
+    IntegerAdd,
     Assign,
     InteriorAssign,
     RawAssign,

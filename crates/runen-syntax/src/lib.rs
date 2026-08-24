@@ -110,6 +110,8 @@ pub enum SyntaxKind {
     BangEq,
     BooleanEqualityValue,
     GroupedValue,
+    Plus,
+    IntegerAddValue,
 }
 
 impl SyntaxKind {
@@ -255,6 +257,8 @@ impl Language for RunenLanguage {
             85 => SyntaxKind::BangEq,
             86 => SyntaxKind::BooleanEqualityValue,
             87 => SyntaxKind::GroupedValue,
+            88 => SyntaxKind::Plus,
+            89 => SyntaxKind::IntegerAddValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

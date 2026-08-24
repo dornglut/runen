@@ -52,6 +52,7 @@ version = "0.0.0"
 dependencies = [
  "runen-core-ir",
  "runen-hir",
+ "runen-reference",
  "runen-syntax",
 ]
 
