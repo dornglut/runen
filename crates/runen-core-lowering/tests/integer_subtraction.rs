@@ -81,7 +81,11 @@ fn integer_sub_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
     let lowered = lower_source("fn f(left: I8, right: I8) -> I8 { return left - right; }");
     let f = function(lowered.as_program(), "f");
 
-    assert_eq!(f.body.blocks.len(), 1, "plain subtraction adds no Core block");
+    assert_eq!(
+        f.body.blocks.len(),
+        1,
+        "plain subtraction adds no Core block"
+    );
     let subtractions = integer_sub_statements(f);
     assert_eq!(subtractions.len(), 1);
     let CoreStatement::IntegerSub { dst, left, right } = subtractions[0] else {
