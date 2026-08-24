@@ -513,6 +513,12 @@ pub enum Operand {
 pub enum Statement {
     /// Non-replacing initialization of wholly vacant direct storage.
     Init { dst: Place, src: Operand },
+    /// Plain fixed-width integer addition into wholly vacant direct storage.
+    IntegerAdd {
+        dst: Place,
+        left: Operand,
+        right: Operand,
+    },
     /// Begins a root borrow from direct access or a child borrow from loan access.
     Borrow {
         loan: LoanId,
