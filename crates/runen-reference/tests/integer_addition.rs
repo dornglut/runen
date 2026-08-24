@@ -166,11 +166,7 @@ fn integer_add_wraps_at_every_signed_and_unsigned_width_boundary() {
 
 #[test]
 fn integer_add_moves_left_then_right_once_and_records_one_integer_add_write() {
-    let report = execute_integer_add(
-        ScalarType::I8,
-        Value::I8(40),
-        Value::I8(2),
-    );
+    let report = execute_integer_add(ScalarType::I8, Value::I8(40), Value::I8(2));
 
     let left = Place::local(LocalId(0));
     let right = Place::local(LocalId(1));
