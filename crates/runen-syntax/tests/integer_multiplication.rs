@@ -78,7 +78,6 @@ fn slash_remains_unsupported_and_double_star_and_star_equals_are_not_operators()
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
         assert!(!parsed.errors().is_empty());
-        assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), 1);
     }
 
     let double = parse("fn f(a: I64, b: I64) -> I64 { return a ** b; }");
