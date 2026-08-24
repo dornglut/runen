@@ -9,6 +9,7 @@ runen-core-ir = { path = "../runen-core-ir" }
 runen-hir = { path = "../runen-hir" }
 
 [dev-dependencies]
+runen-reference = { path = "../runen-reference" }
 runen-syntax = { path = "../runen-syntax" }
 
 [lints]
