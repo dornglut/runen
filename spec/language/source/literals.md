@@ -192,9 +192,9 @@ Concrete syntax, not this semantic owner, determines which literal family is adm
 
 The represented negative decimal integer and decimal floating forms are literal forms owned concretely by `concrete-syntax.md`. Their `-` token denotes the negative sign only inside the applicable literal production.
 
-This document does not define a general unary-negation operation, subtraction, arithmetic operator, operator overloading, precedence, associativity, grouping, or general expression grammar.
+This document does not define general unary negation or any arithmetic operator. Represented binary addition, subtraction, and multiplication remain owned by `operators.md`; in particular, represented binary subtraction does not reinterpret an already represented signed decimal literal, and multiplication introduces no new value-start `-` role.
 
-A later operator owner may add independently defined dynamic negation or subtraction only while preserving the accepted meaning of the represented signed decimal literal forms. It must not reinterpret an already represented signed literal through host-language operator behavior.
+Any future operator owner must likewise preserve the accepted meaning of represented signed decimal literal forms rather than reinterpret an already represented signed literal through host-language operator behavior.
 
 ## Other literal boundary
 
