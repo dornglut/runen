@@ -6,7 +6,7 @@ This document owns the represented source-semantic operator relations: each repr
 
 It consumes the represented source type identities and semantic value domains from [Source type foundation](types.md), including the exact two-value `Bool` domain. Its represented Core refinements consume Bool-valued conditional branching from [Core control flow](../core/control-flow.md) and constant values plus wholly-vacant non-replacing initialization from [Core value and storage semantics](../core/value-storage.md).
 
-[Source concrete syntax](concrete-syntax.md) owns the punctuation and concrete prefix/equality grammar that map to the operator relations defined here. [Source function execution](function-execution.md) consumes these relations when validating and executing operand producers, sequencing multiple operands, propagating fault or divergence behavior, managing any operation-owned produced operand value that must remain live while a later operand executes, and transferring a successful operator result into an existing receiving position. [Source control flow](control-flow.md) consumes a completed operator result only through its existing exact-`Bool` `ConditionalValue` relation. This document does not redefine those owners.
+[Source concrete syntax](concrete-syntax.md) owns the punctuation, concrete prefix/equality grammar, and bounded contextual grouping grammar that map source forms to the operator relations defined here. [Source function execution](function-execution.md) consumes these relations when validating and executing operand producers, sequencing multiple operands, propagating fault or divergence behavior, managing any operation-owned produced operand value that must remain live while a later operand executes, transparently executing any surrounding grouped-value wrapper, and transferring a successful operator result into an existing receiving position. [Source control flow](control-flow.md) consumes a completed operator result only through its existing exact-`Bool` `ConditionalValue` relation. This document does not redefine those owners.
 
 This revision does not define a universal source expression taxonomy, parser implementation strategy, implementation HIR layout, runtime operator object, or backend instruction selection.
 
@@ -123,6 +123,16 @@ A successfully validated represented operator adds no binding structural-ownersh
 
 Every successful result is one ordinary owned value of intrinsic type `Bool`. Its owned-value duplicability is the existing intrinsic duplicability classification from `types.md`; these operators introduce no second duplicability or copyability rule.
 
+## Contextual grouping relationship
+
+Parenthesized grouping is concrete syntax around one already represented value producer; it is not a fourth operator and defines no operator-local type, value, ownership, fault, divergence, or Core relation. `concrete-syntax.md` owns the ordinary and conditional grouped-value grammar, and `function-execution.md` owns its semantic transparency.
+
+When a group contains a represented Boolean operator, the contained operator retains exactly the typing, truth relation, operand ordering, ownership consequences, held-left lifetime, fault/divergence behavior, and source-to-Core refinement defined in this document. The parentheses add no operator step before, between, or after those relations.
+
+Grouping may make explicit a syntax-tree nesting that the unparenthesized bounded grammar does not represent. For example, `!(a == b)` contains one grouped equality value as the operand of logical negation, `(a == b) == c` contains one grouped inner equality as the left operand of an outer equality, and `a == (b != c)` contains one grouped inner inequality as the right operand. These forms do not make ungrouped `a == b == c` represented and do not introduce equality associativity or comparison chaining.
+
+No precedence number, associativity metadata, grouping operator identity, runtime parenthesis object, or Core grouping operation follows from this concrete nesting. A faithful typed frontend may erase the grouping wrapper while retaining the already required contained operator/value facts.
+
 ## Conditional-use relationship
 
 When a completed represented operator result is used as the condition of a represented `if` or `while`, `control-flow.md` consumes the resulting owned `Bool` exactly like any other admitted `ConditionalValue` result.
@@ -163,7 +173,7 @@ where the outer value, left operand, and right operand all have source type `Boo
 
 A faithful implementation MAY instead use two explicit equality/inequality value variants when that retains exactly the same source-semantic facts and no speculative generalized abstraction.
 
-These explanatory shapes are not implementation-layout mandates. Source locations may be retained by diagnostics/tooling but are not part of an operator's semantic identity. Token spelling, numeric precedence values, associativity metadata, Core block identities, source-CFG identities, source ownership-state sets, runtime operator objects, and backend opcodes are not semantic facts required after validation.
+These explanatory shapes are not implementation-layout mandates. Source locations may be retained by diagnostics/tooling but are not part of an operator's semantic identity. Token spelling, numeric precedence values, associativity metadata, grouping delimiters, Core block identities, source-CFG identities, source ownership-state sets, runtime operator objects, and backend opcodes are not semantic facts required after validation.
 
 A faithful lowerer MUST reject internally inconsistent retained operator facts, including a non-`Bool` result or any non-`Bool` represented operand, rather than repairing them from lower/Core type information.
 
@@ -226,7 +236,7 @@ This refinement is valid under the accepted Core owners because:
 
 A conforming implementation MAY use another Core program shape only when it is observationally equivalent under the accepted Core semantics and preserves the source relations above. In particular, an implementation may reduce the number of blocks but may not change operand evaluation order, successful operand consumption, truth mapping, fault/divergence behavior, or the one-result relation.
 
-No represented refinement introduces a Core `Not`, `Eq`, `Ne`, numeric operation, comparison operation, reference-machine extension, source/Core state merge, host-language Boolean comparison authority, or backend requirement.
+No represented refinement introduces a Core `Not`, `Eq`, `Ne`, numeric operation, comparison operation, grouping operation, reference-machine extension, source/Core state merge, host-language Boolean comparison authority, or backend requirement.
 
 ## Deliberate boundaries
 
@@ -238,7 +248,7 @@ This revision defines no:
 - ordering or other comparison operator;
 - `&&`, `||`, short-circuiting, or another logical operator;
 - conversion, cast, coercion, or numeric promotion;
-- grouping or parenthesized expression;
+- Unit/tuple grouping form or general expression system beyond the bounded contextual grouping grammar owned by `concrete-syntax.md`;
 - equality chaining or comparison chaining;
 - general binary precedence or associativity hierarchy beyond the one bounded concrete equality tier owned by `concrete-syntax.md`;
 - arbitrary postfix/member/method expression;
