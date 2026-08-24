@@ -9,6 +9,7 @@ pub enum VerificationWriteKind {
     Init,
     IntegerAdd,
     IntegerSub,
+    IntegerMul,
     Assign,
     InteriorAssign,
     RawAssign,

@@ -113,6 +113,8 @@ pub enum SyntaxKind {
     Plus,
     IntegerAddValue,
     IntegerSubValue,
+    Star,
+    IntegerMulValue,
 }
 
 impl SyntaxKind {
@@ -261,6 +263,8 @@ impl Language for RunenLanguage {
             88 => SyntaxKind::Plus,
             89 => SyntaxKind::IntegerAddValue,
             90 => SyntaxKind::IntegerSubValue,
+            91 => SyntaxKind::Star,
+            92 => SyntaxKind::IntegerMulValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

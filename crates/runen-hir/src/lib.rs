@@ -318,6 +318,10 @@ pub enum ValueKind {
         left: Box<Value>,
         right: Box<Value>,
     },
+    IntegerMul {
+        left: Box<Value>,
+        right: Box<Value>,
+    },
     BooleanEquality {
         relation: BooleanEqualityRelation,
         left: Box<Value>,
@@ -505,6 +509,7 @@ pub enum DiagnosticKind {
     TypeMismatch { expected: Type, found: Type },
     IntegerAdditionRequiresInteger { required: Type },
     IntegerSubtractionRequiresInteger { required: Type },
+    IntegerMultiplicationRequiresInteger { required: Type },
     IntegerLiteralRequiresInteger { required: Type },
     IntegerLiteralOutOfRange { required: Type },
     FloatingLiteralRequiresFloating { required: Type },

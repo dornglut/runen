@@ -657,7 +657,7 @@ impl Parser<'_> {
 
     fn parse_additive_value(&mut self, context: ValueContext) {
         let checkpoint = self.builder.checkpoint();
-        self.parse_value_in(context);
+        self.parse_multiplicative_value(context);
         let operation = match self.current() {
             Some(SyntaxKind::Plus) => Some(SyntaxKind::IntegerAddValue),
             Some(SyntaxKind::Minus) => Some(SyntaxKind::IntegerSubValue),
@@ -665,6 +665,22 @@ impl Parser<'_> {
         };
         if let Some(operation) = operation {
             self.builder.start_node_at(checkpoint, operation.into());
+            self.bump();
+            self.parse_multiplicative_value(context);
+            self.builder.finish_node();
+        }
+    }
+
+    fn parse_multiplicative_value(&mut self, context: ValueContext) {
+        let checkpoint = self.builder.checkpoint();
+        self.parse_value_in(context);
+        if self.at(SyntaxKind::Star)
+            && self
+                .peek_nontrivia(1)
+                .is_some_and(SyntaxKind::is_value_start)
+        {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::IntegerMulValue.into());
             self.bump();
             self.parse_value_in(context);
             self.builder.finish_node();
