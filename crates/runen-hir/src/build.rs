@@ -2115,6 +2115,10 @@ fn validate_value(
 ) -> Option<Value> {
     let value_location = location(header.unit, node);
     match node.kind() {
+        SyntaxKind::GroupedValue => {
+            let inner = value_child(node);
+            validate_value(header, &inner, required, context, bindings, diagnostics)
+        }
         SyntaxKind::BooleanEqualityValue => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
             if required != found {
@@ -3309,7 +3313,8 @@ fn value_child(node: &SyntaxNode) -> SyntaxNode {
 fn is_value_node(kind: SyntaxKind) -> bool {
     matches!(
         kind,
-        SyntaxKind::BooleanEqualityValue
+        SyntaxKind::GroupedValue
+            | SyntaxKind::BooleanEqualityValue
             | SyntaxKind::BooleanNotValue
             | SyntaxKind::BooleanLiteral
             | SyntaxKind::DecimalIntegerLiteral

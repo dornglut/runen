@@ -658,6 +658,7 @@ impl Parser<'_> {
     fn parse_value_in(&mut self, context: ValueContext) {
         match self.current() {
             Some(SyntaxKind::Bang) => self.parse_boolean_not_value(context),
+            Some(SyntaxKind::LParen) => self.parse_grouped_value(context),
             Some(SyntaxKind::Ident) => match context {
                 ValueContext::Ordinary => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
@@ -789,6 +790,38 @@ impl Parser<'_> {
         self.expect(SyntaxKind::Bang, ExpectedSyntax::Value);
         self.parse_value_in(context);
         self.builder.finish_node();
+    }
+
+    fn parse_grouped_value(&mut self, context: ValueContext) {
+        self.builder.start_node(SyntaxKind::GroupedValue.into());
+        self.expect(SyntaxKind::LParen, ExpectedSyntax::LeftParen);
+        if self.group_inner_value_is_missing() {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
+        } else {
+            self.parse_equality_value(context);
+        }
+        self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
+        self.builder.finish_node();
+    }
+
+    fn group_inner_value_is_missing(&self) -> bool {
+        self.current().is_none()
+            || self.at_any(&[
+                SyntaxKind::RParen,
+                SyntaxKind::Comma,
+                SyntaxKind::Semicolon,
+                SyntaxKind::RBrace,
+                SyntaxKind::LBrace,
+                SyntaxKind::KwLet,
+                SyntaxKind::KwFault,
+                SyntaxKind::KwBreak,
+                SyntaxKind::KwContinue,
+                SyntaxKind::KwIf,
+                SyntaxKind::KwWhile,
+                SyntaxKind::KwElse,
+                SyntaxKind::KwReturn,
+            ])
+            || self.at_any(TOP_LEVEL_STARTERS)
     }
 
     fn parse_binding_field_value_use(&mut self) {

@@ -109,6 +109,7 @@ pub enum SyntaxKind {
     EqEq,
     BangEq,
     BooleanEqualityValue,
+    GroupedValue,
 }
 
 impl SyntaxKind {
@@ -150,6 +151,7 @@ impl SyntaxKind {
                 | Self::DecimalFloatingMagnitude
                 | Self::Minus
                 | Self::Bang
+                | Self::LParen
         )
     }
 }
@@ -252,6 +254,7 @@ impl Language for RunenLanguage {
             84 => SyntaxKind::EqEq,
             85 => SyntaxKind::BangEq,
             86 => SyntaxKind::BooleanEqualityValue,
+            87 => SyntaxKind::GroupedValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
