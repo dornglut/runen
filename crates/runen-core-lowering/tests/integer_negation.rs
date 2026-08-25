@@ -95,7 +95,11 @@ fn integer_negation_lowers_to_existing_integer_sub_with_zero_and_move() {
     assert_eq!(left, &Operand::Constant(CoreValue::I8(0)));
     let operand_local = moved_local(right).expect("negation right operand must Move its temporary");
     assert_ne!(dst.local, operand_local);
-    assert!(f.body.locals[operand_local.0 as usize].name.starts_with("$tmp"));
+    assert!(
+        f.body.locals[operand_local.0 as usize]
+            .name
+            .starts_with("$tmp")
+    );
     assert!(f.body.locals[dst.local.0 as usize].name.starts_with("$tmp"));
     assert!(operand_local.0 < dst.local.0);
 
@@ -129,11 +133,12 @@ fn integer_negation_uses_exact_same_kind_zero_for_all_eight_integer_types() {
         ("u64_neg", CoreValue::U64(0)),
     ] {
         let function = function(lowered.as_program(), name);
-        let [CoreStatement::IntegerSub { left, .. }] = integer_sub_statements(function).as_slice()
-        else {
-            panic!("{name} must lower to exactly one IntegerSub");
+        let subtractions = integer_sub_statements(function);
+        assert_eq!(subtractions.len(), 1, "{name}");
+        let CoreStatement::IntegerSub { left, .. } = subtractions[0] else {
+            unreachable!();
         };
-        assert_eq!(left, &&Operand::Constant(expected_zero), "{name}");
+        assert_eq!(left, &Operand::Constant(expected_zero), "{name}");
     }
 }
 
@@ -232,10 +237,22 @@ fn mixed_and_grouped_negation_lower_one_existing_arithmetic_statement_per_operat
          fn additive() -> I8 { return 2 + -(3 * 4); }",
     );
 
-    assert_eq!(arithmetic_statement_count(function(lowered.as_program(), "nested")), 1);
-    assert_eq!(arithmetic_statement_count(function(lowered.as_program(), "grouped")), 2);
-    assert_eq!(arithmetic_statement_count(function(lowered.as_program(), "multiplied")), 3);
-    assert_eq!(arithmetic_statement_count(function(lowered.as_program(), "additive")), 3);
+    assert_eq!(
+        arithmetic_statement_count(function(lowered.as_program(), "nested")),
+        1
+    );
+    assert_eq!(
+        arithmetic_statement_count(function(lowered.as_program(), "grouped")),
+        2
+    );
+    assert_eq!(
+        arithmetic_statement_count(function(lowered.as_program(), "multiplied")),
+        3
+    );
+    assert_eq!(
+        arithmetic_statement_count(function(lowered.as_program(), "additive")),
+        3
+    );
 
     for name in ["nested", "grouped", "multiplied", "additive"] {
         assert!(
