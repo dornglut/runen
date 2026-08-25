@@ -94,9 +94,7 @@ fn boolean_and_integer_prefixes_recurse_rightward_without_absorbing_looser_tiers
 
 #[test]
 fn conditional_integer_negation_keeps_standalone_record_construction_excluded() {
-    let valid = parse(
-        "record Box { value: I8 } fn f() { if -Box { value: 1 }.value {} }",
-    );
+    let valid = parse("record Box { value: I8 } fn f() { if -Box { value: 1 }.value {} }");
     assert_eq!(
         valid.text(),
         "record Box { value: I8 } fn f() { if -Box { value: 1 }.value {} }"
