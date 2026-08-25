@@ -333,6 +333,10 @@ pub enum ValueKind {
         left: Box<Value>,
         right: Box<Value>,
     },
+    BooleanAnd {
+        left: Box<Value>,
+        right: Box<Value>,
+    },
     BindingUse {
         binding: BindingId,
         ownership: OwnedUse,
@@ -532,6 +536,7 @@ pub enum DiagnosticKind {
     UnavailableFieldValue,
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
+    BooleanConjunctionOwnershipMismatch,
     ConditionalOwnershipMismatch,
     LoopOwnershipMismatch,
     BreakOutsideLoop,

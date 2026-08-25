@@ -373,7 +373,7 @@ impl Parser<'_> {
     }
 
     fn parse_conditional_value(&mut self) {
-        self.parse_equality_value(ValueContext::Conditional);
+        self.parse_logical_and_value(ValueContext::Conditional);
     }
 
     fn parse_let_statement(&mut self) {
@@ -640,7 +640,19 @@ impl Parser<'_> {
     }
 
     fn parse_value(&mut self) {
-        self.parse_equality_value(ValueContext::Ordinary);
+        self.parse_logical_and_value(ValueContext::Ordinary);
+    }
+
+    fn parse_logical_and_value(&mut self, context: ValueContext) {
+        let checkpoint = self.builder.checkpoint();
+        self.parse_equality_value(context);
+        if self.at(SyntaxKind::AmpAmp) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::BooleanAndValue.into());
+            self.bump();
+            self.parse_equality_value(context);
+            self.builder.finish_node();
+        }
     }
 
     fn parse_equality_value(&mut self, context: ValueContext) {
@@ -845,7 +857,7 @@ impl Parser<'_> {
         if self.group_inner_value_is_missing() {
             self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
         } else {
-            self.parse_equality_value(context);
+            self.parse_logical_and_value(context);
         }
         self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
         self.builder.finish_node();

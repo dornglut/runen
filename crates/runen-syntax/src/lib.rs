@@ -118,6 +118,8 @@ pub enum SyntaxKind {
     IntegerNegValue,
     Tilde,
     IntegerComplementValue,
+    AmpAmp,
+    BooleanAndValue,
 }
 
 impl SyntaxKind {
@@ -272,6 +274,8 @@ impl Language for RunenLanguage {
             93 => SyntaxKind::IntegerNegValue,
             94 => SyntaxKind::Tilde,
             95 => SyntaxKind::IntegerComplementValue,
+            96 => SyntaxKind::AmpAmp,
+            97 => SyntaxKind::BooleanAndValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

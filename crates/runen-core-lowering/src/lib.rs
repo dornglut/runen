@@ -1235,6 +1235,65 @@ impl<'a> FunctionLowerer<'a> {
                 self.current = join_target.0 as usize;
                 Ok(result)
             }
+            hir::ValueKind::BooleanAnd { left, right } => {
+                let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+                if value.ty != bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Boolean-conjunction result type is not Bool",
+                    ));
+                }
+                if left.ty != bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Boolean-conjunction left operand type is not Bool",
+                    ));
+                }
+                if right.ty != bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Boolean-conjunction right operand type is not Bool",
+                    ));
+                }
+
+                let core_bool_ty = self.types.get(bool_ty)?;
+                let left_local = self.lower_value(left)?;
+                if self.local_type(left_local)? != core_bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Boolean-conjunction left operand temporary is not Bool",
+                    ));
+                }
+
+                let result = self.push_temporary(bool_ty)?;
+                let true_target = self.new_block()?;
+                let false_target = self.new_block()?;
+                let join_target = self.new_block()?;
+                self.terminate_current(core::Terminator::Branch {
+                    condition: core::Operand::Move(core::Place::local(left_local).into()),
+                    true_target,
+                    false_target,
+                })?;
+
+                self.current = false_target.0 as usize;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(result),
+                    src: core::Operand::Constant(core::Value::Bool(false)),
+                });
+                self.terminate_current(core::Terminator::Goto(join_target))?;
+
+                self.current = true_target.0 as usize;
+                let right_local = self.lower_value(right)?;
+                if self.local_type(right_local)? != core_bool_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Boolean-conjunction right operand temporary is not Bool",
+                    ));
+                }
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(result),
+                    src: core::Operand::Move(core::Place::local(right_local).into()),
+                });
+                self.terminate_current(core::Terminator::Goto(join_target))?;
+
+                self.current = join_target.0 as usize;
+                Ok(result)
+            }
             hir::ValueKind::BooleanEquality {
                 relation,
                 left,
