@@ -162,7 +162,12 @@ fn zero_is_identity_and_all_ones_is_absorbing_in_represented_domains() {
             Value::I64(0),
             Value::I64(-1),
         ),
-        (ScalarType::U8, Value::U8(42), Value::U8(0), Value::U8(u8::MAX)),
+        (
+            ScalarType::U8,
+            Value::U8(42),
+            Value::U8(0),
+            Value::U8(u8::MAX),
+        ),
         (
             ScalarType::U64,
             Value::U64(0x1234_5678),
