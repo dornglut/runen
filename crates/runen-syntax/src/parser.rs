@@ -657,10 +657,22 @@ impl Parser<'_> {
 
     fn parse_equality_value(&mut self, context: ValueContext) {
         let checkpoint = self.builder.checkpoint();
-        self.parse_xor_value(context);
+        self.parse_or_value(context);
         if self.at(SyntaxKind::EqEq) || self.at(SyntaxKind::BangEq) {
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::BooleanEqualityValue.into());
+            self.bump();
+            self.parse_or_value(context);
+            self.builder.finish_node();
+        }
+    }
+
+    fn parse_or_value(&mut self, context: ValueContext) {
+        let checkpoint = self.builder.checkpoint();
+        self.parse_xor_value(context);
+        if self.at(SyntaxKind::Pipe) {
+            self.builder
+                .start_node_at(checkpoint, SyntaxKind::IntegerOrValue.into());
             self.bump();
             self.parse_xor_value(context);
             self.builder.finish_node();
