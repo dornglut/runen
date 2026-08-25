@@ -158,7 +158,7 @@ Nested integer-negation producers apply this same complete producer relation rec
 
 ## Plain fixed-width integer-bitwise-complement producer validation and execution
 
-A represented plain fixed-width integer-bitwise-complement producer consumes from `operators.md` the context-directed exact result/operand type relation, canonical-width-residue/equivalent-exact-`-1-v` value relation, exactly-once consumption of its successful owned operand value, and absence of any operator-local binding structural-ownership transition.
+A represented plain fixed-width integer-bitwise-complement producer consumes from `operators.md` the context-directed exact result/operand type relation, canonical-width-residue/equivalent exact `-1 - v` value relation, exactly-once consumption of its successful owned operand value, and absence of any operator-local binding structural-ownership transition.
 
 Let `T` be the surrounding receiving position's exact required source type. Source validation MUST first establish that `T` is exactly one of `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, or `U64`. If it is not, integer complement is source-invalid before its operand is validated in a way that may commit a binding ownership consequence. In particular, the exact `Bool` requirement supplied by a represented `if` or bounded-`while` condition rejects integer complement at this outer admission point.
 
