@@ -328,6 +328,10 @@ pub enum ValueKind {
         left: Box<Value>,
         right: Box<Value>,
     },
+    IntegerXor {
+        left: Box<Value>,
+        right: Box<Value>,
+    },
     BooleanEquality {
         relation: BooleanEqualityRelation,
         left: Box<Value>,
@@ -458,7 +462,7 @@ pub struct Function {
 }
 
 /// One source module represented in this typed compilation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone,PartialEq, Eq)]
 pub struct Module {
     pub id: ModuleId,
     pub records: Vec<RecordId>,
@@ -522,6 +526,7 @@ pub enum DiagnosticKind {
     IntegerAdditionRequiresInteger { required: Type },
     IntegerSubtractionRequiresInteger { required: Type },
     IntegerMultiplicationRequiresInteger { required: Type },
+    IntegerXorRequiresInteger { required: Type },
     IntegerLiteralRequiresInteger { required: Type },
     IntegerLiteralOutOfRange { required: Type },
     FloatingLiteralRequiresFloating { required: Type },
