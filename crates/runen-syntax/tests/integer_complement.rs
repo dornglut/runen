@@ -29,14 +29,19 @@ fn standalone_tilde_and_tilde_equals_follow_the_accepted_punctuation_boundary() 
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::IntegerComplementValue), 1);
-    assert!(parsed
-        .syntax()
-        .descendants_with_tokens()
-        .filter_map(|element| element.into_token())
-        .any(|token| token.kind() == SyntaxKind::Tilde && token.text() == "~"));
+    assert!(
+        parsed
+            .syntax()
+            .descendants_with_tokens()
+            .filter_map(|element| element.into_token())
+            .any(|token| token.kind() == SyntaxKind::Tilde && token.text() == "~")
+    );
 
     let malformed = parse("fn f(value: I8) { let x: I8 = ~= value; }");
-    assert_eq!(malformed.text(), "fn f(value: I8) { let x: I8 = ~= value; }");
+    assert_eq!(
+        malformed.text(),
+        "fn f(value: I8) { let x: I8 = ~= value; }"
+    );
     let kinds = malformed
         .syntax()
         .descendants_with_tokens()
@@ -69,9 +74,11 @@ fn complement_prefixes_recurse_rightward_and_keep_signed_literals_intact() {
                     .any(|child| child.kind() == SyntaxKind::DecimalIntegerLiteral)
         })
         .expect("~-1 must retain the signed literal as the complement operand");
-    assert!(signed
-        .children()
-        .any(|child| child.kind() == SyntaxKind::DecimalIntegerLiteral));
+    assert!(
+        signed
+            .children()
+            .any(|child| child.kind() == SyntaxKind::DecimalIntegerLiteral)
+    );
 }
 
 #[test]
@@ -91,7 +98,10 @@ fn complement_prefix_stays_tighter_than_multiplicative_additive_and_equality_tie
             .children()
             .map(|child| child.kind())
             .collect::<Vec<_>>(),
-        [SyntaxKind::IntegerComplementValue, SyntaxKind::IdentifierUse]
+        [
+            SyntaxKind::IntegerComplementValue,
+            SyntaxKind::IdentifierUse
+        ]
     );
     assert_eq!(count(&parsed, SyntaxKind::IntegerAddValue), 2);
     assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 1);
@@ -128,9 +138,12 @@ fn bare_tilde_is_lossless_incomplete_complement_with_missing_value_recovery() {
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert_eq!(count(&parsed, SyntaxKind::IntegerComplementValue), 1);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value) })
+    );
 }
 
 #[test]

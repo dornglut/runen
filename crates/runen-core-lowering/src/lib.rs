@@ -994,7 +994,9 @@ impl<'a> FunctionLowerer<'a> {
                     hir::Type::Intrinsic(hir::IntrinsicType::I64) => core::Value::I64(-1),
                     hir::Type::Intrinsic(hir::IntrinsicType::U8) => core::Value::U8(255),
                     hir::Type::Intrinsic(hir::IntrinsicType::U16) => core::Value::U16(65_535),
-                    hir::Type::Intrinsic(hir::IntrinsicType::U32) => core::Value::U32(4_294_967_295),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U32) => {
+                        core::Value::U32(4_294_967_295)
+                    }
                     hir::Type::Intrinsic(hir::IntrinsicType::U64) => {
                         core::Value::U64(18_446_744_073_709_551_615)
                     }

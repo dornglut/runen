@@ -83,7 +83,11 @@ fn integer_complement_lowers_to_existing_integer_sub_with_same_type_minus_one_an
     let lowered = lower_source("fn f(value: I8) -> I8 { return ~value; }");
     let f = function(lowered.as_program(), "f");
 
-    assert_eq!(f.body.blocks.len(), 1, "integer complement adds no Core CFG");
+    assert_eq!(
+        f.body.blocks.len(),
+        1,
+        "integer complement adds no Core CFG"
+    );
     let subtractions = integer_sub_statements(f);
     assert_eq!(subtractions.len(), 1);
     let CoreStatement::IntegerSub { dst, left, right } = subtractions[0] else {
@@ -91,7 +95,8 @@ fn integer_complement_lowers_to_existing_integer_sub_with_same_type_minus_one_an
     };
     assert!(dst.projections.is_empty());
     assert_eq!(left, &Operand::Constant(CoreValue::I8(-1)));
-    let operand_local = moved_local(right).expect("complement right operand must Move its temporary");
+    let operand_local =
+        moved_local(right).expect("complement right operand must Move its temporary");
     assert_ne!(dst.local, operand_local);
     assert!(
         f.body.locals[operand_local.0 as usize]
