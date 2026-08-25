@@ -107,6 +107,36 @@ enum RuntimeValue {
     Struct(Vec<RuntimeValue>),
 }
 
+fn canonical_signed_residue(value: i128, width: u32) -> u128 {
+    debug_assert!((1..=64).contains(&width));
+    let modulus = 1_u128 << width;
+    if value >= 0 {
+        u128::try_from(value).expect("nonnegative represented integer fits canonical residue")
+    } else {
+        modulus
+            - u128::try_from(-value)
+                .expect("promoted represented signed magnitude fits canonical residue")
+    }
+}
+
+fn signed_value_from_residue(residue: u128, width: u32) -> i128 {
+    debug_assert!((1..=64).contains(&width));
+    let modulus = 1_u128 << width;
+    let signed_boundary = 1_u128 << (width - 1);
+    let residue = i128::try_from(residue).expect("represented-width residue fits i128");
+    if u128::try_from(residue).expect("residue is nonnegative") < signed_boundary {
+        residue
+    } else {
+        residue - i128::try_from(modulus).expect("represented-width modulus fits i128")
+    }
+}
+
+fn xor_signed_values(left: i128, right: i128, width: u32) -> i128 {
+    let left = canonical_signed_residue(left, width);
+    let right = canonical_signed_residue(right, width);
+    signed_value_from_residue(left ^ right, width)
+}
+
 impl RuntimeValue {
     fn from_constant(value: &Value) -> Self {
         match value {
@@ -166,6 +196,32 @@ impl RuntimeValue {
             (Self::U32(left), Self::U32(right)) => Self::U32(left.wrapping_mul(right)),
             (Self::U64(left), Self::U64(right)) => Self::U64(left.wrapping_mul(right)),
             _ => unreachable!("validated IntegerMul has matching fixed-width integer operands"),
+        }
+    }
+
+    fn integer_xor(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::I8(left), Self::I8(right)) => Self::I8(
+                i8::try_from(xor_signed_values(i128::from(left), i128::from(right), 8))
+                    .expect("I8 XOR residue maps to I8 domain"),
+            ),
+            (Self::I16(left), Self::I16(right)) => Self::I16(
+                i16::try_from(xor_signed_values(i128::from(left), i128::from(right), 16))
+                    .expect("I16 XOR residue maps to I16 domain"),
+            ),
+            (Self::I32(left), Self::I32(right)) => Self::I32(
+                i32::try_from(xor_signed_values(i128::from(left), i128::from(right), 32))
+                    .expect("I32 XOR residue maps to I32 domain"),
+            ),
+            (Self::I64(left), Self::I64(right)) => Self::I64(
+                i64::try_from(xor_signed_values(i128::from(left), i128::from(right), 64))
+                    .expect("I64 XOR residue maps to I64 domain"),
+            ),
+            (Self::U8(left), Self::U8(right)) => Self::U8(left ^ right),
+            (Self::U16(left), Self::U16(right)) => Self::U16(left ^ right),
+            (Self::U32(left), Self::U32(right)) => Self::U32(left ^ right),
+            (Self::U64(left), Self::U64(right)) => Self::U64(left ^ right),
+            _ => unreachable!("validated IntegerXor has matching fixed-width integer operands"),
         }
     }
 
@@ -536,6 +592,9 @@ impl Machine {
             Statement::IntegerMul { dst, left, right } => {
                 self.integer_mul(frame_index, dst, left, right)
             }
+            Statement::IntegerXor { dst, left, right } => {
+                self.integer_xor(frame_index, dst, left, right)
+            }
             Statement::Borrow { loan, kind, src } => {
                 self.begin_borrow(frame_index, *loan, *kind, src);
                 Ok(())
@@ -679,6 +738,37 @@ impl Machine {
             VerificationEventKind::Write {
                 place: dst.clone(),
                 kind: VerificationWriteKind::IntegerMul,
+            },
+        );
+        Ok(())
+    }
+
+    fn integer_xor(
+        &mut self,
+        frame_index: usize,
+        dst: &Place,
+        left: &Operand,
+        right: &Operand,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        let dst_ty = self.place_type(frame_index, dst);
+        let left = self.evaluate_operand(frame_index, left)?;
+        let right = self.evaluate_operand(frame_index, right)?;
+        let value = RuntimeValue::integer_xor(left, right);
+        {
+            let types = &self.program.as_program().types;
+            let frame = &mut self.frames[frame_index];
+            write_value(
+                types,
+                dst_ty,
+                place_state_mut(&mut frame.locals, dst),
+                value,
+            );
+        }
+        self.record(
+            frame_index,
+            VerificationEventKind::Write {
+                place: dst.clone(),
+                kind: VerificationWriteKind::IntegerXor,
             },
         );
         Ok(())
