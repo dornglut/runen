@@ -45,7 +45,7 @@ fn conjunction_lexing_uses_one_adjacent_token_and_preserves_invalid_boundaries()
     assert_eq!(
         nontrivia_kinds(&assign_like)
             .windows(2)
-            .filter(|window| window == [SyntaxKind::AmpAmp, SyntaxKind::Eq])
+            .filter(|window| *window == [SyntaxKind::AmpAmp, SyntaxKind::Eq])
             .count(),
         1
     );
