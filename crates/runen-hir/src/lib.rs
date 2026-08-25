@@ -462,7 +462,7 @@ pub struct Function {
 }
 
 /// One source module represented in this typed compilation.
-#[derive(Debug, Clone,PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     pub id: ModuleId,
     pub records: Vec<RecordId>,
