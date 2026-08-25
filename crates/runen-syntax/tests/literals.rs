@@ -318,9 +318,12 @@ fn minus_without_an_operand_has_a_structured_value_error() {
     let source = "fn bad() -> I8 { return -; }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value) })
+    );
     assert_eq!(
         parsed
             .syntax()
