@@ -65,11 +65,19 @@ fn conjunction_refines_to_move_branch_false_init_true_rhs_and_one_join() {
         panic!("conjunction entry must branch on left");
     };
     let left_local = moved_local(condition).expect("conjunction Branch must Move left temporary");
-    assert!(f.body.locals[left_local.0 as usize].name.starts_with("$tmp"));
+    assert!(
+        f.body.locals[left_local.0 as usize]
+            .name
+            .starts_with("$tmp")
+    );
 
     let false_block = &f.body.blocks[false_target.0 as usize];
     assert_eq!(false_block.statements.len(), 1);
-    let CoreStatement::Init { dst: false_dst, src } = &false_block.statements[0] else {
+    let CoreStatement::Init {
+        dst: false_dst,
+        src,
+    } = &false_block.statements[0]
+    else {
         panic!("false path must initialize conjunction result");
     };
     assert!(false_dst.projections.is_empty());
@@ -176,9 +184,7 @@ fn conjunction_truth_values_execute_through_existing_core_machine() {
 
 #[test]
 fn nested_conjunctions_preserve_current_block_and_build_nested_cfg() {
-    let lowered = lower_source(
-        "fn f(a: Bool, b: Bool, c: Bool) -> Bool { return a && (b && c); }",
-    );
+    let lowered = lower_source("fn f(a: Bool, b: Bool, c: Bool) -> Bool { return a && (b && c); }");
     let f = function(lowered.as_program(), "f");
     assert_eq!(
         f.body
@@ -189,10 +195,12 @@ fn nested_conjunctions_preserve_current_block_and_build_nested_cfg() {
         2,
         "one Branch is emitted per represented conjunction"
     );
-    assert!(f.body.blocks.iter().any(|block| matches!(
-        block.terminator,
-        Terminator::Return(Some(_))
-    )));
+    assert!(
+        f.body
+            .blocks
+            .iter()
+            .any(|block| matches!(block.terminator, Terminator::Return(Some(_))))
+    );
 }
 
 #[test]
