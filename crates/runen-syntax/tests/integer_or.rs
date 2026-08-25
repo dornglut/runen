@@ -58,7 +58,10 @@ fn pipe_is_lossless_and_composite_spellings_remain_repeated_existing_tokens() {
     );
 
     let double = parse("fn f(a: I64, b: I64) -> I64 { return a || b; }");
-    assert_eq!(double.text(), "fn f(a: I64, b: I64) -> I64 { return a || b; }");
+    assert_eq!(
+        double.text(),
+        "fn f(a: I64, b: I64) -> I64 { return a || b; }"
+    );
     assert!(!double.errors().is_empty());
     assert!(
         nontrivia_kinds(&double)
@@ -67,7 +70,10 @@ fn pipe_is_lossless_and_composite_spellings_remain_repeated_existing_tokens() {
     );
 
     let triple = parse("fn f(a: I64, b: I64) -> I64 { return a ||| b; }");
-    assert_eq!(triple.text(), "fn f(a: I64, b: I64) -> I64 { return a ||| b; }");
+    assert_eq!(
+        triple.text(),
+        "fn f(a: I64, b: I64) -> I64 { return a ||| b; }"
+    );
     assert!(!triple.errors().is_empty());
     assert!(
         nontrivia_kinds(&triple)
@@ -127,7 +133,11 @@ fn xor_binds_tighter_than_or_and_or_binds_tighter_than_equality() {
     );
 
     let left_equality = parse("fn f(a: I64, b: I64, c: I64) -> Bool { return a | b == c; }");
-    assert!(left_equality.errors().is_empty(), "{:?}", left_equality.errors());
+    assert!(
+        left_equality.errors().is_empty(),
+        "{:?}",
+        left_equality.errors()
+    );
     let equality = left_equality
         .syntax()
         .descendants()
@@ -142,7 +152,11 @@ fn xor_binds_tighter_than_or_and_or_binds_tighter_than_equality() {
     );
 
     let right_equality = parse("fn f(a: I64, b: I64, c: I64) -> Bool { return a == b | c; }");
-    assert!(right_equality.errors().is_empty(), "{:?}", right_equality.errors());
+    assert!(
+        right_equality.errors().is_empty(),
+        "{:?}",
+        right_equality.errors()
+    );
     let equality = right_equality
         .syntax()
         .descendants()
@@ -158,7 +172,11 @@ fn xor_binds_tighter_than_or_and_or_binds_tighter_than_equality() {
 
     let conjunction =
         parse("fn f(a: I64, b: I64, c: I64, d: I64) -> Bool { return a | b == c && d == d; }");
-    assert!(conjunction.errors().is_empty(), "{:?}", conjunction.errors());
+    assert!(
+        conjunction.errors().is_empty(),
+        "{:?}",
+        conjunction.errors()
+    );
     let and = conjunction
         .syntax()
         .descendants()
@@ -184,7 +202,10 @@ fn or_preserves_tighter_signed_literal_prefix_additive_and_xor_boundaries() {
         .expect("or");
     assert_eq!(
         or.children().map(|node| node.kind()).collect::<Vec<_>>(),
-        [SyntaxKind::IntegerXorValue, SyntaxKind::DecimalIntegerLiteral]
+        [
+            SyntaxKind::IntegerXorValue,
+            SyntaxKind::DecimalIntegerLiteral
+        ]
     );
     let xor = or
         .children()
