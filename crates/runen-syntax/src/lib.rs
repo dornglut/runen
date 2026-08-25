@@ -116,6 +116,8 @@ pub enum SyntaxKind {
     Star,
     IntegerMulValue,
     IntegerNegValue,
+    Tilde,
+    IntegerComplementValue,
 }
 
 impl SyntaxKind {
@@ -157,6 +159,7 @@ impl SyntaxKind {
                 | Self::DecimalFloatingMagnitude
                 | Self::Minus
                 | Self::Bang
+                | Self::Tilde
                 | Self::LParen
         )
     }
@@ -267,6 +270,8 @@ impl Language for RunenLanguage {
             91 => SyntaxKind::Star,
             92 => SyntaxKind::IntegerMulValue,
             93 => SyntaxKind::IntegerNegValue,
+            94 => SyntaxKind::Tilde,
+            95 => SyntaxKind::IntegerComplementValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

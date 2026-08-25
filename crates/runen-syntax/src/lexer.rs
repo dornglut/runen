@@ -167,6 +167,7 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
                 ';' => Some((SyntaxKind::Semicolon, 1)),
                 '.' => Some((SyntaxKind::Dot, 1)),
                 '!' => Some((SyntaxKind::Bang, 1)),
+                '~' => Some((SyntaxKind::Tilde, 1)),
                 _ => None,
             }
         };

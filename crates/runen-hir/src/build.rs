@@ -2159,6 +2159,46 @@ fn validate_value(
                 location: value_location,
             })
         }
+        SyntaxKind::IntegerComplementValue => {
+            if !matches!(
+                required,
+                Type::Intrinsic(
+                    IntrinsicType::I8
+                        | IntrinsicType::I16
+                        | IntrinsicType::I32
+                        | IntrinsicType::I64
+                        | IntrinsicType::U8
+                        | IntrinsicType::U16
+                        | IntrinsicType::U32
+                        | IntrinsicType::U64
+                )
+            ) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::IntegerComplementRequiresInteger { required },
+                    location: value_location,
+                });
+                return None;
+            }
+
+            let operand_node = value_child(node);
+            let mut operand_bindings = bindings.clone();
+            let operand = validate_value(
+                header,
+                &operand_node,
+                required,
+                context,
+                &mut operand_bindings,
+                diagnostics,
+            )?;
+            *bindings = operand_bindings;
+            Some(Value {
+                ty: required,
+                kind: ValueKind::IntegerComplement {
+                    operand: Box::new(operand),
+                },
+                location: value_location,
+            })
+        }
         SyntaxKind::IntegerAddValue => {
             if !matches!(
                 required,
@@ -3526,6 +3566,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
         kind,
         SyntaxKind::GroupedValue
             | SyntaxKind::IntegerNegValue
+            | SyntaxKind::IntegerComplementValue
             | SyntaxKind::IntegerAddValue
             | SyntaxKind::IntegerSubValue
             | SyntaxKind::IntegerMulValue

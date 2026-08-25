@@ -985,6 +985,49 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(result)
             }
+            hir::ValueKind::IntegerComplement { operand } => {
+                let integer_ty = value.ty;
+                let minus_one_mod_width = match integer_ty {
+                    hir::Type::Intrinsic(hir::IntrinsicType::I8) => core::Value::I8(-1),
+                    hir::Type::Intrinsic(hir::IntrinsicType::I16) => core::Value::I16(-1),
+                    hir::Type::Intrinsic(hir::IntrinsicType::I32) => core::Value::I32(-1),
+                    hir::Type::Intrinsic(hir::IntrinsicType::I64) => core::Value::I64(-1),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U8) => core::Value::U8(255),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U16) => core::Value::U16(65_535),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U32) => {
+                        core::Value::U32(4_294_967_295)
+                    }
+                    hir::Type::Intrinsic(hir::IntrinsicType::U64) => {
+                        core::Value::U64(18_446_744_073_709_551_615)
+                    }
+                    _ => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "Integer-complement result type is not a fixed-width integer",
+                        ));
+                    }
+                };
+                if operand.ty != integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Integer-complement operand type does not match result type",
+                    ));
+                }
+
+                let core_integer_ty = self.types.get(integer_ty)?;
+                let operand_local = self.lower_value(operand)?;
+                if self.local_type(operand_local)? != core_integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Integer-complement operand temporary type does not match result type",
+                    ));
+                }
+
+                let result = self.push_temporary(integer_ty)?;
+                self.push_statement(core::Statement::IntegerSub {
+                    dst: core::Place::local(result),
+                    left: core::Operand::Constant(minus_one_mod_width),
+                    right: core::Operand::Move(core::Place::local(operand_local).into()),
+                });
+                Ok(result)
+            }
             hir::ValueKind::IntegerAdd { left, right } => {
                 let integer_ty = value.ty;
                 if !matches!(

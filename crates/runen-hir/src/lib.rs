@@ -313,6 +313,9 @@ pub enum ValueKind {
     IntegerNeg {
         operand: Box<Value>,
     },
+    IntegerComplement {
+        operand: Box<Value>,
+    },
     IntegerAdd {
         left: Box<Value>,
         right: Box<Value>,
@@ -511,6 +514,7 @@ pub enum DiagnosticKind {
     ArgumentCount { expected: usize, found: usize },
     TypeMismatch { expected: Type, found: Type },
     IntegerNegationRequiresInteger { required: Type },
+    IntegerComplementRequiresInteger { required: Type },
     IntegerAdditionRequiresInteger { required: Type },
     IntegerSubtractionRequiresInteger { required: Type },
     IntegerMultiplicationRequiresInteger { required: Type },

@@ -690,6 +690,7 @@ impl Parser<'_> {
     fn parse_value_in(&mut self, context: ValueContext) {
         match self.current() {
             Some(SyntaxKind::Bang) => self.parse_boolean_not_value(context),
+            Some(SyntaxKind::Tilde) => self.parse_integer_complement_value(context),
             Some(SyntaxKind::LParen) => self.parse_grouped_value(context),
             Some(SyntaxKind::Ident) => match context {
                 ValueContext::Ordinary => match self.peek_nontrivia(1) {
@@ -826,6 +827,14 @@ impl Parser<'_> {
     fn parse_integer_neg_value(&mut self, context: ValueContext) {
         self.builder.start_node(SyntaxKind::IntegerNegValue.into());
         self.expect(SyntaxKind::Minus, ExpectedSyntax::Value);
+        self.parse_value_in(context);
+        self.builder.finish_node();
+    }
+
+    fn parse_integer_complement_value(&mut self, context: ValueContext) {
+        self.builder
+            .start_node(SyntaxKind::IntegerComplementValue.into());
+        self.expect(SyntaxKind::Tilde, ExpectedSyntax::Value);
         self.parse_value_in(context);
         self.builder.finish_node();
     }
