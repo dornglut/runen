@@ -190,11 +190,13 @@ Concrete syntax, not this semantic owner, determines which literal family is adm
 
 ## Concrete sign and operator boundary
 
-The represented negative decimal integer and decimal floating forms are literal forms owned concretely by `concrete-syntax.md`. Their `-` token denotes the negative sign only inside the applicable literal production.
+The represented negative decimal integer and decimal floating forms are literal forms owned concretely by `concrete-syntax.md`. Whenever the complete applicable signed-literal production is present, its standalone `-` token is the literal's negative sign and the signed-literal production takes priority over the separately represented integer-negation prefix form.
 
-This document does not define general unary negation or any arithmetic operator. Represented binary addition, subtraction, and multiplication remain owned by `operators.md`; in particular, represented binary subtraction does not reinterpret an already represented signed decimal literal, and multiplication introduces no new value-start `-` role.
+This literal owner does not define an arithmetic operator. Represented plain fixed-width integer negation and binary addition, subtraction, and multiplication are owned by `operators.md`. The integer-negation role for value-start `-` applies only when `concrete-syntax.md` does not consume that token as the sign of an applicable `DecimalIntegerLiteral` or `DecimalFloatingLiteral`. Represented binary subtraction likewise does not reinterpret an already represented signed decimal literal.
 
-Any future operator owner must likewise preserve the accepted meaning of represented signed decimal literal forms rather than reinterpret an already represented signed literal through host-language operator behavior.
+The distinction remains part of source validity and MUST NOT be normalized away before literal materialization and operator validation. For example, under required source type `U8`, concrete `-1` is the existing negative decimal integer literal and is source-invalid because its mathematical literal datum is not representable as `U8`, while concrete `-(1)` is a separately represented integer-negation operation whose unsigned operand may validly materialize as `U8` and whose result is governed by `operators.md`.
+
+A parser, typed frontend, optimizer, lowerer, future operator owner, or host-language implementation MUST preserve the accepted meaning of a represented signed decimal literal rather than reinterpret it as application of an arithmetic operator or host-language unary negation.
 
 ## Other literal boundary
 
