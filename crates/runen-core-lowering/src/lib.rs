@@ -987,7 +987,7 @@ impl<'a> FunctionLowerer<'a> {
             }
             hir::ValueKind::IntegerComplement { operand } => {
                 let integer_ty = value.ty;
-                let all_ones = match integer_ty {
+                let minus_one_mod_width = match integer_ty {
                     hir::Type::Intrinsic(hir::IntrinsicType::I8) => core::Value::I8(-1),
                     hir::Type::Intrinsic(hir::IntrinsicType::I16) => core::Value::I16(-1),
                     hir::Type::Intrinsic(hir::IntrinsicType::I32) => core::Value::I32(-1),
@@ -1023,7 +1023,7 @@ impl<'a> FunctionLowerer<'a> {
                 let result = self.push_temporary(integer_ty)?;
                 self.push_statement(core::Statement::IntegerSub {
                     dst: core::Place::local(result),
-                    left: core::Operand::Constant(all_ones),
+                    left: core::Operand::Constant(minus_one_mod_width),
                     right: core::Operand::Move(core::Place::local(operand_local).into()),
                 });
                 Ok(result)
