@@ -61,7 +61,7 @@ The represented producer families are:
 
 `concrete-syntax.md` exposes exactly those six producer families through its represented `Value` grammar. `GroupedValue` and `ConditionalGroupedValue` are concrete wrappers around exactly one already represented value producer and therefore do **not** add a seventh producer family. The represented operator family currently contains Boolean logical negation, plain fixed-width integer negation, plain fixed-width integer multiplication, plain fixed-width integer addition, plain fixed-width integer subtraction, Boolean equality, and Boolean inequality; those operations do not become seven unrelated general expression families merely because their arities or typing rules differ. A record-destructuring declaration is not another `Value` producer: `patterns.md` owns its grouped production of zero or more binding-leaf values. A producer-backed record-pattern scrutinee reuses one existing producer family in a pattern-specific receiving position and remains deliberately narrower than `Value`.
 
-`control-flow.md` reuses the concrete `ConditionalValue` receiving position for represented `if` and bounded `while`. The conditional grammar may syntactically contain a represented operator that cannot satisfy the condition's exact `Bool` requirement; such a producer is source-invalid before it can yield a condition value. Context-preserving conditional grouping wraps only the recursively admitted conditional grammar and does not create an additional producer family or alter any producer execution semantics here.
+`control-flow.md` reuses the concrete `ConditionalValue` receiving position for represented `if` and `while`. The conditional grammar may syntactically contain a represented operator that cannot satisfy the condition's exact `Bool` requirement; such a producer is source-invalid before it can yield a condition value. Context-preserving conditional grouping wraps only the recursively admitted conditional grammar and does not create an additional producer family or alter any producer execution semantics here.
 
 The represented `fault;`, `break;`, and `continue;` forms are body statements with no local fallthrough, not owned value producers, `Value`, `ConditionalValue`, expressions, calls, or return-value forms. None evaluates a producer merely to select its termination/transfer reason or target.
 
@@ -455,7 +455,7 @@ For a producer-backed category:
 7. apply pattern-owned binding-leaf `Duplicate`/`Consume` productions in retained depth-first source order;
 8. after every binding leaf has been produced, clean the transient's remaining structural ownership frontier selected by `patterns.md` through `structural-ownership.md` exactly once;
 9. only after transient cleanup completes, establish all pattern-introduced bindings in the containing lexical scope together; and
-10. only then may the next statement begin.
+10. only then may the next body statement begin.
 
 Any accepted producer-backed scrutinee follows exactly this sequence when its result type equals the already resolved top pattern record type. Whether the producer target or receiver, the pattern head, both, or neither use represented qualification does not add a producer, transient, ownership transition, fault path, divergence path, or cleanup phase.
 
