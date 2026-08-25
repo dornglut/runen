@@ -80,8 +80,14 @@ fn integer_xor_lowers_to_one_fresh_result_with_move_operands_and_no_rewrite_or_c
     assert_ne!(dst.local, right_local);
     assert!(left_local.0 < right_local.0);
     assert!(right_local.0 < dst.local.0);
-    assert_eq!(f.body.locals[left_local.0 as usize].ty, f.body.locals[dst.local.0 as usize].ty);
-    assert_eq!(f.body.locals[right_local.0 as usize].ty, f.body.locals[dst.local.0 as usize].ty);
+    assert_eq!(
+        f.body.locals[left_local.0 as usize].ty,
+        f.body.locals[dst.local.0 as usize].ty
+    );
+    assert_eq!(
+        f.body.locals[right_local.0 as usize].ty,
+        f.body.locals[dst.local.0 as usize].ty
+    );
 
     let arithmetic_rewrites = f.body.blocks[0]
         .statements
@@ -171,10 +177,7 @@ fn grouped_nested_xor_emits_one_core_xor_per_source_xor_in_dependency_order() {
         assert_eq!(xors.len(), 2, "{name}");
         assert_eq!(function.body.blocks.len(), 1, "{name}");
 
-        let CoreStatement::IntegerXor {
-            dst: first_dst, ..
-        } = xors[0]
-        else {
+        let CoreStatement::IntegerXor { dst: first_dst, .. } = xors[0] else {
             unreachable!();
         };
         let CoreStatement::IntegerXor {
@@ -187,7 +190,8 @@ fn grouped_nested_xor_emits_one_core_xor_per_source_xor_in_dependency_order() {
         };
         assert!(first_dst.local.0 < second_dst.local.0);
         assert!(
-            moved_local(left) == Some(first_dst.local) || moved_local(right) == Some(first_dst.local),
+            moved_local(left) == Some(first_dst.local)
+                || moved_local(right) == Some(first_dst.local),
             "outer XOR must consume the nested XOR result"
         );
     }
@@ -251,14 +255,8 @@ fn lowering_rejects_malformed_integer_xor_retained_type_facts() {
 fn source_to_hir_to_core_to_reference_proves_signed_unsigned_and_precedence_xor() {
     for (source, expected) in [
         ("fn f() -> I8 { return -5 ^ 3; }", CoreValue::I8(-8)),
-        (
-            "fn f() -> I8 { return 127 ^ -1; }",
-            CoreValue::I8(i8::MIN),
-        ),
-        (
-            "fn f() -> I8 { return -128 ^ -1; }",
-            CoreValue::I8(i8::MAX),
-        ),
+        ("fn f() -> I8 { return 127 ^ -1; }", CoreValue::I8(i8::MIN)),
+        ("fn f() -> I8 { return -128 ^ -1; }", CoreValue::I8(i8::MAX)),
         ("fn f() -> U8 { return 255 ^ 15; }", CoreValue::U8(240)),
         ("fn f() -> I8 { return 1 + 2 ^ 7; }", CoreValue::I8(4)),
         ("fn f() -> I8 { return 7 ^ 1 + 2; }", CoreValue::I8(4)),
