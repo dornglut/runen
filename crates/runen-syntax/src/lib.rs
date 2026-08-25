@@ -122,6 +122,8 @@ pub enum SyntaxKind {
     BooleanAndValue,
     Caret,
     IntegerXorValue,
+    Pipe,
+    IntegerOrValue,
 }
 
 impl SyntaxKind {
@@ -196,7 +198,7 @@ impl Language for RunenLanguage {
             13 => SyntaxKind::TyI64,
             14 => SyntaxKind::TyU8,
             15 => SyntaxKind::TyU16,
-            16 => SyntaxKind::TyU32,
+            16 => SyntaxKind::U32,
             17 => SyntaxKind::TyU64,
             18 => SyntaxKind::TyF16,
             19 => SyntaxKind::TyF32,
@@ -280,6 +282,8 @@ impl Language for RunenLanguage {
             97 => SyntaxKind::BooleanAndValue,
             98 => SyntaxKind::Caret,
             99 => SyntaxKind::IntegerXorValue,
+            100 => SyntaxKind::Pipe,
+            101 => SyntaxKind::IntegerOrValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
