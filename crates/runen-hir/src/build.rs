@@ -2370,6 +2370,63 @@ fn validate_value(
                 location: value_location,
             })
         }
+        SyntaxKind::IntegerXorValue => {
+            if !matches!(
+                required,
+                Type::Intrinsic(
+                    IntrinsicType::I8
+                        | IntrinsicType::I16
+                        | IntrinsicType::I32
+                        | IntrinsicType::I64
+                        | IntrinsicType::U8
+                        | IntrinsicType::U16
+                        | IntrinsicType::U32
+                        | IntrinsicType::U64
+                )
+            ) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::IntegerXorRequiresInteger { required },
+                    location: value_location,
+                });
+                return None;
+            }
+
+            let mut operands = node.children().filter(|child| is_value_node(child.kind()));
+            let left_node = operands
+                .next()
+                .expect("syntax-clean integer XOR contains a left operand");
+            let right_node = operands
+                .next()
+                .expect("syntax-clean integer XOR contains a right operand");
+            debug_assert!(operands.next().is_none());
+
+            let mut operand_bindings = bindings.clone();
+            let left = validate_value(
+                header,
+                &left_node,
+                required,
+                context,
+                &mut operand_bindings,
+                diagnostics,
+            )?;
+            let right = validate_value(
+                header,
+                &right_node,
+                required,
+                context,
+                &mut operand_bindings,
+                diagnostics,
+            )?;
+            *bindings = operand_bindings;
+            Some(Value {
+                ty: required,
+                kind: ValueKind::IntegerXor {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                location: value_location,
+            })
+        }
         SyntaxKind::BooleanAndValue => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
             if required != found {
@@ -3638,6 +3695,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
             | SyntaxKind::IntegerAddValue
             | SyntaxKind::IntegerSubValue
             | SyntaxKind::IntegerMulValue
+            | SyntaxKind::IntegerXorValue
             | SyntaxKind::BooleanAndValue
             | SyntaxKind::BooleanEqualityValue
             | SyntaxKind::BooleanNotValue
