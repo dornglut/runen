@@ -120,6 +120,8 @@ pub enum SyntaxKind {
     IntegerComplementValue,
     AmpAmp,
     BooleanAndValue,
+    Caret,
+    IntegerXorValue,
 }
 
 impl SyntaxKind {
@@ -276,6 +278,8 @@ impl Language for RunenLanguage {
             95 => SyntaxKind::IntegerComplementValue,
             96 => SyntaxKind::AmpAmp,
             97 => SyntaxKind::BooleanAndValue,
+            98 => SyntaxKind::Caret,
+            99 => SyntaxKind::IntegerXorValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
