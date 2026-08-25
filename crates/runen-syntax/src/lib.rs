@@ -115,6 +115,7 @@ pub enum SyntaxKind {
     IntegerSubValue,
     Star,
     IntegerMulValue,
+    IntegerNegValue,
 }
 
 impl SyntaxKind {
@@ -265,6 +266,7 @@ impl Language for RunenLanguage {
             90 => SyntaxKind::IntegerSubValue,
             91 => SyntaxKind::Star,
             92 => SyntaxKind::IntegerMulValue,
+            93 => SyntaxKind::IntegerNegValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
