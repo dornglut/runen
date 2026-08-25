@@ -184,7 +184,10 @@ fn signed_literal_and_integer_negation_remain_distinct_for_unsigned_requirements
         .and_then(|returned| returned.value.as_ref())
         .expect("negated U8 return value");
     let operand = integer_neg(value, IntrinsicType::U8);
-    assert!(matches!(operand.kind, ValueKind::Literal(LiteralValue::U8(1))));
+    assert!(matches!(
+        operand.kind,
+        ValueKind::Literal(LiteralValue::U8(1))
+    ));
 }
 
 #[test]
@@ -234,7 +237,10 @@ fn nested_and_mixed_arithmetic_retain_explicit_source_operation_tree() {
         .and_then(|returned| returned.value.as_ref())
         .expect("nested return");
     let operand = integer_neg(nested, IntrinsicType::I8);
-    assert!(matches!(operand.kind, ValueKind::Literal(LiteralValue::I8(-1))));
+    assert!(matches!(
+        operand.kind,
+        ValueKind::Literal(LiteralValue::I8(-1))
+    ));
 
     let grouped = function(&hir, "grouped")
         .body
