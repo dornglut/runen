@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    FunctionId, LocalId, Operand, PlaceAccess, Statement as CoreStatement, Terminator,
-    ValidatedProgram, Value as CoreValue,
+    FunctionId, LocalId, MirValidationErrorKind, Operand, PlaceAccess, Statement as CoreStatement,
+    Terminator, ValidatedProgram, Value as CoreValue,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
@@ -226,6 +226,20 @@ fn lowering_rejects_integer_neg_operand_type_fact_that_differs_from_result() {
             "Integer-neg operand type does not match result type"
         ))
     );
+}
+
+#[test]
+fn lowering_rejects_malformed_operand_source_local_type_mismatch_without_conversion() {
+    let mut compilation = hir("fn f(value: I8) -> I8 { return -value; }");
+    compilation.functions[0].parameters[0].ty = Type::Intrinsic(IntrinsicType::I16);
+
+    let Err(LoweringError::CoreValidation(error)) = lower(&compilation) else {
+        panic!("mismatched operand source local must be rejected by Core validation");
+    };
+    assert!(matches!(
+        error.kind,
+        MirValidationErrorKind::TypeMismatch { .. }
+    ));
 }
 
 #[test]
