@@ -98,9 +98,11 @@ fn f(root: Flag, flag: Bool) -> Bool {
     assert_eq!(count(&parsed, SyntaxKind::FieldValueUse), 1);
     assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 1);
 
-    let invalid = parse("fn bad() { let value: I64 = -(1); }");
-    assert_eq!(invalid.text(), "fn bad() { let value: I64 = -(1); }");
-    assert!(!invalid.errors().is_empty());
+    let negated = parse("fn f() { let value: I64 = -(1); }");
+    assert_eq!(negated.text(), "fn f() { let value: I64 = -(1); }");
+    assert!(negated.errors().is_empty(), "{:?}", negated.errors());
+    assert_eq!(count(&negated, SyntaxKind::IntegerNegValue), 1);
+    assert_eq!(count(&negated, SyntaxKind::GroupedValue), 1);
 }
 
 #[test]
