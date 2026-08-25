@@ -751,30 +751,29 @@ impl Parser<'_> {
                 self.bump();
                 self.builder.finish_node();
             }
-            Some(SyntaxKind::Minus) => {
-                let floating = self.peek_nontrivia(1) == Some(SyntaxKind::DecimalFloatingMagnitude);
-                self.builder.start_node(
-                    if floating {
-                        SyntaxKind::DecimalFloatingLiteral
-                    } else {
-                        SyntaxKind::DecimalIntegerLiteral
-                    }
-                    .into(),
-                );
-                self.bump();
-                if floating {
-                    self.expect(
-                        SyntaxKind::DecimalFloatingMagnitude,
-                        ExpectedSyntax::DecimalMagnitude,
-                    );
-                } else {
+            Some(SyntaxKind::Minus) => match self.peek_nontrivia(1) {
+                Some(SyntaxKind::DecimalMagnitude) => {
+                    self.builder
+                        .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                    self.bump();
                     self.expect(
                         SyntaxKind::DecimalMagnitude,
                         ExpectedSyntax::DecimalMagnitude,
                     );
+                    self.builder.finish_node();
                 }
-                self.builder.finish_node();
-            }
+                Some(SyntaxKind::DecimalFloatingMagnitude) => {
+                    self.builder
+                        .start_node(SyntaxKind::DecimalFloatingLiteral.into());
+                    self.bump();
+                    self.expect(
+                        SyntaxKind::DecimalFloatingMagnitude,
+                        ExpectedSyntax::DecimalMagnitude,
+                    );
+                    self.builder.finish_node();
+                }
+                _ => self.parse_integer_neg_value(context),
+            },
             _ => {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
                 let is_boundary = match context {
@@ -820,6 +819,13 @@ impl Parser<'_> {
     fn parse_boolean_not_value(&mut self, context: ValueContext) {
         self.builder.start_node(SyntaxKind::BooleanNotValue.into());
         self.expect(SyntaxKind::Bang, ExpectedSyntax::Value);
+        self.parse_value_in(context);
+        self.builder.finish_node();
+    }
+
+    fn parse_integer_neg_value(&mut self, context: ValueContext) {
+        self.builder.start_node(SyntaxKind::IntegerNegValue.into());
+        self.expect(SyntaxKind::Minus, ExpectedSyntax::Value);
         self.parse_value_in(context);
         self.builder.finish_node();
     }
