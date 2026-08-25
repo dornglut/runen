@@ -946,6 +946,45 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(temporary)
             }
+            hir::ValueKind::IntegerNeg { operand } => {
+                let integer_ty = value.ty;
+                let zero = match integer_ty {
+                    hir::Type::Intrinsic(hir::IntrinsicType::I8) => core::Value::I8(0),
+                    hir::Type::Intrinsic(hir::IntrinsicType::I16) => core::Value::I16(0),
+                    hir::Type::Intrinsic(hir::IntrinsicType::I32) => core::Value::I32(0),
+                    hir::Type::Intrinsic(hir::IntrinsicType::I64) => core::Value::I64(0),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U8) => core::Value::U8(0),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U16) => core::Value::U16(0),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U32) => core::Value::U32(0),
+                    hir::Type::Intrinsic(hir::IntrinsicType::U64) => core::Value::U64(0),
+                    _ => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "Integer-neg result type is not a fixed-width integer",
+                        ));
+                    }
+                };
+                if operand.ty != integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Integer-neg operand type does not match result type",
+                    ));
+                }
+
+                let core_integer_ty = self.types.get(integer_ty)?;
+                let operand_local = self.lower_value(operand)?;
+                if self.local_type(operand_local)? != core_integer_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Integer-neg operand temporary type does not match result type",
+                    ));
+                }
+
+                let result = self.push_temporary(integer_ty)?;
+                self.push_statement(core::Statement::IntegerSub {
+                    dst: core::Place::local(result),
+                    left: core::Operand::Constant(zero),
+                    right: core::Operand::Move(core::Place::local(operand_local).into()),
+                });
+                Ok(result)
+            }
             hir::ValueKind::IntegerAdd { left, right } => {
                 let integer_ty = value.ty;
                 if !matches!(
