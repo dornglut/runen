@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-Fixed-width integer arithmetic MUST have language-defined semantics.
+Fixed-width integer operations represented here MUST have language-defined semantics.
 
 Signed overflow MUST NOT become undefined behavior merely because a backend uses machine integers, and debug or release mode MUST NOT change language meaning.
 
@@ -117,6 +117,50 @@ The multiplication step after both semantic operand values are available is dete
 A conforming implementation MAY use native arithmetic only when it preserves the exact mathematical-multiplication-plus-plain-overflow relation above. Host signed-overflow behavior, backend `nsw`/`nuw`-like assumptions, debug/release mode, instruction width, or physical two's-complement representation is never semantic authority.
 
 This represented operation defines no unary negation, division, remainder, shift, bitwise operation, comparison, floating operation, vector operation, conversion, constant-evaluation rule, checked multiplication, saturating multiplication, explicitly wrapping multiplication, or generic arithmetic operation family.
+
+## Plain fixed-width integer exclusive-or
+
+This revision represents one concrete plain fixed-width bitwise operation: **integer exclusive-or**.
+
+Its represented operand and result scalar kinds are exactly:
+
+- signed fixed-width integer kinds `I8`, `I16`, `I32`, and `I64`; and
+- unsigned fixed-width integer kinds `U8`, `U16`, `U32`, and `U64`.
+
+For one selected fixed-width integer kind of width `N`, let `l` and `r` be two semantic integer values of that same kind.
+
+For any semantic integer value `v` of that kind, define its **canonical width residue** `r_N(v)` as the unique mathematical integer `q` satisfying
+
+```text
+0 <= q < 2^N
+q ≡ v (mod 2^N).
+```
+
+For every mathematical residue `q` in `[0, 2^N - 1]` and every `i` with `0 <= i < N`, define its mathematical binary digit
+
+```text
+bit_i(q) = floor(q / 2^i) mod 2.
+```
+
+Let `a = r_N(l)` and `b = r_N(r)`. Define the exclusive-or residue
+
+```text
+x = sum_{i = 0}^{N - 1} 2^i * ((bit_i(a) + bit_i(b)) mod 2).
+```
+
+The successful **plain fixed-width exclusive-or result** is exactly the unique semantic value of that same selected fixed-width integer kind whose canonical width residue is `x`. Equivalently, unsigned kinds select the value `x` itself, while signed kinds select the unique value in `[-2^(N-1), 2^(N-1) - 1]` congruent to `x` modulo `2^N`.
+
+This definition is a mathematical value-domain relation. Canonical width residues and their binary digits are not physical bit patterns, bytes, object representations, ABI encodings, endianness facts, storage layouts, host signed representations, or a promise that signed integers are physically stored using two's complement.
+
+Exclusive-or is total over every pair of semantic values in one represented fixed-width integer domain. Once both operand values are available, the exclusive-or step is finite, deterministic, non-faulting, and non-diverging. It has no overflow classification because its result residue is already in `[0, 2^N - 1]`; the explicit checked, wrapping, and saturating arithmetic modes below do not alter this operation.
+
+This numerical relation does not make distinct Core type identities interchangeable merely because they have the same scalar kind. The Core operation that consumes this relation owns exact operand/destination type-identity validation and result storage. Likewise, source-language typing and `^` spelling are owned by their source semantic and concrete-syntax owners rather than by this Core numerical relation.
+
+The represented Core operation consuming this relation evaluates its two operands left-to-right and writes the resulting value through the non-replacing destination relation owned by [Core value and storage semantics](../value-storage.md). Those operand-access, storage, lifetime, initialization, and borrowing rules are not duplicated here.
+
+A conforming implementation MAY use a native exclusive-or instruction or host-language bitwise primitive only when it proves that the produced semantic value is exactly the representation-neutral result defined above. Host integer representation, host `^` behavior, backend instruction width, target endianness, optimizer assumptions, or physical two's-complement storage is never semantic authority.
+
+This represented operation defines no binary AND or OR, complement, shift, division, remainder, comparison, floating operation, vector operation, conversion, constant-evaluation rule, explicit overflow mode, source operator family, generic bitwise abstraction, or backend instruction requirement.
 
 ## Explicit checked overflow
 
