@@ -24,7 +24,10 @@ fn nontrivia_kinds(parsed: &Parse) -> Vec<SyntaxKind> {
 
 #[test]
 fn conjunction_kinds_append_without_renumbering_existing_syntax() {
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerComplementValue).0, 95);
+    assert_eq!(
+        rowan::SyntaxKind::from(SyntaxKind::IntegerComplementValue).0,
+        95
+    );
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::AmpAmp).0, 96);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::BooleanAndValue).0, 97);
 
@@ -155,7 +158,8 @@ fn conditional_conjunction_preserves_standalone_record_construction_exclusion() 
 
 #[test]
 fn conjunction_stays_a_value_and_does_not_expand_receiver_or_pattern_categories() {
-    let field_source = "record Flag { ready: Bool } fn f(a: Bool, root: Flag) -> Bool { return a && root.ready; }";
+    let field_source =
+        "record Flag { ready: Bool } fn f(a: Bool, root: Flag) -> Bool { return a && root.ready; }";
     let field = parse(field_source);
     assert!(field.errors().is_empty(), "{:?}", field.errors());
     let conjunction = field
