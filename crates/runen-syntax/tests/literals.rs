@@ -314,9 +314,22 @@ fn unsupported_numeric_spellings_are_not_silently_reinterpreted() {
 }
 
 #[test]
-fn minus_without_a_decimal_magnitude_has_a_structured_syntax_error() {
-    let parsed = parse("fn bad() -> I8 { return -; }");
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::DecimalMagnitude)
-    }));
+fn minus_without_an_operand_has_a_structured_value_error() {
+    let source = "fn bad() -> I8 { return -; }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::Value) })
+    );
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::IntegerNegValue)
+            .count(),
+        1
+    );
 }

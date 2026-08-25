@@ -376,10 +376,11 @@ fn equality_is_not_reparsed_as_a_field_receiver_or_pattern_scrutinee() {
 
 #[test]
 fn malformed_operator_forms_remain_lossless() {
-    let numeric_source = "fn bad(flag: Bool) { let value: Bool = -!flag; }";
+    let numeric_source = "fn bad(flag: Bool) { let value: Bool = -; }";
     let numeric = parse(numeric_source);
     assert_eq!(numeric.text(), numeric_source);
     assert!(!numeric.errors().is_empty());
+    assert_eq!(count(&numeric, SyntaxKind::IntegerNegValue), 1);
 
     let leading_operator = "fn bad(flag: Bool) { let value: Bool = == flag; } fn after() {}";
     let leading = parse(leading_operator);

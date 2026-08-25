@@ -76,19 +76,22 @@ fn subtraction_preserves_signed_literal_right_operand_with_or_without_whitespace
 }
 
 #[test]
-fn minus_does_not_create_unary_negation_decrement_or_compound_assignment_forms() {
+fn minus_distinguishes_integer_negation_from_decrement_and_compound_assignment_forms() {
     for source in [
-        "fn bad() -> I8 { return -(1); }",
-        "fn bad(value: I8) -> I8 { return -value; }",
-        "fn bad() -> I8 { return --1; }",
-        "fn bad(a: I8) { let value: I8 = a -= 1; }",
+        "fn f() -> I8 { return -(1); }",
+        "fn f(value: I8) -> I8 { return -value; }",
+        "fn f() -> I8 { return --1; }",
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty());
+        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        assert_eq!(count(&parsed, SyntaxKind::IntegerNegValue), 1);
     }
 
     let compound = parse("fn bad(a: I8) { let value: I8 = a -= 1; }");
+    assert_eq!(compound.text(), "fn bad(a: I8) { let value: I8 = a -= 1; }");
+    assert!(!compound.errors().is_empty());
+    assert_eq!(count(&compound, SyntaxKind::IntegerNegValue), 0);
     assert!(
         nontrivia_kinds(&compound)
             .windows(2)
