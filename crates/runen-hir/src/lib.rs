@@ -289,7 +289,7 @@ pub enum FieldValueReceiver {
 pub enum RecordPatternScrutinee {
     /// Accepted bare binding root with direct per-leaf ownership semantics.
     DirectRoot(BindingId),
-    /// Existing value producer whose successful result is the pattern transient.
+    /// Existing value producer whose successful result becomes the pattern transient.
     Producer {
         value: Value,
         cleanup: RecordPatternTransientCleanup,
@@ -330,6 +330,10 @@ pub enum ValueKind {
     },
     BooleanEquality {
         relation: BooleanEqualityRelation,
+        left: Box<Value>,
+        right: Box<Value>,
+    },
+    BooleanAnd {
         left: Box<Value>,
         right: Box<Value>,
     },
@@ -532,6 +536,7 @@ pub enum DiagnosticKind {
     UnavailableFieldValue,
     NoResultCallUsedAsValue,
     ResultCallUsedAsStatement,
+    BooleanConjunctionOwnershipMismatch,
     ConditionalOwnershipMismatch,
     LoopOwnershipMismatch,
     BreakOutsideLoop,
