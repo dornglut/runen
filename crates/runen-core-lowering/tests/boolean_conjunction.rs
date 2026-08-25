@@ -278,8 +278,10 @@ fn lowering_rejects_malformed_retained_conjunction_type_facts() {
 #[test]
 fn conjunction_lowers_through_existing_generic_value_consumers() {
     let lowered = lower_source(
-        "fn sink(value: Bool) {} \
+        "record Wrapper { value: Bool } \
+         fn sink(value: Bool) {} \
          fn f(a: Bool, b: Bool) -> Bool { \
+             let wrapper: Wrapper = Wrapper { value: a && b }; \
              let mut local: Bool = a && b; \
              local = a && b; \
              sink(a && b); \
@@ -295,7 +297,7 @@ fn conjunction_lowers_through_existing_generic_value_consumers() {
             .iter()
             .filter(|block| matches!(block.terminator, Terminator::Branch { .. }))
             .count()
-            >= 7,
+            >= 9,
         "conjunctions plus existing if/while control flow all refine through CFG"
     );
     assert!(
@@ -304,5 +306,16 @@ fn conjunction_lowers_through_existing_generic_value_consumers() {
             .iter()
             .any(|block| matches!(block.terminator, Terminator::Call { .. })),
         "conjunction result remains usable as a call argument"
+    );
+    assert!(
+        f.body
+            .blocks
+            .iter()
+            .flat_map(|block| &block.statements)
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Init { dst, .. } if !dst.projections.is_empty()
+            )),
+        "conjunction result remains usable as a record-construction field"
     );
 }
