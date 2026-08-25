@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, ModuleId, SourceUnit, Statement, Type, TypedCompilation,
-    Value, ValueKind, build_typed_hir,
+    DiagnosticKind, IntrinsicType, ModuleId, SourceUnit, Statement, Type, TypedCompilation, Value,
+    ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -99,10 +99,7 @@ fn successful_conjunction_commits_exact_post_left_ownership_state() {
 
     assert!(has_diagnostic(&errors, DiagnosticKind::UnavailableBinding));
     assert!(
-        !has_diagnostic(
-            &errors,
-            DiagnosticKind::BooleanConjunctionOwnershipMismatch
-        ),
+        !has_diagnostic(&errors, DiagnosticKind::BooleanConjunctionOwnershipMismatch),
         "RHS adds no ownership transition, so L and R are equal"
     );
 }
