@@ -2370,6 +2370,74 @@ fn validate_value(
                 location: value_location,
             })
         }
+        SyntaxKind::BooleanAndValue => {
+            let found = Type::Intrinsic(IntrinsicType::Bool);
+            if required != found {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::TypeMismatch {
+                        expected: required,
+                        found,
+                    },
+                    location: value_location,
+                });
+                return None;
+            }
+
+            let mut operands = node.children().filter(|child| is_value_node(child.kind()));
+            let left_node = operands
+                .next()
+                .expect("syntax-clean Boolean conjunction contains a left operand");
+            let right_node = operands
+                .next()
+                .expect("syntax-clean Boolean conjunction contains a right operand");
+            debug_assert!(operands.next().is_none());
+
+            let mut left_bindings = bindings.clone();
+            let left = validate_value(
+                header,
+                &left_node,
+                found,
+                context,
+                &mut left_bindings,
+                diagnostics,
+            )?;
+            let mut right_bindings = left_bindings.clone();
+            let right = validate_value(
+                header,
+                &right_node,
+                found,
+                context,
+                &mut right_bindings,
+                diagnostics,
+            )?;
+
+            let equal = left_bindings.values().all(|left_state| {
+                let right_state = right_bindings
+                    .values()
+                    .find(|state| state.id == left_state.id)
+                    .expect("conjunction RHS outcome retains every enclosing binding identity");
+                debug_assert_eq!(right_state.ty, left_state.ty);
+                debug_assert_eq!(right_state.mutability, left_state.mutability);
+                right_state.ownership == left_state.ownership
+            });
+            if !equal {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::BooleanConjunctionOwnershipMismatch,
+                    location: value_location,
+                });
+                return None;
+            }
+
+            *bindings = left_bindings;
+            Some(Value {
+                ty: found,
+                kind: ValueKind::BooleanAnd {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                location: value_location,
+            })
+        }
         SyntaxKind::BooleanEqualityValue => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
             if required != found {
@@ -3570,6 +3638,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
             | SyntaxKind::IntegerAddValue
             | SyntaxKind::IntegerSubValue
             | SyntaxKind::IntegerMulValue
+            | SyntaxKind::BooleanAndValue
             | SyntaxKind::BooleanEqualityValue
             | SyntaxKind::BooleanNotValue
             | SyntaxKind::BooleanLiteral
