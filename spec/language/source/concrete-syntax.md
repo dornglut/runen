@@ -574,25 +574,25 @@ The `.` punctuation token in this production has no decimal-literal, method, ass
 The ordinary represented value grammar has one recursive prefix tier above the bounded multiplicative tier, with the bounded additive tier below the non-associative equality tier and bounded grouping admitted as one atom wrapper:
 
 ```text
-Value                  = EqualityValue
-EqualityValue          = AdditiveValue EqualitySuffix?
-EqualitySuffix         = EqualityOperator AdditiveValue
-EqualityOperator       = "==" | "!="
-AdditiveValue          = MultiplicativeValue AdditiveSuffix?
-AdditiveSuffix         = AdditiveOperator MultiplicativeValue
-AdditiveOperator       = "+" | "-"
-MultiplicativeValue    = PrefixValue MultiplicativeSuffix?
-MultiplicativeSuffix   = "*" PrefixValue
-PrefixValue            = BooleanNotValue | IntegerNegValue | IntegerComplementValue | ValueAtom
-BooleanNotValue        = "!" PrefixValue
-IntegerNegValue        = "-" PrefixValue
+Value                = EqualityValue
+EqualityValue        = AdditiveValue EqualitySuffix?
+EqualitySuffix       = EqualityOperator AdditiveValue
+EqualityOperator     = "==" | "!="
+AdditiveValue        = MultiplicativeValue AdditiveSuffix?
+AdditiveSuffix       = AdditiveOperator MultiplicativeValue
+AdditiveOperator     = "+" | "-"
+MultiplicativeValue  = PrefixValue MultiplicativeSuffix?
+MultiplicativeSuffix = "*" PrefixValue
+PrefixValue          = BooleanNotValue | IntegerNegValue | IntegerComplementValue | ValueAtom
+BooleanNotValue      = "!" PrefixValue
+IntegerNegValue      = "-" PrefixValue
 IntegerComplementValue = "~" PrefixValue
-ValueAtom              = Literal
-                       | IdentifierUse
-                       | DirectCall
-                       | RecordConstruction
-                       | FieldValueUse
-                       | GroupedValue
+ValueAtom            = Literal
+                     | IdentifierUse
+                     | DirectCall
+                     | RecordConstruction
+                     | FieldValueUse
+                     | GroupedValue
 GroupedValue           = "(" Value ")"
 Literal                = BooleanLiteral | DecimalIntegerLiteral | DecimalFloatingLiteral
 BooleanLiteral         = "true" | "false"
