@@ -130,7 +130,10 @@ fn xor_binds_tighter_than_equality_and_equality_binds_tighter_than_conjunction()
         .find(|node| node.kind() == SyntaxKind::BooleanEqualityValue)
         .expect("equality");
     assert_eq!(
-        equality.children().map(|node| node.kind()).collect::<Vec<_>>(),
+        equality
+            .children()
+            .map(|node| node.kind())
+            .collect::<Vec<_>>(),
         [SyntaxKind::IntegerXorValue, SyntaxKind::IdentifierUse]
     );
 
@@ -142,14 +145,20 @@ fn xor_binds_tighter_than_equality_and_equality_binds_tighter_than_conjunction()
         .find(|node| node.kind() == SyntaxKind::BooleanEqualityValue)
         .expect("equality");
     assert_eq!(
-        equality.children().map(|node| node.kind()).collect::<Vec<_>>(),
+        equality
+            .children()
+            .map(|node| node.kind())
+            .collect::<Vec<_>>(),
         [SyntaxKind::IdentifierUse, SyntaxKind::IntegerXorValue]
     );
 
-    let conjunction = parse(
-        "fn f(a: I64, b: I64, c: I64, d: I64) -> Bool { return a ^ b == c && d == d; }",
+    let conjunction =
+        parse("fn f(a: I64, b: I64, c: I64, d: I64) -> Bool { return a ^ b == c && d == d; }");
+    assert!(
+        conjunction.errors().is_empty(),
+        "{:?}",
+        conjunction.errors()
     );
-    assert!(conjunction.errors().is_empty(), "{:?}", conjunction.errors());
     let and = conjunction
         .syntax()
         .descendants()
@@ -200,9 +209,8 @@ fn xor_preserves_signed_literal_and_prefix_boundaries() {
 
 #[test]
 fn conditional_xor_keeps_standalone_record_construction_excluded() {
-    let valid = parse(
-        "record Box { value: I64 } fn f(a: I64) { if Box { value: 2 }.value ^ a {} }",
-    );
+    let valid =
+        parse("record Box { value: I64 } fn f(a: I64) { if Box { value: 2 }.value ^ a {} }");
     assert_eq!(
         valid.text(),
         "record Box { value: I64 } fn f(a: I64) { if Box { value: 2 }.value ^ a {} }"
