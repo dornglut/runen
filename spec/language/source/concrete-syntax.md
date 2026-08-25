@@ -307,7 +307,7 @@ ConditionalValueAtom =
 ConditionalGroupedValue = "(" ConditionalValue ")"
 ```
 
-At every `ConditionalPrefixValue` decision point, the signed-literal priority from the punctuation/value rules applies before `ConditionalIntegerNegValue`: `-` followed across permitted ordinary trivia by `DecimalMagnitude` or `DecimalFloatingMagnitude` begins the existing signed literal atom; only another value-start `-` may begin `ConditionalIntegerNegValue`. The standalone `~` form has no literal role and therefore selects `ConditionalIntegerComplementValue` directly at a conditional prefix start.
+At every `ConditionalPrefixValue` decision point, the signed-literal priority from the punctuation/value rules applies before `ConditionalIntegerNegValue`: `-` followed across permitted trivia by `DecimalMagnitude` or `DecimalFloatingMagnitude` begins the existing signed literal atom; only another value-start `-` may begin `ConditionalIntegerNegValue`. The standalone `~` form has no literal role and therefore selects `ConditionalIntegerComplementValue` directly at a conditional prefix start.
 
 `ConditionalValue` deliberately has its own logical-conjunction, equality, exclusive-or, additive, multiplicative, and prefix tiers rather than reusing unrestricted ordinary `LogicalAndValue`, `EqualityValue`, `XorValue`, `AdditiveValue`, `MultiplicativeValue`, or `PrefixValue`. This preserves the accepted exclusion of a **standalone** `RecordConstruction` at every conditional conjunction operand, equality operand, exclusive-or operand, additive operand, multiplicative operand, and recursive prefix depth.
 
