@@ -279,10 +279,7 @@ fn source_to_hir_to_core_to_reference_proves_in_range_wrapping_and_signed_right_
             "fn f() -> I8 { return -128 - 1; }",
             ObservedValue::I8(i8::MAX),
         ),
-        (
-            "fn f() -> U8 { return 0 - 1; }",
-            ObservedValue::U8(u8::MAX),
-        ),
+        ("fn f() -> U8 { return 0 - 1; }", ObservedValue::U8(u8::MAX)),
         ("fn f() -> I8 { return 40--2; }", ObservedValue::I8(42)),
     ] {
         let report = execute_source(source, "f");
