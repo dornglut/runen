@@ -102,9 +102,7 @@ fn add_represented(
             RuntimeFloatValue::Represented(Infinity(left_sign))
         }
         (Infinity(_), Infinity(_)) => RuntimeFloatValue::NaNClass,
-        (Infinity(sign), _) | (_, Infinity(sign)) => {
-            RuntimeFloatValue::Represented(Infinity(sign))
-        }
+        (Infinity(sign), _) | (_, Infinity(sign)) => RuntimeFloatValue::Represented(Infinity(sign)),
         (left, right) => add_nonzero_finite(format, left, right),
     }
 }
@@ -219,11 +217,17 @@ impl ExactMagnitude {
         let mut limbs = [0_u64; MAGNITUDE_LIMBS];
         let word = usize::try_from(shift / 64).expect("word index fits usize");
         let offset = shift % 64;
-        assert!(word < MAGNITUDE_LIMBS, "validated floating magnitude fits fixed carrier");
+        assert!(
+            word < MAGNITUDE_LIMBS,
+            "validated floating magnitude fits fixed carrier"
+        );
         limbs[word] = value << offset;
         if offset != 0 {
             let next = word + 1;
-            assert!(next < MAGNITUDE_LIMBS, "validated floating magnitude fits fixed carrier");
+            assert!(
+                next < MAGNITUDE_LIMBS,
+                "validated floating magnitude fits fixed carrier"
+            );
             limbs[next] = value >> (64 - offset);
         }
         Self(limbs)
@@ -248,7 +252,10 @@ impl ExactMagnitude {
             *slot = sum;
             carry = carry_left || carry_in;
         }
-        assert!(!carry, "F16/F32/F64 exact addition fits the proven 2112-bit carrier");
+        assert!(
+            !carry,
+            "F16/F32/F64 exact addition fits the proven 2112-bit carrier"
+        );
         Self(result)
     }
 
@@ -272,9 +279,7 @@ impl ExactMagnitude {
                 None
             } else {
                 let within_word = 63 - word.leading_zeros();
-                Some(
-                    u32::try_from(index).expect("limb index fits u32") * 64 + within_word,
-                )
+                Some(u32::try_from(index).expect("limb index fits u32") * 64 + within_word)
             }
         })
     }
