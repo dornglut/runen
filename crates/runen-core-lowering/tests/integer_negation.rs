@@ -6,7 +6,7 @@ use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
     DiagnosticKind, IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir,
 };
-use runen_reference::{Machine, TerminalStatus};
+use runen_reference::{Machine, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -283,13 +283,19 @@ fn mixed_and_grouped_negation_lower_one_existing_arithmetic_statement_per_operat
 #[test]
 fn source_to_hir_to_core_to_reference_proves_total_plain_integer_negation() {
     for (source, expected) in [
-        ("fn f() -> I8 { return -(1); }", CoreValue::I8(-1)),
-        ("fn f() -> I8 { return -(-128); }", CoreValue::I8(-128)),
-        ("fn f() -> U8 { return -(1); }", CoreValue::U8(255)),
-        ("fn f() -> U8 { return -(255); }", CoreValue::U8(1)),
-        ("fn f() -> I8 { return --1; }", CoreValue::I8(1)),
-        ("fn f() -> I8 { return -(2 + 3) * 4; }", CoreValue::I8(-20)),
-        ("fn f() -> I8 { return 2 + -(3 * 4); }", CoreValue::I8(-10)),
+        ("fn f() -> I8 { return -(1); }", ObservedValue::I8(-1)),
+        ("fn f() -> I8 { return -(-128); }", ObservedValue::I8(-128)),
+        ("fn f() -> U8 { return -(1); }", ObservedValue::U8(255)),
+        ("fn f() -> U8 { return -(255); }", ObservedValue::U8(1)),
+        ("fn f() -> I8 { return --1; }", ObservedValue::I8(1)),
+        (
+            "fn f() -> I8 { return -(2 + 3) * 4; }",
+            ObservedValue::I8(-20),
+        ),
+        (
+            "fn f() -> I8 { return 2 + -(3 * 4); }",
+            ObservedValue::I8(-10),
+        ),
     ] {
         let report = execute_source(source, "f");
         assert_eq!(report.terminal, TerminalStatus::Returned);
@@ -311,5 +317,5 @@ fn unsigned_signed_literal_distinction_survives_before_lowering() {
 
     let report = execute_source("fn good() -> U8 { return -(1); }", "good");
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert_eq!(report.result, Some(CoreValue::U8(255)));
+    assert_eq!(report.result, Some(ObservedValue::U8(255)));
 }

@@ -3,7 +3,8 @@ use runen_core_ir::{
     Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{
-    ExecutionReport, Machine, TerminalStatus, VerificationEventKind, VerificationWriteKind,
+    ExecutionReport, Machine, ObservedValue, TerminalStatus, VerificationEventKind,
+    VerificationWriteKind,
 };
 
 fn execute_integer_or(scalar: ScalarType, left: Value, right: Value) -> ExecutionReport {
@@ -58,48 +59,53 @@ fn execute_integer_or(scalar: ScalarType, left: Value, right: Value) -> Executio
 #[test]
 fn integer_or_executes_all_eight_fixed_width_integer_kinds_and_edge_relations() {
     let cases = [
-        (ScalarType::I8, Value::I8(-5), Value::I8(3), Value::I8(-5)),
+        (
+            ScalarType::I8,
+            Value::I8(-5),
+            Value::I8(3),
+            ObservedValue::I8(-5),
+        ),
         (
             ScalarType::I16,
             Value::I16(i16::MIN),
             Value::I16(1),
-            Value::I16(i16::MIN + 1),
+            ObservedValue::I16(i16::MIN + 1),
         ),
         (
             ScalarType::I32,
             Value::I32(i32::MAX),
             Value::I32(i32::MIN),
-            Value::I32(-1),
+            ObservedValue::I32(-1),
         ),
         (
             ScalarType::I64,
             Value::I64(-1),
             Value::I64(0),
-            Value::I64(-1),
+            ObservedValue::I64(-1),
         ),
         (
             ScalarType::U8,
             Value::U8(0),
             Value::U8(u8::MAX),
-            Value::U8(u8::MAX),
+            ObservedValue::U8(u8::MAX),
         ),
         (
             ScalarType::U16,
             Value::U16(0x00ff),
             Value::U16(0x0f0f),
-            Value::U16(0x0fff),
+            ObservedValue::U16(0x0fff),
         ),
         (
             ScalarType::U32,
             Value::U32(0xaaaa_5555),
             Value::U32(0x0f0f_f0f0),
-            Value::U32(0xafaf_f5f5),
+            ObservedValue::U32(0xafaf_f5f5),
         ),
         (
             ScalarType::U64,
             Value::U64(42),
             Value::U64(15),
-            Value::U64(47),
+            ObservedValue::U64(47),
         ),
     ];
 
@@ -117,32 +123,37 @@ fn signed_or_maps_canonical_residues_back_to_the_signed_domain() {
             ScalarType::I8,
             Value::I8(i8::MAX),
             Value::I8(-1),
-            Value::I8(-1),
+            ObservedValue::I8(-1),
         ),
         (
             ScalarType::I8,
             Value::I8(i8::MIN),
             Value::I8(-1),
-            Value::I8(-1),
+            ObservedValue::I8(-1),
         ),
-        (ScalarType::I8, Value::I8(-5), Value::I8(-3), Value::I8(-1)),
+        (
+            ScalarType::I8,
+            Value::I8(-5),
+            Value::I8(-3),
+            ObservedValue::I8(-1),
+        ),
         (
             ScalarType::I16,
             Value::I16(i16::MAX),
             Value::I16(i16::MIN),
-            Value::I16(-1),
+            ObservedValue::I16(-1),
         ),
         (
             ScalarType::I32,
             Value::I32(i32::MIN),
             Value::I32(1),
-            Value::I32(i32::MIN + 1),
+            ObservedValue::I32(i32::MIN + 1),
         ),
         (
             ScalarType::I64,
             Value::I64(i64::MAX),
             Value::I64(-1),
-            Value::I64(-1),
+            ObservedValue::I64(-1),
         ),
     ];
 
@@ -154,35 +165,48 @@ fn signed_or_maps_canonical_residues_back_to_the_signed_domain() {
 
 #[test]
 fn zero_is_identity_and_all_ones_is_absorbing_in_represented_domains() {
-    for (scalar, value, zero, all_ones) in [
-        (ScalarType::I8, Value::I8(42), Value::I8(0), Value::I8(-1)),
+    for (scalar, value, zero, all_ones, observed_value, observed_all_ones) in [
+        (
+            ScalarType::I8,
+            Value::I8(42),
+            Value::I8(0),
+            Value::I8(-1),
+            ObservedValue::I8(42),
+            ObservedValue::I8(-1),
+        ),
         (
             ScalarType::I64,
             Value::I64(i64::MIN + 17),
             Value::I64(0),
             Value::I64(-1),
+            ObservedValue::I64(i64::MIN + 17),
+            ObservedValue::I64(-1),
         ),
         (
             ScalarType::U8,
             Value::U8(42),
             Value::U8(0),
             Value::U8(u8::MAX),
+            ObservedValue::U8(42),
+            ObservedValue::U8(u8::MAX),
         ),
         (
             ScalarType::U64,
             Value::U64(0x1234_5678),
             Value::U64(0),
             Value::U64(u64::MAX),
+            ObservedValue::U64(0x1234_5678),
+            ObservedValue::U64(u64::MAX),
         ),
     ] {
         assert_eq!(
             execute_integer_or(scalar, value.clone(), zero).result,
-            Some(value.clone()),
+            Some(observed_value),
             "zero must be the OR identity"
         );
         assert_eq!(
-            execute_integer_or(scalar, value, all_ones.clone()).result,
-            Some(all_ones),
+            execute_integer_or(scalar, value, all_ones).result,
+            Some(observed_all_ones),
             "all-ones must absorb OR"
         );
     }

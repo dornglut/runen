@@ -1,10 +1,10 @@
 use runen_core_ir::{
     FunctionId, LocalId, Operand, PlaceAccess, Statement as CoreStatement, Terminator,
-    ValidatedProgram, Value as CoreValue,
+    ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
-use runen_reference::{Machine, TerminalStatus};
+use runen_reference::{Machine, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -278,13 +278,16 @@ fn lowering_rejects_malformed_integer_or_retained_type_facts() {
 #[test]
 fn source_to_hir_to_core_to_reference_proves_signed_unsigned_and_mixed_precedence_or() {
     for (source, expected) in [
-        ("fn f() -> I8 { return -5 | 3; }", CoreValue::I8(-5)),
-        ("fn f() -> I8 { return 127 | -1; }", CoreValue::I8(-1)),
-        ("fn f() -> I8 { return -128 | 1; }", CoreValue::I8(-127)),
-        ("fn f() -> U8 { return 255 | 15; }", CoreValue::U8(255)),
-        ("fn f() -> I8 { return 1 + 2 ^ 7 | 8; }", CoreValue::I8(12)),
-        ("fn f() -> I8 { return 8 | 1 ^ 3; }", CoreValue::I8(10)),
-        ("fn f() -> I8 { return (1 | 2) | 4; }", CoreValue::I8(7)),
+        ("fn f() -> I8 { return -5 | 3; }", ObservedValue::I8(-5)),
+        ("fn f() -> I8 { return 127 | -1; }", ObservedValue::I8(-1)),
+        ("fn f() -> I8 { return -128 | 1; }", ObservedValue::I8(-127)),
+        ("fn f() -> U8 { return 255 | 15; }", ObservedValue::U8(255)),
+        (
+            "fn f() -> I8 { return 1 + 2 ^ 7 | 8; }",
+            ObservedValue::I8(12),
+        ),
+        ("fn f() -> I8 { return 8 | 1 ^ 3; }", ObservedValue::I8(10)),
+        ("fn f() -> I8 { return (1 | 2) | 4; }", ObservedValue::I8(7)),
     ] {
         let report = execute_source(source, "f");
         assert_eq!(report.terminal, TerminalStatus::Returned);

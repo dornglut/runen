@@ -543,6 +543,12 @@ pub enum Statement {
         left: Operand,
         right: Operand,
     },
+    /// Standard same-format binary floating addition into wholly vacant direct storage.
+    FloatAdd {
+        dst: Place,
+        left: Operand,
+        right: Operand,
+    },
     /// Begins a root borrow from direct access or a child borrow from loan access.
     Borrow {
         loan: LoanId,

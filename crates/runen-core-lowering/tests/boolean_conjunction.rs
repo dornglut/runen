@@ -4,7 +4,7 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
-use runen_reference::{Machine, TerminalStatus};
+use runen_reference::{Machine, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -155,7 +155,7 @@ fn false_left_runtime_skips_faulting_rhs_but_true_left_reaches_same_fault() {
         "f",
     );
     assert_eq!(false_report.terminal, TerminalStatus::Returned);
-    assert_eq!(false_report.result, Some(CoreValue::Bool(false)));
+    assert_eq!(false_report.result, Some(ObservedValue::Bool(false)));
 
     let true_report = execute_source(
         "fn boom() -> Bool { fault; } fn f() -> Bool { return true && boom(); }",
@@ -178,7 +178,7 @@ fn conjunction_truth_values_execute_through_existing_core_machine() {
     ] {
         let report = execute_source(source, "f");
         assert_eq!(report.terminal, TerminalStatus::Returned);
-        assert_eq!(report.result, Some(CoreValue::Bool(expected)));
+        assert_eq!(report.result, Some(ObservedValue::Bool(expected)));
     }
 }
 

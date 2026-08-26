@@ -8,5 +8,8 @@ publish = false
 [dependencies]
 runen-core-ir = { path = "../runen-core-ir" }
 
+[dev-dependencies]
+runen-numeric-oracle = { path = "../runen-numeric-oracle" }
+
 [lints]
 workspace = true

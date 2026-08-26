@@ -2,7 +2,7 @@ use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
     Program, ScalarType, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
-use runen_reference::{Machine, TerminalStatus, VerificationEventKind};
+use runen_reference::{Machine, ObservedValue, TerminalStatus, VerificationEventKind};
 
 #[test]
 fn outer_result_bearing_entry_preserves_result_across_entry_cleanup() {
@@ -46,7 +46,7 @@ fn outer_result_bearing_entry_preserves_result_across_entry_cleanup() {
         .expect("entry return is defined");
 
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert_eq!(report.result, Some(Value::TrackedFixture(41)));
+    assert_eq!(report.result, Some(ObservedValue::TrackedFixture(41)));
 
     let drops = report
         .verification_events
