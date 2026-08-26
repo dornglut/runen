@@ -126,7 +126,7 @@ fn f(empty: Empty, root: Outer) {
         root.descendants()
             .filter(|node| node.kind() == SyntaxKind::RecordPatternField)
             .count(),
-        1
+        2
     );
 }
 
