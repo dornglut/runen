@@ -3,7 +3,8 @@ use runen_core_ir::{
     Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{
-    ExecutionReport, Machine, TerminalStatus, VerificationEventKind, VerificationWriteKind,
+    ExecutionReport, Machine, ObservedValue, TerminalStatus, VerificationEventKind,
+    VerificationWriteKind,
 };
 
 fn execute_integer_sub(scalar: ScalarType, left: Value, right: Value) -> ExecutionReport {
@@ -58,43 +59,53 @@ fn execute_integer_sub(scalar: ScalarType, left: Value, right: Value) -> Executi
 #[test]
 fn integer_sub_executes_all_eight_fixed_width_integer_kinds() {
     let cases = [
-        (ScalarType::I8, Value::I8(2), Value::I8(3), Value::I8(-1)),
+        (
+            ScalarType::I8,
+            Value::I8(2),
+            Value::I8(3),
+            ObservedValue::I8(-1),
+        ),
         (
             ScalarType::I16,
             Value::I16(-8),
             Value::I16(11),
-            Value::I16(-19),
+            ObservedValue::I16(-19),
         ),
         (
             ScalarType::I32,
             Value::I32(20),
             Value::I32(-7),
-            Value::I32(27),
+            ObservedValue::I32(27),
         ),
         (
             ScalarType::I64,
             Value::I64(-30),
             Value::I64(-12),
-            Value::I64(-18),
+            ObservedValue::I64(-18),
         ),
-        (ScalarType::U8, Value::U8(5), Value::U8(3), Value::U8(2)),
+        (
+            ScalarType::U8,
+            Value::U8(5),
+            Value::U8(3),
+            ObservedValue::U8(2),
+        ),
         (
             ScalarType::U16,
             Value::U16(19),
             Value::U16(11),
-            Value::U16(8),
+            ObservedValue::U16(8),
         ),
         (
             ScalarType::U32,
             Value::U32(27),
             Value::U32(7),
-            Value::U32(20),
+            ObservedValue::U32(20),
         ),
         (
             ScalarType::U64,
             Value::U64(42),
             Value::U64(12),
-            Value::U64(30),
+            ObservedValue::U64(30),
         ),
     ];
 
@@ -112,49 +123,49 @@ fn integer_sub_wraps_at_every_signed_and_unsigned_width_boundary() {
             ScalarType::I8,
             Value::I8(i8::MIN),
             Value::I8(1),
-            Value::I8(i8::MAX),
+            ObservedValue::I8(i8::MAX),
         ),
         (
             ScalarType::I16,
             Value::I16(i16::MIN),
             Value::I16(1),
-            Value::I16(i16::MAX),
+            ObservedValue::I16(i16::MAX),
         ),
         (
             ScalarType::I32,
             Value::I32(i32::MIN),
             Value::I32(1),
-            Value::I32(i32::MAX),
+            ObservedValue::I32(i32::MAX),
         ),
         (
             ScalarType::I64,
             Value::I64(i64::MIN),
             Value::I64(1),
-            Value::I64(i64::MAX),
+            ObservedValue::I64(i64::MAX),
         ),
         (
             ScalarType::U8,
             Value::U8(0),
             Value::U8(1),
-            Value::U8(u8::MAX),
+            ObservedValue::U8(u8::MAX),
         ),
         (
             ScalarType::U16,
             Value::U16(0),
             Value::U16(1),
-            Value::U16(u16::MAX),
+            ObservedValue::U16(u16::MAX),
         ),
         (
             ScalarType::U32,
             Value::U32(0),
             Value::U32(1),
-            Value::U32(u32::MAX),
+            ObservedValue::U32(u32::MAX),
         ),
         (
             ScalarType::U64,
             Value::U64(0),
             Value::U64(1),
-            Value::U64(u64::MAX),
+            ObservedValue::U64(u64::MAX),
         ),
     ];
 
