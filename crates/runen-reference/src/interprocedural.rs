@@ -4,7 +4,8 @@ use runen_core_ir::{
     TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
 };
 
-use crate::{RawPointerValue, UndefinedBehaviorKind, VerificationWriteKind};
+use crate::floating_add::{RuntimeFloatValue, add_f16, add_f32, add_f64};
+use crate::{ObservedValue, RawPointerValue, UndefinedBehaviorKind, VerificationWriteKind};
 
 /// Verification-only identity of one dynamic function activation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -70,7 +71,7 @@ pub enum TerminalStatus {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ExecutionReport {
     pub terminal: TerminalStatus,
-    pub result: Option<Value>,
+    pub result: Option<ObservedValue>,
     pub verification_events: Vec<VerificationEvent>,
 }
 
@@ -99,9 +100,9 @@ enum RuntimeValue {
     U16(u16),
     U32(u32),
     U64(u64),
-    F16(BinaryFloatValue),
-    F32(BinaryFloatValue),
-    F64(BinaryFloatValue),
+    F16(RuntimeFloatValue),
+    F32(RuntimeFloatValue),
+    F64(RuntimeFloatValue),
     RawPointer(RawPointerValue),
     TrackedFixture(u64),
     Struct(Vec<RuntimeValue>),
@@ -155,9 +156,9 @@ impl RuntimeValue {
             Value::U16(value) => Self::U16(*value),
             Value::U32(value) => Self::U32(*value),
             Value::U64(value) => Self::U64(*value),
-            Value::F16(value) => Self::F16(*value),
-            Value::F32(value) => Self::F32(*value),
-            Value::F64(value) => Self::F64(*value),
+            Value::F16(value) => Self::F16(RuntimeFloatValue::from_constant(*value)),
+            Value::F32(value) => Self::F32(RuntimeFloatValue::from_constant(*value)),
+            Value::F64(value) => Self::F64(RuntimeFloatValue::from_constant(*value)),
             Value::TrackedFixture(value) => Self::TrackedFixture(*value),
             Value::Struct(values) => Self::Struct(values.iter().map(Self::from_constant).collect()),
         }
@@ -257,24 +258,36 @@ impl RuntimeValue {
         }
     }
 
-    fn into_public_value(self) -> Value {
+    fn floating_add(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::F16(left), Self::F16(right)) => Self::F16(add_f16(left, right)),
+            (Self::F32(left), Self::F32(right)) => Self::F32(add_f32(left, right)),
+            (Self::F64(left), Self::F64(right)) => Self::F64(add_f64(left, right)),
+            _ => unreachable!("validated FloatAdd has matching same-format floating operands"),
+        }
+    }
+
+    fn into_observed_value(self) -> ObservedValue {
         match self {
-            Self::Bool(value) => Value::Bool(value),
-            Self::I8(value) => Value::I8(value),
-            Self::I16(value) => Value::I16(value),
-            Self::I32(value) => Value::I32(value),
-            Self::I64(value) => Value::I64(value),
-            Self::U8(value) => Value::U8(value),
-            Self::U16(value) => Value::U16(value),
-            Self::U32(value) => Value::U32(value),
-            Self::U64(value) => Value::U64(value),
-            Self::F16(value) => Value::F16(value),
-            Self::F32(value) => Value::F32(value),
-            Self::F64(value) => Value::F64(value),
-            Self::TrackedFixture(value) => Value::TrackedFixture(value),
-            Self::Struct(values) => {
-                Value::Struct(values.into_iter().map(Self::into_public_value).collect())
-            }
+            Self::Bool(value) => ObservedValue::Bool(value),
+            Self::I8(value) => ObservedValue::I8(value),
+            Self::I16(value) => ObservedValue::I16(value),
+            Self::I32(value) => ObservedValue::I32(value),
+            Self::I64(value) => ObservedValue::I64(value),
+            Self::U8(value) => ObservedValue::U8(value),
+            Self::U16(value) => ObservedValue::U16(value),
+            Self::U32(value) => ObservedValue::U32(value),
+            Self::U64(value) => ObservedValue::U64(value),
+            Self::F16(value) => ObservedValue::F16(value.into_observed()),
+            Self::F32(value) => ObservedValue::F32(value.into_observed()),
+            Self::F64(value) => ObservedValue::F64(value.into_observed()),
+            Self::TrackedFixture(value) => ObservedValue::TrackedFixture(value),
+            Self::Struct(values) => ObservedValue::Struct(
+                values
+                    .into_iter()
+                    .map(Self::into_observed_value)
+                    .collect(),
+            ),
             Self::RawPointer(_) => {
                 unreachable!("validated entry result is call-transfer-safe and pointer-free")
             }
@@ -517,7 +530,7 @@ impl Machine {
                     } else {
                         return Ok(ExecutionReport {
                             terminal: TerminalStatus::Returned,
-                            result: result.map(RuntimeValue::into_public_value),
+                            result: result.map(RuntimeValue::into_observed_value),
                             verification_events: self.verification_events,
                         });
                     }
@@ -629,6 +642,9 @@ impl Machine {
             }
             Statement::IntegerOr { dst, left, right } => {
                 self.integer_or(frame_index, dst, left, right)
+            }
+            Statement::FloatAdd { dst, left, right } => {
+                self.float_add(frame_index, dst, left, right)
             }
             Statement::Borrow { loan, kind, src } => {
                 self.begin_borrow(frame_index, *loan, *kind, src);
@@ -835,6 +851,37 @@ impl Machine {
             VerificationEventKind::Write {
                 place: dst.clone(),
                 kind: VerificationWriteKind::IntegerOr,
+            },
+        );
+        Ok(())
+    }
+
+    fn float_add(
+        &mut self,
+        frame_index: usize,
+        dst: &Place,
+        left: &Operand,
+        right: &Operand,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        let dst_ty = self.place_type(frame_index, dst);
+        let left = self.evaluate_operand(frame_index, left)?;
+        let right = self.evaluate_operand(frame_index, right)?;
+        let value = RuntimeValue::floating_add(left, right);
+        {
+            let types = &self.program.as_program().types;
+            let frame = &mut self.frames[frame_index];
+            write_value(
+                types,
+                dst_ty,
+                place_state_mut(&mut frame.locals, dst),
+                value,
+            );
+        }
+        self.record(
+            frame_index,
+            VerificationEventKind::Write {
+                place: dst.clone(),
+                kind: VerificationWriteKind::FloatAdd,
             },
         );
         Ok(())
