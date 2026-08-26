@@ -236,7 +236,8 @@ fn zero_field_rest_and_post_cleanup_binding_scope_are_preserved() {
          }",
     );
 
-    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "direct").body.statements[0]
+    let Statement::RecordDestructure { bindings, .. } =
+        &function(&hir, "direct").body.statements[0]
     else {
         panic!("expected direct zero-field rest pattern");
     };

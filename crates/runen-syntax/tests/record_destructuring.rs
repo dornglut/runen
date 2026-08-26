@@ -117,7 +117,11 @@ fn f(empty: Empty, root: Outer) {
         .filter(|node| node.kind() == SyntaxKind::RecordPatternRest)
         .collect::<Vec<_>>();
     assert_eq!(rests.len(), 3);
-    assert!(rests.iter().all(|rest| rest.text().to_string().contains("..")));
+    assert!(
+        rests
+            .iter()
+            .all(|rest| rest.text().to_string().contains(".."))
+    );
     assert_eq!(
         root.descendants()
             .filter(|node| node.kind() == SyntaxKind::RecordPatternField)
@@ -173,7 +177,10 @@ fn malformed_duplicate_and_non_final_record_pattern_rest_are_not_normalized() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty(), "malformed rest parsed cleanly: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "malformed rest parsed cleanly: {source}"
+        );
         assert_eq!(
             parsed
                 .syntax()
@@ -213,7 +220,10 @@ fn record_pattern_rest_is_not_a_general_value_or_constructor_spread() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty(), "out-of-pattern rest parsed cleanly: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "out-of-pattern rest parsed cleanly: {source}"
+        );
     }
 }
 

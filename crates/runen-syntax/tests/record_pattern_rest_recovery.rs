@@ -6,9 +6,12 @@ fn missing_pattern_close_after_rest_preserves_following_statement_and_top_level_
     let parsed = parse_source(source.as_bytes()).expect("valid UTF-8 test source");
 
     assert_eq!(parsed.text(), source);
-    assert!(parsed.errors().iter().any(|error| {
-        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace)
-    }));
+    assert!(
+        parsed
+            .errors()
+            .iter()
+            .any(|error| { error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace) })
+    );
 
     let root = parsed.syntax();
     assert_eq!(
