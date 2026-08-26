@@ -103,7 +103,7 @@ fn complement_prefix_stays_tighter_than_multiplicative_additive_and_equality_tie
             SyntaxKind::IdentifierUse
         ]
     );
-    assert_eq!(count(&parsed, SyntaxKind::IntegerAddValue), 2);
+    assert_eq!(count(&parsed, SyntaxKind::AddValue), 2);
     assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 1);
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 1);
 }
