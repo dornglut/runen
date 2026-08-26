@@ -202,25 +202,19 @@ fn cancellation_and_signed_zero_follow_the_accepted_addition_rule() {
         ScalarType::F64,
         positive_normal(1_u64 << 52, 10),
         negative_normal(1_u64 << 52, 10),
-        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(
-            BinaryFloatSign::Positive,
-        )),
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Positive)),
     );
     assert_add(
         ScalarType::F32,
         BinaryFloatValue::Zero(BinaryFloatSign::Negative),
         BinaryFloatValue::Zero(BinaryFloatSign::Negative),
-        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(
-            BinaryFloatSign::Negative,
-        )),
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Negative)),
     );
     assert_add(
         ScalarType::F32,
         BinaryFloatValue::Zero(BinaryFloatSign::Positive),
         BinaryFloatValue::Zero(BinaryFloatSign::Negative),
-        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(
-            BinaryFloatSign::Positive,
-        )),
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Positive)),
     );
 }
 
@@ -506,12 +500,16 @@ fn operand_effects_precede_exactly_one_float_add_write() {
     let left_move = report
         .verification_events
         .iter()
-        .position(|event| matches!(&event.kind, VerificationEventKind::Move(place) if *place == left))
+        .position(
+            |event| matches!(&event.kind, VerificationEventKind::Move(place) if *place == left),
+        )
         .expect("left move event");
     let right_move = report
         .verification_events
         .iter()
-        .position(|event| matches!(&event.kind, VerificationEventKind::Move(place) if *place == right))
+        .position(
+            |event| matches!(&event.kind, VerificationEventKind::Move(place) if *place == right),
+        )
         .expect("right move event");
     let writes = report
         .verification_events
@@ -532,9 +530,11 @@ fn operand_effects_precede_exactly_one_float_add_write() {
     assert_eq!(writes.len(), 1);
     assert!(left_move < right_move);
     assert!(right_move < writes[0]);
-    assert!(!report.verification_events.iter().any(|event| {
-        matches!(event.kind, VerificationEventKind::DropTrackedFixture { .. })
-    }));
+    assert!(
+        !report.verification_events.iter().any(|event| {
+            matches!(event.kind, VerificationEventKind::DropTrackedFixture { .. })
+        })
+    );
 }
 
 fn oracle_format(scalar: ScalarType) -> BinaryFormat {
@@ -664,13 +664,18 @@ fn reference_results_match_independent_numeric_oracle_within_fixture_capacity() 
                         assert_add(scalar, *left, *right, observed_from_oracle(expected));
                     }
                     Err(NumericOracleError::InternalRangeExceeded) => capacity_limited += 1,
-                    Err(error) => panic!("well-formed represented oracle fixture failed: {error:?}"),
+                    Err(error) => {
+                        panic!("well-formed represented oracle fixture failed: {error:?}")
+                    }
                 }
             }
         }
     }
 
-    assert!(compared > 150, "differential corpus must exercise a broad defined domain");
+    assert!(
+        compared > 150,
+        "differential corpus must exercise a broad defined domain"
+    );
     assert!(
         capacity_limited > 0,
         "corpus must expose the oracle's documented extreme-range capacity limit"
