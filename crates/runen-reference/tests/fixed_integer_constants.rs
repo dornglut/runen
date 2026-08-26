@@ -2,7 +2,7 @@ use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId, Operand,
     Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
-use runen_reference::{Machine, TerminalStatus, VerificationEventKind};
+use runen_reference::{Machine, ObservedValue, TerminalStatus, VerificationEventKind};
 
 fn execute_direct_result(scalar: ScalarType, value: Value) -> runen_reference::ExecutionReport {
     let mut types = TypeTable::new();
@@ -34,18 +34,17 @@ fn execute_direct_result(scalar: ScalarType, value: Value) -> runen_reference::E
 #[test]
 fn entry_results_preserve_every_fixed_width_integer_variant() {
     let cases = [
-        (ScalarType::I8, Value::I8(i8::MIN)),
-        (ScalarType::I16, Value::I16(i16::MIN)),
-        (ScalarType::I32, Value::I32(i32::MIN)),
-        (ScalarType::I64, Value::I64(i64::MIN)),
-        (ScalarType::U8, Value::U8(u8::MAX)),
-        (ScalarType::U16, Value::U16(u16::MAX)),
-        (ScalarType::U32, Value::U32(u32::MAX)),
-        (ScalarType::U64, Value::U64(u64::MAX)),
+        (ScalarType::I8, Value::I8(i8::MIN), ObservedValue::I8(i8::MIN)),
+        (ScalarType::I16, Value::I16(i16::MIN), ObservedValue::I16(i16::MIN)),
+        (ScalarType::I32, Value::I32(i32::MIN), ObservedValue::I32(i32::MIN)),
+        (ScalarType::I64, Value::I64(i64::MIN), ObservedValue::I64(i64::MIN)),
+        (ScalarType::U8, Value::U8(u8::MAX), ObservedValue::U8(u8::MAX)),
+        (ScalarType::U16, Value::U16(u16::MAX), ObservedValue::U16(u16::MAX)),
+        (ScalarType::U32, Value::U32(u32::MAX), ObservedValue::U32(u32::MAX)),
+        (ScalarType::U64, Value::U64(u64::MAX), ObservedValue::U64(u64::MAX)),
     ];
 
-    for (scalar, value) in cases {
-        let expected = value.clone();
+    for (scalar, value, expected) in cases {
         let report = execute_direct_result(scalar, value);
         assert_eq!(report.terminal, TerminalStatus::Returned);
         assert_eq!(report.result, Some(expected));
@@ -98,7 +97,7 @@ fn non_i64_values_survive_init_copy_assign_and_move() {
         .expect("u32 transport is defined");
 
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert_eq!(report.result, Some(Value::U32(u32::MAX)));
+    assert_eq!(report.result, Some(ObservedValue::U32(u32::MAX)));
     assert!(
         !report
             .verification_events
@@ -164,7 +163,7 @@ fn u64_max_round_trips_through_call_argument_and_result() {
         .expect("u64 boundary call is defined");
 
     assert_eq!(report.terminal, TerminalStatus::Returned);
-    assert_eq!(report.result, Some(Value::U64(u64::MAX)));
+    assert_eq!(report.result, Some(ObservedValue::U64(u64::MAX)));
 }
 
 #[test]
@@ -176,7 +175,11 @@ fn mixed_fixed_width_struct_round_trips_through_storage() {
         "Pair",
         vec![Field::new("small", i8_ty), Field::new("large", u64_ty)],
     ));
-    let expected = Value::Struct(vec![Value::I8(i8::MIN), Value::U64(u64::MAX)]);
+    let input = Value::Struct(vec![Value::I8(i8::MIN), Value::U64(u64::MAX)]);
+    let expected = ObservedValue::Struct(vec![
+        ObservedValue::I8(i8::MIN),
+        ObservedValue::U64(u64::MAX),
+    ]);
     let program = Program {
         types,
         functions: vec![Function {
@@ -190,7 +193,7 @@ fn mixed_fixed_width_struct_round_trips_through_storage() {
                 blocks: vec![BasicBlock::new(
                     vec![Statement::Init {
                         dst: Place::local(LocalId(0)),
-                        src: Operand::Constant(expected.clone()),
+                        src: Operand::Constant(input),
                     }],
                     Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
                 )],
