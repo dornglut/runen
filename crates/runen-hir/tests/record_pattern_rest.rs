@@ -148,7 +148,7 @@ fn producer_rest_uses_existing_remaining_frontier_and_rest_only_keeps_root() {
         "record Token {} \
          record Pair { copied: I8, moved: Token, omitted: Token } \
          fn partial() { \
-             let Pair { copied: copy, moved: moved, .. } = \
+             let Pair { copied: copied_value, moved: moved, .. } = \
                  Pair { copied: 1, moved: Token {}, omitted: Token {} }; \
          } \
          fn rest_only() { \
