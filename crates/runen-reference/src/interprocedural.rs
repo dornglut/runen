@@ -282,12 +282,9 @@ impl RuntimeValue {
             Self::F32(value) => ObservedValue::F32(value.into_observed()),
             Self::F64(value) => ObservedValue::F64(value.into_observed()),
             Self::TrackedFixture(value) => ObservedValue::TrackedFixture(value),
-            Self::Struct(values) => ObservedValue::Struct(
-                values
-                    .into_iter()
-                    .map(Self::into_observed_value)
-                    .collect(),
-            ),
+            Self::Struct(values) => {
+                ObservedValue::Struct(values.into_iter().map(Self::into_observed_value).collect())
+            }
             Self::RawPointer(_) => {
                 unreachable!("validated entry result is call-transfer-safe and pointer-free")
             }
