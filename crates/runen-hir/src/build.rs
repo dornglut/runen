@@ -2204,18 +2204,18 @@ fn validate_value(
         }
         SyntaxKind::AddValue => {
             let floating = match required {
-                Type::Intrinsic(
-                    IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64,
-                ) => true,
+                Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64) => {
+                    true
+                }
                 Type::Intrinsic(
                     IntrinsicType::I8
-                        | IntrinsicType::I16
-                        | IntrinsicType::I32
-                        | IntrinsicType::I64
-                        | IntrinsicType::U8
-                        | IntrinsicType::U16
-                        | IntrinsicType::U32
-                        | IntrinsicType::U64,
+                    | IntrinsicType::I16
+                    | IntrinsicType::I32
+                    | IntrinsicType::I64
+                    | IntrinsicType::U8
+                    | IntrinsicType::U16
+                    | IntrinsicType::U32
+                    | IntrinsicType::U64,
                 ) => false,
                 _ => {
                     diagnostics.push(Diagnostic {
