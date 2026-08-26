@@ -79,6 +79,14 @@ fn float_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
     assert_eq!(f.body.blocks.len(), 1, "plain floating addition adds no Core block");
     let additions = float_add_statements(f);
     assert_eq!(additions.len(), 1);
+    assert!(
+        f.body
+            .blocks
+            .iter()
+            .flat_map(|block| &block.statements)
+            .all(|statement| !matches!(statement, CoreStatement::IntegerAdd { .. })),
+        "floating source addition must not refine to Core IntegerAdd"
+    );
     let CoreStatement::FloatAdd { dst, left, right } = additions[0] else {
         unreachable!();
     };
@@ -123,6 +131,7 @@ fn call_operands_lower_complete_left_then_right_before_float_add() {
     else {
         panic!("left producer must lower first");
     };
+    assert!(left_destination.projections.is_empty());
 
     let Terminator::Call {
         destination: Some(right_destination),
@@ -132,6 +141,7 @@ fn call_operands_lower_complete_left_then_right_before_float_add() {
     else {
         panic!("right producer must lower from the successful left continuation");
     };
+    assert!(right_destination.projections.is_empty());
 
     let additions = f.body.blocks[add_block.0 as usize]
         .statements
