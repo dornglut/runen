@@ -79,6 +79,7 @@ pub enum UndefinedBehaviorKind {
     RawAssignConflictsWithLoan { target: StorageRegion, loan: LoanId },
 }
 
+mod floating_add;
 mod interprocedural;
 pub use interprocedural::{
     ActivationId, EntryError, ExecutionReport, Machine, TerminalStatus, UndefinedBehavior,
