@@ -92,7 +92,7 @@ Every dynamic local storage extent has one semantic **storage-instance identity*
 
 Distinct simultaneously existing local storage extents have distinct storage-instance identities.
 
-Whenever a Core function activation is created, one fresh dynamic local storage instance is created for every local declaration in that activation's body. Repeated or recursive activations of the same function therefore create new storage instances for the same static local declarations. The static `LocalId` identifies a declaration within one function body; the dynamic storage-instance identity identifies one particular activation's storage extent. They are different semantic concepts even when a reference implementation allocates deterministic verification tokens in local-declaration order.
+Whenever a Core function activation is created, one fresh dynamic local storage instance is created for each local declaration in that activation's body. Repeated or recursive activations of the same function therefore create new storage instances for the same static local declarations. The static `LocalId` identifies a declaration within one function body; the dynamic storage-instance identity identifies one particular activation's storage extent. They are different semantic concepts even when a reference implementation allocates deterministic verification tokens in local-declaration order.
 
 The storage-instance identity remains stable while the storage extent continues. In particular, none of the following creates a new storage instance:
 
