@@ -91,6 +91,143 @@ fn f(root: Outer) {
 }
 
 #[test]
+fn record_pattern_rest_parses_losslessly_at_each_recursive_node() {
+    let source = r#"
+record Empty {}
+record Leaf { value: I8, other: U8 }
+record Outer { leaf: Leaf, tail: U8 }
+fn f(empty: Empty, root: Outer) {
+    let Empty { .. } = empty;
+    let Outer {
+        leaf: Leaf {
+            value: value,
+            /* before rest */ .. /* after rest */,
+        },
+        ..,
+    } = root;
+}
+"#;
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let root = parsed.syntax();
+    let rests = root
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::RecordPatternRest)
+        .collect::<Vec<_>>();
+    assert_eq!(rests.len(), 3);
+    assert!(
+        rests
+            .iter()
+            .all(|rest| rest.text().to_string().contains(".."))
+    );
+    assert_eq!(
+        root.descendants()
+            .filter(|node| node.kind() == SyntaxKind::RecordPatternField)
+            .count(),
+        2
+    );
+}
+
+#[test]
+fn record_pattern_rest_longest_match_preserves_field_dot_and_decimal_float() {
+    let source = r#"
+record Pair { left: F32, right: I8 }
+fn f(root: Pair) {
+    let Pair { right: value, .. } = root;
+    let x: F32 = 1.25;
+    let y: I8 = root.right;
+}
+"#;
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let root = parsed.syntax();
+    let tokens = root
+        .descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        tokens
+            .iter()
+            .filter(|token| token.kind() == SyntaxKind::DotDot)
+            .count(),
+        1
+    );
+    assert_eq!(
+        tokens
+            .iter()
+            .filter(|token| token.kind() == SyntaxKind::Dot)
+            .count(),
+        1
+    );
+    assert!(tokens.iter().any(|token| {
+        token.kind() == SyntaxKind::DecimalFloatingMagnitude && token.text() == "1.25"
+    }));
+}
+
+#[test]
+fn malformed_duplicate_and_non_final_record_pattern_rest_are_not_normalized() {
+    for source in [
+        "record Pair { left: I8, right: I8 } fn f(root: Pair) { let Pair { .., .. } = root; }",
+        "record Pair { left: I8, right: I8 } fn f(root: Pair) { let Pair { .., left: value } = root; }",
+        "record Pair { left: I8, right: I8 } fn f(root: Pair) { let Pair { left: value, .., right: other } = root; }",
+    ] {
+        let parsed = parse(source);
+        assert_eq!(parsed.text(), source);
+        assert!(
+            !parsed.errors().is_empty(),
+            "malformed rest parsed cleanly: {source}"
+        );
+        assert_eq!(
+            parsed
+                .syntax()
+                .descendants()
+                .filter(|node| node.kind() == SyntaxKind::RecordPatternRest)
+                .count(),
+            1,
+            "malformed tail was normalized into additional semantic rest: {source}"
+        );
+    }
+}
+
+#[test]
+fn missing_comma_before_record_pattern_rest_is_rejected_without_losing_rest_boundary() {
+    let source = "record Pair { left: I8, right: I8 } fn f(root: Pair) { let Pair { left: value .. } = root; }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().iter().any(|error| {
+        error.kind() == SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightBrace)
+    }));
+    assert_eq!(
+        parsed
+            .syntax()
+            .descendants()
+            .filter(|node| node.kind() == SyntaxKind::RecordPatternRest)
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn record_pattern_rest_is_not_a_general_value_or_constructor_spread() {
+    for source in [
+        "fn f() { let value: I8 = ..; }",
+        "record Pair { left: I8 } fn f() { let value: Pair = Pair { .. }; }",
+    ] {
+        let parsed = parse(source);
+        assert_eq!(parsed.text(), source);
+        assert!(
+            !parsed.errors().is_empty(),
+            "out-of-pattern rest parsed cleanly: {source}"
+        );
+    }
+}
+
+#[test]
 fn qualified_top_and_nested_pattern_heads_reuse_qualified_module_member_losslessly() {
     let source = r#"
 import dep;
@@ -248,7 +385,6 @@ fn ordinary_local_forms_remain_distinct_and_unchanged() {
 fn excluded_pattern_extensions_and_scrutinees_are_not_silently_accepted() {
     for source in [
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left } = root; }",
-        "record Pair { left: I8 } fn f(root: Pair) { let Pair { left: value, .. } = root; }",
         "record Pair { left: I8 } fn f(root: Pair) { let Pair { left: dep::value } = root; }",
         "record Pair { left: I8 } fn f() { let Pair { left: value } = true; }",
         "record Pair { left: I8 } fn f() { let Pair { left: value } = 1; }",

@@ -1690,6 +1690,9 @@ fn validate_record_pattern_node(
     }
 
     let record_decl = &context.records[record.0];
+    let has_rest = node
+        .children()
+        .any(|child| child.kind() == SyntaxKind::RecordPatternRest);
     let mut seen_fields = BTreeSet::<usize>::new();
     for pattern_field in node
         .children()
@@ -1783,7 +1786,7 @@ fn validate_record_pattern_node(
         path.pop();
     }
 
-    if seen_fields.len() != record_decl.fields.len() {
+    if !has_rest && seen_fields.len() != record_decl.fields.len() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::MissingRecordPatternField,
             location: location(header.unit, node),

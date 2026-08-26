@@ -154,6 +154,8 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
             Some((SyntaxKind::BangEq, 2))
         } else if rest.starts_with("&&") {
             Some((SyntaxKind::AmpAmp, 2))
+        } else if rest.starts_with("..") {
+            Some((SyntaxKind::DotDot, 2))
         } else {
             match character {
                 '(' => Some((SyntaxKind::LParen, 1)),
