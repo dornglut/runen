@@ -448,6 +448,53 @@ impl Parser<'_> {
                 break;
             }
 
+            if self.at(SyntaxKind::DotDot) {
+                self.builder
+                    .start_node(SyntaxKind::RecordPatternRest.into());
+                self.bump();
+                self.builder.finish_node();
+                self.eat(SyntaxKind::Comma);
+                self.bump_trivia();
+                if !self.at(SyntaxKind::RBrace)
+                    && self.current().is_some()
+                    && !self.at_any(&[
+                        SyntaxKind::Eq,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::LBrace,
+                        SyntaxKind::KwLet,
+                        SyntaxKind::KwFault,
+                        SyntaxKind::KwBreak,
+                        SyntaxKind::KwContinue,
+                        SyntaxKind::KwIf,
+                        SyntaxKind::KwWhile,
+                        SyntaxKind::KwElse,
+                        SyntaxKind::KwReturn,
+                    ])
+                    && !self.at_any(TOP_LEVEL_STARTERS)
+                {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBrace));
+                    self.recover_until(&[
+                        SyntaxKind::RBrace,
+                        SyntaxKind::Eq,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::LBrace,
+                        SyntaxKind::KwLet,
+                        SyntaxKind::KwFault,
+                        SyntaxKind::KwBreak,
+                        SyntaxKind::KwContinue,
+                        SyntaxKind::KwIf,
+                        SyntaxKind::KwWhile,
+                        SyntaxKind::KwElse,
+                        SyntaxKind::KwReturn,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
+                        SyntaxKind::KwFn,
+                        SyntaxKind::KwRecord,
+                    ]);
+                }
+                continue;
+            }
+
             if self.at(SyntaxKind::Ident) {
                 self.parse_record_pattern_field();
                 if self.eat(SyntaxKind::Comma) {
@@ -458,6 +505,7 @@ impl Parser<'_> {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightBrace));
                     self.recover_until(&[
                         SyntaxKind::Ident,
+                        SyntaxKind::DotDot,
                         SyntaxKind::Comma,
                         SyntaxKind::RBrace,
                         SyntaxKind::Eq,
@@ -482,6 +530,7 @@ impl Parser<'_> {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
                 self.recover_until(&[
                     SyntaxKind::Ident,
+                    SyntaxKind::DotDot,
                     SyntaxKind::Comma,
                     SyntaxKind::RBrace,
                     SyntaxKind::Eq,
