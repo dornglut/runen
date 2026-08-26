@@ -3,8 +3,8 @@ use runen_core_ir::{
     Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{
-    Machine, TerminalStatus, UndefinedBehaviorKind, VerificationEvent, VerificationEventKind,
-    VerificationWriteKind,
+    Machine, ObservedValue, TerminalStatus, UndefinedBehaviorKind, VerificationEvent,
+    VerificationEventKind, VerificationWriteKind,
 };
 
 fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -594,11 +594,11 @@ fn execute_constant_branch(condition: bool) -> runen_reference::ExecutionReport 
 fn runtime_branch_selects_exactly_the_concrete_bool_edge() {
     let true_report = execute_constant_branch(true);
     assert_eq!(true_report.terminal, TerminalStatus::Returned);
-    assert_eq!(true_report.result, Some(Value::I64(11)));
+    assert_eq!(true_report.result, Some(ObservedValue::I64(11)));
 
     let false_report = execute_constant_branch(false);
     assert_eq!(false_report.terminal, TerminalStatus::Returned);
-    assert_eq!(false_report.result, Some(Value::I64(22)));
+    assert_eq!(false_report.result, Some(ObservedValue::I64(22)));
 }
 
 fn execute_stored_bool_branch(copy: bool) -> runen_reference::ExecutionReport {
