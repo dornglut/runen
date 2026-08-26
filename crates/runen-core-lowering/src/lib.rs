@@ -1086,9 +1086,7 @@ impl<'a> FunctionLowerer<'a> {
                 if !matches!(
                     float_ty,
                     hir::Type::Intrinsic(
-                        hir::IntrinsicType::F16
-                            | hir::IntrinsicType::F32
-                            | hir::IntrinsicType::F64
+                        hir::IntrinsicType::F16 | hir::IntrinsicType::F32 | hir::IntrinsicType::F64
                     )
                 ) {
                     return Err(LoweringError::InvalidHirInvariant(
