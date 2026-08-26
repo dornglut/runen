@@ -60,6 +60,7 @@ pub enum MirValidationErrorKind {
     IntegerMulRequiresInteger(TypeId),
     IntegerXorRequiresInteger(TypeId),
     IntegerOrRequiresInteger(TypeId),
+    FloatAddRequiresFloat(TypeId),
     AssignToImmutable(LocalId),
     InteriorMutationRequiresMarkedRegion(Place),
     InitRequiresVacant(Place),
@@ -68,6 +69,7 @@ pub enum MirValidationErrorKind {
     IntegerMulRequiresVacant(Place),
     IntegerXorRequiresVacant(Place),
     IntegerOrRequiresVacant(Place),
+    FloatAddRequiresVacant(Place),
     CallResultRequiresVacant(Place),
     UseOfUninitialized(Place),
     DropOfUninitialized(Place),
@@ -459,6 +461,15 @@ fn is_integer_type(types: &TypeTable, ty: TypeId) -> bool {
     )
 }
 
+fn is_float_type(types: &TypeTable, ty: TypeId) -> bool {
+    matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(
+            ScalarType::F16 | ScalarType::F32 | ScalarType::F64
+        ))
+    )
+}
+
 fn validate_static_statement(
     types: &TypeTable,
     body: &Body,
@@ -520,6 +531,17 @@ fn validate_static_statement(
                 return Err(point_error(
                     point,
                     MirValidationErrorKind::IntegerOrRequiresInteger(expected),
+                ));
+            }
+            validate_operand_type(types, body, left, expected, point)?;
+            validate_operand_type(types, body, right, expected, point)
+        }
+        Statement::FloatAdd { dst, left, right } => {
+            let expected = place_type(types, body, dst, point)?;
+            if !is_float_type(types, expected) {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::FloatAddRequiresFloat(expected),
                 ));
             }
             validate_operand_type(types, body, left, expected, point)?;
@@ -1180,6 +1202,28 @@ fn validate_state_statement(
                 return Err(point_error(
                     point,
                     MirValidationErrorKind::IntegerOrRequiresVacant(dst.clone()),
+                ));
+            }
+            let dst_ty = place_type(types, body, dst, point)?;
+            let DefinedStep::Continue(_) =
+                validate_operand_state(types, body, locals, active_loans, left, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
+            let DefinedStep::Continue(_) =
+                validate_operand_state(types, body, locals, active_loans, right, point)?
+            else {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            };
+            let value = unknown_validation_value(types, dst_ty);
+            write_validation_value(types, dst_ty, place_state_mut(locals, dst), value);
+        }
+        Statement::FloatAdd { dst, left, right } => {
+            authorize_direct_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
+            if !place_state(locals, dst).wholly_vacant() {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::FloatAddRequiresVacant(dst.clone()),
                 ));
             }
             let dst_ty = place_type(types, body, dst, point)?;
