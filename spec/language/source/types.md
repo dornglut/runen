@@ -6,7 +6,7 @@ This document owns the represented intrinsic scalar source type identities, repr
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), and applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md). It does not redefine those owners.
 
-The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Structural source paths, structural ownership state, availability, and remaining frontiers are owned by [Source structural ownership](structural-ownership.md). Function-local binding identity, mutability, lifecycle, lookup, ordinary whole-binding owned use, and assignment are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities/value domains defined here. [Source field-value access](field-access.md) consumes nominal record/field identity, field source types, source type equality, and owned-value duplicability and separately owns direct record-field accessibility. [Source patterns](patterns.md) consumes nominal record/field identity, exact source type equality, structural field order, and duplicability for recursive exhaustive record-pattern validation and binding-leaf production. This document does not define literal materialization, structural ownership state, field-access execution/accessibility, pattern lookup/ownership, conversions, general member lookup, or an implementation representation.
+The represented concrete intrinsic type and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Structural source paths, structural ownership state, availability, and remaining frontiers are owned by [Source structural ownership](structural-ownership.md). Function-local binding identity, mutability, lifecycle, lookup, ordinary whole-binding owned use, and assignment are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities/value domains defined here. [Source field-value access](field-access.md) consumes nominal record/field identity, field source types, source type equality, and owned-value duplicability and separately owns direct record-field accessibility. [Source patterns](patterns.md) consumes nominal record/field identity, exact source type equality, structural field order, and duplicability for recursive record-pattern validation, including bounded node-local omission, and binding-leaf production. This document does not define literal materialization, structural ownership state, field-access execution/accessibility, pattern lookup/ownership, conversions, general member lookup, or an implementation representation.
 
 ## Intrinsic scalar source types
 
@@ -104,7 +104,7 @@ The ordered field sequence is semantic structural order for the source record va
 
 A value of a represented record type contains exactly one field value of the declared type for every field in the declaration. This source value shape creates no physical layout contract.
 
-`structural-ownership.md` consumes record field identity/type/order to define structurally valid source paths and recursive remaining-ownership frontiers. `local-bindings.md` instantiates that relation for bindings. `field-access.md` consumes field lexical key, containing nominal record identity, declared type, and duplicability while owning the separate direct-accessibility rule used to select/produce a field value. `patterns.md` consumes nominal field identities/types and the separately owned direct-accessibility relation to validate recursive exhaustive coverage and retain binding-leaf structural paths. Pattern presentation order never changes this declaration's structural field order.
+`structural-ownership.md` consumes record field identity/type/order to define structurally valid source paths and recursive remaining-ownership frontiers. `local-bindings.md` instantiates that relation for bindings. `field-access.md` consumes field lexical key, containing nominal record identity, declared type, and duplicability while owning the separate direct-accessibility rule used to select/produce a field value. `patterns.md` consumes nominal field identities/types and the separately owned direct-accessibility relation to validate explicit field selection, no-rest exhaustiveness or rest-authorized omission, and retain binding-leaf structural paths. Pattern presentation order never changes this declaration's structural field order.
 
 ## Direct record containment
 
@@ -184,7 +184,7 @@ Those declarations require independently owned source semantics rather than infe
 
 `field-access.md` owns binding-rooted and bounded producer-backed field selection, direct field accessibility, final-path availability requirement, producer-receiver transient ownership, and duplicate-or-consume field-value production.
 
-`patterns.md` owns recursive exhaustive record-pattern selection, binding-leaf introduction/order, direct-root leaf production, and producer-transient leaf ownership/cleanup selection.
+`patterns.md` owns recursive record-pattern selection with bounded node-local omission, binding-leaf introduction/order, direct-root leaf production, and producer-transient leaf ownership/cleanup selection.
 
 This type owner supplies nominal record/field identity, field types, source type equality, structural field order, and owned-value duplicability only.
 
@@ -202,8 +202,8 @@ Proving-kernel copyability, path state, scalar liveness, or interior-mutability 
 
 ## Further boundaries
 
-The concrete intrinsic/record forms do not themselves define literal semantics, additional refutable/rest/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
+The concrete intrinsic/record forms do not themselves define literal semantics, additional refutable/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, source `unsafe`, pointer/reference/lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
 
-Represented boolean, decimal integer, and decimal floating literal semantics are owned by `literals.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; and recursive exhaustive record destructuring by `patterns.md`.
+Represented boolean, decimal integer, and decimal floating literal semantics are owned by `literals.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; and recursive record destructuring with bounded node-local omission by `patterns.md`.
 
 Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities/relations defined here.

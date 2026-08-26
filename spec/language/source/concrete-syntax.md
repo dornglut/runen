@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented concrete source spellings, token forms, grammar, and mapping from those forms to the accepted abstract source-language relations.
 
-It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean, integer, and decimal floating literal semantics from [Source literal semantics](literals.md); Boolean logical-negation, Boolean short-circuit conjunction, plain fixed-width integer-negation/bitwise-complement/multiplication/addition/subtraction/exclusive-or/bitwise-OR, and Boolean equality/inequality operand/result typing and semantic value transformation from [Source operator semantics](operators.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive exhaustive record-pattern semantics, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, represented operator operand validation/evaluation, bounded contextual grouping transparency, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, loop-transfer cleanup, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, bounded `break`/`continue` target/state admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
+It consumes source text, whitespace, identifier-form tokens, identifier-token extent, and lexical identifier keys from [Source lexical foundation](lexical.md); module bindings and lookup from [Source names and modules](names-modules.md); source types and record declarations from [Source type foundation](types.md); boolean, integer, and decimal floating literal semantics from [Source literal semantics](literals.md); Boolean logical-negation, Boolean short-circuit conjunction, plain fixed-width integer-negation/bitwise-complement/multiplication/addition/subtraction/exclusive-or/bitwise-OR, and Boolean equality/inequality operand/result typing and semantic value transformation from [Source operator semantics](operators.md); function entities and callable signatures from [Source callables](callables.md); structural paths and ownership availability from [Source structural ownership](structural-ownership.md); parameter/local binding semantics, assignment mutability, and function-local lookup from [Source function-local bindings](local-bindings.md); bounded binding-root/producer-receiver field-path selection, direct field accessibility, receiver-transient ownership, and final-field value production from [Source field-value access](field-access.md); recursive irrefutable record-pattern semantics with bounded node-local rest/omission, including qualified/unqualified heads, direct binding-root scrutinees, and producer-backed scrutinees, from [Source patterns](patterns.md); direct-call, represented operator operand validation/evaluation, bounded contextual grouping transparency, initialization, assignment/replacement, record-construction evaluation and assembly, field-receiver evaluation/cleanup, producer-backed pattern scrutinee evaluation and transient cleanup, return, payload-free explicit-fault execution, loop-transfer cleanup, normal-continuation presence, cleanup, divergence, defined-fault propagation, and body/block execution semantics from [Source function execution](function-execution.md); and represented statement-level conditional selection, bounded `while` selection/backedge admission, bounded `break`/`continue` target/state admission, definite normal ownership, and normal-continuation composition from [Source control flow](control-flow.md). It does not redefine those owners.
 
 The grammar in this document is normative independently of any parser, syntax-tree, HIR, source-range, diagnostic, or backend representation.
 
@@ -56,10 +56,10 @@ Reserved-key classification uses the lexical identifier key, not original source
 The represented punctuation tokens are exactly:
 
 ```text
-( ) { } : :: , -> - + * = == ; . ! != ~ ^ | &&
+( ) { } : :: , -> - + * = == ; . .. ! != ~ ^ | &&
 ```
 
-`->`, `::`, `==`, `!=`, and `&&` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens, `->` is never tokenized as `-` followed by unrepresented `>` material, `==` is never tokenized as two `=` tokens, adjacent `!=` is never tokenized as `!` followed by `=`, and adjacent `&&` is one token rather than two unrepresented standalone `&` scalars.
+`->`, `::`, `==`, `!=`, `..`, and `&&` are each one punctuation token. Where more than one represented punctuation token could begin at one source position, the longest represented token is selected; consequently `::` is never tokenized as two `:` tokens, `->` is never tokenized as `-` followed by unrepresented `>` material, `==` is never tokenized as two `=` tokens, adjacent `!=` is never tokenized as `!` followed by `=`, adjacent `..` is never tokenized as two standalone `.` tokens, and adjacent `&&` is one token rather than two unrepresented standalone `&` scalars.
 
 The existing `(` and `)` punctuation tokens additionally delimit the bounded grouped-value productions below. This adds no new punctuation spelling and does not change their existing parameter-list, direct-call, or argument-list roles. The same delimiters do not by themselves define Unit/empty-group values, tuples, parenthesized `Type`, indirect/grouped call targets, a general expression category, or another postfix system.
 
@@ -73,7 +73,9 @@ The standalone `+` punctuation token participates only in the bounded plain fixe
 
 The standalone `*` punctuation token participates only in the bounded plain fixed-width integer-multiplication productions below and maps those forms to the multiplication semantic relation in `operators.md`. It is not dereference, pointer syntax, wildcard/pattern syntax, exponentiation, compound assignment, or another operator. Consequently `**` tokenizes as two standalone `*` tokens and `*=` tokenizes as standalone `*` followed by standalone `=`; neither is a represented value/operator form. No standalone `/` punctuation or division operation is represented. The ordinary comment delimiters `/*` and `*/` are recognized as complete comment delimiters under the comment rules below and are never decomposed merely because standalone `*` is represented outside comments.
 
-The standalone `.` punctuation token participates only in the represented `FieldValueUse` production below. The decimal point inside one `DecimalFloatingMagnitude` is consumed as interior material of that single decimal token and is therefore not a `.` punctuation token. The standalone punctuation token does not by itself define floating-point literal spelling, a general member/postfix system, a method call, field assignment, or another operator.
+The standalone `.` punctuation token participates only in the represented `FieldValueUse` production below. The decimal point inside one `DecimalFloatingMagnitude` is consumed as interior material of that single decimal token and is therefore not a `.` punctuation token. Adjacent `..` is the distinct longest-match punctuation token described next and is never two standalone field selectors. The standalone `.` punctuation token does not by itself define floating-point literal spelling, a general member/postfix system, a method call, field assignment, or another operator.
+
+The `..` punctuation token participates only as `RecordPatternRest` in the bounded recursive record-pattern grammar below. It is node-local rest/omission syntax, not a field selector, range, spread/update, constructor-rest form, arbitrary wildcard, value, type, operator, module path, or general punctuation facility. Before this revision adjacent `..` tokenized as two standalone `.` punctuation tokens, but no represented grammar admitted two adjacent field selectors or another source-valid `..` spelling, so longest-match recognition of `..` reinterprets no previously source-valid source. Decimal floating tokenization remains unchanged: when token processing begins at a digit, the decimal-floating selection rule below consumes a qualifying digit-run `.` digit-run as one numeric token before ordinary punctuation tokenization can see that decimal point.
 
 The standalone `=` punctuation token retains only its represented declaration/assignment roles. `==` instead participates only in the bounded Boolean equality productions below and maps those forms to the equality semantic relation in `operators.md`.
 
@@ -406,17 +408,20 @@ Initializer lookup, owned-value production, transfer, the resulting initial stru
 
 This ordinary-local form has no uninitialized local, inferred local type, pattern binding, destructuring local, or mutable-parameter spelling.
 
-## Recursive exhaustive record destructuring
+## Recursive record destructuring with bounded rest
 
 ```text
 RecordDestructuringDeclaration =
     "let" RecordPattern "=" RecordPatternScrutinee ";"
 RecordPattern =
-    RecordPatternHead "{" RecordPatternFields? "}"
+    RecordPatternHead "{" RecordPatternEntries? "}"
 RecordPatternHead =
     UserIdentifier | QualifiedModuleMember
-RecordPatternFields =
-    RecordPatternField ("," RecordPatternField)* ","?
+RecordPatternEntries =
+    RecordPatternRest ","?
+  | RecordPatternField ("," RecordPatternField)* ("," RecordPatternRest)? ","?
+RecordPatternRest =
+    ".."
 RecordPatternField =
     UserIdentifier ":" RecordPatternTarget
 RecordPatternTarget =
@@ -429,21 +434,23 @@ ProducerBackedRecordPatternScrutinee =
     DirectCall | RecordConstruction | FieldValueUse
 ```
 
-Every `RecordPattern` begins with one explicit nominal record-pattern head. The head is either one unqualified `UserIdentifier` or the existing two-part `QualifiedModuleMember`. Each `RecordPatternField` maps its first identifier to one selected declared field key. Its target is either one bare binding leaf identifier or another explicit nested `RecordPattern`.
+Every `RecordPattern` begins with one explicit nominal record-pattern head. The head is either one unqualified `UserIdentifier` or the existing two-part `QualifiedModuleMember`. Each `RecordPatternField` maps its first identifier to one explicitly selected declared field key. Its target is either one bare binding leaf identifier or another explicit nested `RecordPattern`.
 
 The field target is classified syntactically without semantic lookup: a bare `UserIdentifier` target is a binding leaf; `UserIdentifier "{"` begins an unqualified nested record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified nested record pattern. No field type inference or lookup is needed to select among those concrete shapes.
 
-Every record-pattern node MAY have an empty field sequence and MAY use a trailing comma. Pattern field presentation order is retained exactly. `patterns.md` defines the resulting recursive structure, exhaustive validation, depth-first binding-leaf source order, exact type/accessibility requirements, and ownership behavior.
+A record-pattern node MAY have no entries, MAY contain only `RecordPatternRest`, or MAY contain one or more explicit `RecordPatternField` entries optionally followed by one `RecordPatternRest`. The grammar admits an optional trailing comma in every represented non-empty case. `RecordPatternRest` is therefore always the final non-trivia semantic entry of its node. Forms such as `R { .., a: x }`, `R { a: x, .., b: y }`, `R { .., .. }`, or more than one rest marker in one node are not represented. Rest may recur independently inside a nested `RecordPattern` because the complete production is recursive.
 
-A nested record-pattern target introduces no binding merely for naming its record head. Only bare binding-leaf targets introduce function-local bindings under `local-bindings.md`. Qualification is therefore never a binding-leaf spelling.
+Pattern field presentation order is retained exactly for explicit fields. `RecordPatternRest` contributes no field target, binding leaf, binding key, or source-order item. `patterns.md` defines the resulting recursive field/rest structure, no-rest exhaustiveness, rest-authorized omission, depth-first explicit binding-leaf source order, exact type/accessibility requirements, and ownership behavior.
+
+A nested record-pattern target introduces no binding merely for naming its record head. Only bare binding-leaf targets introduce function-local bindings under `local-bindings.md`. Qualification and rest are therefore never binding-leaf spellings.
 
 An unqualified pattern head maps to the same-module record-declaration lookup owned by `patterns.md` and `names-modules.md`. A qualified `alias::Record` pattern head maps to the existing source-unit module-alias and exported qualified cross-module lookup relation in `names-modules.md`; the selected entity must be a nominal record. Function-local bindings do not participate in either pattern-head lookup.
 
-A `DirectRecordPatternRoot` is exactly one bare unqualified `UserIdentifier`. In this declaration position it maps to the accepted direct binding-root pattern relation, not to ordinary `IdentifierUse` value production. The grammar does not insert an implicit whole-record value use or scrutinee transient. Pattern-head qualification does not alter the direct-root scrutinee grammar.
+A `DirectRecordPatternRoot` is exactly one bare unqualified `UserIdentifier`. In this declaration position it maps to the accepted direct binding-root pattern relation, not to ordinary `IdentifierUse` value production. The grammar does not insert an implicit whole-record value use or scrutinee transient. Pattern-head qualification and rest do not alter the direct-root scrutinee grammar.
 
 A `ProducerBackedRecordPatternScrutinee` remains deliberately narrower than `Value`. It admits exactly one syntactically non-bare already-represented producer: a result-bearing `DirectCall`, a `RecordConstruction`, or a `FieldValueUse`. The top record-pattern head supplies the exact required nominal record type under `patterns.md` and `function-execution.md`.
 
-The producer-backed alternatives reuse their existing concrete forms. A direct call may be unqualified or use the represented `alias::member(...)` target. A record construction may use its represented unqualified same-module target or qualified `alias::Record` target and remains named-field/exhaustive. Field-value use may be binding-rooted or use the bounded direct-call/record-construction producer receiver defined below.
+The producer-backed alternatives reuse their existing concrete forms. A direct call may be unqualified or use the represented `alias::member(...)` target. A record construction may use its represented unqualified same-module target or qualified `alias::Record` target and remains named-field/exhaustive. Field-value use may be binding-rooted or use the bounded direct-call/record-construction producer receiver defined below. Pattern rest does not authorize constructor field omission, update, or spread.
 
 A qualified construction may directly satisfy a qualified top record pattern when both qualified forms resolve to the same nominal record and their independent target/field-accessibility rules are source-valid. This is exact nominal producer typing, not a second pattern-scrutinee or construction category. Different record declarations remain unequal even when their fields are structurally equal.
 
@@ -451,15 +458,15 @@ When a producer-backed `FieldValueUse` is the scrutinee, its complete field-valu
 
 The top scrutinee alternatives remain classifiable from their complete token shapes without semantic lookup. A direct root ends after its `UserIdentifier`; a direct call has call syntax; a record construction has constructor syntax; and a field-value use contains one or more `.` selectors after either its binding root or its complete bounded producer receiver. Scrutinee category does not depend on inferred type.
 
-This recursive pattern form introduces no new reserved key. It remains distinguished from `LocalDeclaration` after `let` by concrete token shape: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form; `UserIdentifier "{"` begins an unqualified record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified record pattern. This classification uses bounded token lookahead only and does not consult module lookup or source types. The represented `!`, prefix or binary `-`, `~`, `*`, `+`, `^`, `|`, `==`, `!=`, and `&&` punctuation does not participate in record-pattern grammar.
+This recursive pattern form introduces no new reserved key. It remains distinguished from `LocalDeclaration` after `let` by concrete token shape: optional `mut` followed by `UserIdentifier ":"` continues the ordinary-local form; `UserIdentifier "{"` begins an unqualified record pattern; and `UserIdentifier "::" UserIdentifier "{"` begins a qualified record pattern. This classification uses bounded token lookahead only and does not consult module lookup or source types. The represented `!`, prefix or binary `-`, `~`, `*`, `+`, `^`, `|`, `==`, `!=`, `&&`, standalone `.`, and longest-match `..` punctuation do not otherwise participate in record-pattern-head classification.
 
 Boolean, decimal integer, and decimal floating literals and represented operator values are not producer-backed record-pattern scrutinees. A bare identifier is not admitted through the producer-backed alternative even though `IdentifierUse` is an ordinary `Value` producer elsewhere. No parenthesized/grouped value, operator value, conversion, arbitrary postfix/member expression, qualified bare module member, or other general `Value` form is admitted as a record-pattern scrutinee.
 
-Complete recursive pattern validation, binding-leaf ordering, producer evaluation ordering, transient structural ownership/cleanup, grouped binding establishment, and fault/divergence behavior are owned by `patterns.md`, `field-access.md`, `structural-ownership.md`, and `function-execution.md`.
+Complete recursive pattern validation, explicit binding-leaf ordering, rest-authorized omission, producer evaluation ordering, transient structural ownership/cleanup, grouped binding establishment, and fault/divergence behavior are owned by `patterns.md`, `field-access.md`, `structural-ownership.md`, and `function-execution.md`.
 
-Pattern-head qualification is discharged by source validation. A faithful typed representation may retain the resolved top nominal record identity and complete leaf paths/types/ownership facts without retaining qualified versus unqualified head spelling or separate nested-head qualification facts.
+Pattern-head qualification and concrete rest spelling are discharged by source validation. A faithful typed representation may retain the resolved top nominal record identity and complete explicit leaf paths/types/ownership facts plus the source-selected producer cleanup frontier without retaining qualified versus unqualified head spelling, separate nested-head qualification facts, the concrete rest marker, or omitted field identities.
 
-This revision defines no `let mut Record { ... }`, shorthand field pattern, wildcard/ignore, rest/omission, tuple/array/enum pattern, literal/alternative/guard pattern, qualified binding leaf, qualified field name, nested module path beyond the represented alias/member pair, refutable pattern, destructuring assignment, reference-binding mode, or mutable pattern-binding modifier.
+This revision defines no `let mut Record { ... }`, shorthand field pattern, wildcard/ignore binding, tuple/array/enum pattern, literal/alternative/guard pattern, qualified binding leaf, qualified field name, nested module path beyond the represented alias/member pair, refutable pattern, destructuring assignment, reference-binding mode, mutable pattern-binding modifier, range pattern, constructor spread/update/rest, or general spread syntax.
 
 ## Whole-binding assignment statements
 
@@ -563,8 +570,8 @@ This form defines no inferred or anonymous constructor target, positional field 
 The represented field-value forms have this grammar:
 
 ```text
-FieldValueUse        = BindingFieldValueUse | ProducerFieldValueUse
-BindingFieldValueUse = UserIdentifier FieldSelector+
+FieldValueUse         = BindingFieldValueUse | ProducerFieldValueUse
+BindingFieldValueUse  = UserIdentifier FieldSelector+
 ProducerFieldValueUse = FieldReceiverProducer FieldSelector+
 FieldReceiverProducer = DirectCall | RecordConstruction
 FieldSelector         = "." UserIdentifier
@@ -588,7 +595,7 @@ Exact receiver result-type selection, direct record-field accessibility at every
 
 The same `.` selector spelling represents both duplicate and consume outcomes. No second move/extract token is introduced.
 
-The `.` punctuation token in this production has no decimal-literal, method, assignment, reference, place/lvalue, general postfix/member, or other operator meaning. The decimal point inside a `DecimalFloatingMagnitude` is instead part of that one decimal token and never reaches this punctuation production.
+The `.` punctuation token in this production has no decimal-literal, method, assignment, reference, place/lvalue, general postfix/member, or other operator meaning. The decimal point inside a `DecimalFloatingMagnitude` is instead part of that one decimal token and never reaches this punctuation production. The distinct longest-match `..` punctuation token never enters `FieldSelector` and has only its bounded record-pattern role above.
 
 ## Value forms
 
@@ -739,10 +746,10 @@ This revision does not define:
 - Unit/empty-group, tuple/comma-expression, parenthesized-type, or general expression grammar beyond the bounded one-value contextual grouping forms above; multiplicative/additive/exclusive-or/bitwise-OR/equality/logical-conjunction/comparison chaining; or a binary precedence/associativity hierarchy beyond the bounded multiplicative, additive, exclusive-or, bitwise-OR, non-associative equality, and bounded logical-conjunction tiers;
 - assignment expressions, assignment-as-value, field assignment, partial-field reinitialization, destructuring assignment, or general place/lvalue syntax beyond represented whole-binding assignment;
 - uninitialized locals, type inference, mutable parameters, or mutable record-pattern binding modifiers;
-- conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, labels or a label namespace, labeled `break`/`continue`, transfer values, loop values, refutable/literal/alternative/guard patterns, `match`, wildcard/rest/shorthand patterns, catch/recovery, or other control-transfer forms beyond represented statement-level `if`, bounded statement-level `while`, bounded unlabeled `break;`/`continue;`, terminal return, and payload-free explicit `fault;`;
+- conditional expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, labels or a label namespace, labeled `break`/`continue`, transfer values, loop values, refutable/literal/alternative/guard patterns, `match`, wildcard/ignore/shorthand patterns, range patterns, catch/recovery, or other control-transfer forms beyond represented statement-level `if`, bounded statement-level `while`, bounded unlabeled `break;`/`continue;`, terminal return, and payload-free explicit `fault;`;
 - record-pattern scrutinees beyond the represented bare direct binding root and dedicated `DirectCall`, `RecordConstruction`, and bounded `FieldValueUse` producer-backed forms; in particular no literal (including decimal floating), bare `IdentifierUse`-as-value, represented operator value, grouping, other operator expression, conversion, arbitrary postfix/member expression, or other general expression is admitted there;
 - source-visible module identities, dependency locators, package paths, nested module paths beyond the represented alias/member pair, selective imports, glob imports, re-exports, implicit preludes, or transitive import lookup;
-- inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, method-based, or partial record construction, nor a constructor namespace or separate public-constructor capability;
+- inferred/anonymous, positional, shorthand, defaulted, update/spread/base, constructor-body, method-based, or partial record construction, nor a constructor namespace or separate public-constructor capability; record-pattern `..` does not authorize constructor rest, update, spread, or general spread syntax;
 - arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms; field accessibility beyond the represented module-private/exported direct relation; package/friend/protected accessibility; methods; properties; or associated-item lookup;
 - qualified binding leaves or qualified field names inside record patterns;
 - explicit copy/clone value operations, custom copy constructors, or duplicability-selection syntax beyond the record-specific `copy` selection;
