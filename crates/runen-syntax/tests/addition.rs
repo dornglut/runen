@@ -26,14 +26,25 @@ fn nontrivia_kinds(parsed: &Parse) -> Vec<SyntaxKind> {
 fn addition_syntax_kinds_are_append_only_and_plus_is_lossless() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::GroupedValue).0, 87);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Plus).0, 88);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerAddValue).0, 89);
+    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::AddValue).0, 89);
 
     let source = "fn add(a: I8, b: I8) -> I8 { return a /* left */ + /* right */ b; }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::IntegerAddValue), 1);
+    assert_eq!(count(&parsed, SyntaxKind::AddValue), 1);
     assert!(nontrivia_kinds(&parsed).contains(&SyntaxKind::Plus));
+}
+
+#[test]
+fn integer_and_floating_spellings_share_one_type_neutral_addition_node() {
+    let source = "fn integer() -> I8 { return 1 + 2; } fn floating() -> F32 { return 1.0 + 2.0; }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert_eq!(count(&parsed, SyntaxKind::AddValue), 2);
+    assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 2);
+    assert_eq!(count(&parsed, SyntaxKind::DecimalFloatingLiteral), 2);
 }
 
 #[test]
@@ -63,7 +74,7 @@ fn addition_is_bounded_between_prefix_and_equality() {
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::IntegerAddValue), 2);
+    assert_eq!(count(&parsed, SyntaxKind::AddValue), 2);
     assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 1);
 
     let equality = parsed
@@ -74,13 +85,13 @@ fn addition_is_bounded_between_prefix_and_equality() {
     assert!(
         equality
             .children()
-            .any(|node| node.kind() == SyntaxKind::IntegerAddValue)
+            .any(|node| node.kind() == SyntaxKind::AddValue)
     );
 
     let first_add = parsed
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerAddValue)
+        .find(|node| node.kind() == SyntaxKind::AddValue)
         .expect("addition node");
     assert!(
         first_add
@@ -93,14 +104,14 @@ fn addition_is_bounded_between_prefix_and_equality() {
 fn ungrouped_addition_chains_are_invalid_but_grouped_nesting_is_represented() {
     let chained = parse("fn bad(a: I8, b: I8, c: I8) -> I8 { return a + b + c; }");
     assert!(!chained.errors().is_empty());
-    assert_eq!(count(&chained, SyntaxKind::IntegerAddValue), 1);
+    assert_eq!(count(&chained, SyntaxKind::AddValue), 1);
 
     let source =
         "fn good(a: I8, b: I8, c: I8) { let left: I8 = (a + b) + c; let right: I8 = a + (b + c); }";
     let grouped = parse(source);
     assert_eq!(grouped.text(), source);
     assert!(grouped.errors().is_empty(), "{:?}", grouped.errors());
-    assert_eq!(count(&grouped, SyntaxKind::IntegerAddValue), 4);
+    assert_eq!(count(&grouped, SyntaxKind::AddValue), 4);
     assert_eq!(count(&grouped, SyntaxKind::GroupedValue), 2);
 }
 
@@ -116,7 +127,7 @@ fn choose(flag: Bool) {
     let valid = parse(valid_source);
     assert_eq!(valid.text(), valid_source);
     assert!(valid.errors().is_empty(), "{:?}", valid.errors());
-    assert_eq!(count(&valid, SyntaxKind::IntegerAddValue), 2);
+    assert_eq!(count(&valid, SyntaxKind::AddValue), 2);
     assert_eq!(count(&valid, SyntaxKind::RecordConstruction), 2);
     assert_eq!(count(&valid, SyntaxKind::FieldValueUse), 2);
 
@@ -139,14 +150,14 @@ fn addition_does_not_widen_field_receivers_or_pattern_scrutinees() {
     assert_eq!(field.text(), field_source);
     assert!(!field.errors().is_empty());
     assert_eq!(count(&field, SyntaxKind::FieldValueUse), 0);
-    assert_eq!(count(&field, SyntaxKind::IntegerAddValue), 1);
+    assert_eq!(count(&field, SyntaxKind::AddValue), 1);
 
     let pattern_source =
         "record Pair { left: I8 } fn bad(a: Pair, b: Pair) { let Pair { left: x } = a + b; }";
     let pattern = parse(pattern_source);
     assert_eq!(pattern.text(), pattern_source);
     assert!(!pattern.errors().is_empty());
-    assert_eq!(count(&pattern, SyntaxKind::IntegerAddValue), 0);
+    assert_eq!(count(&pattern, SyntaxKind::AddValue), 0);
 }
 
 #[test]

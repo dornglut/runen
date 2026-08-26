@@ -320,6 +320,10 @@ pub enum ValueKind {
         left: Box<Value>,
         right: Box<Value>,
     },
+    FloatAdd {
+        left: Box<Value>,
+        right: Box<Value>,
+    },
     IntegerSub {
         left: Box<Value>,
         right: Box<Value>,
@@ -527,7 +531,7 @@ pub enum DiagnosticKind {
     TypeMismatch { expected: Type, found: Type },
     IntegerNegationRequiresInteger { required: Type },
     IntegerComplementRequiresInteger { required: Type },
-    IntegerAdditionRequiresInteger { required: Type },
+    AdditionRequiresIntegerOrFloating { required: Type },
     IntegerSubtractionRequiresInteger { required: Type },
     IntegerMultiplicationRequiresInteger { required: Type },
     IntegerXorRequiresInteger { required: Type },

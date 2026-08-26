@@ -104,7 +104,7 @@ fn additive_binds_tighter_than_xor() {
         .expect("xor");
     assert_eq!(
         xor.children().map(|node| node.kind()).collect::<Vec<_>>(),
-        [SyntaxKind::IntegerAddValue, SyntaxKind::IdentifierUse]
+        [SyntaxKind::AddValue, SyntaxKind::IdentifierUse]
     );
 
     let right = parse("fn f(a: I64, b: I64, c: I64) -> I64 { return a ^ b - c; }");

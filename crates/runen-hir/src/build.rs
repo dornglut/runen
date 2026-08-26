@@ -2202,34 +2202,37 @@ fn validate_value(
                 location: value_location,
             })
         }
-        SyntaxKind::IntegerAddValue => {
-            if !matches!(
-                required,
+        SyntaxKind::AddValue => {
+            let floating = match required {
+                Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64) => {
+                    true
+                }
                 Type::Intrinsic(
                     IntrinsicType::I8
-                        | IntrinsicType::I16
-                        | IntrinsicType::I32
-                        | IntrinsicType::I64
-                        | IntrinsicType::U8
-                        | IntrinsicType::U16
-                        | IntrinsicType::U32
-                        | IntrinsicType::U64
-                )
-            ) {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::IntegerAdditionRequiresInteger { required },
-                    location: value_location,
-                });
-                return None;
-            }
+                    | IntrinsicType::I16
+                    | IntrinsicType::I32
+                    | IntrinsicType::I64
+                    | IntrinsicType::U8
+                    | IntrinsicType::U16
+                    | IntrinsicType::U32
+                    | IntrinsicType::U64,
+                ) => false,
+                _ => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::AdditionRequiresIntegerOrFloating { required },
+                        location: value_location,
+                    });
+                    return None;
+                }
+            };
 
             let mut operands = node.children().filter(|child| is_value_node(child.kind()));
             let left_node = operands
                 .next()
-                .expect("syntax-clean integer addition contains a left operand");
+                .expect("syntax-clean addition contains a left operand");
             let right_node = operands
                 .next()
-                .expect("syntax-clean integer addition contains a right operand");
+                .expect("syntax-clean addition contains a right operand");
             debug_assert!(operands.next().is_none());
 
             let mut operand_bindings = bindings.clone();
@@ -2250,12 +2253,20 @@ fn validate_value(
                 diagnostics,
             )?;
             *bindings = operand_bindings;
-            Some(Value {
-                ty: required,
-                kind: ValueKind::IntegerAdd {
+            let kind = if floating {
+                ValueKind::FloatAdd {
                     left: Box::new(left),
                     right: Box::new(right),
-                },
+                }
+            } else {
+                ValueKind::IntegerAdd {
+                    left: Box::new(left),
+                    right: Box::new(right),
+                }
+            };
+            Some(Value {
+                ty: required,
+                kind,
                 location: value_location,
             })
         }
@@ -3752,7 +3763,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
         SyntaxKind::GroupedValue
             | SyntaxKind::IntegerNegValue
             | SyntaxKind::IntegerComplementValue
-            | SyntaxKind::IntegerAddValue
+            | SyntaxKind::AddValue
             | SyntaxKind::IntegerSubValue
             | SyntaxKind::IntegerMulValue
             | SyntaxKind::IntegerXorValue

@@ -744,7 +744,7 @@ impl Parser<'_> {
         let checkpoint = self.builder.checkpoint();
         self.parse_multiplicative_value(context);
         let operation = match self.current() {
-            Some(SyntaxKind::Plus) => Some(SyntaxKind::IntegerAddValue),
+            Some(SyntaxKind::Plus) => Some(SyntaxKind::AddValue),
             Some(SyntaxKind::Minus) => Some(SyntaxKind::IntegerSubValue),
             _ => None,
         };

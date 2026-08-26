@@ -26,7 +26,7 @@ fn nontrivia_kinds(parsed: &Parse) -> Vec<SyntaxKind> {
 fn multiplication_syntax_kinds_are_append_only() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Minus).0, 57);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Plus).0, 88);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerAddValue).0, 89);
+    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::AddValue).0, 89);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerSubValue).0, 90);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Star).0, 91);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerMulValue).0, 92);
@@ -113,7 +113,7 @@ fn multiplicative_tier_is_bounded_and_tighter_than_additive() {
     let add = right
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerAddValue)
+        .find(|node| node.kind() == SyntaxKind::AddValue)
         .expect("addition");
     let children = add.children().map(|node| node.kind()).collect::<Vec<_>>();
     assert_eq!(
@@ -126,7 +126,7 @@ fn multiplicative_tier_is_bounded_and_tighter_than_additive() {
     let add = left
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerAddValue)
+        .find(|node| node.kind() == SyntaxKind::AddValue)
         .expect("addition");
     let children = add.children().map(|node| node.kind()).collect::<Vec<_>>();
     assert_eq!(
@@ -163,7 +163,7 @@ fn grouping_explicitly_repeats_or_overrides_multiplicative_nesting() {
         assert_eq!(parsed.text(), source);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
         assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), multiplications);
-        assert_eq!(count(&parsed, SyntaxKind::IntegerAddValue), additions);
+        assert_eq!(count(&parsed, SyntaxKind::AddValue), additions);
         if source.contains("b - c") {
             assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 1);
         }

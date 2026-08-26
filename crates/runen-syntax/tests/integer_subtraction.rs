@@ -25,7 +25,7 @@ fn nontrivia_kinds(parsed: &Parse) -> Vec<SyntaxKind> {
 #[test]
 fn subtraction_syntax_kind_is_append_only_and_minus_is_reused_losslessly() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Minus).0, 57);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerAddValue).0, 89);
+    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::AddValue).0, 89);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerSubValue).0, 90);
 
     let source = "fn sub(a: I8, b: I8) -> I8 { return a /* left */ - /* right */ b; }";
@@ -106,7 +106,7 @@ fn additive_tier_selects_operation_specific_nodes_between_prefix_and_equality() 
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 2);
-    assert_eq!(count(&parsed, SyntaxKind::IntegerAddValue), 1);
+    assert_eq!(count(&parsed, SyntaxKind::AddValue), 1);
     assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 1);
 
     let equality = parsed
@@ -143,8 +143,7 @@ fn ungrouped_repeated_and_mixed_additive_chains_remain_invalid() {
         assert_eq!(parsed.text(), source);
         assert!(!parsed.errors().is_empty());
         assert_eq!(
-            count(&parsed, SyntaxKind::IntegerAddValue)
-                + count(&parsed, SyntaxKind::IntegerSubValue),
+            count(&parsed, SyntaxKind::AddValue) + count(&parsed, SyntaxKind::IntegerSubValue),
             1
         );
     }
@@ -156,7 +155,7 @@ fn grouping_represents_explicit_nested_addition_and_subtraction_trees() {
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::IntegerAddValue), 3);
+    assert_eq!(count(&parsed, SyntaxKind::AddValue), 3);
     assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 5);
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 4);
 }

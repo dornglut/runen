@@ -101,11 +101,11 @@ fn non_integer_outer_requirement_rejects_before_operand_validation_or_consumptio
              sink(value); \
          }",
     )
-    .expect_err("integer addition cannot satisfy Bool");
+    .expect_err("addition cannot satisfy Bool");
 
     assert!(has_diagnostic(
         &errors,
-        DiagnosticKind::IntegerAdditionRequiresInteger {
+        DiagnosticKind::AdditionRequiresIntegerOrFloating {
             required: Type::Intrinsic(IntrinsicType::Bool),
         }
     ));
