@@ -81,7 +81,7 @@ fn producer_rest_destroys_retained_omitted_and_duplicated_paths_in_hir_order() {
         "record Token { value: I8 } \
          record Pair { copied: I8, moved: Token, omitted: Token } \
          fn f() { \
-             let Pair { copied: copy, moved: moved, .. } = \
+             let Pair { copied: copied_value, moved: moved, .. } = \
                  Pair { copied: 1, moved: Token { value: 2 }, omitted: Token { value: 3 } }; \
          }",
     );
@@ -93,7 +93,7 @@ fn producer_rest_destroys_retained_omitted_and_duplicated_paths_in_hir_order() {
         .iter()
         .map(|local| local.name.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(&names[..2], ["copy", "moved"]);
+    assert_eq!(&names[..2], ["copied_value", "moved"]);
     assert!(names[2..].iter().all(|name| name.starts_with("$tmp")));
     assert_eq!(
         drop_paths(f),
