@@ -288,8 +288,14 @@ fn source_to_hir_to_core_to_reference_proves_total_plain_integer_negation() {
         ("fn f() -> U8 { return -(1); }", ObservedValue::U8(255)),
         ("fn f() -> U8 { return -(255); }", ObservedValue::U8(1)),
         ("fn f() -> I8 { return --1; }", ObservedValue::I8(1)),
-        ("fn f() -> I8 { return -(2 + 3) * 4; }", ObservedValue::I8(-20)),
-        ("fn f() -> I8 { return 2 + -(3 * 4); }", ObservedValue::I8(-10)),
+        (
+            "fn f() -> I8 { return -(2 + 3) * 4; }",
+            ObservedValue::I8(-20),
+        ),
+        (
+            "fn f() -> I8 { return 2 + -(3 * 4); }",
+            ObservedValue::I8(-10),
+        ),
     ] {
         let report = execute_source(source, "f");
         assert_eq!(report.terminal, TerminalStatus::Returned);
