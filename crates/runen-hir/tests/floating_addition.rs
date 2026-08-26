@@ -162,16 +162,34 @@ fn floating_literals_materialize_under_the_exact_receiving_format() {
         let (left, right) = float_add(returned_value(&hir, name), ty);
         match ty {
             IntrinsicType::F16 => {
-                assert!(matches!(left.kind, ValueKind::Literal(LiteralValue::F16(_))));
-                assert!(matches!(right.kind, ValueKind::Literal(LiteralValue::F16(_))));
+                assert!(matches!(
+                    left.kind,
+                    ValueKind::Literal(LiteralValue::F16(_))
+                ));
+                assert!(matches!(
+                    right.kind,
+                    ValueKind::Literal(LiteralValue::F16(_))
+                ));
             }
             IntrinsicType::F32 => {
-                assert!(matches!(left.kind, ValueKind::Literal(LiteralValue::F32(_))));
-                assert!(matches!(right.kind, ValueKind::Literal(LiteralValue::F32(_))));
+                assert!(matches!(
+                    left.kind,
+                    ValueKind::Literal(LiteralValue::F32(_))
+                ));
+                assert!(matches!(
+                    right.kind,
+                    ValueKind::Literal(LiteralValue::F32(_))
+                ));
             }
             IntrinsicType::F64 => {
-                assert!(matches!(left.kind, ValueKind::Literal(LiteralValue::F64(_))));
-                assert!(matches!(right.kind, ValueKind::Literal(LiteralValue::F64(_))));
+                assert!(matches!(
+                    left.kind,
+                    ValueKind::Literal(LiteralValue::F64(_))
+                ));
+                assert!(matches!(
+                    right.kind,
+                    ValueKind::Literal(LiteralValue::F64(_))
+                ));
             }
             _ => unreachable!(),
         }
