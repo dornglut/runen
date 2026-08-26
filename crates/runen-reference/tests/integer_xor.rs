@@ -3,7 +3,8 @@ use runen_core_ir::{
     Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{
-    ExecutionReport, Machine, TerminalStatus, VerificationEventKind, VerificationWriteKind,
+    ExecutionReport, Machine, ObservedValue, TerminalStatus, VerificationEventKind,
+    VerificationWriteKind,
 };
 
 fn execute_integer_xor(scalar: ScalarType, left: Value, right: Value) -> ExecutionReport {
@@ -58,48 +59,53 @@ fn execute_integer_xor(scalar: ScalarType, left: Value, right: Value) -> Executi
 #[test]
 fn integer_xor_executes_all_eight_fixed_width_integer_kinds() {
     let cases = [
-        (ScalarType::I8, Value::I8(-5), Value::I8(3), Value::I8(-8)),
+        (
+            ScalarType::I8,
+            Value::I8(-5),
+            Value::I8(3),
+            ObservedValue::I8(-8),
+        ),
         (
             ScalarType::I16,
             Value::I16(i16::MIN),
             Value::I16(-1),
-            Value::I16(i16::MAX),
+            ObservedValue::I16(i16::MAX),
         ),
         (
             ScalarType::I32,
             Value::I32(i32::MAX),
             Value::I32(-1),
-            Value::I32(i32::MIN),
+            ObservedValue::I32(i32::MIN),
         ),
         (
             ScalarType::I64,
             Value::I64(-1),
             Value::I64(0),
-            Value::I64(-1),
+            ObservedValue::I64(-1),
         ),
         (
             ScalarType::U8,
             Value::U8(0),
             Value::U8(u8::MAX),
-            Value::U8(u8::MAX),
+            ObservedValue::U8(u8::MAX),
         ),
         (
             ScalarType::U16,
             Value::U16(0x00ff),
             Value::U16(0x0f0f),
-            Value::U16(0x0ff0),
+            ObservedValue::U16(0x0ff0),
         ),
         (
             ScalarType::U32,
             Value::U32(0xaaaa_5555),
             Value::U32(0x0f0f_f0f0),
-            Value::U32(0xa5a5_a5a5),
+            ObservedValue::U32(0xa5a5_a5a5),
         ),
         (
             ScalarType::U64,
             Value::U64(42),
             Value::U64(15),
-            Value::U64(37),
+            ObservedValue::U64(37),
         ),
     ];
 
@@ -117,32 +123,37 @@ fn signed_xor_maps_canonical_residues_back_to_the_signed_domain() {
             ScalarType::I8,
             Value::I8(i8::MAX),
             Value::I8(-1),
-            Value::I8(i8::MIN),
+            ObservedValue::I8(i8::MIN),
         ),
         (
             ScalarType::I8,
             Value::I8(i8::MIN),
             Value::I8(-1),
-            Value::I8(i8::MAX),
+            ObservedValue::I8(i8::MAX),
         ),
-        (ScalarType::I8, Value::I8(-5), Value::I8(-3), Value::I8(6)),
+        (
+            ScalarType::I8,
+            Value::I8(-5),
+            Value::I8(-3),
+            ObservedValue::I8(6),
+        ),
         (
             ScalarType::I16,
             Value::I16(i16::MAX),
             Value::I16(-1),
-            Value::I16(i16::MIN),
+            ObservedValue::I16(i16::MIN),
         ),
         (
             ScalarType::I32,
             Value::I32(i32::MIN),
             Value::I32(-1),
-            Value::I32(i32::MAX),
+            ObservedValue::I32(i32::MAX),
         ),
         (
             ScalarType::I64,
             Value::I64(i64::MAX),
             Value::I64(-1),
-            Value::I64(i64::MIN),
+            ObservedValue::I64(i64::MIN),
         ),
     ];
 
