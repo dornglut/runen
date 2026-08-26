@@ -124,6 +124,8 @@ pub enum SyntaxKind {
     IntegerXorValue,
     Pipe,
     IntegerOrValue,
+    DotDot,
+    RecordPatternRest,
 }
 
 impl SyntaxKind {
@@ -284,6 +286,8 @@ impl Language for RunenLanguage {
             99 => SyntaxKind::IntegerXorValue,
             100 => SyntaxKind::Pipe,
             101 => SyntaxKind::IntegerOrValue,
+            102 => SyntaxKind::DotDot,
+            103 => SyntaxKind::RecordPatternRest,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
