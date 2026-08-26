@@ -68,8 +68,12 @@ fn float_add_rejects_non_floating_destination_with_specific_error() {
                 right: Operand::Constant(Value::Bool(false)),
             }],
         );
-        let error = validate_program(program).expect_err("non-floating destination must fail first");
-        assert_eq!(error.kind, MirValidationErrorKind::FloatAddRequiresFloat(ty));
+        let error =
+            validate_program(program).expect_err("non-floating destination must fail first");
+        assert_eq!(
+            error.kind,
+            MirValidationErrorKind::FloatAddRequiresFloat(ty)
+        );
     }
 }
 
@@ -258,7 +262,10 @@ fn float_add_evaluates_left_state_before_right_state() {
     );
 
     let error = validate_program(program).expect_err("right move observes the left move");
-    assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(source));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(source)
+    );
 }
 
 #[test]
@@ -280,5 +287,6 @@ fn float_add_result_becomes_live_once_after_both_operands() {
         ],
     );
 
-    validate_program(program).expect("successful FloatAdd initializes its destination exactly once");
+    validate_program(program)
+        .expect("successful FloatAdd initializes its destination exactly once");
 }
