@@ -34,14 +34,46 @@ fn execute_direct_result(scalar: ScalarType, value: Value) -> runen_reference::E
 #[test]
 fn entry_results_preserve_every_fixed_width_integer_variant() {
     let cases = [
-        (ScalarType::I8, Value::I8(i8::MIN), ObservedValue::I8(i8::MIN)),
-        (ScalarType::I16, Value::I16(i16::MIN), ObservedValue::I16(i16::MIN)),
-        (ScalarType::I32, Value::I32(i32::MIN), ObservedValue::I32(i32::MIN)),
-        (ScalarType::I64, Value::I64(i64::MIN), ObservedValue::I64(i64::MIN)),
-        (ScalarType::U8, Value::U8(u8::MAX), ObservedValue::U8(u8::MAX)),
-        (ScalarType::U16, Value::U16(u16::MAX), ObservedValue::U16(u16::MAX)),
-        (ScalarType::U32, Value::U32(u32::MAX), ObservedValue::U32(u32::MAX)),
-        (ScalarType::U64, Value::U64(u64::MAX), ObservedValue::U64(u64::MAX)),
+        (
+            ScalarType::I8,
+            Value::I8(i8::MIN),
+            ObservedValue::I8(i8::MIN),
+        ),
+        (
+            ScalarType::I16,
+            Value::I16(i16::MIN),
+            ObservedValue::I16(i16::MIN),
+        ),
+        (
+            ScalarType::I32,
+            Value::I32(i32::MIN),
+            ObservedValue::I32(i32::MIN),
+        ),
+        (
+            ScalarType::I64,
+            Value::I64(i64::MIN),
+            ObservedValue::I64(i64::MIN),
+        ),
+        (
+            ScalarType::U8,
+            Value::U8(u8::MAX),
+            ObservedValue::U8(u8::MAX),
+        ),
+        (
+            ScalarType::U16,
+            Value::U16(u16::MAX),
+            ObservedValue::U16(u16::MAX),
+        ),
+        (
+            ScalarType::U32,
+            Value::U32(u32::MAX),
+            ObservedValue::U32(u32::MAX),
+        ),
+        (
+            ScalarType::U64,
+            Value::U64(u64::MAX),
+            ObservedValue::U64(u64::MAX),
+        ),
     ];
 
     for (scalar, value, expected) in cases {
