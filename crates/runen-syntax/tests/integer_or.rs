@@ -213,7 +213,7 @@ fn or_preserves_tighter_signed_literal_prefix_additive_and_xor_boundaries() {
         .expect("xor");
     assert_eq!(
         xor.children().map(|node| node.kind()).collect::<Vec<_>>(),
-        [SyntaxKind::IntegerAddValue, SyntaxKind::IntegerNegValue]
+        [SyntaxKind::AddValue, SyntaxKind::IntegerNegValue]
     );
 
     let prefix_start = parse("fn f(a: I64) -> I64 { return |a; }");
@@ -267,6 +267,6 @@ fn or_does_not_widen_other_categories_and_no_pipe_source_keeps_existing_tree_sha
         .expect("existing XOR tree");
     assert_eq!(
         xor.children().map(|node| node.kind()).collect::<Vec<_>>(),
-        [SyntaxKind::IntegerAddValue, SyntaxKind::IntegerNegValue]
+        [SyntaxKind::AddValue, SyntaxKind::IntegerNegValue]
     );
 }
