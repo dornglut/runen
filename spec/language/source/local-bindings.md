@@ -107,7 +107,7 @@ Consequently:
 - a nested local cannot shadow an enclosing local;
 - two sequential locals in the same continuing lexical scope cannot reuse one key;
 - two bindings introduced by one pattern cannot share a key; and
-- disjoint sibling lexical scopes, including explicit sibling conditional arms, MAY independently introduce the same key because their scopes do not overlap.
+- disjoint sibling lexical scopes, including explicit sibling conditional arms, MAY independently introduce the same key because their binding scopes do not overlap.
 
 This prohibition applies only inside the function-local value-binding domain. A function-local binding key MAY equal a module-level declaration key.
 
