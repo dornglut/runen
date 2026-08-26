@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlockId, BinaryFloatValue, BorrowKind, FunctionId, LoanId, LocalId, Operand, Place,
-    PlaceAccess, Projection, ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator,
-    TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
+    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, Operand, Place, PlaceAccess, Projection,
+    ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind,
+    TypeTable, ValidatedProgram, Value,
 };
 
 use crate::floating_add::{RuntimeFloatValue, add_f16, add_f32, add_f64};
