@@ -300,8 +300,14 @@ fn source_to_hir_to_core_to_reference_proves_total_plain_integer_complement() {
         ("fn f() -> U8 { return ~1; }", ObservedValue::U8(254)),
         ("fn f() -> I8 { return ~~42; }", ObservedValue::I8(42)),
         ("fn f() -> U8 { return ~~200; }", ObservedValue::U8(200)),
-        ("fn f() -> I8 { return ~(2 + 3) * 4; }", ObservedValue::I8(-24)),
-        ("fn f() -> I8 { return 2 + ~(3 * 4); }", ObservedValue::I8(-11)),
+        (
+            "fn f() -> I8 { return ~(2 + 3) * 4; }",
+            ObservedValue::I8(-24),
+        ),
+        (
+            "fn f() -> I8 { return 2 + ~(3 * 4); }",
+            ObservedValue::I8(-11),
+        ),
         ("fn f() -> I8 { return -~1; }", ObservedValue::I8(2)),
     ] {
         let report = execute_source(source, "f");
