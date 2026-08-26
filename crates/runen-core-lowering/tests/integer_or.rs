@@ -282,7 +282,10 @@ fn source_to_hir_to_core_to_reference_proves_signed_unsigned_and_mixed_precedenc
         ("fn f() -> I8 { return 127 | -1; }", ObservedValue::I8(-1)),
         ("fn f() -> I8 { return -128 | 1; }", ObservedValue::I8(-127)),
         ("fn f() -> U8 { return 255 | 15; }", ObservedValue::U8(255)),
-        ("fn f() -> I8 { return 1 + 2 ^ 7 | 8; }", ObservedValue::I8(12)),
+        (
+            "fn f() -> I8 { return 1 + 2 ^ 7 | 8; }",
+            ObservedValue::I8(12),
+        ),
         ("fn f() -> I8 { return 8 | 1 ^ 3; }", ObservedValue::I8(10)),
         ("fn f() -> I8 { return (1 | 2) | 4; }", ObservedValue::I8(7)),
     ] {
