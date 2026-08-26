@@ -4,7 +4,7 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
-use runen_reference::{Machine, TerminalStatus};
+use runen_reference::{Machine, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -291,18 +291,18 @@ fn mixed_and_grouped_complement_lower_one_existing_subtraction_per_operation() {
 #[test]
 fn source_to_hir_to_core_to_reference_proves_total_plain_integer_complement() {
     for (source, expected) in [
-        ("fn f() -> I8 { return ~0; }", CoreValue::I8(-1)),
-        ("fn f() -> I8 { return ~-1; }", CoreValue::I8(0)),
-        ("fn f() -> I8 { return ~127; }", CoreValue::I8(-128)),
-        ("fn f() -> I8 { return ~-128; }", CoreValue::I8(127)),
-        ("fn f() -> U8 { return ~0; }", CoreValue::U8(255)),
-        ("fn f() -> U8 { return ~255; }", CoreValue::U8(0)),
-        ("fn f() -> U8 { return ~1; }", CoreValue::U8(254)),
-        ("fn f() -> I8 { return ~~42; }", CoreValue::I8(42)),
-        ("fn f() -> U8 { return ~~200; }", CoreValue::U8(200)),
-        ("fn f() -> I8 { return ~(2 + 3) * 4; }", CoreValue::I8(-24)),
-        ("fn f() -> I8 { return 2 + ~(3 * 4); }", CoreValue::I8(-11)),
-        ("fn f() -> I8 { return -~1; }", CoreValue::I8(2)),
+        ("fn f() -> I8 { return ~0; }", ObservedValue::I8(-1)),
+        ("fn f() -> I8 { return ~-1; }", ObservedValue::I8(0)),
+        ("fn f() -> I8 { return ~127; }", ObservedValue::I8(-128)),
+        ("fn f() -> I8 { return ~-128; }", ObservedValue::I8(127)),
+        ("fn f() -> U8 { return ~0; }", ObservedValue::U8(255)),
+        ("fn f() -> U8 { return ~255; }", ObservedValue::U8(0)),
+        ("fn f() -> U8 { return ~1; }", ObservedValue::U8(254)),
+        ("fn f() -> I8 { return ~~42; }", ObservedValue::I8(42)),
+        ("fn f() -> U8 { return ~~200; }", ObservedValue::U8(200)),
+        ("fn f() -> I8 { return ~(2 + 3) * 4; }", ObservedValue::I8(-24)),
+        ("fn f() -> I8 { return 2 + ~(3 * 4); }", ObservedValue::I8(-11)),
+        ("fn f() -> I8 { return -~1; }", ObservedValue::I8(2)),
     ] {
         let report = execute_source(source, "f");
         assert_eq!(report.terminal, TerminalStatus::Returned);
