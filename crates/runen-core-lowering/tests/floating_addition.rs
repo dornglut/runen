@@ -4,9 +4,7 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
-use runen_reference::{
-    Machine, ObservedBinaryFloatValue, ObservedValue, TerminalStatus,
-};
+use runen_reference::{Machine, ObservedBinaryFloatValue, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -76,7 +74,11 @@ fn float_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
     let lowered = lower_source("fn f(left: F32, right: F32) -> F32 { return left + right; }");
     let f = function(lowered.as_program(), "f");
 
-    assert_eq!(f.body.blocks.len(), 1, "plain floating addition adds no Core block");
+    assert_eq!(
+        f.body.blocks.len(),
+        1,
+        "plain floating addition adds no Core block"
+    );
     let additions = float_add_statements(f);
     assert_eq!(additions.len(), 1);
     assert!(
@@ -96,8 +98,16 @@ fn float_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
     assert_ne!(left_local, right_local);
     assert_ne!(dst.local, left_local);
     assert_ne!(dst.local, right_local);
-    assert!(f.body.locals[left_local.0 as usize].name.starts_with("$tmp"));
-    assert!(f.body.locals[right_local.0 as usize].name.starts_with("$tmp"));
+    assert!(
+        f.body.locals[left_local.0 as usize]
+            .name
+            .starts_with("$tmp")
+    );
+    assert!(
+        f.body.locals[right_local.0 as usize]
+            .name
+            .starts_with("$tmp")
+    );
     assert!(f.body.locals[dst.local.0 as usize].name.starts_with("$tmp"));
     assert!(left_local.0 < right_local.0);
     assert!(right_local.0 < dst.local.0);
@@ -279,10 +289,7 @@ fn source_to_hir_to_core_to_reference_executes_all_three_formats() {
 
 #[test]
 fn source_reachable_f16_finite_addition_can_overflow_to_infinity() {
-    let report = execute_source(
-        "fn f() -> F16 { return 65504.0 + 65504.0; }",
-        "f",
-    );
+    let report = execute_source("fn f() -> F16 { return 65504.0 + 65504.0; }", "f");
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(
         report.result,
