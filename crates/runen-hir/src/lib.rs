@@ -284,7 +284,7 @@ pub enum FieldValueReceiver {
     },
 }
 
-/// Resolved scrutinee category for the represented exhaustive record pattern.
+/// Resolved scrutinee category for the represented irrefutable record pattern.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordPatternScrutinee {
     /// Accepted bare binding root with direct per-leaf ownership semantics.
