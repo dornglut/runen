@@ -143,8 +143,7 @@ fn ungrouped_repeated_and_mixed_additive_chains_remain_invalid() {
         assert_eq!(parsed.text(), source);
         assert!(!parsed.errors().is_empty());
         assert_eq!(
-            count(&parsed, SyntaxKind::AddValue)
-                + count(&parsed, SyntaxKind::IntegerSubValue),
+            count(&parsed, SyntaxKind::AddValue) + count(&parsed, SyntaxKind::IntegerSubValue),
             1
         );
     }
