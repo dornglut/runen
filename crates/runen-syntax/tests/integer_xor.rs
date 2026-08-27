@@ -116,7 +116,7 @@ fn additive_binds_tighter_than_xor() {
         .expect("xor");
     assert_eq!(
         xor.children().map(|node| node.kind()).collect::<Vec<_>>(),
-        [SyntaxKind::IdentifierUse, SyntaxKind::IntegerSubValue]
+        [SyntaxKind::IdentifierUse, SyntaxKind::SubValue]
     );
 }
 

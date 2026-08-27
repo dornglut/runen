@@ -13,6 +13,7 @@ pub enum VerificationWriteKind {
     IntegerXor,
     IntegerOr,
     FloatAdd,
+    FloatSub,
     Assign,
     InteriorAssign,
     RawAssign,
@@ -79,7 +80,7 @@ pub enum UndefinedBehaviorKind {
     RawAssignConflictsWithLoan { target: StorageRegion, loan: LoanId },
 }
 
-mod floating_add;
+mod floating;
 mod interprocedural;
 pub use interprocedural::{
     ActivationId, EntryError, ExecutionReport, Machine, TerminalStatus, UndefinedBehavior,

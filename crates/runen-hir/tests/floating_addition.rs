@@ -142,7 +142,7 @@ fn stacked_numeric_contract_selection_is_rejected_by_typed_applicability() {
         .expect_err("stacked numeric-contract selectors are invalid");
     assert!(errors.iter().any(|error| {
         error.kind
-            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddition {
+            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddOrSub {
                 required: Type::Intrinsic(IntrinsicType::F32),
             }
     }));
@@ -162,7 +162,7 @@ fn selected_non_governed_roots_reject_before_operand_validation_or_consumption()
     .expect_err("selector cannot govern a call root");
     assert!(call_errors.iter().any(|error| {
         error.kind
-            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddition {
+            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddOrSub {
                 required: Type::Intrinsic(IntrinsicType::F32),
             }
     }));
@@ -176,7 +176,7 @@ fn selected_non_governed_roots_reject_before_operand_validation_or_consumption()
         .expect_err("selector cannot govern integer addition");
     assert!(integer_errors.iter().any(|error| {
         error.kind
-            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddition {
+            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddOrSub {
                 required: Type::Intrinsic(IntrinsicType::I32),
             }
     }));

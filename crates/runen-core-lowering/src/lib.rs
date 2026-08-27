@@ -1132,6 +1132,57 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(result)
             }
+            hir::ValueKind::FloatSub {
+                contract,
+                left,
+                right,
+            } => {
+                let float_ty = value.ty;
+                if !matches!(
+                    float_ty,
+                    hir::Type::Intrinsic(
+                        hir::IntrinsicType::F16 | hir::IntrinsicType::F32 | hir::IntrinsicType::F64
+                    )
+                ) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Float-sub result type is not a represented floating type",
+                    ));
+                }
+                if left.ty != float_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Float-sub left operand type does not match result type",
+                    ));
+                }
+                if right.ty != float_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Float-sub right operand type does not match result type",
+                    ));
+                }
+
+                let core_float_ty = self.types.get(float_ty)?;
+                let left_local = self.lower_value(left)?;
+                if self.local_type(left_local)? != core_float_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Float-sub left operand temporary type does not match result type",
+                    ));
+                }
+
+                let right_local = self.lower_value(right)?;
+                if self.local_type(right_local)? != core_float_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "lowered Float-sub right operand temporary type does not match result type",
+                    ));
+                }
+
+                let result = self.push_temporary(float_ty)?;
+                self.push_statement(core::Statement::FloatSub {
+                    contract: lower_numeric_contract(*contract),
+                    dst: core::Place::local(result),
+                    left: core::Operand::Move(core::Place::local(left_local).into()),
+                    right: core::Operand::Move(core::Place::local(right_local).into()),
+                });
+                Ok(result)
+            }
             hir::ValueKind::IntegerSub { left, right } => {
                 let integer_ty = value.ty;
                 if !matches!(

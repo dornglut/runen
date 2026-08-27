@@ -26,13 +26,13 @@ fn nontrivia_kinds(parsed: &Parse) -> Vec<SyntaxKind> {
 fn subtraction_syntax_kind_is_append_only_and_minus_is_reused_losslessly() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Minus).0, 57);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::AddValue).0, 89);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerSubValue).0, 90);
+    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::SubValue).0, 90);
 
     let source = "fn sub(a: I8, b: I8) -> I8 { return a /* left */ - /* right */ b; }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 1);
+    assert_eq!(count(&parsed, SyntaxKind::SubValue), 1);
     assert!(nontrivia_kinds(&parsed).contains(&SyntaxKind::Minus));
 }
 
@@ -63,7 +63,7 @@ fn subtraction_preserves_signed_literal_right_operand_with_or_without_whitespace
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-        assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 1);
+        assert_eq!(count(&parsed, SyntaxKind::SubValue), 1);
         assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 1);
         assert_eq!(
             nontrivia_kinds(&parsed)
@@ -105,7 +105,7 @@ fn additive_tier_selects_operation_specific_nodes_between_prefix_and_equality() 
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 2);
+    assert_eq!(count(&parsed, SyntaxKind::SubValue), 2);
     assert_eq!(count(&parsed, SyntaxKind::AddValue), 1);
     assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 1);
 
@@ -117,13 +117,13 @@ fn additive_tier_selects_operation_specific_nodes_between_prefix_and_equality() 
     assert!(
         equality
             .children()
-            .any(|node| node.kind() == SyntaxKind::IntegerSubValue)
+            .any(|node| node.kind() == SyntaxKind::SubValue)
     );
 
     let first_sub = parsed
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerSubValue)
+        .find(|node| node.kind() == SyntaxKind::SubValue)
         .expect("subtraction node");
     assert!(
         first_sub
@@ -143,7 +143,7 @@ fn ungrouped_repeated_and_mixed_additive_chains_remain_invalid() {
         assert_eq!(parsed.text(), source);
         assert!(!parsed.errors().is_empty());
         assert_eq!(
-            count(&parsed, SyntaxKind::AddValue) + count(&parsed, SyntaxKind::IntegerSubValue),
+            count(&parsed, SyntaxKind::AddValue) + count(&parsed, SyntaxKind::SubValue),
             1
         );
     }
@@ -156,7 +156,7 @@ fn grouping_represents_explicit_nested_addition_and_subtraction_trees() {
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::AddValue), 3);
-    assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 5);
+    assert_eq!(count(&parsed, SyntaxKind::SubValue), 5);
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 4);
 }
 
@@ -172,7 +172,7 @@ fn choose(flag: Bool) {
     let valid = parse(valid_source);
     assert_eq!(valid.text(), valid_source);
     assert!(valid.errors().is_empty(), "{:?}", valid.errors());
-    assert_eq!(count(&valid, SyntaxKind::IntegerSubValue), 2);
+    assert_eq!(count(&valid, SyntaxKind::SubValue), 2);
     assert_eq!(count(&valid, SyntaxKind::RecordConstruction), 2);
     assert_eq!(count(&valid, SyntaxKind::FieldValueUse), 2);
 
@@ -195,14 +195,14 @@ fn subtraction_does_not_widen_field_receivers_or_pattern_scrutinees() {
     assert_eq!(field.text(), field_source);
     assert!(!field.errors().is_empty());
     assert_eq!(count(&field, SyntaxKind::FieldValueUse), 0);
-    assert_eq!(count(&field, SyntaxKind::IntegerSubValue), 1);
+    assert_eq!(count(&field, SyntaxKind::SubValue), 1);
 
     let pattern_source =
         "record Pair { left: I8 } fn bad(a: Pair, b: Pair) { let Pair { left: x } = a - b; }";
     let pattern = parse(pattern_source);
     assert_eq!(pattern.text(), pattern_source);
     assert!(!pattern.errors().is_empty());
-    assert_eq!(count(&pattern, SyntaxKind::IntegerSubValue), 0);
+    assert_eq!(count(&pattern, SyntaxKind::SubValue), 0);
 }
 
 #[test]
