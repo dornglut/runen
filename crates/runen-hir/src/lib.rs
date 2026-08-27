@@ -303,6 +303,14 @@ pub enum BooleanEqualityRelation {
     NotEqual,
 }
 
+/// Numeric contract selected for one governed numeric operation occurrence.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NumericContract {
+    Standard,
+    Reproducible,
+    Fast,
+}
+
 /// Resolved producer for one typed HIR value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
@@ -321,6 +329,7 @@ pub enum ValueKind {
         right: Box<Value>,
     },
     FloatAdd {
+        contract: NumericContract,
         left: Box<Value>,
         right: Box<Value>,
     },
@@ -532,6 +541,7 @@ pub enum DiagnosticKind {
     IntegerNegationRequiresInteger { required: Type },
     IntegerComplementRequiresInteger { required: Type },
     AdditionRequiresIntegerOrFloating { required: Type },
+    NumericContractSelectionRequiresFloatingAddition { required: Type },
     IntegerSubtractionRequiresInteger { required: Type },
     IntegerMultiplicationRequiresInteger { required: Type },
     IntegerXorRequiresInteger { required: Type },

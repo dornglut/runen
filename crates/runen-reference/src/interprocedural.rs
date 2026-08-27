@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, Operand, Place, PlaceAccess, Projection,
-    ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind,
-    TypeTable, ValidatedProgram, Value,
+    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, NumericContract, Operand, Place,
+    PlaceAccess, Projection, ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator,
+    TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
 };
 
 use crate::floating_add::{RuntimeFloatValue, add_f16, add_f32, add_f64};
@@ -258,7 +258,15 @@ impl RuntimeValue {
         }
     }
 
-    fn floating_add(left: Self, right: Self) -> Self {
+    fn floating_add(contract: NumericContract, left: Self, right: Self) -> Self {
+        match contract {
+            NumericContract::Standard => Self::standard_floating_add(left, right),
+            NumericContract::Reproducible => Self::standard_floating_add(left, right),
+            NumericContract::Fast => Self::standard_floating_add(left, right),
+        }
+    }
+
+    fn standard_floating_add(left: Self, right: Self) -> Self {
         match (left, right) {
             (Self::F16(left), Self::F16(right)) => Self::F16(add_f16(left, right)),
             (Self::F32(left), Self::F32(right)) => Self::F32(add_f32(left, right)),
@@ -640,9 +648,12 @@ impl Machine {
             Statement::IntegerOr { dst, left, right } => {
                 self.integer_or(frame_index, dst, left, right)
             }
-            Statement::FloatAdd { dst, left, right } => {
-                self.float_add(frame_index, dst, left, right)
-            }
+            Statement::FloatAdd {
+                contract,
+                dst,
+                left,
+                right,
+            } => self.float_add(frame_index, *contract, dst, left, right),
             Statement::Borrow { loan, kind, src } => {
                 self.begin_borrow(frame_index, *loan, *kind, src);
                 Ok(())
@@ -856,6 +867,7 @@ impl Machine {
     fn float_add(
         &mut self,
         frame_index: usize,
+        contract: NumericContract,
         dst: &Place,
         left: &Operand,
         right: &Operand,
@@ -863,7 +875,7 @@ impl Machine {
         let dst_ty = self.place_type(frame_index, dst);
         let left = self.evaluate_operand(frame_index, left)?;
         let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::floating_add(left, right);
+        let value = RuntimeValue::floating_add(contract, left, right);
         {
             let types = &self.program.as_program().types;
             let frame = &mut self.frames[frame_index];

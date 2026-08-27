@@ -126,6 +126,8 @@ pub enum SyntaxKind {
     IntegerOrValue,
     DotDot,
     RecordPatternRest,
+    At,
+    NumericContractSelectedValue,
 }
 
 impl SyntaxKind {
@@ -169,6 +171,7 @@ impl SyntaxKind {
                 | Self::Bang
                 | Self::Tilde
                 | Self::LParen
+                | Self::At
         )
     }
 }
@@ -288,6 +291,8 @@ impl Language for RunenLanguage {
             101 => SyntaxKind::IntegerOrValue,
             102 => SyntaxKind::DotDot,
             103 => SyntaxKind::RecordPatternRest,
+            104 => SyntaxKind::At,
+            105 => SyntaxKind::NumericContractSelectedValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

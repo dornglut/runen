@@ -2,8 +2,9 @@ mod support;
 
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, BorrowKind, LoanDecl,
-    LoanId, LocalDecl, LocalId, MirValidationErrorKind, Operand, Place, PlaceAccess, Program,
-    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    LoanId, LocalDecl, LocalId, MirValidationErrorKind, NumericContract, Operand, Place,
+    PlaceAccess, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
+    validate_program,
 };
 use support::one_function_program;
 
@@ -30,23 +31,31 @@ fn zero_value(scalar: ScalarType) -> Value {
 }
 
 #[test]
-fn float_add_accepts_all_three_scalar_kinds_and_immutable_vacant_destinations() {
+fn float_add_accepts_all_three_scalar_kinds_all_contracts_and_immutable_vacant_destinations() {
     for (index, scalar) in [ScalarType::F16, ScalarType::F32, ScalarType::F64]
         .into_iter()
         .enumerate()
     {
-        let mut types = TypeTable::new();
-        let ty = types.push(TypeDef::scalar(format!("float-{index}"), scalar));
-        let program = one_block(
-            types,
-            vec![LocalDecl::new("result", ty, false)],
-            vec![Statement::FloatAdd {
-                dst: Place::local(LocalId(0)),
-                left: Operand::Constant(zero_value(scalar)),
-                right: Operand::Constant(zero_value(scalar)),
-            }],
-        );
-        validate_program(program).expect("represented same-format FloatAdd must validate");
+        for contract in [
+            NumericContract::Standard,
+            NumericContract::Reproducible,
+            NumericContract::Fast,
+        ] {
+            let mut types = TypeTable::new();
+            let ty = types.push(TypeDef::scalar(format!("float-{index}"), scalar));
+            let program = one_block(
+                types,
+                vec![LocalDecl::new("result", ty, false)],
+                vec![Statement::FloatAdd {
+                    contract,
+                    dst: Place::local(LocalId(0)),
+                    left: Operand::Constant(zero_value(scalar)),
+                    right: Operand::Constant(zero_value(scalar)),
+                }],
+            );
+            validate_program(program)
+                .expect("represented same-format FloatAdd contract must validate");
+        }
     }
 }
 
@@ -63,6 +72,7 @@ fn float_add_rejects_non_floating_destination_with_specific_error() {
             types,
             vec![LocalDecl::new("result", ty, false)],
             vec![Statement::FloatAdd {
+                contract: NumericContract::Standard,
                 dst: Place::local(LocalId(0)),
                 left: Operand::Constant(Value::Bool(false)),
                 right: Operand::Constant(Value::Bool(false)),
@@ -97,6 +107,7 @@ fn float_add_requires_exact_destination_type_identity_for_both_operands() {
                 ))),
             },
             Statement::FloatAdd {
+                contract: NumericContract::Standard,
                 dst: Place::local(LocalId(0)),
                 left: Operand::Move(source.into()),
                 right: Operand::Constant(Value::F32(BinaryFloatValue::Zero(
@@ -135,6 +146,7 @@ fn float_add_rejects_cross_format_operand() {
                 ))),
             },
             Statement::FloatAdd {
+                contract: NumericContract::Standard,
                 dst: Place::local(LocalId(0)),
                 left: Operand::Move(source.into()),
                 right: Operand::Constant(Value::F32(BinaryFloatValue::Zero(
@@ -170,6 +182,7 @@ fn float_add_checks_vacancy_before_operand_state() {
                 src: Operand::Constant(zero.clone()),
             },
             Statement::FloatAdd {
+                contract: NumericContract::Standard,
                 dst: destination.clone(),
                 left: Operand::Move(missing.into()),
                 right: Operand::Constant(zero),
@@ -215,6 +228,7 @@ fn float_add_checks_direct_destination_authority_before_operands() {
                         src: Operand::Move(PlaceAccess::loan(LoanId(0))),
                     },
                     Statement::FloatAdd {
+                        contract: NumericContract::Standard,
                         dst: destination.clone(),
                         left: Operand::Move(Place::local(LocalId(1)).into()),
                         right: Operand::Constant(zero),
@@ -254,6 +268,7 @@ fn float_add_evaluates_left_state_before_right_state() {
                 src: Operand::Constant(zero),
             },
             Statement::FloatAdd {
+                contract: NumericContract::Standard,
                 dst: result,
                 left: Operand::Move(source.clone().into()),
                 right: Operand::Move(source.clone().into()),
@@ -279,6 +294,7 @@ fn float_add_result_becomes_live_once_after_both_operands() {
         vec![LocalDecl::new("result", f32_ty, false)],
         vec![
             Statement::FloatAdd {
+                contract: NumericContract::Standard,
                 dst: result.clone(),
                 left: Operand::Constant(zero.clone()),
                 right: Operand::Constant(zero),
