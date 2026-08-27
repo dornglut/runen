@@ -1081,7 +1081,11 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(result)
             }
-            hir::ValueKind::FloatAdd { left, right } => {
+            hir::ValueKind::FloatAdd {
+                contract,
+                left,
+                right,
+            } => {
                 let float_ty = value.ty;
                 if !matches!(
                     float_ty,
@@ -1121,6 +1125,7 @@ impl<'a> FunctionLowerer<'a> {
 
                 let result = self.push_temporary(float_ty)?;
                 self.push_statement(core::Statement::FloatAdd {
+                    contract: lower_numeric_contract(*contract),
                     dst: core::Place::local(result),
                     left: core::Operand::Move(core::Place::local(left_local).into()),
                     right: core::Operand::Move(core::Place::local(right_local).into()),
@@ -1887,6 +1892,14 @@ fn lower_float_sign(sign: hir::BinaryFloatSign) -> core::BinaryFloatSign {
     match sign {
         hir::BinaryFloatSign::Positive => core::BinaryFloatSign::Positive,
         hir::BinaryFloatSign::Negative => core::BinaryFloatSign::Negative,
+    }
+}
+
+fn lower_numeric_contract(contract: hir::NumericContract) -> core::NumericContract {
+    match contract {
+        hir::NumericContract::Standard => core::NumericContract::Standard,
+        hir::NumericContract::Reproducible => core::NumericContract::Reproducible,
+        hir::NumericContract::Fast => core::NumericContract::Fast,
     }
 }
 

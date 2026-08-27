@@ -1,6 +1,6 @@
 use runen_hir::{
-    Diagnostic, DiagnosticKind, IntrinsicType, LiteralValue, ModuleId, OwnedUse, SourceUnit,
-    Statement, Type, TypedCompilation, Value, ValueKind, build_typed_hir,
+    Diagnostic, DiagnosticKind, IntrinsicType, LiteralValue, ModuleId, NumericContract, OwnedUse,
+    SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -29,14 +29,28 @@ fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("missing returned value for {name}"))
 }
 
-fn float_add(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
+fn float_add_with_contract(
+    value: &Value,
+    ty: IntrinsicType,
+) -> (NumericContract, &Value, &Value) {
     let expected = Type::Intrinsic(ty);
     assert_eq!(value.ty, expected);
-    let ValueKind::FloatAdd { left, right } = &value.kind else {
+    let ValueKind::FloatAdd {
+        contract,
+        left,
+        right,
+    } = &value.kind
+    else {
         panic!("expected FloatAdd HIR value");
     };
     assert_eq!(left.ty, expected);
     assert_eq!(right.ty, expected);
+    (*contract, left, right)
+}
+
+fn float_add(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
+    let (contract, left, right) = float_add_with_contract(value, ty);
+    assert_eq!(contract, NumericContract::Standard);
     (left, right)
 }
 
@@ -48,7 +62,7 @@ fn unavailable_count(errors: &[Diagnostic]) -> usize {
 }
 
 #[test]
-fn all_three_floating_formats_retain_distinct_float_add_hir() {
+fn all_three_floating_formats_retain_distinct_standard_float_add_hir() {
     let hir = build(
         "fn f16_add(a: F16, b: F16) -> F16 { return a + b; } \
          fn f32_add(a: F32, b: F32) -> F32 { return a + b; } \
@@ -77,6 +91,98 @@ fn all_three_floating_formats_retain_distinct_float_add_hir() {
             }
         ));
     }
+}
+
+#[test]
+fn fast_selector_retain_fast_contract_in_all_three_floating_formats() {
+    let hir = build(
+        "fn f16_add(a: F16, b: F16) -> F16 { return @fast(a + b); } \
+         fn f32_add(a: F32, b: F32) -> F32 { return @fast((a + b)); } \
+         fn f64_add(a: F64, b: F64) -> F64 { return @ fast (((a + b))); }",
+    )
+    .expect("operation-local fast floating additions are valid");
+
+    for (name, ty) in [
+        ("f16_add", IntrinsicType::F16),
+        ("f32_add", IntrinsicType::F32),
+        ("f64_add", IntrinsicType::F64),
+    ] {
+        let (contract, left, right) = float_add_with_contract(returned_value(&hir, name), ty);
+        assert_eq!(contract, NumericContract::Fast);
+        assert!(matches!(left.kind, ValueKind::BindingUse { .. }));
+        assert!(matches!(right.kind, ValueKind::BindingUse { .. }));
+    }
+}
+
+#[test]
+fn numeric_contract_selection_is_strictly_operation_local() {
+    let hir = build(
+        "fn fast_root(a: F32, b: F32, c: F32) -> F32 { \
+             return @fast(a + (b + c)); \
+         } \
+         fn fast_child(a: F32, b: F32, c: F32) -> F32 { \
+             return a + @fast(b + c); \
+         }",
+    )
+    .expect("mixed operation-local contracts are valid");
+
+    let (outer_contract, _, inner) =
+        float_add_with_contract(returned_value(&hir, "fast_root"), IntrinsicType::F32);
+    assert_eq!(outer_contract, NumericContract::Fast);
+    let (inner_contract, _, _) = float_add_with_contract(inner, IntrinsicType::F32);
+    assert_eq!(inner_contract, NumericContract::Standard);
+
+    let (outer_contract, _, inner) =
+        float_add_with_contract(returned_value(&hir, "fast_child"), IntrinsicType::F32);
+    assert_eq!(outer_contract, NumericContract::Standard);
+    let (inner_contract, _, _) = float_add_with_contract(inner, IntrinsicType::F32);
+    assert_eq!(inner_contract, NumericContract::Fast);
+}
+
+#[test]
+fn stacked_numeric_contract_selection_is_rejected_by_typed_applicability() {
+    let errors = build("fn f(a: F32, b: F32) -> F32 { return @fast(@fast(a + b)); }")
+        .expect_err("stacked numeric-contract selectors are invalid");
+    assert!(errors.iter().any(|error| {
+        error.kind
+            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddition {
+                required: Type::Intrinsic(IntrinsicType::F32),
+            }
+    }));
+}
+
+#[test]
+fn selected_non_governed_roots_reject_before_operand_validation_or_consumption() {
+    let call_errors = build(
+        "record Ticket {} \
+         fn take(value: Ticket) -> F32 { return 1.0; } \
+         fn sink(value: Ticket) {} \
+         fn f(value: Ticket) { \
+             let wrong: F32 = @fast(take(value)); \
+             sink(value); \
+         }",
+    )
+    .expect_err("selector cannot govern a call root");
+    assert!(call_errors.iter().any(|error| {
+        error.kind
+            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddition {
+                required: Type::Intrinsic(IntrinsicType::F32),
+            }
+    }));
+    assert_eq!(
+        unavailable_count(&call_errors),
+        0,
+        "selector applicability must reject before a contained call can consume"
+    );
+
+    let integer_errors = build("fn f(a: I32, b: I32) -> I32 { return @fast(a + b); }")
+        .expect_err("selector cannot govern integer addition");
+    assert!(integer_errors.iter().any(|error| {
+        error.kind
+            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddition {
+                required: Type::Intrinsic(IntrinsicType::I32),
+            }
+    }));
 }
 
 #[test]
@@ -142,6 +248,33 @@ fn failed_floating_right_operand_rolls_back_successful_left_consumption() {
         unavailable_count(&errors),
         0,
         "failed two-operand validation must not commit left consumption"
+    );
+}
+
+#[test]
+fn failed_fast_floating_right_operand_rolls_back_successful_left_consumption() {
+    let errors = build(
+        "record Ticket {} \
+         fn take(value: Ticket) -> F32 { return 1.0; } \
+         fn sink(value: Ticket) {} \
+         fn f(value: Ticket) { \
+             let sum: F32 = @fast(take(value) + true); \
+             sink(value); \
+         }",
+    )
+    .expect_err("selected right operand must have exact F32 type");
+
+    assert!(errors.iter().any(|error| {
+        error.kind
+            == DiagnosticKind::TypeMismatch {
+                expected: Type::Intrinsic(IntrinsicType::F32),
+                found: Type::Intrinsic(IntrinsicType::Bool),
+            }
+    }));
+    assert_eq!(
+        unavailable_count(&errors),
+        0,
+        "failed selected two-operand validation must not commit left consumption"
     );
 }
 
@@ -256,13 +389,13 @@ fn floating_addition_flows_through_existing_generic_value_consumers() {
          fn sink(value: F32) {} \
          fn f(a: F32, b: F32) -> F32 { \
              let mut local: F32 = a + b; \
-             local = a + b; \
+             local = @fast(a + b); \
              sink(a + b); \
-             let boxed: Boxed = Boxed { value: a + b }; \
+             let boxed: Boxed = Boxed { value: @fast(a + b) }; \
              return boxed.value + b; \
          }",
     )
-    .expect("FloatAdd composes through generic Value consumers");
+    .expect("FloatAdd contracts compose through generic Value consumers");
 
     let f = function(&hir, "f");
     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
@@ -273,7 +406,10 @@ fn floating_addition_flows_through_existing_generic_value_consumers() {
     let Statement::Assignment { value, .. } = &f.body.statements[1] else {
         panic!("expected assignment");
     };
-    float_add(value, IntrinsicType::F32);
+    assert_eq!(
+        float_add_with_contract(value, IntrinsicType::F32).0,
+        NumericContract::Fast
+    );
 
     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
         panic!("expected call statement");
@@ -286,7 +422,10 @@ fn floating_addition_flows_through_existing_generic_value_consumers() {
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
         panic!("expected record construction");
     };
-    float_add(&fields[0].value, IntrinsicType::F32);
+    assert_eq!(
+        float_add_with_contract(&fields[0].value, IntrinsicType::F32).0,
+        NumericContract::Fast
+    );
 
     float_add(returned_value(&hir, "f"), IntrinsicType::F32);
 }

@@ -1,9 +1,12 @@
 use runen_core_ir::{
-    BinaryFloatSign, BinaryFloatValue, FunctionId, LocalId, Operand, PlaceAccess,
-    Statement as CoreStatement, Terminator, ValidatedProgram,
+    BinaryFloatSign, BinaryFloatValue, FunctionId, LocalId, NumericContract as CoreNumericContract,
+    Operand, PlaceAccess, Statement as CoreStatement, Terminator, ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
+use runen_hir::{
+    IntrinsicType, ModuleId, NumericContract as HirNumericContract, SourceUnit, Type, ValueKind,
+    build_typed_hir,
+};
 use runen_reference::{Machine, ObservedBinaryFloatValue, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
@@ -46,6 +49,13 @@ fn float_add_statements(function: &runen_core_ir::Function) -> Vec<&CoreStatemen
         .collect()
 }
 
+fn float_add_contract(statement: &CoreStatement) -> CoreNumericContract {
+    let CoreStatement::FloatAdd { contract, .. } = statement else {
+        panic!("expected Core FloatAdd");
+    };
+    *contract
+}
+
 fn execute_source(source: &str, entry_name: &str) -> runen_reference::ExecutionReport {
     let lowered = lower_source(source);
     let entry_index = lowered
@@ -70,7 +80,7 @@ fn represented_normal(significand: u64, exponent: i16) -> ObservedBinaryFloatVal
 }
 
 #[test]
-fn float_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
+fn float_add_lowers_to_one_fresh_standard_result_with_move_operands_and_no_cfg() {
     let lowered = lower_source("fn f(left: F32, right: F32) -> F32 { return left + right; }");
     let f = function(lowered.as_program(), "f");
 
@@ -81,6 +91,10 @@ fn float_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
     );
     let additions = float_add_statements(f);
     assert_eq!(additions.len(), 1);
+    assert_eq!(
+        float_add_contract(additions[0]),
+        CoreNumericContract::Standard
+    );
     assert!(
         f.body
             .blocks
@@ -89,7 +103,10 @@ fn float_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
             .all(|statement| !matches!(statement, CoreStatement::IntegerAdd { .. })),
         "floating source addition must not refine to Core IntegerAdd"
     );
-    let CoreStatement::FloatAdd { dst, left, right } = additions[0] else {
+    let CoreStatement::FloatAdd {
+        dst, left, right, ..
+    } = additions[0]
+    else {
         unreachable!();
     };
     assert!(dst.projections.is_empty());
@@ -125,11 +142,71 @@ fn float_add_lowers_to_one_fresh_result_with_move_operands_and_no_cfg() {
 }
 
 #[test]
+fn numeric_contracts_lower_one_to_one_without_redefaulting() {
+    let standard = lower_source("fn f(a: F32, b: F32) -> F32 { return a + b; }");
+    assert_eq!(
+        float_add_contract(float_add_statements(function(standard.as_program(), "f"))[0]),
+        CoreNumericContract::Standard
+    );
+
+    let fast = lower_source("fn f(a: F32, b: F32) -> F32 { return @fast(a + b); }");
+    assert_eq!(
+        float_add_contract(float_add_statements(function(fast.as_program(), "f"))[0]),
+        CoreNumericContract::Fast
+    );
+
+    let mut reproducible = hir("fn f(a: F32, b: F32) -> F32 { return a + b; }");
+    let value = reproducible.functions[0]
+        .body
+        .terminal_return
+        .as_mut()
+        .and_then(|returned| returned.value.as_mut())
+        .expect("return value");
+    let ValueKind::FloatAdd { contract, .. } = &mut value.kind else {
+        panic!("expected float-add HIR value");
+    };
+    *contract = HirNumericContract::Reproducible;
+    let reproducible = lower(&reproducible).expect("valid Reproducible HIR must lower");
+    assert_eq!(
+        float_add_contract(float_add_statements(function(reproducible.as_program(), "f"))[0]),
+        CoreNumericContract::Reproducible
+    );
+}
+
+#[test]
+fn mixed_contract_nested_additions_preserve_each_occurrence() {
+    let lowered = lower_source(
+        "fn fast_root(a: F32, b: F32, c: F32) -> F32 { return @fast(a + (b + c)); } \
+         fn fast_child(a: F32, b: F32, c: F32) -> F32 { return a + @fast(b + c); }",
+    );
+
+    let fast_root = float_add_statements(function(lowered.as_program(), "fast_root"));
+    assert_eq!(fast_root.len(), 2);
+    assert_eq!(
+        fast_root
+            .iter()
+            .map(|statement| float_add_contract(statement))
+            .collect::<Vec<_>>(),
+        vec![CoreNumericContract::Standard, CoreNumericContract::Fast]
+    );
+
+    let fast_child = float_add_statements(function(lowered.as_program(), "fast_child"));
+    assert_eq!(fast_child.len(), 2);
+    assert_eq!(
+        fast_child
+            .iter()
+            .map(|statement| float_add_contract(statement))
+            .collect::<Vec<_>>(),
+        vec![CoreNumericContract::Fast, CoreNumericContract::Standard]
+    );
+}
+
+#[test]
 fn call_operands_lower_complete_left_then_right_before_float_add() {
     let lowered = lower_source(
         "fn left() -> F32 { return 1.0; } \
          fn right() -> F32 { return 2.0; } \
-         fn f() -> F32 { return left() + right(); }",
+         fn f() -> F32 { return @fast(left() + right()); }",
     );
     let f = function(lowered.as_program(), "f");
 
@@ -159,7 +236,11 @@ fn call_operands_lower_complete_left_then_right_before_float_add() {
         .filter(|statement| matches!(statement, CoreStatement::FloatAdd { .. }))
         .collect::<Vec<_>>();
     assert_eq!(additions.len(), 1);
-    let CoreStatement::FloatAdd { dst, left, right } = additions[0] else {
+    assert_eq!(float_add_contract(additions[0]), CoreNumericContract::Fast);
+    let CoreStatement::FloatAdd {
+        dst, left, right, ..
+    } = additions[0]
+    else {
         unreachable!();
     };
     assert_eq!(moved_local(left), Some(left_destination.local));
@@ -194,6 +275,9 @@ fn grouped_nested_float_additions_lower_one_core_add_per_hir_addition() {
     for name in ["left", "right"] {
         let function = function(lowered.as_program(), name);
         assert_eq!(float_add_statements(function).len(), 2);
+        assert!(float_add_statements(function)
+            .iter()
+            .all(|statement| float_add_contract(statement) == CoreNumericContract::Standard));
         assert_eq!(function.body.blocks.len(), 1);
         assert!(
             function
@@ -264,7 +348,7 @@ fn lowering_rejects_float_add_operand_type_facts_that_do_not_match_result() {
 }
 
 #[test]
-fn source_to_hir_to_core_to_reference_executes_all_three_formats() {
+fn source_to_hir_to_core_to_reference_executes_standard_and_fast_all_three_formats() {
     let cases = [
         (
             "fn f() -> F16 { return 1.0 + 1.0; }",
@@ -276,6 +360,18 @@ fn source_to_hir_to_core_to_reference_executes_all_three_formats() {
         ),
         (
             "fn f() -> F64 { return 1.0 + 1.0; }",
+            ObservedValue::F64(represented_normal(1_u64 << 52, 1)),
+        ),
+        (
+            "fn f() -> F16 { return @fast(1.0 + 1.0); }",
+            ObservedValue::F16(represented_normal(1_u64 << 10, 1)),
+        ),
+        (
+            "fn f() -> F32 { return @fast(1.0 + 1.0); }",
+            ObservedValue::F32(represented_normal(1_u64 << 23, 1)),
+        ),
+        (
+            "fn f() -> F64 { return @fast(1.0 + 1.0); }",
             ObservedValue::F64(represented_normal(1_u64 << 52, 1)),
         ),
     ];

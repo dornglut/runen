@@ -1,7 +1,8 @@
 use rowan::{GreenNode, GreenNodeBuilder};
 
 use crate::{
-    ExpectedSyntax, SyntaxError, SyntaxErrorKind, SyntaxKind, lexer::LexToken, text_range,
+    ExpectedSyntax, SyntaxError, SyntaxErrorKind, SyntaxKind, identifier_key, lexer::LexToken,
+    text_range,
 };
 
 const TOP_LEVEL_STARTERS: &[SyntaxKind] = &[
@@ -774,6 +775,11 @@ impl Parser<'_> {
 
     fn parse_value_in(&mut self, context: ValueContext) {
         match self.current() {
+            Some(SyntaxKind::At)
+                if matches!(context, ValueContext::Ordinary) && self.at_fast_selector_start() =>
+            {
+                self.parse_numeric_contract_selected_value();
+            }
             Some(SyntaxKind::Bang) => self.parse_boolean_not_value(context),
             Some(SyntaxKind::Tilde) => self.parse_integer_complement_value(context),
             Some(SyntaxKind::LParen) => self.parse_grouped_value(context),
@@ -900,6 +906,25 @@ impl Parser<'_> {
                 }
             }
         }
+    }
+
+    fn parse_numeric_contract_selected_value(&mut self) {
+        debug_assert!(self.at_fast_selector_start());
+        self.builder
+            .start_node(SyntaxKind::NumericContractSelectedValue.into());
+        self.expect(SyntaxKind::At, ExpectedSyntax::Value);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if !self.expect(SyntaxKind::LParen, ExpectedSyntax::LeftParen) {
+            self.builder.finish_node();
+            return;
+        }
+        if self.group_inner_value_is_missing() {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
+        } else {
+            self.parse_value();
+        }
+        self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
+        self.builder.finish_node();
     }
 
     fn parse_boolean_not_value(&mut self, context: ValueContext) {
@@ -1229,12 +1254,27 @@ impl Parser<'_> {
             .map(|token| token.kind)
     }
 
-    fn peek_nontrivia(&self, index: usize) -> Option<SyntaxKind> {
+    fn peek_nontrivia_token(&self, index: usize) -> Option<LexToken> {
         self.tokens[self.position..]
             .iter()
             .filter(|token| !token.kind.is_trivia())
             .nth(index)
-            .map(|token| token.kind)
+            .copied()
+    }
+
+    fn peek_nontrivia(&self, index: usize) -> Option<SyntaxKind> {
+        self.peek_nontrivia_token(index).map(|token| token.kind)
+    }
+
+    fn at_fast_selector_start(&self) -> bool {
+        if self.current() != Some(SyntaxKind::At) {
+            return false;
+        }
+        let Some(token) = self.peek_nontrivia_token(1) else {
+            return false;
+        };
+        token.kind == SyntaxKind::Ident
+            && identifier_key(&self.source[token.start..token.end]).as_deref() == Some("fast")
     }
 
     fn at(&self, kind: SyntaxKind) -> bool {

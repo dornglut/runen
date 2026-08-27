@@ -536,7 +536,9 @@ fn validate_static_statement(
             validate_operand_type(types, body, left, expected, point)?;
             validate_operand_type(types, body, right, expected, point)
         }
-        Statement::FloatAdd { dst, left, right } => {
+        Statement::FloatAdd {
+            dst, left, right, ..
+        } => {
             let expected = place_type(types, body, dst, point)?;
             if !is_float_type(types, expected) {
                 return Err(point_error(
@@ -1218,7 +1220,9 @@ fn validate_state_statement(
             let value = unknown_validation_value(types, dst_ty);
             write_validation_value(types, dst_ty, place_state_mut(locals, dst), value);
         }
-        Statement::FloatAdd { dst, left, right } => {
+        Statement::FloatAdd {
+            dst, left, right, ..
+        } => {
             authorize_direct_access(active_loans, dst, AccessRequirement::Exclusive, point)?;
             if !place_state(locals, dst).wholly_vacant() {
                 return Err(point_error(

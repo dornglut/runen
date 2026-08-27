@@ -508,6 +508,14 @@ pub enum Operand {
     AddressOf(PlaceAccess),
 }
 
+/// Numeric contract selected for one governed Core numeric operation occurrence.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum NumericContract {
+    Standard,
+    Reproducible,
+    Fast,
+}
+
 /// Core MIR operations represented by the current proving kernel.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Statement {
@@ -543,11 +551,12 @@ pub enum Statement {
         left: Operand,
         right: Operand,
     },
-    /// Standard same-format binary floating addition into wholly vacant direct storage.
+    /// Same-format binary floating addition under one explicit numeric contract.
     FloatAdd {
         dst: Place,
         left: Operand,
         right: Operand,
+        contract: NumericContract,
     },
     /// Begins a root borrow from direct access or a child borrow from loan access.
     Borrow {

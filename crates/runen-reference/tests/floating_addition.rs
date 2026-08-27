@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, FunctionId,
-    LocalDecl, LocalId, Operand, Place, Program, ScalarType, Statement, Terminator, TypeDef,
-    TypeTable, Value, validate_program,
+    LocalDecl, LocalId, NumericContract, Operand, Place, Program, ScalarType, Statement, Terminator,
+    TypeDef, TypeTable, Value, validate_program,
 };
 use runen_numeric_oracle::{
     BinaryFormat, NumericOracleError, RoundedBinaryValue, Sign, SumReductionResult,
@@ -30,7 +30,8 @@ fn observed(scalar: ScalarType, value: ObservedBinaryFloatValue) -> ObservedValu
     }
 }
 
-fn execute_float_add(
+fn execute_float_add_with_contract(
+    contract: NumericContract,
     scalar: ScalarType,
     left: BinaryFloatValue,
     right: BinaryFloatValue,
@@ -50,6 +51,7 @@ fn execute_float_add(
                 entry: BasicBlockId(0),
                 blocks: vec![BasicBlock::new(
                     vec![Statement::FloatAdd {
+                        contract,
                         dst: result.clone(),
                         left: Operand::Constant(constant(scalar, left)),
                         right: Operand::Constant(constant(scalar, right)),
@@ -64,6 +66,26 @@ fn execute_float_add(
         .expect("entry has zero parameters")
         .execute()
         .expect("safe FloatAdd execution is defined")
+}
+
+fn execute_float_add(
+    scalar: ScalarType,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+) -> runen_reference::ExecutionReport {
+    execute_float_add_with_contract(NumericContract::Standard, scalar, left, right)
+}
+
+fn assert_add_with_contract(
+    contract: NumericContract,
+    scalar: ScalarType,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+    expected: ObservedBinaryFloatValue,
+) {
+    let report = execute_float_add_with_contract(contract, scalar, left, right);
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(observed(scalar, expected)));
 }
 
 fn assert_add(
@@ -109,6 +131,52 @@ fn exact_addition_executes_in_all_three_formats() {
             ObservedBinaryFloatValue::Represented(positive_normal(one, 1)),
         );
     }
+}
+
+#[test]
+fn all_numeric_contracts_execute_the_explicit_reference_representative() {
+    let one = positive_normal(1_u64 << 23, 0);
+    let expected = ObservedBinaryFloatValue::Represented(positive_normal(1_u64 << 23, 1));
+    for contract in [
+        NumericContract::Standard,
+        NumericContract::Reproducible,
+        NumericContract::Fast,
+    ] {
+        assert_add_with_contract(contract, ScalarType::F32, one, one, expected.clone());
+    }
+}
+
+#[test]
+fn fast_reference_representative_preserves_subnormal_inputs_results_and_sign() {
+    let positive_minimum = BinaryFloatValue::Subnormal {
+        sign: BinaryFloatSign::Positive,
+        significand: 1,
+    };
+    assert_add_with_contract(
+        NumericContract::Fast,
+        ScalarType::F16,
+        positive_minimum,
+        positive_minimum,
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Subnormal {
+            sign: BinaryFloatSign::Positive,
+            significand: 2,
+        }),
+    );
+
+    let negative_minimum = BinaryFloatValue::Subnormal {
+        sign: BinaryFloatSign::Negative,
+        significand: 1,
+    };
+    assert_add_with_contract(
+        NumericContract::Fast,
+        ScalarType::F16,
+        negative_minimum,
+        negative_minimum,
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Subnormal {
+            sign: BinaryFloatSign::Negative,
+            significand: 2,
+        }),
+    );
 }
 
 #[test]
@@ -194,6 +262,13 @@ fn extreme_f64_exponent_gap_is_complete_without_oracle_capacity() {
         minimum_subnormal,
         ObservedBinaryFloatValue::Represented(maximum),
     );
+    assert_add_with_contract(
+        NumericContract::Fast,
+        ScalarType::F64,
+        maximum,
+        minimum_subnormal,
+        ObservedBinaryFloatValue::Represented(maximum),
+    );
 }
 
 #[test]
@@ -267,6 +342,7 @@ fn produced_nan_survives_copy_move_and_later_float_add() {
                 blocks: vec![BasicBlock::new(
                     vec![
                         Statement::FloatAdd {
+                            contract: NumericContract::Standard,
                             dst: first.clone(),
                             left: Operand::Constant(Value::F32(BinaryFloatValue::Infinity(
                                 BinaryFloatSign::Positive,
@@ -280,6 +356,7 @@ fn produced_nan_survives_copy_move_and_later_float_add() {
                             src: Operand::Copy(first.into()),
                         },
                         Statement::FloatAdd {
+                            contract: NumericContract::Fast,
                             dst: result.clone(),
                             left: Operand::Move(copied.into()),
                             right: Operand::Constant(Value::F32(positive_normal(1_u64 << 23, 0))),
@@ -328,6 +405,7 @@ fn nan_class_round_trips_through_call_argument_and_result() {
             blocks: vec![
                 BasicBlock::new(
                     vec![Statement::FloatAdd {
+                        contract: NumericContract::Reproducible,
                         dst: Place::local(LocalId(0)),
                         left: Operand::Constant(Value::F32(BinaryFloatValue::Infinity(
                             BinaryFloatSign::Positive,
@@ -409,6 +487,7 @@ fn struct_transport_preserves_nan_class_without_member_identity() {
                 blocks: vec![BasicBlock::new(
                     vec![
                         Statement::FloatAdd {
+                            contract: NumericContract::Fast,
                             dst: nan.clone(),
                             left: Operand::Constant(Value::F32(BinaryFloatValue::Infinity(
                                 BinaryFloatSign::Positive,
@@ -480,6 +559,7 @@ fn operand_effects_precede_exactly_one_float_add_write() {
                             src: Operand::Constant(Value::F32(one)),
                         },
                         Statement::FloatAdd {
+                            contract: NumericContract::Fast,
                             dst: result.clone(),
                             left: Operand::Move(left.clone().into()),
                             right: Operand::Move(right.clone().into()),
