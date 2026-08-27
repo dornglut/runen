@@ -229,7 +229,7 @@ The admissibility test is applied to `t`, not directly to `x`. A finite source w
 
 Both `+0` and `-0` convert to integer `0`; this section introduces no integer zero-sign distinction.
 
-By the contract-refinement rules, `reproducible` and `fast` follow this `standard` finite in-range conversion unless a later contract-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not alter the source value for this conversion.
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` finite in-range conversion unless a later conversion-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not alter the source value for this conversion.
 
 This section by itself does not define the conversion outcome when the source is NaN or signed infinity, or when truncation produces an integer outside the destination interval. The non-NaN cases are extended by the clamping rule below, and the NaN case is defined by the subsequent NaN conversion rule.
 
@@ -268,7 +268,7 @@ For the same already-admitted binary-floating-to-fixed-width-integer conversion 
 
 This result is independent of which semantic NaN member is supplied. Every source NaN member converts to integer zero; this rule does not inspect or infer a NaN sign, payload, signaling state, preferred or canonical identity, or physical representation.
 
-By the contract-refinement rules, `reproducible` and `fast` follow this `standard` NaN conversion result unless a later contract-specific rule explicitly narrows or relaxes it. Backend `nnan`, poison or undefined behavior, host-language casts, target conversion conventions, and physical NaN encodings do not alter the result.
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` NaN conversion result unless a later conversion-specific rule explicitly narrows or relaxes it. Backend `nnan`, poison or undefined behavior, host-language casts, target conversion conventions, and physical NaN encodings do not alter the result.
 
 Together with the finite and non-NaN clamping rules above, this defines the numerical result of the already-admitted binary-floating-to-fixed-width-integer conversion for every source floating value class.
 
