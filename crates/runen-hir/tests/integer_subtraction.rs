@@ -112,11 +112,11 @@ fn non_integer_outer_requirement_rejects_before_operand_validation_or_consumptio
              sink(value); \
          }",
     )
-    .expect_err("integer subtraction cannot satisfy Bool");
+    .expect_err("subtraction cannot satisfy Bool");
 
     assert!(has_diagnostic(
         &errors,
-        DiagnosticKind::IntegerSubtractionRequiresInteger {
+        DiagnosticKind::SubtractionRequiresIntegerOrFloating {
             required: Type::Intrinsic(IntrinsicType::Bool),
         }
     ));

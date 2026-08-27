@@ -64,6 +64,18 @@ pub(super) fn add_f64(left: RuntimeFloatValue, right: RuntimeFloatValue) -> Runt
     add_standard(F64, left, right)
 }
 
+pub(super) fn sub_f16(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    sub_standard(F16, left, right)
+}
+
+pub(super) fn sub_f32(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    sub_standard(F32, left, right)
+}
+
+pub(super) fn sub_f64(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    sub_standard(F64, left, right)
+}
+
 fn add_standard(
     format: FloatFormat,
     left: RuntimeFloatValue,
@@ -75,6 +87,21 @@ fn add_standard(
         }
         (RuntimeFloatValue::Represented(left), RuntimeFloatValue::Represented(right)) => {
             add_represented(format, left, right)
+        }
+    }
+}
+
+fn sub_standard(
+    format: FloatFormat,
+    left: RuntimeFloatValue,
+    right: RuntimeFloatValue,
+) -> RuntimeFloatValue {
+    match (left, right) {
+        (RuntimeFloatValue::NaNClass, _) | (_, RuntimeFloatValue::NaNClass) => {
+            RuntimeFloatValue::NaNClass
+        }
+        (RuntimeFloatValue::Represented(left), RuntimeFloatValue::Represented(right)) => {
+            sub_represented(format, left, right)
         }
     }
 }
@@ -107,6 +134,59 @@ fn add_represented(
     }
 }
 
+fn sub_represented(
+    format: FloatFormat,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+) -> RuntimeFloatValue {
+    use BinaryFloatSign::{Negative, Positive};
+    use BinaryFloatValue::{Infinity, Zero};
+
+    match (left, right) {
+        (Zero(Negative), Zero(Positive)) => RuntimeFloatValue::Represented(Zero(Negative)),
+        (Zero(_), Zero(_)) => RuntimeFloatValue::Represented(Zero(Positive)),
+        (Infinity(left_sign), Infinity(right_sign)) if left_sign != right_sign => {
+            RuntimeFloatValue::Represented(Infinity(left_sign))
+        }
+        (Infinity(_), Infinity(_)) => RuntimeFloatValue::NaNClass,
+        (Infinity(left_sign), _) => RuntimeFloatValue::Represented(Infinity(left_sign)),
+        (_, Infinity(right_sign)) => {
+            RuntimeFloatValue::Represented(Infinity(opposite_sign(right_sign)))
+        }
+        (Zero(_), right) => RuntimeFloatValue::Represented(opposite_nonzero_finite_sign(right)),
+        (left, Zero(_)) => RuntimeFloatValue::Represented(left),
+        (left, right) => sub_nonzero_finite(format, left, right),
+    }
+}
+
+fn opposite_sign(sign: BinaryFloatSign) -> BinaryFloatSign {
+    match sign {
+        BinaryFloatSign::Positive => BinaryFloatSign::Negative,
+        BinaryFloatSign::Negative => BinaryFloatSign::Positive,
+    }
+}
+
+fn opposite_nonzero_finite_sign(value: BinaryFloatValue) -> BinaryFloatValue {
+    match value {
+        BinaryFloatValue::Subnormal { sign, significand } => BinaryFloatValue::Subnormal {
+            sign: opposite_sign(sign),
+            significand,
+        },
+        BinaryFloatValue::Normal {
+            sign,
+            significand,
+            exponent,
+        } => BinaryFloatValue::Normal {
+            sign: opposite_sign(sign),
+            significand,
+            exponent,
+        },
+        BinaryFloatValue::Zero(_) | BinaryFloatValue::Infinity(_) => {
+            unreachable!("subtraction special values are handled before finite sign reversal")
+        }
+    }
+}
+
 fn add_nonzero_finite(
     format: FloatFormat,
     left: BinaryFloatValue,
@@ -121,6 +201,34 @@ fn add_nonzero_finite(
         match left_magnitude.cmp(&right_magnitude) {
             Ordering::Greater => (left_sign, left_magnitude.sub(&right_magnitude)),
             Ordering::Less => (right_sign, right_magnitude.sub(&left_magnitude)),
+            Ordering::Equal => {
+                return RuntimeFloatValue::Represented(BinaryFloatValue::Zero(
+                    BinaryFloatSign::Positive,
+                ));
+            }
+        }
+    };
+
+    RuntimeFloatValue::Represented(round_exact_magnitude(format, sign, &magnitude))
+}
+
+fn sub_nonzero_finite(
+    format: FloatFormat,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+) -> RuntimeFloatValue {
+    let (left_sign, left_magnitude) = exact_finite_magnitude(format, left);
+    let (right_sign, right_magnitude) = exact_finite_magnitude(format, right);
+
+    let (sign, magnitude) = if left_sign != right_sign {
+        (left_sign, left_magnitude.add(&right_magnitude))
+    } else {
+        match left_magnitude.cmp(&right_magnitude) {
+            Ordering::Greater => (left_sign, left_magnitude.sub(&right_magnitude)),
+            Ordering::Less => (
+                opposite_sign(left_sign),
+                right_magnitude.sub(&left_magnitude),
+            ),
             Ordering::Equal => {
                 return RuntimeFloatValue::Represented(BinaryFloatValue::Zero(
                     BinaryFloatSign::Positive,
@@ -151,7 +259,7 @@ fn exact_finite_magnitude(
             (sign, ExactMagnitude::from_shifted(significand, shift))
         }
         BinaryFloatValue::Zero(_) | BinaryFloatValue::Infinity(_) => {
-            unreachable!("special floating values are handled before exact finite addition")
+            unreachable!("special floating values are handled before exact finite arithmetic")
         }
     }
 }
@@ -163,7 +271,7 @@ fn round_exact_magnitude(
 ) -> BinaryFloatValue {
     let highest = magnitude
         .highest_bit()
-        .expect("nonzero finite addition result has one highest bit");
+        .expect("nonzero finite arithmetic result has one highest bit");
     let normal_threshold_bit = format.precision - 1;
 
     if highest < normal_threshold_bit {
@@ -254,7 +362,7 @@ impl ExactMagnitude {
         }
         assert!(
             !carry,
-            "F16/F32/F64 exact addition fits the proven 2112-bit carrier"
+            "F16/F32/F64 exact magnitude arithmetic fits the proven 2112-bit carrier"
         );
         Self(result)
     }

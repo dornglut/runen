@@ -27,7 +27,7 @@ fn multiplication_syntax_kinds_are_append_only() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Minus).0, 57);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Plus).0, 88);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::AddValue).0, 89);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerSubValue).0, 90);
+    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::SubValue).0, 90);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Star).0, 91);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerMulValue).0, 92);
 }
@@ -165,7 +165,7 @@ fn grouping_explicitly_repeats_or_overrides_multiplicative_nesting() {
         assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), multiplications);
         assert_eq!(count(&parsed, SyntaxKind::AddValue), additions);
         if source.contains("b - c") {
-            assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 1);
+            assert_eq!(count(&parsed, SyntaxKind::SubValue), 1);
         }
     }
 }

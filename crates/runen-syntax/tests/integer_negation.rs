@@ -62,7 +62,7 @@ fn binary_subtraction_with_negative_literal_is_not_reinterpreted() {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-        assert_eq!(count(&parsed, SyntaxKind::IntegerSubValue), 1);
+        assert_eq!(count(&parsed, SyntaxKind::SubValue), 1);
         assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 1);
         assert_eq!(count(&parsed, SyntaxKind::IntegerNegValue), 0);
     }

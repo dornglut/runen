@@ -558,6 +558,13 @@ pub enum Statement {
         right: Operand,
         contract: NumericContract,
     },
+    /// Same-format binary floating subtraction under one explicit numeric contract.
+    FloatSub {
+        dst: Place,
+        left: Operand,
+        right: Operand,
+        contract: NumericContract,
+    },
     /// Begins a root borrow from direct access or a child borrow from loan access.
     Borrow {
         loan: LoanId,

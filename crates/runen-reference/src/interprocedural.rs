@@ -4,7 +4,7 @@ use runen_core_ir::{
     TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
 };
 
-use crate::floating_add::{RuntimeFloatValue, add_f16, add_f32, add_f64};
+use crate::floating::{RuntimeFloatValue, add_f16, add_f32, add_f64, sub_f16, sub_f32, sub_f64};
 use crate::{ObservedValue, RawPointerValue, UndefinedBehaviorKind, VerificationWriteKind};
 
 /// Verification-only identity of one dynamic function activation.
@@ -272,6 +272,23 @@ impl RuntimeValue {
             (Self::F32(left), Self::F32(right)) => Self::F32(add_f32(left, right)),
             (Self::F64(left), Self::F64(right)) => Self::F64(add_f64(left, right)),
             _ => unreachable!("validated FloatAdd has matching same-format floating operands"),
+        }
+    }
+
+    fn floating_sub(contract: NumericContract, left: Self, right: Self) -> Self {
+        match contract {
+            NumericContract::Standard => Self::standard_floating_sub(left, right),
+            NumericContract::Reproducible => Self::standard_floating_sub(left, right),
+            NumericContract::Fast => Self::standard_floating_sub(left, right),
+        }
+    }
+
+    fn standard_floating_sub(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::F16(left), Self::F16(right)) => Self::F16(sub_f16(left, right)),
+            (Self::F32(left), Self::F32(right)) => Self::F32(sub_f32(left, right)),
+            (Self::F64(left), Self::F64(right)) => Self::F64(sub_f64(left, right)),
+            _ => unreachable!("validated FloatSub has matching same-format floating operands"),
         }
     }
 
@@ -654,6 +671,12 @@ impl Machine {
                 left,
                 right,
             } => self.float_add(frame_index, *contract, dst, left, right),
+            Statement::FloatSub {
+                contract,
+                dst,
+                left,
+                right,
+            } => self.float_sub(frame_index, *contract, dst, left, right),
             Statement::Borrow { loan, kind, src } => {
                 self.begin_borrow(frame_index, *loan, *kind, src);
                 Ok(())
@@ -891,6 +914,38 @@ impl Machine {
             VerificationEventKind::Write {
                 place: dst.clone(),
                 kind: VerificationWriteKind::FloatAdd,
+            },
+        );
+        Ok(())
+    }
+
+    fn float_sub(
+        &mut self,
+        frame_index: usize,
+        contract: NumericContract,
+        dst: &Place,
+        left: &Operand,
+        right: &Operand,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        let dst_ty = self.place_type(frame_index, dst);
+        let left = self.evaluate_operand(frame_index, left)?;
+        let right = self.evaluate_operand(frame_index, right)?;
+        let value = RuntimeValue::floating_sub(contract, left, right);
+        {
+            let types = &self.program.as_program().types;
+            let frame = &mut self.frames[frame_index];
+            write_value(
+                types,
+                dst_ty,
+                place_state_mut(&mut frame.locals, dst),
+                value,
+            );
+        }
+        self.record(
+            frame_index,
+            VerificationEventKind::Write {
+                place: dst.clone(),
+                kind: VerificationWriteKind::FloatSub,
             },
         );
         Ok(())

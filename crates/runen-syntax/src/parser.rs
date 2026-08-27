@@ -746,7 +746,7 @@ impl Parser<'_> {
         self.parse_multiplicative_value(context);
         let operation = match self.current() {
             Some(SyntaxKind::Plus) => Some(SyntaxKind::AddValue),
-            Some(SyntaxKind::Minus) => Some(SyntaxKind::IntegerSubValue),
+            Some(SyntaxKind::Minus) => Some(SyntaxKind::SubValue),
             _ => None,
         };
         if let Some(operation) = operation {
