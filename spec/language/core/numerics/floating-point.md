@@ -153,7 +153,7 @@ Under `standard`, cases already covered by finite basic arithmetic and its round
 
 - infinity divided by a nonzero finite value or signed zero produces `+∞` when the operand signs are equal and `-∞` when they are opposite;
 - a nonzero finite value divided by signed zero produces `+∞` when the operand signs are equal and `-∞` when they are opposite;
-- a nonzero finite value or signed zero divided by infinity produces `+0` when the operand signs are equal and `-0` when the operand signs are opposite.
+- a nonzero finite value or signed zero divided by infinity produces `+0` when the operand signs are equal and `-0` when they are opposite.
 
 By the contract-refinement rules, `reproducible` and `fast` follow these determinate special-value rules unless a later contract-specific rule explicitly narrows or relaxes the named numerical behavior. Backend `nnan`, `ninf`, `nsz`, aggregate fast-math behavior, physical floating exception behavior, or target latitude supplies no implicit Runen relaxation.
 
@@ -229,7 +229,7 @@ The admissibility test is applied to `t`, not directly to `x`. A finite source w
 
 Both `+0` and `-0` convert to integer `0`; this section introduces no integer zero-sign distinction.
 
-By the contract-refinement rules, `reproducible` and `fast` follow this `standard` finite in-range conversion unless a later conversion-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not alter the source value for this conversion.
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` finite in-range conversion unless a later contract-specific rule explicitly narrows or relaxes it. The `fast` subnormal input- and result-flushing permissions below apply only to the basic floating `+`, `-`, `*`, and `/` operation occurrences they name and do not alter the source value for this conversion.
 
 This section by itself does not define the conversion outcome when the source is NaN or signed infinity, or when truncation produces an integer outside the destination interval. The non-NaN cases are extended by the clamping rule below, and the NaN case is defined by the subsequent NaN conversion rule.
 
@@ -268,7 +268,7 @@ For the same already-admitted binary-floating-to-fixed-width-integer conversion 
 
 This result is independent of which semantic NaN member is supplied. Every source NaN member converts to integer zero; this rule does not inspect or infer a NaN sign, payload, signaling state, preferred or canonical identity, or physical representation.
 
-By the contract-refinement rules, `reproducible` and `fast` follow this `standard` NaN conversion result unless a later conversion-specific rule explicitly narrows or relaxes it. Backend `nnan`, poison or undefined behavior, host-language casts, target conversion conventions, and physical NaN encodings do not alter the result.
+By the contract-refinement rules, `reproducible` and `fast` follow this `standard` NaN conversion result unless a later contract-specific rule explicitly narrows or relaxes it. Backend `nnan`, poison or undefined behavior, host-language casts, target conversion conventions, and physical NaN encodings do not alter the result.
 
 Together with the finite and non-NaN clamping rules above, this defines the numerical result of the already-admitted binary-floating-to-fixed-width-integer conversion for every source floating value class.
 
@@ -426,7 +426,7 @@ By the contract-refinement rules, `reproducible` and `fast` follow this `standar
 
 A realization MAY use a native or library sine implementation only when it proves that the produced semantic result satisfies this contract, and MAY emulate when needed to preserve the selected contract. Backend approximate-function flags, shader accuracy latitude, host math-library behavior, target-native range reduction, or aggregate fast-math modes are not semantic authority and do not widen the permitted result.
 
-This section does not define cosine, exponential, logarithmic, power, or another transcendental operation; a sine-specific `fast` approximation contract; source function syntax or library placement; vector forms, constant evaluation; a physical range-reduction algorithm; compiler IR; backend instructions; or target taxonomy.
+This section does not define cosine, exponential, logarithmic, power, or another transcendental operation; a sine-specific `fast` approximation contract; source function syntax or library placement; vector forms; constant evaluation; a physical range-reduction algorithm; compiler IR; backend instructions; or target taxonomy.
 
 ## Finite unordered floating sum reduction
 
@@ -593,4 +593,4 @@ This `fast` reassociation permission does not by itself authorize operand permut
 
 Reassociation under this section is not authority to choose an Exec unordered-reduction tree or to treat floating addition or multiplication as satisfying a reduction combination law. The separate fast tree-rounded sum rule above owns the specific tree/permutation latitude it grants. Its internal nodes deliberately use the baseline `standard` addition relation and are not represented basic-operation occurrences to which neighboring basic-operation numeric-contract selections propagate. Exec reduction participation, contribution coverage, and combination obligations remain independently applicable.
 
-NaN equality/comparison/hash/order and representation-sensitive identity, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior outside the correctly rounded sine baseline above, exact-zero sign outside the basic operations defined above, subnormal handling outside the `fast` basic input/result rules above, other reduction-specific numeric behavior outside the same-format unordered sum and explicit fast tree-rounded rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
+NaN equality/comparison/hash/order and representation-sensitive identity, operation semantics outside the basic `+`, `-`, `*`, and `/` relations above, contraction outside the finite multiply-add case above, including exact-zero and special-value cases and multiply-subtract variants, transcendental behavior outside the correctly rounded sine baseline above, exact-zero sign outside the basic operations above, subnormal handling outside the `fast` basic input/result rules above, other reduction-specific numeric behavior outside the same-format unordered sum and explicit fast tree-rounded rules above, the remaining detailed `standard`/`reproducible`/`fast` result sets, explicit source contract selection and scoping, and the concrete hard requirements for unsupported direct realization are not defined by this revision.
