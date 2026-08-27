@@ -275,9 +275,11 @@ fn grouped_nested_float_additions_lower_one_core_add_per_hir_addition() {
     for name in ["left", "right"] {
         let function = function(lowered.as_program(), name);
         assert_eq!(float_add_statements(function).len(), 2);
-        assert!(float_add_statements(function)
-            .iter()
-            .all(|statement| float_add_contract(statement) == CoreNumericContract::Standard));
+        assert!(
+            float_add_statements(function)
+                .iter()
+                .all(|statement| float_add_contract(statement) == CoreNumericContract::Standard)
+        );
         assert_eq!(function.body.blocks.len(), 1);
         assert!(
             function

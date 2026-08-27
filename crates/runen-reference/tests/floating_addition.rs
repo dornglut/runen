@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, FunctionId,
-    LocalDecl, LocalId, NumericContract, Operand, Place, Program, ScalarType, Statement, Terminator,
-    TypeDef, TypeTable, Value, validate_program,
+    LocalDecl, LocalId, NumericContract, Operand, Place, Program, ScalarType, Statement,
+    Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_numeric_oracle::{
     BinaryFormat, NumericOracleError, RoundedBinaryValue, Sign, SumReductionResult,

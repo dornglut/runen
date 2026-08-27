@@ -30,9 +30,11 @@ fn parses_lossless_operation_local_fast_selector_with_trivia() {
         .filter_map(|element| element.into_token())
         .collect::<Vec<_>>();
     assert!(tokens.iter().any(|token| token.kind() == SyntaxKind::At));
-    assert!(tokens
-        .iter()
-        .any(|token| token.kind() == SyntaxKind::Ident && token.text() == "fast"));
+    assert!(
+        tokens
+            .iter()
+            .any(|token| token.kind() == SyntaxKind::Ident && token.text() == "fast")
+    );
 }
 
 #[test]
@@ -45,12 +47,14 @@ fn fast_remains_an_ordinary_identifier_away_from_selector_position() {
         node_count(&parsed, SyntaxKind::NumericContractSelectedValue),
         0
     );
-    assert!(parsed
-        .syntax()
-        .descendants_with_tokens()
-        .filter_map(|element| element.into_token())
-        .filter(|token| token.text() == "fast")
-        .all(|token| token.kind() == SyntaxKind::Ident));
+    assert!(
+        parsed
+            .syntax()
+            .descendants_with_tokens()
+            .filter_map(|element| element.into_token())
+            .filter(|token| token.text() == "fast")
+            .all(|token| token.kind() == SyntaxKind::Ident)
+    );
 }
 
 #[test]
@@ -68,9 +72,7 @@ fn stacked_fast_selectors_are_represented_for_typed_rejection() {
 #[test]
 fn standard_and_reproducible_are_not_source_selectors() {
     for selector in ["standard", "reproducible"] {
-        let source = format!(
-            "fn f(a: F32, b: F32) -> F32 {{ return @{selector}(a + b); }}"
-        );
+        let source = format!("fn f(a: F32, b: F32) -> F32 {{ return @{selector}(a + b); }}");
         let parsed = parse(&source);
         assert_eq!(parsed.text(), source);
         assert!(!parsed.errors().is_empty());

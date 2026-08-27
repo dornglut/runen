@@ -29,10 +29,7 @@ fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
         .unwrap_or_else(|| panic!("missing returned value for {name}"))
 }
 
-fn float_add_with_contract(
-    value: &Value,
-    ty: IntrinsicType,
-) -> (NumericContract, &Value, &Value) {
+fn float_add_with_contract(value: &Value, ty: IntrinsicType) -> (NumericContract, &Value, &Value) {
     let expected = Type::Intrinsic(ty);
     assert_eq!(value.ty, expected);
     let ValueKind::FloatAdd {
