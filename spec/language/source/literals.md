@@ -156,7 +156,7 @@ Decimal floating literal formation has one deterministic semantic result and doe
 
 This literal owner consumes the accepted binary floating rounding relation directly for literal formation. Numeric-contract refinements or relaxations apply only where their canonical operation owners explicitly say they do. In particular, `fast` permissions for subnormal handling, reassociation, contraction, reduced precision, or other named operation behavior do not re-form, flush, or reinterpret an already materialized literal value.
 
-A later source syntax/scoping owner for numeric-contract selection must preserve the materialized literal value defined here. Backend fast-math settings, target floating modes, and host parsing are not additional semantic input.
+The represented operation-local numeric-contract selector preserves the materialized literal value defined here. A selected-value form whose directly contained root after ordinary grouping is a literal is source-invalid rather than making that literal contract-sensitive. Backend fast-math settings, target floating modes, and host parsing are not additional semantic input.
 
 ## Floating infinity and NaN boundary
 
