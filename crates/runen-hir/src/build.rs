@@ -1655,7 +1655,7 @@ fn validate_record_pattern_node(
             .map(|entity| entity.entity)
         {
             Some(EntityId::Record(record)) => record,
-            Some(EntityId::Function(_) => {
+            Some(EntityId::Function(_)) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
