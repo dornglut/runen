@@ -407,9 +407,7 @@ fn lower_normal_subnormal_boundary_and_underflow_midpoint_round_ties_to_even() {
         ScalarType::F16,
         minimum_subnormal,
         two,
-        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(
-            BinaryFloatSign::Positive,
-        )),
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Positive)),
     );
     assert_div(
         ScalarType::F16,
@@ -420,7 +418,8 @@ fn lower_normal_subnormal_boundary_and_underflow_midpoint_round_ties_to_even() {
 }
 
 #[test]
-fn finite_overflow_boundary_and_extreme_f64_ranges_are_complete_without_oracle_capacity_dependency() {
+fn finite_overflow_boundary_and_extreme_f64_ranges_are_complete_without_oracle_capacity_dependency()
+{
     let f16_maximum = positive_normal(2047, 15);
     assert_div(
         ScalarType::F16,
@@ -450,9 +449,7 @@ fn finite_overflow_boundary_and_extreme_f64_ranges_are_complete_without_oracle_c
         ScalarType::F64,
         f64_minimum_subnormal,
         f64_maximum,
-        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(
-            BinaryFloatSign::Positive,
-        )),
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Positive)),
     );
     assert_div(
         ScalarType::F64,
@@ -473,20 +470,14 @@ fn fast_reference_representative_preserves_subnormal_results_and_sign() {
         ScalarType::F16,
         minimum_normal,
         two,
-        ObservedBinaryFloatValue::Represented(signed_subnormal(
-            BinaryFloatSign::Positive,
-            512,
-        )),
+        ObservedBinaryFloatValue::Represented(signed_subnormal(BinaryFloatSign::Positive, 512)),
     );
     assert_div_with_contract(
         NumericContract::Fast,
         ScalarType::F16,
         negative_normal(1024, -14),
         two,
-        ObservedBinaryFloatValue::Represented(signed_subnormal(
-            BinaryFloatSign::Negative,
-            512,
-        )),
+        ObservedBinaryFloatValue::Represented(signed_subnormal(BinaryFloatSign::Negative, 512)),
     );
 }
 
