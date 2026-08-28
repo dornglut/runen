@@ -197,15 +197,24 @@ fn float_mul_contracts_are_occurrence_local_for_nested_multiplication() {
 
     let (outer, _, inner) = float_mul(returned_value(&hir, "fast_root"), IntrinsicType::F32);
     assert_eq!(outer, NumericContract::Fast);
-    assert_eq!(float_mul(inner, IntrinsicType::F32).0, NumericContract::Standard);
+    assert_eq!(
+        float_mul(inner, IntrinsicType::F32).0,
+        NumericContract::Standard
+    );
 
     let (outer, _, inner) = float_mul(returned_value(&hir, "fast_child"), IntrinsicType::F32);
     assert_eq!(outer, NumericContract::Standard);
-    assert_eq!(float_mul(inner, IntrinsicType::F32).0, NumericContract::Fast);
+    assert_eq!(
+        float_mul(inner, IntrinsicType::F32).0,
+        NumericContract::Fast
+    );
 
     let (outer, _, inner) = float_mul(returned_value(&hir, "both_fast"), IntrinsicType::F32);
     assert_eq!(outer, NumericContract::Fast);
-    assert_eq!(float_mul(inner, IntrinsicType::F32).0, NumericContract::Fast);
+    assert_eq!(
+        float_mul(inner, IntrinsicType::F32).0,
+        NumericContract::Fast
+    );
 }
 
 #[test]
@@ -229,13 +238,22 @@ fn float_mul_and_float_add_contracts_are_occurrence_local_in_both_directions() {
 
     let (outer, _, inner) = float_add(returned_value(&hir, "add_root"));
     assert_eq!(outer, NumericContract::Fast);
-    assert_eq!(float_mul(inner, IntrinsicType::F32).0, NumericContract::Standard);
+    assert_eq!(
+        float_mul(inner, IntrinsicType::F32).0,
+        NumericContract::Standard
+    );
 
     let (outer, _, inner) = float_add(returned_value(&hir, "mul_child"));
     assert_eq!(outer, NumericContract::Standard);
-    assert_eq!(float_mul(inner, IntrinsicType::F32).0, NumericContract::Fast);
+    assert_eq!(
+        float_mul(inner, IntrinsicType::F32).0,
+        NumericContract::Fast
+    );
 
     let (outer, _, inner) = float_add(returned_value(&hir, "both_fast"));
     assert_eq!(outer, NumericContract::Fast);
-    assert_eq!(float_mul(inner, IntrinsicType::F32).0, NumericContract::Fast);
+    assert_eq!(
+        float_mul(inner, IntrinsicType::F32).0,
+        NumericContract::Fast
+    );
 }
