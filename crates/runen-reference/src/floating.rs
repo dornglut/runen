@@ -195,14 +195,12 @@ fn mul_represented(
 
     match (left, right) {
         (Zero(_), Infinity(_)) | (Infinity(_), Zero(_)) => RuntimeFloatValue::NaNClass,
-        (Zero(left_sign), right) => RuntimeFloatValue::Represented(Zero(product_sign(
-            left_sign,
-            represented_sign(right),
-        ))),
-        (left, Zero(right_sign)) => RuntimeFloatValue::Represented(Zero(product_sign(
-            represented_sign(left),
-            right_sign,
-        ))),
+        (Zero(left_sign), right) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(left_sign, represented_sign(right))))
+        }
+        (left, Zero(right_sign)) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(represented_sign(left), right_sign)))
+        }
         (Infinity(left_sign), right) => RuntimeFloatValue::Represented(Infinity(product_sign(
             left_sign,
             represented_sign(right),
