@@ -1,6 +1,6 @@
 use runen_hir::{
-    Diagnostic, DiagnosticKind, IntrinsicType, ModuleId, NumericContract, OwnedUse, SourceUnit, Type,
-    TypedCompilation, Value, ValueKind, build_typed_hir,
+    Diagnostic, DiagnosticKind, IntrinsicType, ModuleId, NumericContract, OwnedUse, SourceUnit,
+    Type, TypedCompilation, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
