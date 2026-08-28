@@ -91,7 +91,7 @@ fn all_eight_fixed_width_integer_types_retain_explicit_multiplication_hir() {
 }
 
 #[test]
-fn non_integer_outer_requirement_rejects_before_operand_validation_or_consumption() {
+fn non_numeric_outer_requirement_rejects_before_operand_validation_or_consumption() {
     let errors = build(
         "record Ticket {} \
          fn take(value: Ticket) -> I8 { return 1; } \
@@ -101,11 +101,11 @@ fn non_integer_outer_requirement_rejects_before_operand_validation_or_consumptio
              sink(value); \
          }",
     )
-    .expect_err("integer multiplication cannot satisfy Bool");
+    .expect_err("multiplication cannot satisfy Bool");
 
     assert!(has_diagnostic(
         &errors,
-        DiagnosticKind::IntegerMultiplicationRequiresInteger {
+        DiagnosticKind::MultiplicationRequiresIntegerOrFloating {
             required: Type::Intrinsic(IntrinsicType::Bool),
         }
     ));
