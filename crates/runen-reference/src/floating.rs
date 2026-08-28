@@ -253,18 +253,16 @@ fn div_represented(
             represented_sign(left),
             right_sign,
         ))),
-        (Zero(left_sign), right) => RuntimeFloatValue::Represented(Zero(product_sign(
-            left_sign,
-            represented_sign(right),
-        ))),
+        (Zero(left_sign), right) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(left_sign, represented_sign(right))))
+        }
         (Infinity(left_sign), right) => RuntimeFloatValue::Represented(Infinity(product_sign(
             left_sign,
             represented_sign(right),
         ))),
-        (left, Infinity(right_sign)) => RuntimeFloatValue::Represented(Zero(product_sign(
-            represented_sign(left),
-            right_sign,
-        ))),
+        (left, Infinity(right_sign)) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(represented_sign(left), right_sign)))
+        }
         (left, right) => div_nonzero_finite(format, left, right),
     }
 }
@@ -327,7 +325,7 @@ fn add_nonzero_finite(
     } else {
         match left_magnitude.cmp(&right_magnitude) {
             Ordering::Greater => (left_sign, left_magnitude.sub(&right_magnitude)),
-            Ordering::Less => (right_sign, right_magnitude.sub(&left_magnitude)),
+            Ordering::Less => (right_sign, left_magnitude.sub(&left_magnitude)),
             Ordering::Equal => {
                 return RuntimeFloatValue::Represented(BinaryFloatValue::Zero(
                     BinaryFloatSign::Positive,
@@ -626,11 +624,8 @@ fn round_exact_ratio(
         };
     }
 
-    let mut significand = round_normalized_ratio(
-        normalized_denominator,
-        remainder,
-        format.precision - 1,
-    );
+    let mut significand =
+        round_normalized_ratio(normalized_denominator, remainder, format.precision - 1);
     let carry = 1_u128 << format.precision;
     if significand == carry {
         significand >>= 1;
@@ -714,8 +709,7 @@ fn round_normalized_ratio(denominator: u128, mut remainder: u128, fraction_bits:
     }
 
     let doubled_remainder = remainder << 1;
-    if doubled_remainder > denominator
-        || (doubled_remainder == denominator && significand & 1 == 1)
+    if doubled_remainder > denominator || (doubled_remainder == denominator && significand & 1 == 1)
     {
         significand += 1;
     }
