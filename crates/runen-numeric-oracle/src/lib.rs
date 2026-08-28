@@ -217,12 +217,7 @@ pub struct ExactBinaryRatio {
 
 impl ExactBinaryRatio {
     #[must_use]
-    pub const fn from_parts(
-        sign: Sign,
-        numerator: u128,
-        denominator: u128,
-        exponent: i32,
-    ) -> Self {
+    pub const fn from_parts(sign: Sign, numerator: u128, denominator: u128, exponent: i32) -> Self {
         Self {
             sign,
             numerator,
@@ -296,11 +291,8 @@ pub fn round_binary_ratio(
 
     let (numerator, denominator) =
         normalize_binary_ratio(exact.numerator, exact.denominator, ratio_exponent)?;
-    let mut significand = round_normalized_ratio_to_integer(
-        numerator,
-        denominator,
-        format.precision - 1,
-    )?;
+    let mut significand =
+        round_normalized_ratio_to_integer(numerator, denominator, format.precision - 1)?;
     let carry = 1_u128 << format.precision;
 
     if significand == carry {
@@ -326,10 +318,7 @@ pub fn round_binary_ratio(
     })
 }
 
-fn ratio_floor_log2(
-    numerator: u128,
-    denominator: u128,
-) -> Result<i32, NumericOracleError> {
+fn ratio_floor_log2(numerator: u128, denominator: u128) -> Result<i32, NumericOracleError> {
     debug_assert_ne!(numerator, 0);
     debug_assert_ne!(denominator, 0);
 
