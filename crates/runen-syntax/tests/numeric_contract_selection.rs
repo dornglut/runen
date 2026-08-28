@@ -23,6 +23,10 @@ fn parses_lossless_operation_local_fast_selector_with_trivia() {
             "fn f(a: F32, b: F32) -> F32 { return @ /* selector */ fast\n( a - b ); }",
             SyntaxKind::SubValue,
         ),
+        (
+            "fn f(a: F32, b: F32) -> F32 { return @ /* selector */ fast\n( a * b ); }",
+            SyntaxKind::MulValue,
+        ),
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
@@ -69,7 +73,7 @@ fn fast_remains_an_ordinary_identifier_away_from_selector_position() {
 
 #[test]
 fn stacked_fast_selectors_are_represented_for_typed_rejection() {
-    for operator in ["+", "-"] {
+    for operator in ["+", "-", "*"] {
         let source =
             format!("fn f(a: F32, b: F32) -> F32 {{ return @fast(@fast(a {operator} b)); }}");
         let parsed = parse(&source);
@@ -85,7 +89,7 @@ fn stacked_fast_selectors_are_represented_for_typed_rejection() {
 #[test]
 fn standard_and_reproducible_are_not_source_selectors() {
     for selector in ["standard", "reproducible"] {
-        for operator in ["+", "-"] {
+        for operator in ["+", "-", "*"] {
             let source =
                 format!("fn f(a: F32, b: F32) -> F32 {{ return @{selector}(a {operator} b); }}");
             let parsed = parse(&source);
@@ -101,7 +105,7 @@ fn standard_and_reproducible_are_not_source_selectors() {
 
 #[test]
 fn direct_conditional_value_does_not_admit_numeric_contract_selection() {
-    for operator in ["+", "-"] {
+    for operator in ["+", "-", "*"] {
         let source = format!("fn f(a: F32, b: F32) {{ if @fast(a {operator} b) {{ fault; }} }}");
         let parsed = parse(&source);
         assert_eq!(parsed.text(), source);
