@@ -15,7 +15,7 @@ fn count(parsed: &Parse, kind: SyntaxKind) -> usize {
 #[test]
 fn integer_negation_syntax_kind_is_append_only() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Minus).0, 57);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerMulValue).0, 92);
+    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::MulValue).0, 92);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerNegValue).0, 93);
 }
 
@@ -76,12 +76,12 @@ fn boolean_and_integer_prefixes_recurse_rightward_without_absorbing_looser_tiers
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::IntegerNegValue), 3);
     assert_eq!(count(&parsed, SyntaxKind::BooleanNotValue), 2);
-    assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), 1);
+    assert_eq!(count(&parsed, SyntaxKind::MulValue), 1);
 
     let multiplication = parsed
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerMulValue)
+        .find(|node| node.kind() == SyntaxKind::MulValue)
         .expect("multiplication");
     assert_eq!(
         multiplication
