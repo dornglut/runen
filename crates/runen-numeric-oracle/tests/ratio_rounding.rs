@@ -29,6 +29,10 @@ fn exact_binary_ratios_agree_with_dyadic_rounding_when_the_quotient_is_dyadic() 
             ExactDyadic::from_parts(Sign::Positive, 3, -1),
         ),
         (
+            ratio(Sign::Positive, 5, 2, 0),
+            ExactDyadic::from_parts(Sign::Positive, 5, -1),
+        ),
+        (
             ratio(Sign::Negative, 5, 4, 2),
             ExactDyadic::from_parts(Sign::Negative, 5, 0),
         ),
