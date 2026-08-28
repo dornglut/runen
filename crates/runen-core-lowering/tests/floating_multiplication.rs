@@ -136,9 +136,8 @@ fn float_mul_numeric_contracts_lower_one_to_one_without_redefaulting() {
 
 #[test]
 fn nested_float_mul_dataflow_preserves_operation_identity_and_occurrence_contracts() {
-    let lowered = lower_source(
-        "fn f(a: F32, b: F32, c: F32) -> F32 { return @fast(a * @fast(b * c)); }",
-    );
+    let lowered =
+        lower_source("fn f(a: F32, b: F32, c: F32) -> F32 { return @fast(a * @fast(b * c)); }");
     let f = function(lowered.as_program(), "f");
     let multiplications = float_mul_statements(f);
     assert_eq!(multiplications.len(), 2);
@@ -167,9 +166,8 @@ fn nested_float_mul_dataflow_preserves_operation_identity_and_occurrence_contrac
 
 #[test]
 fn float_mul_to_float_add_dataflow_preserves_consumed_result_and_contracts() {
-    let lowered = lower_source(
-        "fn f(a: F32, b: F32, c: F32) -> F32 { return @fast(@fast(a * b) + c); }",
-    );
+    let lowered =
+        lower_source("fn f(a: F32, b: F32, c: F32) -> F32 { return @fast(@fast(a * b) + c); }");
     let f = function(lowered.as_program(), "f");
     let statements = f
         .body
