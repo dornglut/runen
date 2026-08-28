@@ -766,7 +766,7 @@ impl Parser<'_> {
                 .is_some_and(SyntaxKind::is_value_start)
         {
             self.builder
-                .start_node_at(checkpoint, SyntaxKind::IntegerMulValue.into());
+                .start_node_at(checkpoint, SyntaxKind::MulValue.into());
             self.bump();
             self.parse_value_in(context);
             self.builder.finish_node();

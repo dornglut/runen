@@ -76,6 +76,18 @@ pub(super) fn sub_f64(left: RuntimeFloatValue, right: RuntimeFloatValue) -> Runt
     sub_standard(F64, left, right)
 }
 
+pub(super) fn mul_f16(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    mul_standard(F16, left, right)
+}
+
+pub(super) fn mul_f32(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    mul_standard(F32, left, right)
+}
+
+pub(super) fn mul_f64(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    mul_standard(F64, left, right)
+}
+
 fn add_standard(
     format: FloatFormat,
     left: RuntimeFloatValue,
@@ -102,6 +114,21 @@ fn sub_standard(
         }
         (RuntimeFloatValue::Represented(left), RuntimeFloatValue::Represented(right)) => {
             sub_represented(format, left, right)
+        }
+    }
+}
+
+fn mul_standard(
+    format: FloatFormat,
+    left: RuntimeFloatValue,
+    right: RuntimeFloatValue,
+) -> RuntimeFloatValue {
+    match (left, right) {
+        (RuntimeFloatValue::NaNClass, _) | (_, RuntimeFloatValue::NaNClass) => {
+            RuntimeFloatValue::NaNClass
+        }
+        (RuntimeFloatValue::Represented(left), RuntimeFloatValue::Represented(right)) => {
+            mul_represented(format, left, right)
         }
     }
 }
@@ -159,10 +186,54 @@ fn sub_represented(
     }
 }
 
+fn mul_represented(
+    format: FloatFormat,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+) -> RuntimeFloatValue {
+    use BinaryFloatValue::{Infinity, Zero};
+
+    match (left, right) {
+        (Zero(_), Infinity(_)) | (Infinity(_), Zero(_)) => RuntimeFloatValue::NaNClass,
+        (Zero(left_sign), right) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(left_sign, represented_sign(right))))
+        }
+        (left, Zero(right_sign)) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(represented_sign(left), right_sign)))
+        }
+        (Infinity(left_sign), right) => RuntimeFloatValue::Represented(Infinity(product_sign(
+            left_sign,
+            represented_sign(right),
+        ))),
+        (left, Infinity(right_sign)) => RuntimeFloatValue::Represented(Infinity(product_sign(
+            represented_sign(left),
+            right_sign,
+        ))),
+        (left, right) => mul_nonzero_finite(format, left, right),
+    }
+}
+
 fn opposite_sign(sign: BinaryFloatSign) -> BinaryFloatSign {
     match sign {
         BinaryFloatSign::Positive => BinaryFloatSign::Negative,
         BinaryFloatSign::Negative => BinaryFloatSign::Positive,
+    }
+}
+
+fn product_sign(left: BinaryFloatSign, right: BinaryFloatSign) -> BinaryFloatSign {
+    if left == right {
+        BinaryFloatSign::Positive
+    } else {
+        BinaryFloatSign::Negative
+    }
+}
+
+fn represented_sign(value: BinaryFloatValue) -> BinaryFloatSign {
+    match value {
+        BinaryFloatValue::Zero(sign)
+        | BinaryFloatValue::Subnormal { sign, .. }
+        | BinaryFloatValue::Normal { sign, .. }
+        | BinaryFloatValue::Infinity(sign) => sign,
     }
 }
 
@@ -240,6 +311,24 @@ fn sub_nonzero_finite(
     RuntimeFloatValue::Represented(round_exact_magnitude(format, sign, &magnitude))
 }
 
+fn mul_nonzero_finite(
+    format: FloatFormat,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+) -> RuntimeFloatValue {
+    let (left_sign, left_magnitude, left_exponent) = exact_finite_dyadic(format, left);
+    let (right_sign, right_magnitude, right_exponent) = exact_finite_dyadic(format, right);
+    let magnitude = left_magnitude
+        .checked_mul(right_magnitude)
+        .expect("F16/F32/F64 significand products fit u128");
+    let exponent = left_exponent
+        .checked_add(right_exponent)
+        .expect("represented floating product exponent fits i32");
+    let sign = product_sign(left_sign, right_sign);
+
+    RuntimeFloatValue::Represented(round_exact_dyadic(format, sign, magnitude, exponent))
+}
+
 fn exact_finite_magnitude(
     format: FloatFormat,
     value: BinaryFloatValue,
@@ -260,6 +349,32 @@ fn exact_finite_magnitude(
         }
         BinaryFloatValue::Zero(_) | BinaryFloatValue::Infinity(_) => {
             unreachable!("special floating values are handled before exact finite arithmetic")
+        }
+    }
+}
+
+fn exact_finite_dyadic(
+    format: FloatFormat,
+    value: BinaryFloatValue,
+) -> (BinaryFloatSign, u128, i32) {
+    let precision_tail = i32::try_from(format.precision - 1).expect("precision tail fits i32");
+    match value {
+        BinaryFloatValue::Subnormal { sign, significand } => (
+            sign,
+            u128::from(significand),
+            i32::from(format.emin) - precision_tail,
+        ),
+        BinaryFloatValue::Normal {
+            sign,
+            significand,
+            exponent,
+        } => (
+            sign,
+            u128::from(significand),
+            i32::from(exponent) - precision_tail,
+        ),
+        BinaryFloatValue::Zero(_) | BinaryFloatValue::Infinity(_) => {
+            unreachable!("special floating values are handled before exact finite multiplication")
         }
     }
 }
@@ -308,6 +423,99 @@ fn round_exact_magnitude(
             significand,
             exponent: i16::try_from(exponent).expect("represented floating exponent fits i16"),
         }
+    }
+}
+
+fn round_exact_dyadic(
+    format: FloatFormat,
+    sign: BinaryFloatSign,
+    magnitude: u128,
+    exponent: i32,
+) -> BinaryFloatValue {
+    debug_assert_ne!(magnitude, 0);
+    let magnitude_floor_log2 = i32::try_from(magnitude.ilog2()).expect("u128 bit index fits i32");
+    let mut value_exponent = magnitude_floor_log2
+        .checked_add(exponent)
+        .expect("represented floating product exponent fits i32");
+    let precision_tail = i32::try_from(format.precision - 1).expect("precision tail fits i32");
+
+    if value_exponent < i32::from(format.emin) {
+        let quantum_exponent = i32::from(format.emin) - precision_tail;
+        let significand = round_dyadic_to_integer_grid(magnitude, exponent, quantum_exponent);
+        if significand == 0 {
+            return BinaryFloatValue::Zero(sign);
+        }
+
+        let normal_threshold = 1_u128 << (format.precision - 1);
+        if significand < normal_threshold {
+            return BinaryFloatValue::Subnormal {
+                sign,
+                significand: u64::try_from(significand)
+                    .expect("represented subnormal significand fits u64"),
+            };
+        }
+        debug_assert_eq!(significand, normal_threshold);
+        return BinaryFloatValue::Normal {
+            sign,
+            significand: u64::try_from(normal_threshold)
+                .expect("represented normal significand fits u64"),
+            exponent: format.emin,
+        };
+    }
+
+    if value_exponent > i32::from(format.emax) {
+        return BinaryFloatValue::Infinity(sign);
+    }
+
+    let unit_exponent = value_exponent - precision_tail;
+    let mut significand = round_dyadic_to_integer_grid(magnitude, exponent, unit_exponent);
+    let carry = 1_u128 << format.precision;
+    if significand == carry {
+        significand >>= 1;
+        value_exponent += 1;
+    }
+
+    if value_exponent > i32::from(format.emax) {
+        BinaryFloatValue::Infinity(sign)
+    } else {
+        let normal_minimum = 1_u128 << (format.precision - 1);
+        debug_assert!((normal_minimum..carry).contains(&significand));
+        BinaryFloatValue::Normal {
+            sign,
+            significand: u64::try_from(significand)
+                .expect("represented normal significand fits u64"),
+            exponent: i16::try_from(value_exponent)
+                .expect("represented floating exponent fits i16"),
+        }
+    }
+}
+
+fn round_dyadic_to_integer_grid(magnitude: u128, exponent: i32, grid_exponent: i32) -> u128 {
+    let displacement = i64::from(exponent) - i64::from(grid_exponent);
+    if displacement >= 0 {
+        let shift = u32::try_from(displacement).expect("nonnegative dyadic shift fits u32");
+        return magnitude
+            .checked_shl(shift)
+            .expect("selected floating rounding grid keeps exact quotient within u128");
+    }
+
+    let shift = u32::try_from(-displacement).expect("negative dyadic shift magnitude fits u32");
+    if shift > 128 {
+        return 0;
+    }
+    if shift == 128 {
+        let half = 1_u128 << 127;
+        return u128::from(magnitude > half);
+    }
+
+    let quotient = magnitude >> shift;
+    let remainder_mask = (1_u128 << shift) - 1;
+    let remainder = magnitude & remainder_mask;
+    let half = 1_u128 << (shift - 1);
+    if remainder > half || (remainder == half && quotient & 1 == 1) {
+        quotient + 1
+    } else {
+        quotient
     }
 }
 

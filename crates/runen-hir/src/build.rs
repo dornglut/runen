@@ -2342,63 +2342,72 @@ fn validate_value(
                 None
             }
         },
-        SyntaxKind::IntegerMulValue => {
-            if !matches!(
-                required,
-                Type::Intrinsic(
-                    IntrinsicType::I8
-                        | IntrinsicType::I16
-                        | IntrinsicType::I32
-                        | IntrinsicType::I64
-                        | IntrinsicType::U8
-                        | IntrinsicType::U16
-                        | IntrinsicType::U32
-                        | IntrinsicType::U64
+        SyntaxKind::MulValue => match required {
+            Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64) => {
+                validate_float_mul(
+                    header,
+                    node,
+                    required,
+                    NumericContract::Standard,
+                    context,
+                    bindings,
+                    diagnostics,
                 )
-            ) {
+            }
+            Type::Intrinsic(
+                IntrinsicType::I8
+                | IntrinsicType::I16
+                | IntrinsicType::I32
+                | IntrinsicType::I64
+                | IntrinsicType::U8
+                | IntrinsicType::U16
+                | IntrinsicType::U32
+                | IntrinsicType::U64,
+            ) => {
+                let mut operands = node.children().filter(|child| is_value_node(child.kind()));
+                let left_node = operands
+                    .next()
+                    .expect("syntax-clean integer multiplication contains a left operand");
+                let right_node = operands
+                    .next()
+                    .expect("syntax-clean integer multiplication contains a right operand");
+                debug_assert!(operands.next().is_none());
+
+                let mut operand_bindings = bindings.clone();
+                let left = validate_value(
+                    header,
+                    &left_node,
+                    required,
+                    context,
+                    &mut operand_bindings,
+                    diagnostics,
+                )?;
+                let right = validate_value(
+                    header,
+                    &right_node,
+                    required,
+                    context,
+                    &mut operand_bindings,
+                    diagnostics,
+                )?;
+                *bindings = operand_bindings;
+                Some(Value {
+                    ty: required,
+                    kind: ValueKind::IntegerMul {
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    location: value_location,
+                })
+            }
+            _ => {
                 diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::IntegerMultiplicationRequiresInteger { required },
+                    kind: DiagnosticKind::MultiplicationRequiresIntegerOrFloating { required },
                     location: value_location,
                 });
-                return None;
+                None
             }
-
-            let mut operands = node.children().filter(|child| is_value_node(child.kind()));
-            let left_node = operands
-                .next()
-                .expect("syntax-clean integer multiplication contains a left operand");
-            let right_node = operands
-                .next()
-                .expect("syntax-clean integer multiplication contains a right operand");
-            debug_assert!(operands.next().is_none());
-
-            let mut operand_bindings = bindings.clone();
-            let left = validate_value(
-                header,
-                &left_node,
-                required,
-                context,
-                &mut operand_bindings,
-                diagnostics,
-            )?;
-            let right = validate_value(
-                header,
-                &right_node,
-                required,
-                context,
-                &mut operand_bindings,
-                diagnostics,
-            )?;
-            *bindings = operand_bindings;
-            Some(Value {
-                ty: required,
-                kind: ValueKind::IntegerMul {
-                    left: Box::new(left),
-                    right: Box::new(right),
-                },
-                location: value_location,
-            })
-        }
+        },
         SyntaxKind::IntegerXorValue => {
             if !matches!(
                 required,
@@ -2825,13 +2834,24 @@ fn validate_numeric_contract_selected_value(
         Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64)
     ) {
         diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::NumericContractSelectionRequiresFloatingAddOrSub { required },
+            kind: DiagnosticKind::NumericContractSelectionRequiresGovernedFloatingOperation {
+                required,
+            },
             location: selection_location,
         });
         return None;
     }
 
     match root.kind() {
+        SyntaxKind::MulValue => validate_float_mul(
+            header,
+            &root,
+            required,
+            NumericContract::Fast,
+            context,
+            bindings,
+            diagnostics,
+        ),
         SyntaxKind::AddValue => validate_float_add(
             header,
             &root,
@@ -2852,7 +2872,9 @@ fn validate_numeric_contract_selected_value(
         ),
         _ => {
             diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::NumericContractSelectionRequiresFloatingAddOrSub { required },
+                kind: DiagnosticKind::NumericContractSelectionRequiresGovernedFloatingOperation {
+                    required,
+                },
                 location: selection_location,
             });
             None
@@ -2960,6 +2982,60 @@ fn validate_float_sub(
     Some(Value {
         ty: required,
         kind: ValueKind::FloatSub {
+            contract,
+            left: Box::new(left),
+            right: Box::new(right),
+        },
+        location: location(header.unit, node),
+    })
+}
+
+fn validate_float_mul(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    contract: NumericContract,
+    context: &BodyResolutionContext<'_>,
+    bindings: &mut BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Value> {
+    debug_assert_eq!(node.kind(), SyntaxKind::MulValue);
+    debug_assert!(matches!(
+        required,
+        Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64)
+    ));
+
+    let mut operands = node.children().filter(|child| is_value_node(child.kind()));
+    let left_node = operands
+        .next()
+        .expect("syntax-clean floating multiplication contains a left operand");
+    let right_node = operands
+        .next()
+        .expect("syntax-clean floating multiplication contains a right operand");
+    debug_assert!(operands.next().is_none());
+
+    let mut operand_bindings = bindings.clone();
+    let left = validate_value(
+        header,
+        &left_node,
+        required,
+        context,
+        &mut operand_bindings,
+        diagnostics,
+    )?;
+    let right = validate_value(
+        header,
+        &right_node,
+        required,
+        context,
+        &mut operand_bindings,
+        diagnostics,
+    )?;
+    *bindings = operand_bindings;
+
+    Some(Value {
+        ty: required,
+        kind: ValueKind::FloatMul {
             contract,
             left: Box::new(left),
             right: Box::new(right),
@@ -3943,7 +4019,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
             | SyntaxKind::IntegerComplementValue
             | SyntaxKind::AddValue
             | SyntaxKind::SubValue
-            | SyntaxKind::IntegerMulValue
+            | SyntaxKind::MulValue
             | SyntaxKind::IntegerXorValue
             | SyntaxKind::IntegerOrValue
             | SyntaxKind::BooleanAndValue

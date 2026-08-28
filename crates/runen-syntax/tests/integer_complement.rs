@@ -91,7 +91,7 @@ fn complement_prefix_stays_tighter_than_multiplicative_additive_and_equality_tie
     let multiplication = parsed
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerMulValue)
+        .find(|node| node.kind() == SyntaxKind::MulValue)
         .expect("multiplication");
     assert_eq!(
         multiplication

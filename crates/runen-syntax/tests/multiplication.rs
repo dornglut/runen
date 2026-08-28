@@ -29,7 +29,7 @@ fn multiplication_syntax_kinds_are_append_only() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::AddValue).0, 89);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::SubValue).0, 90);
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::Star).0, 91);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::IntegerMulValue).0, 92);
+    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::MulValue).0, 92);
 }
 
 #[test]
@@ -38,7 +38,7 @@ fn standalone_star_is_lossless_without_disturbing_comment_delimiters() {
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), 1);
+    assert_eq!(count(&parsed, SyntaxKind::MulValue), 1);
     assert_eq!(
         nontrivia_kinds(&parsed)
             .into_iter()
@@ -78,7 +78,7 @@ fn slash_remains_unsupported_and_double_star_and_star_equals_are_not_operators()
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
         assert!(!parsed.errors().is_empty());
-        assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), 0);
+        assert_eq!(count(&parsed, SyntaxKind::MulValue), 0);
     }
 
     let double = parse("fn f(a: I64, b: I64) -> I64 { return a ** b; }");
@@ -105,7 +105,7 @@ fn multiplicative_tier_is_bounded_and_tighter_than_additive() {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
         assert!(!parsed.errors().is_empty());
-        assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), 1);
+        assert_eq!(count(&parsed, SyntaxKind::MulValue), 1);
     }
 
     let right = parse("fn f(a: I64, b: I64, c: I64) -> I64 { return a + b * c; }");
@@ -116,10 +116,7 @@ fn multiplicative_tier_is_bounded_and_tighter_than_additive() {
         .find(|node| node.kind() == SyntaxKind::AddValue)
         .expect("addition");
     let children = add.children().map(|node| node.kind()).collect::<Vec<_>>();
-    assert_eq!(
-        children,
-        [SyntaxKind::IdentifierUse, SyntaxKind::IntegerMulValue]
-    );
+    assert_eq!(children, [SyntaxKind::IdentifierUse, SyntaxKind::MulValue]);
 
     let left = parse("fn f(a: I64, b: I64, c: I64) -> I64 { return a * b + c; }");
     assert!(left.errors().is_empty(), "{:?}", left.errors());
@@ -129,10 +126,7 @@ fn multiplicative_tier_is_bounded_and_tighter_than_additive() {
         .find(|node| node.kind() == SyntaxKind::AddValue)
         .expect("addition");
     let children = add.children().map(|node| node.kind()).collect::<Vec<_>>();
-    assert_eq!(
-        children,
-        [SyntaxKind::IntegerMulValue, SyntaxKind::IdentifierUse]
-    );
+    assert_eq!(children, [SyntaxKind::MulValue, SyntaxKind::IdentifierUse]);
 }
 
 #[test]
@@ -162,7 +156,7 @@ fn grouping_explicitly_repeats_or_overrides_multiplicative_nesting() {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-        assert_eq!(count(&parsed, SyntaxKind::IntegerMulValue), multiplications);
+        assert_eq!(count(&parsed, SyntaxKind::MulValue), multiplications);
         assert_eq!(count(&parsed, SyntaxKind::AddValue), additions);
         if source.contains("b - c") {
             assert_eq!(count(&parsed, SyntaxKind::SubValue), 1);
@@ -179,7 +173,7 @@ fn multiplication_preserves_signed_literal_and_prefix_boundaries() {
     let mul = parsed
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerMulValue)
+        .find(|node| node.kind() == SyntaxKind::MulValue)
         .expect("multiplication");
     assert_eq!(
         mul.children().map(|node| node.kind()).collect::<Vec<_>>(),
@@ -195,7 +189,7 @@ fn multiplication_preserves_signed_literal_and_prefix_boundaries() {
     let mul = prefix
         .syntax()
         .descendants()
-        .find(|node| node.kind() == SyntaxKind::IntegerMulValue)
+        .find(|node| node.kind() == SyntaxKind::MulValue)
         .expect("multiplication");
     assert_eq!(
         mul.children().map(|node| node.kind()).collect::<Vec<_>>(),
@@ -214,7 +208,7 @@ fn conditional_multiplication_keeps_standalone_record_construction_excluded() {
     assert!(valid.errors().is_empty(), "{:?}", valid.errors());
     assert_eq!(count(&valid, SyntaxKind::RecordConstruction), 1);
     assert_eq!(count(&valid, SyntaxKind::FieldValueUse), 1);
-    assert_eq!(count(&valid, SyntaxKind::IntegerMulValue), 1);
+    assert_eq!(count(&valid, SyntaxKind::MulValue), 1);
 
     for source in [
         "record Box { value: I64 } fn f(a: I64) { if Box { value: 2 } * a {} }",
@@ -234,9 +228,9 @@ fn multiplication_does_not_widen_pattern_scrutinee_or_statement_categories() {
         "record Pair { value: I64 } fn f(a: Pair, b: Pair) { let Pair { value: x } = a * b; }",
     );
     assert!(!pattern.errors().is_empty());
-    assert_eq!(count(&pattern, SyntaxKind::IntegerMulValue), 0);
+    assert_eq!(count(&pattern, SyntaxKind::MulValue), 0);
 
     let statement = parse("fn f(a: I64, b: I64) { a * b; }");
     assert!(!statement.errors().is_empty());
-    assert_eq!(count(&statement, SyntaxKind::IntegerMulValue), 0);
+    assert_eq!(count(&statement, SyntaxKind::MulValue), 0);
 }
