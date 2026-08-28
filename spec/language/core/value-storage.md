@@ -2,9 +2,9 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, non-replacing result storage for represented Core integer addition, subtraction, multiplication, exclusive-or, bitwise OR, and binary floating addition, subtraction, and multiplication, assignment, destruction domains, and cleanup.
+This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, non-replacing result storage for represented Core integer addition, subtraction, multiplication, exclusive-or, bitwise OR, and binary floating addition, subtraction, multiplication, and division, assignment, destruction domains, and cleanup.
 
-The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical value relations consumed by represented fixed-width integer addition, subtraction, multiplication, exclusive-or, and bitwise OR are owned by [Core integer semantics](numerics/integers.md). The numerical result relations, numeric-contract domain/default/refinement rules, and selected-contract numerical permissions consumed by represented binary floating addition, subtraction, and multiplication are owned by [Core floating-point semantics](numerics/floating-point.md).
+The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical value relations consumed by represented fixed-width integer addition, subtraction, multiplication, exclusive-or, and bitwise OR are owned by [Core integer semantics](numerics/integers.md). The numerical result relations, numeric-contract domain/default/refinement rules, and selected-contract numerical permissions consumed by represented binary floating addition, subtraction, multiplication, and division are owned by [Core floating-point semantics](numerics/floating-point.md).
 
 ## Terms
 
@@ -120,7 +120,7 @@ A stored-value lifetime ends when the stored value is consumed by move, destroye
 
 `Read` and `Copy` do not end the source stored-value lifetime.
 
-`Init` and represented `IntegerAdd`/`IntegerSub`/`IntegerMul`/`IntegerXor`/`IntegerOr`/`FloatAdd`/`FloatSub`/`FloatMul` result initialization may begin either the first stored-value lifetime or a later stored-value lifetime in vacant storage. Ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
+`Init` and represented `IntegerAdd`/`IntegerSub`/`IntegerMul`/`IntegerXor`/`IntegerOr`/`FloatAdd`/`FloatSub`/`FloatMul`/`FloatDiv` result initialization may begin either the first stored-value lifetime or a later stored-value lifetime in vacant storage. Ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
 
 The current revision defines stored-value lifetime at scalar storage leaves. Aggregate initialization and liveness are derived recursively from the states of those leaves; an aggregate does not acquire a separate hidden lifetime identity.
 
@@ -606,6 +606,63 @@ After both operand values have been produced, the ordinary floating-multiplicati
 
 The ordinary operation consumes only its explicit selected-contract same-format floating-multiplication result relation and existing numeric-contract authority from `numerics/floating-point.md`. That numerical owner separately and exclusively defines any result-changing permission to reassociate an eligible pure finite multiplication region or to contract an eligible finite `FloatMul` result consumed by `FloatAdd`, including the requirement that every participating or affected operation occurrence named by those rules be `Fast` and the rule that `Standard` or `Reproducible` occurrences remain semantic boundaries. This storage relation neither widens nor suppresses those permissions and does not turn them into an alternate per-operation result rule. It defines no fused operation, multiply-subtract form, negated fused variant, exact-zero or special-value contraction, reciprocal replacement, permutation, omission, duplication, approximation, reduced precision, backend aggregate fast-math authority, or ambient numeric state.
 
+## Binary floating division result initialization
+
+The represented Core proving relation contains one distinct binary floating-divide operation, normatively written here as:
+
+```text
+FloatDiv {
+    dst: Place,
+    left: Operand,
+    right: Operand,
+    contract: NumericContract,
+}
+```
+
+This semantic spelling identifies the represented Core operation. It does not require one particular implementation enum, generic numeric opcode, reciprocal-multiply lowering, instruction encoding, backend opcode, or physical machine instruction. `NumericContract` denotes exactly the accepted semantic contract identity domain `Standard | Reproducible | Fast` owned by `numerics/floating-point.md`. Every represented `FloatDiv` carries exactly one such explicit contract. This field is semantic input to the floating numerical owner; it is not an ambient numeric mode, target capability, backend flag, runtime floating-environment setting, or second storage-state component.
+
+Let `D` be the exact Core type identity of `dst`. A valid `FloatDiv` requires all of the following static type facts before execution:
+
+- `D` denotes a scalar type whose scalar kind is exactly one of `F16`, `F32`, or `F64`;
+- every place-derived left or right operand produces a value whose selected Core type identity is exactly `D`;
+- a constant operand is admitted only when its semantic value matches `D` under the existing type-table value-matching relation;
+- `contract` is exactly one member of the accepted `NumericContract` domain; and
+- no equality of scalar kind alone makes two distinct Core type identities interchangeable for an operand.
+
+An `AddressOf` operand therefore cannot satisfy this operation's binary-floating operand requirement. Any applicable `Move`, `Copy`, `RawMove`, or other represented operand form retains its own existing access, liveness, copyability, provenance, and ownership-transfer requirements while also producing the exact required type `D`. This operation introduces no integer division, cross-format conversion, promotion, widening, narrowing, coercion, defaulting, overload relation, generic numeric type, or operand-derived result-type inference.
+
+`FloatDiv` is governed by the numeric-contract authority in [Core floating-point semantics](numerics/floating-point.md). Its explicit `contract` is the already-established selected contract for this operation occurrence and is consumed exactly as semantic input by that owner. This storage relation does not redefine the contract's baseline, refinement, subnormal, NaN, signed-zero, infinity, rounding, or other numerical rules. It grants no division reassociation or reciprocal-replacement permission. Independently authored Core may represent any accepted `Standard`, `Reproducible`, or `Fast` FloatDiv whether or not current source syntax can select all three.
+
+`FloatDiv` reuses the non-replacing destination lifecycle of `Init` and the represented integer-result, `FloatAdd`, `FloatSub`, and `FloatMul` operations rather than defining another storage model. Before either operand is evaluated:
+
+1. resolve `dst` as direct storage under the existing place/type rules;
+2. require the exclusive direct-storage authority that the existing non-replacing initialization/result operations require under `borrowing.md`; and
+3. require `dst` to be wholly vacant.
+
+These destination preconditions are fixed at operation admission before left-operand evaluation. Operand evaluation cannot make an initially Live or insufficiently authorized destination retrospectively admissible to that same operation. Ordinary assignment mutability is not required, exactly as for the existing non-replacing initialization/result destinations. The selected numeric contract does not alter these storage-admission requirements.
+
+After destination admission, execution is exactly:
+
+1. evaluate `left` completely under its existing `Operand` semantics with required Core type identity `D`;
+2. preserve all state consequences of that operand evaluation;
+3. evaluate `right` completely under its existing `Operand` semantics with required Core type identity `D` in the resulting state;
+4. preserve all state consequences of that operand evaluation;
+5. consume the two produced semantic binary-floating operand values and select exactly one result permitted by the accepted same-format floating-division relation in `numerics/floating-point.md` for scalar kind `D` under this operation's explicit `contract`;
+6. write that one semantic result into `dst`; and
+7. mark the written scalar destination Live, beginning a new stored-value lifetime there.
+
+The left operand is therefore evaluated before the right operand. `Move`, `Copy`, raw-pointer operand access, and all other operand-local effects remain exactly those of the existing operand relation; `FloatDiv` does not duplicate or weaken them. A place moved by the left operand is already Dead when the right operand is evaluated. A right operand cannot read, copy, or move such a place unless an independent represented operation has legally restored its value beforehand.
+
+The floating owner remains the sole numerical authority for finite quotient selection and binary rounding, signed-zero results, finite/infinity boundaries, signed infinities, NaN-class outcomes including signed-zero divided by signed-zero and infinity divided by infinity, and any selected-contract-specific permitted result variation. Division by signed zero is therefore a numerical result path under that owner: for the accepted nonzero-finite or infinite numerators it selects the corresponding signed infinity result, while signed-zero divided by signed-zero selects the result NaN class. None of those cases is a Core `Fault`, panic, undefined behavior, physical exception/status observation, or alternate control-flow outcome.
+
+When the floating owner requires only that a result belong to `D`'s NaN value class, `FloatDiv` may store any semantic NaN member permitted by that relation. This storage relation does not select a canonical member, payload, sign, quiet/signaling identity, physical encoding, equality identity, or another member-sensitive property. A semantic NaN value produced at runtime is an ordinary storable value of `D`; its existence does not add a NaN form to the current constant-value representation.
+
+Because `dst` was wholly vacant at admission, the result write has an empty destruction domain and performs no replacement destruction. The write has the same stored-value-lifetime and storage-instance consequences as successful non-replacing `Init` and the existing represented result operations: it begins the destination stored-value lifetime without changing the destination storage extent or storage-instance identity.
+
+After both operand values have been produced, the floating-division/result-write step is finite, non-faulting, and non-diverging under the represented Core semantics. Operation admission, operand sequencing, and the one result-write occurrence remain deterministic; the selected numerical relation may admit more than one result only where `numerics/floating-point.md` explicitly permits that variation. Normal, subnormal, signed-zero, signed-infinity, and NaN-class outcomes selected by the floating owner are ordinary numerical results. The operation introduces no new borrow interval, reference value, pointer provenance, cleanup category, storage identity, assignment-mutability rule, interior-mutability rule, fault reason, control-flow edge, floating exception/status state, layout/ABI promise, runtime numeric mode, or backend-visible semantic fact.
+
+The operation consumes only its explicit selected-contract same-format floating-division result relation and existing numeric-contract authority from `numerics/floating-point.md`. It does not represent integer division, floating remainder, floating negation, reciprocal approximation or replacement, division reassociation, fused divide, comparison, conversion, source selector syntax or scoping, a NaN literal, a generic floating operation family, constant folding, a physical floating representation, or an ambient numeric environment. A realization may use a different physical mechanism only when it independently preserves the selected Runen-observable FloatDiv semantics.
+
 ## Read
 
 `Read(src)` requires `src` to be fully initialized.
@@ -742,19 +799,19 @@ When [Core control flow](control-flow.md) selects a cyclic execution that diverg
 
 For a fixed validated Core program using only the semantics defined here, operation admission, operand sequencing, dynamic local storage-instance creation, stored-value lifetime transitions, interior-mutability capability, non-replacing result-write occurrence, destruction domains, and destruction order are deterministic.
 
-Represented integer-operation result values are determined by their separately owned integer relations. Represented `FloatAdd`, `FloatSub`, and `FloatMul` results are each determined by the operation occurrence's explicit selected numeric contract and the corresponding separately owned floating-addition, floating-subtraction, or floating-multiplication relation. Those relations may explicitly permit multiple numerical outcomes, including NaN-member variation and `fast`-specific result latitude. Such permitted numerical variation is semantic latitude owned by `numerics/floating-point.md`; it is not hidden storage or loan state and does not make host NaN propagation, backend behavior, physical encoding, scheduling, or container iteration order an additional semantic input.
+Represented integer-operation result values are determined by their separately owned integer relations. Represented `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` results are each determined by the operation occurrence's explicit selected numeric contract and the corresponding separately owned floating-addition, floating-subtraction, floating-multiplication, or floating-division relation. Those relations may explicitly permit multiple numerical outcomes, including NaN-member variation and `fast`-specific result latitude. Such permitted numerical variation is semantic latitude owned by `numerics/floating-point.md`; it is not hidden storage or loan state and does not make host NaN propagation, backend behavior, physical encoding, scheduling, or container iteration order an additional semantic input.
 
 The actual verification token chosen to represent a storage-instance identity is not program-observable. Semantics depend on instance distinction and stability, not on a particular integer assignment.
 
-The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state and no new path-state component beyond the storage transitions it already performs. `IntegerAdd`, `IntegerSub`, `IntegerMul`, `IntegerXor`, `IntegerOr`, `FloatAdd`, `FloatSub`, and `FloatMul` likewise introduce no hidden storage-state component beyond their operand consequences and one non-replacing result initialization. `FloatAdd.contract`, `FloatSub.contract`, and `FloatMul.contract` are explicit operation semantic facts, not mutable runtime state.
+The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state and no new path-state component beyond the storage transitions it already performs. `IntegerAdd`, `IntegerSub`, `IntegerMul`, `IntegerXor`, `IntegerOr`, `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` likewise introduce no hidden storage-state component beyond their operand consequences and one non-replacing result initialization. `FloatAdd.contract`, `FloatSub.contract`, `FloatMul.contract`, and `FloatDiv.contract` are explicit operation semantic facts, not mutable runtime state.
 
 The semantics defined here do not depend on physical addresses, host arithmetic/bitwise/floating behavior, destruction behavior, container iteration order, physical scheduling, or backend behavior.
 
 ## Separate semantic owners
 
-This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add, integer-subtract, integer-multiply, integer-exclusive-or, integer-bitwise-OR, and selected-contract floating-addition, floating-subtraction, and floating-multiplication relations, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add, integer-subtract, integer-multiply, integer-exclusive-or, integer-bitwise-OR, and selected-contract floating-addition, floating-subtraction, floating-multiplication, and floating-division relations, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
 
-Raw-pointer type/value formation and provenance derived from the storage-instance identity defined here are owned by [Core pointers and provenance](pointers.md). That pointer specification does not change the storage extent or stored-value lifetime rules in this document. Fixed-width integer numerical value relations are owned by [Core integer semantics](numerics/integers.md); binary floating-addition, floating-subtraction, and floating-multiplication numerical results and all numeric-contract authority are owned by [Core floating-point semantics](numerics/floating-point.md). This document owns only the represented operations' operand/storage/lifetime consequences and the explicit contract identity carried by `FloatAdd`, `FloatSub`, and `FloatMul` for consumption by that numerical owner.
+Raw-pointer type/value formation and provenance derived from the storage-instance identity defined here are owned by [Core pointers and provenance](pointers.md). That pointer specification does not change the storage extent or stored-value lifetime rules in this document. Fixed-width integer numerical value relations are owned by [Core integer semantics](numerics/integers.md); binary floating-addition, floating-subtraction, floating-multiplication, and floating-division numerical results and all numeric-contract authority are owned by [Core floating-point semantics](numerics/floating-point.md). This document owns only the represented operations' operand/storage/lifetime consequences and the explicit contract identity carried by `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` for consumption by that numerical owner.
 
 This revision defines only proving-kernel interior-mutability capability and replacement semantics; it does not define source spelling, library abstractions, dynamic borrow guards, synchronization mechanisms, or which future public types expose that capability.
 
