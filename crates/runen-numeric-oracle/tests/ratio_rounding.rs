@@ -123,6 +123,17 @@ fn upper_rounding_boundary_selects_maximum_finite_then_infinity_at_midpoint() {
 }
 
 #[test]
+fn full_u128_normalization_does_not_materialize_an_out_of_range_leading_bit() {
+    let format = BinaryFormat::new(3, -2, 2).unwrap();
+    let denominator = (1_u128 << 127) + 1;
+
+    assert_eq!(
+        round_binary_ratio(format, ratio(Sign::Positive, 1, denominator, 128)),
+        Ok(normal(Sign::Positive, 4, 1))
+    );
+}
+
+#[test]
 fn extreme_exponents_select_zero_and_infinity_without_host_floating_arithmetic() {
     let format = BinaryFormat::new(53, -1022, 1023).unwrap();
 
