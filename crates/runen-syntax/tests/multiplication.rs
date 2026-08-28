@@ -1,4 +1,4 @@
-use runen_syntax::{Parse, SyntaxErrorKind, SyntaxKind, parse_source};
+use runen_syntax::{Parse, SyntaxKind, parse_source};
 
 fn parse(source: &str) -> Parse {
     parse_source(source.as_bytes()).expect("valid UTF-8 test source")
