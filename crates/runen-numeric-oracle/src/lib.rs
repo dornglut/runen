@@ -3,8 +3,9 @@
 //!
 //! This crate is not Runen source syntax, compiler IR, a runtime floating-point
 //! implementation, a backend model, or a normative semantic owner. It covers
-//! exact dyadic inputs to the accepted binary floating rounding relation plus
-//! class-level scalar integer/floating conversion and sum-reduction evidence.
+//! exact dyadic and exact binary-ratio inputs to the accepted binary floating
+//! rounding relation plus class-level scalar integer/floating conversion and
+//! sum-reduction evidence.
 //!
 //! The `i128`/`u128` carriers, `i32` exponents, integer widths up to 128 bits,
 //! and exact finite-sum accumulator capacity are executable fixture limits only.
@@ -84,6 +85,7 @@ pub enum NumericOracleError {
     ExponentArithmeticOverflow,
     InternalRangeExceeded,
     ZeroExactInput,
+    ZeroDenominator,
     NonFiniteReductionInput,
     InvalidRoundedValueFixture,
 }
@@ -203,6 +205,222 @@ impl ExactDyadic {
             exponent: 0,
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ExactBinaryRatio {
+    sign: Sign,
+    numerator: u128,
+    denominator: u128,
+    exponent: i32,
+}
+
+impl ExactBinaryRatio {
+    #[must_use]
+    pub const fn from_parts(sign: Sign, numerator: u128, denominator: u128, exponent: i32) -> Self {
+        Self {
+            sign,
+            numerator,
+            denominator,
+            exponent,
+        }
+    }
+}
+
+pub fn round_binary_ratio(
+    format: BinaryFormat,
+    exact: ExactBinaryRatio,
+) -> Result<RoundedBinaryValue, NumericOracleError> {
+    if exact.numerator == 0 {
+        return Err(NumericOracleError::ZeroExactInput);
+    }
+    if exact.denominator == 0 {
+        return Err(NumericOracleError::ZeroDenominator);
+    }
+
+    let ratio_exponent = ratio_floor_log2(exact.numerator, exact.denominator)?;
+    let mut value_exponent = ratio_exponent
+        .checked_add(exact.exponent)
+        .ok_or(NumericOracleError::ExponentArithmeticOverflow)?;
+
+    if value_exponent > format.emax {
+        return Ok(RoundedBinaryValue::Infinity(exact.sign));
+    }
+
+    if value_exponent < format.emin {
+        let quantum_exponent = format.q_exponent()?;
+        let shift = value_exponent
+            .checked_sub(quantum_exponent)
+            .ok_or(NumericOracleError::ExponentArithmeticOverflow)?;
+        if shift < -1 {
+            return Ok(RoundedBinaryValue::Zero(exact.sign));
+        }
+
+        let (denominator, remainder) =
+            normalized_binary_ratio_remainder(exact.numerator, exact.denominator, ratio_exponent)?;
+        let significand = if shift == -1 {
+            if remainder == 0 { 0 } else { 1 }
+        } else {
+            round_normalized_ratio_to_integer(
+                denominator,
+                remainder,
+                u32::try_from(shift).map_err(|_| NumericOracleError::InternalRangeExceeded)?,
+            )?
+        };
+
+        if significand == 0 {
+            return Ok(RoundedBinaryValue::Zero(exact.sign));
+        }
+
+        let normal_threshold = 1_u128 << (format.precision - 1);
+        if significand < normal_threshold {
+            return Ok(RoundedBinaryValue::Subnormal {
+                sign: exact.sign,
+                significand,
+            });
+        }
+        if significand == normal_threshold {
+            return Ok(RoundedBinaryValue::Normal {
+                sign: exact.sign,
+                significand,
+                exponent: format.emin,
+            });
+        }
+        return Err(NumericOracleError::InternalRangeExceeded);
+    }
+
+    let (denominator, remainder) =
+        normalized_binary_ratio_remainder(exact.numerator, exact.denominator, ratio_exponent)?;
+    let mut significand =
+        round_normalized_ratio_to_integer(denominator, remainder, format.precision - 1)?;
+    let carry = 1_u128 << format.precision;
+
+    if significand == carry {
+        significand >>= 1;
+        value_exponent = value_exponent
+            .checked_add(1)
+            .ok_or(NumericOracleError::ExponentArithmeticOverflow)?;
+    }
+
+    if value_exponent > format.emax {
+        return Ok(RoundedBinaryValue::Infinity(exact.sign));
+    }
+
+    let normal_minimum = 1_u128 << (format.precision - 1);
+    if !(normal_minimum..carry).contains(&significand) {
+        return Err(NumericOracleError::InternalRangeExceeded);
+    }
+
+    Ok(RoundedBinaryValue::Normal {
+        sign: exact.sign,
+        significand,
+        exponent: value_exponent,
+    })
+}
+
+fn ratio_floor_log2(numerator: u128, denominator: u128) -> Result<i32, NumericOracleError> {
+    debug_assert_ne!(numerator, 0);
+    debug_assert_ne!(denominator, 0);
+
+    let candidate = numerator.ilog2() as i32 - denominator.ilog2() as i32;
+    let reaches_candidate = if candidate >= 0 {
+        numerator >= checked_scale_u128(denominator, candidate as u32)?
+    } else {
+        checked_scale_u128(numerator, candidate.unsigned_abs())? >= denominator
+    };
+
+    Ok(if reaches_candidate {
+        candidate
+    } else {
+        candidate - 1
+    })
+}
+
+fn normalized_binary_ratio_remainder(
+    numerator: u128,
+    denominator: u128,
+    ratio_exponent: i32,
+) -> Result<(u128, u128), NumericOracleError> {
+    let (normalized_denominator, remainder) = if ratio_exponent >= 0 {
+        let normalized_denominator = checked_scale_u128(denominator, ratio_exponent as u32)?;
+        let remainder = numerator
+            .checked_sub(normalized_denominator)
+            .ok_or(NumericOracleError::InternalRangeExceeded)?;
+        (normalized_denominator, remainder)
+    } else {
+        let distance = ratio_exponent.unsigned_abs();
+        let remainder = match checked_scale_u128(numerator, distance) {
+            Ok(normalized_numerator) => normalized_numerator
+                .checked_sub(denominator)
+                .ok_or(NumericOracleError::InternalRangeExceeded)?,
+            Err(NumericOracleError::InternalRangeExceeded) => {
+                if distance > u128::BITS
+                    || numerator.ilog2().checked_add(distance) != Some(u128::BITS)
+                {
+                    return Err(NumericOracleError::InternalRangeExceeded);
+                }
+
+                let leading = 1_u128 << numerator.ilog2();
+                let tail = numerator - leading;
+                let scaled_tail = if distance == u128::BITS {
+                    if tail != 0 {
+                        return Err(NumericOracleError::InternalRangeExceeded);
+                    }
+                    0
+                } else {
+                    checked_scale_u128(tail, distance)?
+                };
+                let leading_remainder = (u128::MAX - denominator)
+                    .checked_add(1)
+                    .ok_or(NumericOracleError::InternalRangeExceeded)?;
+                leading_remainder
+                    .checked_add(scaled_tail)
+                    .ok_or(NumericOracleError::InternalRangeExceeded)?
+            }
+            Err(error) => return Err(error),
+        };
+        (denominator, remainder)
+    };
+
+    if remainder >= normalized_denominator {
+        return Err(NumericOracleError::InternalRangeExceeded);
+    }
+
+    Ok((normalized_denominator, remainder))
+}
+
+fn round_normalized_ratio_to_integer(
+    denominator: u128,
+    mut remainder: u128,
+    fraction_bits: u32,
+) -> Result<u128, NumericOracleError> {
+    debug_assert!(remainder < denominator);
+
+    let mut significand = 1_u128;
+
+    for _ in 0..fraction_bits {
+        significand = significand
+            .checked_mul(2)
+            .ok_or(NumericOracleError::InternalRangeExceeded)?;
+        let complement = denominator - remainder;
+        if remainder >= complement {
+            significand |= 1;
+            remainder -= complement;
+        } else {
+            remainder = remainder
+                .checked_add(remainder)
+                .ok_or(NumericOracleError::InternalRangeExceeded)?;
+        }
+    }
+
+    let complement = denominator - remainder;
+    if remainder > complement || (remainder == complement && (significand & 1) == 1) {
+        significand = significand
+            .checked_add(1)
+            .ok_or(NumericOracleError::InternalRangeExceeded)?;
+    }
+
+    Ok(significand)
 }
 
 pub fn round_dyadic(
