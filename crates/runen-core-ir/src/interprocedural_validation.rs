@@ -812,6 +812,7 @@ fn place_type(
     let local = body
         .local(place.local)
         .ok_or_else(|| point_error(point, MirValidationErrorKind::InvalidLocal(place.local)))?;
+
     types
         .project_type(local.ty, &place.projections)
         .ok_or_else(|| {
