@@ -346,6 +346,11 @@ pub enum ValueKind {
         left: Box<Value>,
         right: Box<Value>,
     },
+    FloatMul {
+        contract: NumericContract,
+        left: Box<Value>,
+        right: Box<Value>,
+    },
     IntegerXor {
         left: Box<Value>,
         right: Box<Value>,
@@ -546,9 +551,9 @@ pub enum DiagnosticKind {
     IntegerNegationRequiresInteger { required: Type },
     IntegerComplementRequiresInteger { required: Type },
     AdditionRequiresIntegerOrFloating { required: Type },
-    NumericContractSelectionRequiresFloatingAddOrSub { required: Type },
+    NumericContractSelectionRequiresGovernedFloatingOperation { required: Type },
     SubtractionRequiresIntegerOrFloating { required: Type },
-    IntegerMultiplicationRequiresInteger { required: Type },
+    MultiplicationRequiresIntegerOrFloating { required: Type },
     IntegerXorRequiresInteger { required: Type },
     IntegerOrRequiresInteger { required: Type },
     IntegerLiteralRequiresInteger { required: Type },
