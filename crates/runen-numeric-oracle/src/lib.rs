@@ -341,14 +341,15 @@ fn normalized_binary_ratio_remainder(
     denominator: u128,
     ratio_exponent: i32,
 ) -> Result<(u128, u128), NumericOracleError> {
-    let remainder = if ratio_exponent >= 0 {
+    let (normalized_denominator, remainder) = if ratio_exponent >= 0 {
         let normalized_denominator = checked_scale_u128(denominator, ratio_exponent as u32)?;
-        numerator
+        let remainder = numerator
             .checked_sub(normalized_denominator)
-            .ok_or(NumericOracleError::InternalRangeExceeded)?
+            .ok_or(NumericOracleError::InternalRangeExceeded)?;
+        (normalized_denominator, remainder)
     } else {
         let distance = ratio_exponent.unsigned_abs();
-        match checked_scale_u128(numerator, distance) {
+        let remainder = match checked_scale_u128(numerator, distance) {
             Ok(normalized_numerator) => normalized_numerator
                 .checked_sub(denominator)
                 .ok_or(NumericOracleError::InternalRangeExceeded)?,
@@ -377,14 +378,15 @@ fn normalized_binary_ratio_remainder(
                     .ok_or(NumericOracleError::InternalRangeExceeded)?
             }
             Err(error) => return Err(error),
-        }
+        };
+        (denominator, remainder)
     };
 
-    if remainder >= denominator {
+    if remainder >= normalized_denominator {
         return Err(NumericOracleError::InternalRangeExceeded);
     }
 
-    Ok((denominator, remainder))
+    Ok((normalized_denominator, remainder))
 }
 
 fn round_normalized_ratio_to_integer(
