@@ -503,7 +503,7 @@ Dynamic execution is eager and exactly left-to-right:
 1. evaluate the complete left producer exactly once under its existing producer semantics with required source type `T`;
 2. preserve every binding ownership consequence completed by left evaluation;
 3. if left evaluation yields defined fault `F`, produce no exclusive-or result, do not begin right evaluation, and continue the same `F` through the existing producer/receiving cleanup and propagation relations;
-4. if left evaluation diverges, produce no result, do not begin right evaluation, and perform no cleanup merely because execution remains suspended;
+4. if left evaluation diverges, produce no exclusive-or result, do not begin right evaluation, and perform no cleanup merely because execution remains suspended;
 5. after left success, hold its one produced owned `T` value as the in-progress binary operator's **held left operand**;
 6. evaluate the complete right producer exactly once with required source type `T`, regardless of the semantic integer value held on the left;
 7. preserve every binding ownership consequence completed by right evaluation;
@@ -588,7 +588,7 @@ The held left operand is one bounded operation-owned transient value. It is not 
 
 After both operand values have been produced successfully, equality/inequality itself is non-faulting and non-diverging and adds no source-visible side effect, binding structural transition, storage identity, or runtime state.
 
-When equality/inequality is used as a represented `if` or bounded-`while` condition, the successful post-condition binding environment is exactly the sequential successful environment after right producer evaluation. Only the operator truth relation changes the two successfully produced Bool operands into one Bool result and introduces no successful path-dependent binding environment, source state set, join, meet, widening, implicit restoration, or normalization rule.
+When equality/inequality is used as a represented `if` or bounded-`while` condition, the successful post-condition binding environment is exactly the sequential successful environment after right producer evaluation. The operator truth relation changes the two successfully produced Bool operands into one Bool result and introduces no successful path-dependent binding environment, source state set, join, meet, widening, implicit restoration, or normalization rule.
 
 Nested represented Boolean operators apply their own complete producer relations recursively. In particular, an equality operand may itself be a prefixed logical-negation producer, and complete nested producer execution finishes before the enclosing eager binary operation consumes its operand value.
 
