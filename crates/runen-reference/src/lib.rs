@@ -14,6 +14,7 @@ pub enum VerificationWriteKind {
     IntegerOr,
     FloatAdd,
     FloatSub,
+    FloatMul,
     Assign,
     InteriorAssign,
     RawAssign,
