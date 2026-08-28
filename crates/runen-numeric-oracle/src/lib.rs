@@ -256,14 +256,17 @@ pub fn round_binary_ratio(
             return Ok(RoundedBinaryValue::Zero(exact.sign));
         }
 
-        let (numerator, denominator) =
-            normalize_binary_ratio(exact.numerator, exact.denominator, ratio_exponent)?;
+        let (denominator, remainder) = normalized_binary_ratio_remainder(
+            exact.numerator,
+            exact.denominator,
+            ratio_exponent,
+        )?;
         let significand = if shift == -1 {
-            if numerator == denominator { 0 } else { 1 }
+            if remainder == 0 { 0 } else { 1 }
         } else {
             round_normalized_ratio_to_integer(
-                numerator,
                 denominator,
+                remainder,
                 u32::try_from(shift).map_err(|_| NumericOracleError::InternalRangeExceeded)?,
             )?
         };
@@ -289,10 +292,13 @@ pub fn round_binary_ratio(
         return Err(NumericOracleError::InternalRangeExceeded);
     }
 
-    let (numerator, denominator) =
-        normalize_binary_ratio(exact.numerator, exact.denominator, ratio_exponent)?;
+    let (denominator, remainder) = normalized_binary_ratio_remainder(
+        exact.numerator,
+        exact.denominator,
+        ratio_exponent,
+    )?;
     let mut significand =
-        round_normalized_ratio_to_integer(numerator, denominator, format.precision - 1)?;
+        round_normalized_ratio_to_integer(denominator, remainder, format.precision - 1)?;
     let carry = 1_u128 << format.precision;
 
     if significand == carry {
@@ -336,40 +342,66 @@ fn ratio_floor_log2(numerator: u128, denominator: u128) -> Result<i32, NumericOr
     })
 }
 
-fn normalize_binary_ratio(
+fn normalized_binary_ratio_remainder(
     numerator: u128,
     denominator: u128,
     ratio_exponent: i32,
 ) -> Result<(u128, u128), NumericOracleError> {
-    let (numerator, denominator) = if ratio_exponent >= 0 {
-        (
-            numerator,
-            checked_scale_u128(denominator, ratio_exponent as u32)?,
-        )
+    let remainder = if ratio_exponent >= 0 {
+        let normalized_denominator = checked_scale_u128(denominator, ratio_exponent as u32)?;
+        numerator
+            .checked_sub(normalized_denominator)
+            .ok_or(NumericOracleError::InternalRangeExceeded)?
     } else {
-        (
-            checked_scale_u128(numerator, ratio_exponent.unsigned_abs())?,
-            denominator,
-        )
+        let distance = ratio_exponent.unsigned_abs();
+        match checked_scale_u128(numerator, distance) {
+            Ok(normalized_numerator) => normalized_numerator
+                .checked_sub(denominator)
+                .ok_or(NumericOracleError::InternalRangeExceeded)?,
+            Err(NumericOracleError::InternalRangeExceeded) => {
+                if distance > u128::BITS
+                    || numerator.ilog2().checked_add(distance)
+                        != Some(u128::BITS)
+                {
+                    return Err(NumericOracleError::InternalRangeExceeded);
+                }
+
+                let leading = 1_u128 << numerator.ilog2();
+                let tail = numerator - leading;
+                let scaled_tail = if distance == u128::BITS {
+                    if tail != 0 {
+                        return Err(NumericOracleError::InternalRangeExceeded);
+                    }
+                    0
+                } else {
+                    checked_scale_u128(tail, distance)?
+                };
+                let leading_remainder = (u128::MAX - denominator)
+                    .checked_add(1)
+                    .ok_or(NumericOracleError::InternalRangeExceeded)?;
+                leading_remainder
+                    .checked_add(scaled_tail)
+                    .ok_or(NumericOracleError::InternalRangeExceeded)?
+            }
+            Err(error) => return Err(error),
+        }
     };
 
-    if numerator < denominator || numerator - denominator >= denominator {
+    if remainder >= denominator {
         return Err(NumericOracleError::InternalRangeExceeded);
     }
 
-    Ok((numerator, denominator))
+    Ok((denominator, remainder))
 }
 
 fn round_normalized_ratio_to_integer(
-    numerator: u128,
     denominator: u128,
+    mut remainder: u128,
     fraction_bits: u32,
 ) -> Result<u128, NumericOracleError> {
-    debug_assert!(numerator >= denominator);
-    debug_assert!(numerator - denominator < denominator);
+    debug_assert!(remainder < denominator);
 
     let mut significand = 1_u128;
-    let mut remainder = numerator - denominator;
 
     for _ in 0..fraction_bits {
         significand = significand
