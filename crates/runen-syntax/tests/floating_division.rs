@@ -45,7 +45,8 @@ fn slash_is_append_only_without_moving_established_raw_kinds() {
 
 #[test]
 fn standalone_slash_is_lossless_and_comments_keep_priority() {
-    let source = "fn f(a: F64, b: F64) -> F64 { // line / *\n return a /* left / */ / /* right */ b; }";
+    let source =
+        "fn f(a: F64, b: F64) -> F64 { // line / *\n return a /* left / */ / /* right */ b; }";
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
@@ -81,7 +82,11 @@ fn slash_reuses_the_bounded_multiplicative_node_for_grouped_mixed_forms() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(parsed.errors().is_empty(), "{source}: {:?}", parsed.errors());
+        assert!(
+            parsed.errors().is_empty(),
+            "{source}: {:?}",
+            parsed.errors()
+        );
         assert_eq!(count_nodes(&parsed, SyntaxKind::MulValue), 2);
     }
 
@@ -135,7 +140,10 @@ fn slash_keeps_multiplicative_precedence_and_prefix_boundaries() {
             .children()
             .map(|node| node.kind())
             .collect::<Vec<_>>(),
-        [SyntaxKind::IdentifierUse, SyntaxKind::DecimalFloatingLiteral]
+        [
+            SyntaxKind::IdentifierUse,
+            SyntaxKind::DecimalFloatingLiteral
+        ]
     );
 }
 
