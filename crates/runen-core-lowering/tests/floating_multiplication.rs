@@ -188,7 +188,10 @@ fn float_mul_to_float_add_dataflow_preserves_consumed_result_and_contracts() {
         .find(|statement| matches!(statement, CoreStatement::FloatAdd { .. }))
         .expect("outer FloatAdd");
 
-    assert_eq!(float_mul_contract(multiplication), CoreNumericContract::Fast);
+    assert_eq!(
+        float_mul_contract(multiplication),
+        CoreNumericContract::Fast
+    );
     let CoreStatement::FloatMul { dst: mul_dst, .. } = multiplication else {
         unreachable!();
     };
@@ -238,7 +241,10 @@ fn call_operands_lower_complete_left_then_right_before_float_mul() {
         .iter()
         .find(|statement| matches!(statement, CoreStatement::FloatMul { .. }))
         .expect("FloatMul after both calls");
-    assert_eq!(float_mul_contract(multiplication), CoreNumericContract::Fast);
+    assert_eq!(
+        float_mul_contract(multiplication),
+        CoreNumericContract::Fast
+    );
     let CoreStatement::FloatMul {
         dst, left, right, ..
     } = multiplication
