@@ -256,11 +256,8 @@ pub fn round_binary_ratio(
             return Ok(RoundedBinaryValue::Zero(exact.sign));
         }
 
-        let (denominator, remainder) = normalized_binary_ratio_remainder(
-            exact.numerator,
-            exact.denominator,
-            ratio_exponent,
-        )?;
+        let (denominator, remainder) =
+            normalized_binary_ratio_remainder(exact.numerator, exact.denominator, ratio_exponent)?;
         let significand = if shift == -1 {
             if remainder == 0 { 0 } else { 1 }
         } else {
@@ -292,11 +289,8 @@ pub fn round_binary_ratio(
         return Err(NumericOracleError::InternalRangeExceeded);
     }
 
-    let (denominator, remainder) = normalized_binary_ratio_remainder(
-        exact.numerator,
-        exact.denominator,
-        ratio_exponent,
-    )?;
+    let (denominator, remainder) =
+        normalized_binary_ratio_remainder(exact.numerator, exact.denominator, ratio_exponent)?;
     let mut significand =
         round_normalized_ratio_to_integer(denominator, remainder, format.precision - 1)?;
     let carry = 1_u128 << format.precision;
@@ -360,8 +354,7 @@ fn normalized_binary_ratio_remainder(
                 .ok_or(NumericOracleError::InternalRangeExceeded)?,
             Err(NumericOracleError::InternalRangeExceeded) => {
                 if distance > u128::BITS
-                    || numerator.ilog2().checked_add(distance)
-                        != Some(u128::BITS)
+                    || numerator.ilog2().checked_add(distance) != Some(u128::BITS)
                 {
                     return Err(NumericOracleError::InternalRangeExceeded);
                 }
