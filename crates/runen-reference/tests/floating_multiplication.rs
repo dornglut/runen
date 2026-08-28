@@ -3,9 +3,7 @@ use runen_core_ir::{
     LocalDecl, LocalId, NumericContract, Operand, Place, Program, ScalarType, Statement,
     Terminator, TypeDef, TypeTable, Value, validate_program,
 };
-use runen_numeric_oracle::{
-    BinaryFormat, ExactDyadic, RoundedBinaryValue, Sign, round_dyadic,
-};
+use runen_numeric_oracle::{BinaryFormat, ExactDyadic, RoundedBinaryValue, Sign, round_dyadic};
 use runen_reference::{
     Machine, ObservedBinaryFloatValue, ObservedValue, TerminalStatus, VerificationEventKind,
     VerificationWriteKind,
@@ -144,8 +142,16 @@ fn signed_zero_products_follow_operand_sign_product() {
         (BinaryFloatValue::Zero(Negative), one, Negative),
         (BinaryFloatValue::Zero(Positive), negative_one, Negative),
         (BinaryFloatValue::Zero(Negative), negative_one, Positive),
-        (BinaryFloatValue::Zero(Negative), BinaryFloatValue::Zero(Positive), Negative),
-        (BinaryFloatValue::Zero(Negative), BinaryFloatValue::Zero(Negative), Positive),
+        (
+            BinaryFloatValue::Zero(Negative),
+            BinaryFloatValue::Zero(Positive),
+            Negative,
+        ),
+        (
+            BinaryFloatValue::Zero(Negative),
+            BinaryFloatValue::Zero(Negative),
+            Positive,
+        ),
     ] {
         assert_mul(
             ScalarType::F32,
@@ -273,10 +279,7 @@ fn lower_normal_subnormal_boundary_rounding_is_exact() {
         ScalarType::F16,
         minimum_normal,
         positive_normal(2046, -1),
-        ObservedBinaryFloatValue::Represented(signed_subnormal(
-            BinaryFloatSign::Positive,
-            1023,
-        )),
+        ObservedBinaryFloatValue::Represented(signed_subnormal(BinaryFloatSign::Positive, 1023)),
     );
     assert_mul(
         ScalarType::F16,
@@ -332,10 +335,7 @@ fn fast_reference_representative_preserves_subnormal_inputs_results_and_sign() {
         ScalarType::F16,
         positive_normal(1024, -14),
         positive_normal(1024, -1),
-        ObservedBinaryFloatValue::Represented(signed_subnormal(
-            BinaryFloatSign::Positive,
-            512,
-        )),
+        ObservedBinaryFloatValue::Represented(signed_subnormal(BinaryFloatSign::Positive, 512)),
     );
 }
 
@@ -346,9 +346,7 @@ fn extreme_f64_underflow_and_overflow_are_complete_without_oracle_dependency() {
         ScalarType::F64,
         minimum_subnormal,
         minimum_subnormal,
-        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(
-            BinaryFloatSign::Positive,
-        )),
+        ObservedBinaryFloatValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Positive)),
     );
 
     let maximum = positive_normal((1_u64 << 53) - 1, 1023);
@@ -476,10 +474,7 @@ fn product_sign(left: Sign, right: Sign) -> Sign {
     }
 }
 
-fn exact_nonzero_finite(
-    scalar: ScalarType,
-    value: BinaryFloatValue,
-) -> (Sign, u128, i32) {
+fn exact_nonzero_finite(scalar: ScalarType, value: BinaryFloatValue) -> (Sign, u128, i32) {
     let (_, precision, emin, _) = oracle_format(scalar);
     let precision_tail = i32::try_from(precision - 1).unwrap();
     match value {
@@ -560,7 +555,8 @@ fn standard_finite_products_match_independent_exact_dyadic_oracle_without_capaci
         let values = deterministic_nonzero_finite_values(scalar);
         for left in &values {
             for right in &values {
-                let (left_sign, left_magnitude, left_exponent) = exact_nonzero_finite(scalar, *left);
+                let (left_sign, left_magnitude, left_exponent) =
+                    exact_nonzero_finite(scalar, *left);
                 let (right_sign, right_magnitude, right_exponent) =
                     exact_nonzero_finite(scalar, *right);
                 let magnitude = left_magnitude
