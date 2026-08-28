@@ -325,7 +325,7 @@ fn add_nonzero_finite(
     } else {
         match left_magnitude.cmp(&right_magnitude) {
             Ordering::Greater => (left_sign, left_magnitude.sub(&right_magnitude)),
-            Ordering::Less => (right_sign, left_magnitude.sub(&left_magnitude)),
+            Ordering::Less => (right_sign, right_magnitude.sub(&left_magnitude)),
             Ordering::Equal => {
                 return RuntimeFloatValue::Represented(BinaryFloatValue::Zero(
                     BinaryFloatSign::Positive,
