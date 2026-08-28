@@ -68,9 +68,21 @@ fn all_formats_retain_distinct_standard_and_selected_fast_float_div_hir() {
     .expect("same-format floating divisions are valid");
 
     for (name, ty, expected) in [
-        ("f16_standard", IntrinsicType::F16, NumericContract::Standard),
-        ("f32_standard", IntrinsicType::F32, NumericContract::Standard),
-        ("f64_standard", IntrinsicType::F64, NumericContract::Standard),
+        (
+            "f16_standard",
+            IntrinsicType::F16,
+            NumericContract::Standard,
+        ),
+        (
+            "f32_standard",
+            IntrinsicType::F32,
+            NumericContract::Standard,
+        ),
+        (
+            "f64_standard",
+            IntrinsicType::F64,
+            NumericContract::Standard,
+        ),
         ("f16_fast", IntrinsicType::F16, NumericContract::Fast),
         ("f32_fast", IntrinsicType::F32, NumericContract::Fast),
         ("f64_fast", IntrinsicType::F64, NumericContract::Fast),
@@ -97,9 +109,11 @@ fn division_rejects_nonfloating_requirements_before_operand_consumption() {
         } else {
             Type::Intrinsic(IntrinsicType::I32)
         };
-        assert!(errors.iter().any(|error| {
-            error.kind == DiagnosticKind::DivisionRequiresFloating { required }
-        }));
+        assert!(
+            errors.iter().any(|error| {
+                error.kind == DiagnosticKind::DivisionRequiresFloating { required }
+            })
+        );
         assert_eq!(unavailable_count(&errors), 0);
     }
 }
@@ -192,7 +206,9 @@ fn float_div_contracts_remain_local_across_mul_add_and_sub() {
 fn direct_conditional_selector_root_remains_excluded() {
     let errors = build("fn f(a: F32, b: F32) { if @fast(a / b) {} }")
         .expect_err("numeric selector is not a direct ConditionalValue root");
-    assert!(errors.iter().any(|error| {
-        matches!(error.kind, DiagnosticKind::SyntaxError(_))
-    }));
+    assert!(
+        errors
+            .iter()
+            .any(|error| { matches!(error.kind, DiagnosticKind::SyntaxError(_)) })
+    );
 }
