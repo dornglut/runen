@@ -117,7 +117,7 @@ fn selector_stacking_remains_opaque_for_float_sub() {
         .expect_err("stacked selectors are invalid");
     assert!(errors.iter().any(|error| {
         error.kind
-            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddOrSub {
+            == DiagnosticKind::NumericContractSelectionRequiresGovernedFloatingOperation {
                 required: Type::Intrinsic(IntrinsicType::F32),
             }
     }));
@@ -156,10 +156,10 @@ fn selected_non_floating_requirement_rejects_before_operand_consumption() {
              sink(value); \
          }",
     )
-    .expect_err("selector requires floating subtraction");
+    .expect_err("selector requires governed floating subtraction");
     assert!(errors.iter().any(|error| {
         error.kind
-            == DiagnosticKind::NumericContractSelectionRequiresFloatingAddOrSub {
+            == DiagnosticKind::NumericContractSelectionRequiresGovernedFloatingOperation {
                 required: Type::Intrinsic(IntrinsicType::I32),
             }
     }));
