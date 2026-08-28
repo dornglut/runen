@@ -142,7 +142,7 @@ When `T` is admitted:
 - the right operand required source type is exactly `T`; and
 - the successful result source type is exactly `T`.
 
-The operand types do not independently infer, choose, or alter `T`. A surrounding non-integer required type makes the subtraction relation source-invalid before operand validation may commit a binding ownership consequence. A surrounding integer type different from an operand producer's own exact type causes that operand to fail its existing exact required-type validation rather than causing a conversion or promotion.
+The operand types do not independently infer, choose, or alter `T`. A surrounding non-integer required type makes the subtraction source-invalid before operand validation may commit a binding ownership consequence. A surrounding integer type different from an operand producer's own exact type causes that operand to fail its existing exact required-type validation rather than causing a conversion or promotion.
 
 This relation defines no mixed-width or mixed-signedness arithmetic, integer promotion, widening, narrowing, coercion, conversion, default numeric type, overload resolution, trait dispatch, generic arithmetic, or result-type inference from operand syntax. Decimal integer literals may materialize as `T` only through their existing context-required literal relation; subtraction introduces no second literal-typing rule and does not reinterpret the accepted signed-literal relation.
 
