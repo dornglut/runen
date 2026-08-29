@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the currently represented Core semantics for first-class safe-reference types and values, reference permission classes, reference-backed alias authority, reference-carrier lifetime, root reference formation, reference reborrowing, reference-relative storage access, and the validity requirements that keep represented safe references non-dangling.
+This document owns the currently represented Core semantics for first-class safe-reference types and values, reference permission classes, reference-backed alias authority, reference-carrier lifetime, root reference formation, reference reborrowing, reference-relative storage access, cross-activation safe-reference value-transport consequences, and the validity requirements that keep represented safe references non-dangling.
 
 It consumes structural storage regions, storage extent, stored-value lifetime, initialization state, ordinary replacement permission, interior mutability, destruction, and cleanup from [Core value and storage semantics](value-storage.md); structural overlap and the shared/exclusive alias-authority law from [Core borrowing](borrowing.md); and parameter/result transfer boundaries and activation lifetime from [Core functions and direct calls](functions.md). Raw-pointer values and provenance remain separately owned by [Core pointers and provenance](pointers.md).
 
@@ -276,9 +276,9 @@ The first reference slice does not widen raw-pointer formation or raw-pointer ta
 
 In particular, reference access is not an accepted source for the currently represented raw-pointer `AddressOf` operand, and `RawRead`, `RawMove`, and `RawAssign` do not consume a safe reference as a raw pointer.
 
-A reference value carries no raw-pointer provenance. A raw pointer carries no reference-authority identity. Ending a reference authority does not mutate an independently existing raw-pointer value, and no raw-pointer value is formed merely by moving, copying, storing, dereferencing, or passing a safe reference.
+A reference value carries no raw-pointer provenance. A raw pointer carries no reference-authority identity. Ending a reference authority does not mutate an independently existing raw-pointer value, and no raw-pointer value is formed merely by moving, copying, storing, dereferencing, passing, or returning a safe reference.
 
-The call-transfer restrictions in [Core functions and direct calls](functions.md) additionally prohibit safe-reference parameters from exposing raw-pointer-containing referent storage across activations. No cross-activation raw-pointer relation is created by safe-reference transfer.
+The call-transfer restrictions in [Core functions and direct calls](functions.md) additionally prohibit safe-reference parameters from exposing raw-pointer-containing referent storage across activations. No cross-activation raw-pointer relation is created by safe-reference parameter or result transfer.
 
 ## Target stored-value lifetime
 
@@ -306,7 +306,7 @@ Because [Core value and storage semantics](value-storage.md) ends each local sto
 
 The requirement also permits a callee reference parameter to target storage belonging to a still-live suspended caller or another still-live ancestor activation. Suspension does not end those storage extents.
 
-A reference to a callee-local storage region cannot escape into a normally resumed caller by any mechanism represented in this transfer slice: function results cannot contain safe references, and storage reachable through a transferred safe-reference parameter is required by [Core functions and direct calls](functions.md) to contain no safe-reference leaf. Passing a callee-local reference further into a nested call does not extend the callee-local target beyond its owning activation; every such nested activation must terminate before the owning activation can return normally, unless it diverges or faults instead.
+A reference to a callee-local storage region cannot escape into a normally resumed caller through the bounded result contract owned by [Core functions and direct calls](functions.md): an admitted safe-reference result preserves the exact target and reference-authority identity of its designated incoming Shared-reference parameter origin, whose target belongs to still-live external storage rather than a callee local. Ordinary result forms remain reference-free, and storage reachable through a transferred safe-reference parameter still contains no safe-reference leaf. Passing a callee-local reference further into a nested call does not extend the callee-local target beyond its owning activation unless that owning activation itself remains live; every nested activation must terminate before the owning activation can return normally, unless it diverges or faults instead.
 
 Violation of the storage-extent validity requirement is a Core language-validation failure. It is not a defined `Fault`, not undefined behavior selected by a dereference, and not a runtime recovery case.
 
@@ -337,19 +337,26 @@ A temporary borrowed-call pattern may be represented without a special parameter
 3. move that child reference value as an ordinary call argument;
 4. keep the parent reference carrier in the suspended caller while the child authority delegates the overlapping target;
 5. execute the callee using its ordinary reference parameter value; and
-6. on a normal return, require the child target to be fully Live before callee cleanup removes the final child carrier, so the child authority ends and the parent's delegated authority is restored before caller continuation.
+6. on a normal return, require the child target to be fully Live before callee cleanup; if the function result does not preserve that exact child authority under the callable result contract owned by `functions.md`, cleanup removes its final callee-owned carrier so the child authority ends and the parent's delegated authority is restored before caller continuation; when an admitted result does preserve that exact child authority, the preserved result carrier instead keeps the child active and the parent remains delegated until that returned carrier later ends.
 
 On normal return, `functions.md` requires every external referent domain introduced through safe-reference parameters to be fully Live after return-operand effects and before cleanup. The actual target value may have changed; the postcondition preserves structural liveness, not pre-call value equality.
 
 Defined fault and divergence consequences remain owned by [Core functions and direct calls](functions.md) and do not synthesize this normal-return fully-Live postcondition on paths with no normal continuation.
 
-## Function result boundary
+## Function result transport boundary
 
-The first represented safe-reference slice does not permit any function result type whose value shape contains a safe-reference leaf.
+[Core functions and direct calls](functions.md) owns callable result admissibility, selection of any result-origin parameter slot, independent function validation of that origin contract, Return ordering, caller continuation summaries, and the exact result-transfer predicate. This reference owner does not redefine those policies.
 
-A bare reference result type is insufficient to define which input authority or storage region the result may derive from, which structural subregion is returned, or whether a candidate result improperly targets callee-local storage. The current Core function relation has no callable borrow-origin/result contract and validates function bodies independently.
+When `functions.md` admits a safe-reference result, the preserved result value obeys the ordinary reference-value transport relation from this document:
 
-Therefore reference-return semantics are not inferred from runtime execution or implementation dataflow. A later accepted owner must define an explicit result-origin/authority contract before safe-reference-containing results become valid Core callable structure.
+- the result carrier retains exactly the same semantic target `StorageRegion` and reference-authority identity as the produced result operand;
+- preserving and transferring that carrier across activation cleanup creates no new target, reference authority, reborrow, or additional carrier merely because the value crosses the result boundary;
+- the preserved carrier is outside the terminating activation's local cleanup set and therefore is not removed when other callee-local carriers are destroyed; and
+- the referenced authority remains active after callee cleanup whenever that preserved carrier or an active descendant keeps it live under the existing carrier/child lifecycle.
+
+If the preserved authority is itself a child authority created in an earlier still-live activation, its parent/ancestor delegation consequences remain exactly those already defined by the carrier/child relation. Result transfer does not detach, re-root, widen, narrow, or otherwise rewrite that authority branch.
+
+These are reference transport and lifetime consequences only. Which result values are permitted to survive, which input origin they must match, and which result shapes or permission classes are admitted remain owned by `functions.md`.
 
 ## Parameter referent-state boundary
 
@@ -368,11 +375,11 @@ Richer reference parameters whose referents contain safe references require a la
 
 Reference carrier cleanup uses the ordinary destruction points selected by the existing storage/function owners.
 
-On normal return from a callee whose result is reference-free, the function owner first requires every external referent domain introduced through safe-reference parameters to be fully Live. Callee local cleanup then removes every remaining callee-owned reference carrier in ordinary reverse local/field order. Carrier removal may end reference-authority branches and restore delegated ancestor authority before control resumes in the caller.
+On normal return, the function owner first applies its external-referent postcondition and, when a safe-reference result is admitted, preserves that produced result carrier outside activation-local cleanup. Callee local cleanup then removes every remaining callee-owned reference carrier in ordinary reverse local/field order. A preserved result carrier is not part of that destruction set; it keeps its existing authority active according to the ordinary carrier/child lifecycle while other carrier removals may end sibling or descendant branches and restore delegated ancestor authority as applicable.
 
-On defined fault, each terminating activation performs the same ordinary cleanup as the fault propagates outward. Reference carriers and reference-authority branches therefore end according to each activation's cleanup before that activation's local storage extents end. The normal-return fully-Live external-referent postcondition does not apply because no caller normal continuation is selected.
+On defined fault, no result carrier is preserved. Each terminating activation performs the same ordinary cleanup as the fault propagates outward. Reference carriers and reference-authority branches therefore end according to each activation's cleanup before that activation's local storage extents end. The normal-return fully-Live external-referent postcondition does not apply because no caller normal continuation is selected.
 
-If a callee diverges, no termination cleanup occurs merely because execution continues indefinitely. The caller remains suspended, its storage extents continue, and reference authorities/carriers retained in any still-live activation continue according to this document. No normal-return referent-state postcondition is synthesized on a diverging path.
+If a callee diverges, no result carrier is produced by a completed Return and no termination cleanup occurs merely because execution continues indefinitely. The caller remains suspended, its storage extents continue, and reference authorities/carriers retained in any still-live activation continue according to this document. No normal-return referent-state postcondition is synthesized on a diverging path.
 
 Undefined behavior remains distinct. This document adds no unsafe safe-reference operation and no safe-reference UB category.
 
@@ -403,14 +410,15 @@ A realization may preserve the semantic reference relation using physical addres
 
 ## Separate semantic owners and deliberate exclusions
 
-[Core borrowing](borrowing.md) owns structural overlap and the common alias-conflict consequences shared by explicit loans and reference-backed authorities. [Core value and storage semantics](value-storage.md) owns storage extent, stored-value lifecycle, ordinary replacement, interior mutability, destruction domain/order, and function-local cleanup. [Core functions and direct calls](functions.md) owns parameter/result transfer predicates, bounded transferred-referent entry/normal-return state, and activation/call behavior. [Core pointers and provenance](pointers.md) owns raw-pointer values and provenance. [Core unsafe semantics](unsafe.md) owns unsafe-operation preconditions and undefined-behavior classification.
+[Core borrowing](borrowing.md) owns structural overlap and the common alias-conflict consequences shared by explicit loans and reference-backed authorities. [Core value and storage semantics](value-storage.md) owns storage extent, stored-value lifecycle, ordinary replacement, interior mutability, destruction domain/order, and function-local cleanup. [Core functions and direct calls](functions.md) owns parameter/result transfer predicates, callable safe-reference result-origin policy, bounded transferred-referent entry/normal-return state, and activation/call behavior. [Core pointers and provenance](pointers.md) owns raw-pointer values and provenance. [Core unsafe semantics](unsafe.md) owns unsafe-operation preconditions and undefined-behavior classification.
 
 This revision deliberately does not define:
 
 - source reference, borrow, lifetime, or `unsafe` syntax;
 - named or inferred source lifetimes;
 - source places/lvalues;
-- reference-containing function results or callable result-origin contracts;
+- safe-reference result admissibility or callable result-origin selection beyond the transport consequences consumed from `functions.md`;
+- safe-reference-containing aggregate results, derived/subregion result authorities, authority detachment/re-rooting, or Exclusive/ExclusiveReplace result transfer;
 - cross-activation transfer through safe references whose referent structural values contain safe-reference or raw-pointer leaves;
 - callable borrowed-effect summaries beyond the bounded fully-Live entry/normal-return contract owned by `functions.md`;
 - raw-pointer transfer across calls;
