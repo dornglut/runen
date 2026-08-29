@@ -576,9 +576,7 @@ fn validate_static_statement(
         Statement::IntegerAdd { dst, left, right } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_integer_type,
             MirValidationErrorKind::IntegerAddRequiresInteger,
             point,
@@ -586,9 +584,7 @@ fn validate_static_statement(
         Statement::IntegerSub { dst, left, right } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_integer_type,
             MirValidationErrorKind::IntegerSubRequiresInteger,
             point,
@@ -596,9 +592,7 @@ fn validate_static_statement(
         Statement::IntegerMul { dst, left, right } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_integer_type,
             MirValidationErrorKind::IntegerMulRequiresInteger,
             point,
@@ -606,9 +600,7 @@ fn validate_static_statement(
         Statement::IntegerXor { dst, left, right } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_integer_type,
             MirValidationErrorKind::IntegerXorRequiresInteger,
             point,
@@ -616,9 +608,7 @@ fn validate_static_statement(
         Statement::IntegerOr { dst, left, right } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_integer_type,
             MirValidationErrorKind::IntegerOrRequiresInteger,
             point,
@@ -628,9 +618,7 @@ fn validate_static_statement(
         } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_float_type,
             MirValidationErrorKind::FloatAddRequiresFloat,
             point,
@@ -640,9 +628,7 @@ fn validate_static_statement(
         } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_float_type,
             MirValidationErrorKind::FloatSubRequiresFloat,
             point,
@@ -652,9 +638,7 @@ fn validate_static_statement(
         } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_float_type,
             MirValidationErrorKind::FloatMulRequiresFloat,
             point,
@@ -664,9 +648,7 @@ fn validate_static_statement(
         } => validate_static_binary_numeric(
             types,
             body,
-            dst,
-            left,
-            right,
+            (dst, left, right),
             is_float_type,
             MirValidationErrorKind::FloatDivRequiresFloat,
             point,
@@ -764,13 +746,12 @@ fn validate_static_statement(
 fn validate_static_binary_numeric(
     types: &TypeTable,
     body: &Body,
-    dst: &Place,
-    left: &Operand,
-    right: &Operand,
+    operands: (&Place, &Operand, &Operand),
     predicate: fn(&TypeTable, TypeId) -> bool,
     error: fn(TypeId) -> MirValidationErrorKind,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
+    let (dst, left, right) = operands;
     let expected = place_type(types, body, dst, point)?;
     if !predicate(types, expected) {
         return Err(point_error(point, error(expected)));
@@ -1491,9 +1472,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::IntegerAddRequiresVacant,
                     point,
                 )?,
@@ -1508,9 +1487,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::IntegerSubRequiresVacant,
                     point,
                 )?,
@@ -1525,9 +1502,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::IntegerMulRequiresVacant,
                     point,
                 )?,
@@ -1542,9 +1517,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::IntegerXorRequiresVacant,
                     point,
                 )?,
@@ -1559,9 +1532,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::IntegerOrRequiresVacant,
                     point,
                 )?,
@@ -1578,9 +1549,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::FloatAddRequiresVacant,
                     point,
                 )?,
@@ -1597,9 +1566,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::FloatSubRequiresVacant,
                     point,
                 )?,
@@ -1616,9 +1583,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::FloatMulRequiresVacant,
                     point,
                 )?,
@@ -1635,9 +1600,7 @@ fn validate_state_statement(
                     types,
                     body,
                     state,
-                    dst,
-                    left,
-                    right,
+                    (dst, left, right),
                     MirValidationErrorKind::FloatDivRequiresVacant,
                     point,
                 )?,
@@ -1944,12 +1907,11 @@ fn validate_state_binary_numeric(
     types: &TypeTable,
     body: &Body,
     state: &mut ValidationState,
-    dst: &Place,
-    left: &Operand,
-    right: &Operand,
+    operands: (&Place, &Operand, &Operand),
     vacancy_error: fn(Place) -> MirValidationErrorKind,
     point: &MirPoint,
 ) -> Result<DefinedStep<()>, MirValidationError> {
+    let (dst, left, right) = operands;
     authorize_direct_access(
         &state.active_loans,
         &state.reference_authorities,
@@ -2391,7 +2353,7 @@ fn destroy_object_live(
     types: &TypeTable,
     ty: TypeId,
     state: &mut ObjectState,
-    authorities: &mut Vec<Option<ActiveReferenceAuthority>>,
+    authorities: &mut [Option<ActiveReferenceAuthority>],
 ) {
     let definition = types
         .get(ty)
@@ -2418,7 +2380,7 @@ fn destroy_validation_value(
     types: &TypeTable,
     ty: TypeId,
     value: &ValidationValue,
-    authorities: &mut Vec<Option<ActiveReferenceAuthority>>,
+    authorities: &mut [Option<ActiveReferenceAuthority>],
 ) {
     let definition = types
         .get(ty)
@@ -2752,7 +2714,7 @@ fn allocate_reference_authority(
 }
 
 fn remove_reference_carrier(
-    authorities: &mut Vec<Option<ActiveReferenceAuthority>>,
+    authorities: &mut [Option<ActiveReferenceAuthority>],
     authority: ValidationReferenceAuthorityId,
 ) {
     let active = authorities[authority.0 as usize]
@@ -2765,7 +2727,7 @@ fn remove_reference_carrier(
     normalize_reference_authorities(authorities);
 }
 
-fn normalize_reference_authorities(authorities: &mut Vec<Option<ActiveReferenceAuthority>>) {
+fn normalize_reference_authorities(authorities: &mut [Option<ActiveReferenceAuthority>]) {
     loop {
         let mut changed = false;
 
