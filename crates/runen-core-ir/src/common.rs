@@ -360,9 +360,7 @@ impl TypeTable {
     #[must_use]
     pub fn is_reference_parameter_referent_safe(&self, ty: TypeId) -> bool {
         match self.get(ty).map(|def| &def.kind) {
-            Some(TypeKind::Scalar(
-                ScalarType::RawPointer(_) | ScalarType::Reference { .. },
-            ))
+            Some(TypeKind::Scalar(ScalarType::RawPointer(_) | ScalarType::Reference { .. }))
             | None => false,
             Some(TypeKind::Scalar(_)) => true,
             Some(TypeKind::Struct(fields)) => fields
@@ -390,9 +388,7 @@ impl TypeTable {
     #[must_use]
     pub fn is_result_transfer_safe(&self, ty: TypeId) -> bool {
         match self.get(ty).map(|def| &def.kind) {
-            Some(TypeKind::Scalar(
-                ScalarType::RawPointer(_) | ScalarType::Reference { .. },
-            ))
+            Some(TypeKind::Scalar(ScalarType::RawPointer(_) | ScalarType::Reference { .. }))
             | None => false,
             Some(TypeKind::Scalar(_)) => true,
             Some(TypeKind::Struct(fields)) => fields
@@ -456,12 +452,9 @@ impl TypeTable {
                         .zip(values)
                         .all(|(field, value)| self.value_matches(field.ty, value))
             }
-            (
-                TypeKind::Scalar(
-                    ScalarType::RawPointer(_) | ScalarType::Reference { .. },
-                ),
-                _,
-            ) => false,
+            (TypeKind::Scalar(ScalarType::RawPointer(_) | ScalarType::Reference { .. }), _) => {
+                false
+            }
             _ => false,
         }
     }
