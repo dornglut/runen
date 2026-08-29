@@ -1,8 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, BorrowKind, Field, Function, FunctionId, LoanDecl, LoanId,
-    LocalDecl, LocalId, MirValidationErrorKind, Operand, Place, Program, ReferenceAccess,
-    ReferencePermission, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value,
-    validate_program,
+    BasicBlock, BasicBlockId, Body, BorrowKind, Field, Function, LoanDecl, LoanId, LocalDecl, LocalId,
+    MirValidationErrorKind, Operand, Place, Program, ReferenceAccess, ReferencePermission,
+    ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 
 fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
