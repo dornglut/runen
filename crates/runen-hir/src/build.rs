@@ -2394,8 +2394,7 @@ fn validate_value(
                         | IntrinsicType::U64,
                     ),
                 ) => {
-                    let mut operands =
-                        node.children().filter(|child| is_value_node(child.kind()));
+                    let mut operands = node.children().filter(|child| is_value_node(child.kind()));
                     let left_node = operands
                         .next()
                         .expect("syntax-clean integer multiplication contains a left operand");
