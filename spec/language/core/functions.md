@@ -144,7 +144,20 @@ Each successfully evaluated argument value is held as one owned transient call v
 
 Existing operand semantics determine each argument's state effects. In particular, `Move` consumes its source stored value and `Copy` preserves its source stored value. Safe-reference carrier effects of Move and Shared-reference Copy are owned by [Core references](references.md).
 
-After every argument operand has evaluated successfully:
+After every argument operand has evaluated successfully and before callee activation creation, every safe-reference carrier recursively contained in the held argument values MUST currently retain the complete authority promised by its exact reference permission over its complete target region.
+
+This **parameter-entry authority** requirement is evaluated in the final caller authority state after all left-to-right argument effects. It therefore observes any reborrow or carrier/authority transition caused while evaluating a later argument.
+
+Under the reference delegation relation:
+
+- a Shared carrier satisfies the requirement while Shared child authorities are active because the parent retains shared authority over overlapping storage;
+- an Exclusive or ExclusiveReplace carrier fails the requirement while any active child authority delegates any part of its target, because the parent no longer retains complete exclusive authority over the complete referent;
+- a child Exclusive or ExclusiveReplace reborrow whose own authority has no active child satisfies the requirement even while its parent remains active in the caller; and
+- a reference-containing aggregate satisfies the requirement only when every recursively contained reference carrier does.
+
+This entry invariant ensures that an independently validated callee may rely on the exact Shared, Exclusive, or ExclusiveReplace capability stated by each parameter type without depending on hidden caller-side descendant state. It does not create a new reference authority, end an existing child, or add a borrowed-call pass mode.
+
+After parameter-entry authority admission succeeds:
 
 1. create one fresh activation of the target function;
 2. transfer the transient argument values into the designated parameter locals in parameter-slot order; and
@@ -152,7 +165,7 @@ After every argument operand has evaluated successfully:
 
 Parameter transfer does not duplicate a transient argument value. When the value contains safe-reference carriers, those existing carriers are transferred unchanged into the callee parameter storage; the call boundary does not create a new reference authority, reborrow, target, or carrier merely because transfer occurred.
 
-A caller that requires a temporary borrowed-call interval may explicitly produce a child safe-reference reborrow before the call and move that child value as the ordinary argument. The retained parent carrier remains in the caller while its authority is delegated over the child's target according to [Core references](references.md). No borrowed-call pass mode is implied or required.
+A caller that requires a temporary borrowed-call interval may explicitly produce a child safe-reference reborrow before the call and move that child value as the ordinary argument. The retained parent carrier remains in the caller while its authority is delegated over the child's target according to [Core references](references.md). The child itself satisfies parameter-entry authority admission when it retains the complete capability promised by its own reference type. No borrowed-call pass mode is implied or required.
 
 The represented operand set in this revision does not itself add a new defined-fault or divergence relation for operand evaluation. Undefined behavior selected by an existing unsafe operand has no defined post-state to continue into a call. A future operand owner that adds another abnormal evaluation outcome must define its interaction with held transient call values rather than inferring that behavior from this direct-call relation.
 
@@ -255,6 +268,7 @@ A represented Core program is language-valid under this relation only when all o
 - every direct call has exactly the target parameter count;
 - each argument operand type exactly matches its corresponding target parameter-local type;
 - argument operand state transitions, including safe-reference carrier/authority transitions, are valid in left-to-right order;
+- after all argument operands complete, every recursively contained safe-reference carrier satisfies parameter-entry authority admission before callee activation creation;
 - result-destination presence exactly matches target result/no-result structure;
 - a result destination has exactly the target result type, is wholly vacant at the call point, and has ordinary direct exclusive initialization authority;
 - every normal call continuation block exists in the caller body;
@@ -264,7 +278,7 @@ A represented Core program is language-valid under this relation only when all o
 
 Validation MUST NOT reject a program merely because its call graph contains a cycle or because a call might diverge or yield a defined fault.
 
-Reference parameter transfer does not require whole-program expansion of the callee body merely to establish argument type compatibility. Reference-containing results remain forbidden precisely because this revision has no callable result-origin contract from which an independently validated caller could establish returned reference authority.
+Reference parameter transfer does not require whole-program expansion of the callee body: parameter-entry authority admission ensures that each transferred safe-reference carrier enters the callee with the complete capability promised by its exact reference type. Reference-containing results remain forbidden precisely because this revision has no callable result-origin contract from which an independently validated caller could establish returned reference authority.
 
 Body-local validation diagnostics must identify enough function-local context to distinguish equal body-local identifiers belonging to different functions. That diagnostic identity is implementation evidence and does not make numeric function or block handles Core-observable.
 
