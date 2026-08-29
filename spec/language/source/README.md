@@ -4,6 +4,7 @@
 - [Concrete syntax](concrete-syntax.md)
 - [Names and modules](names-modules.md)
 - [Type foundation](types.md)
+- [Shared references](references.md)
 - [Literal semantics](literals.md)
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
