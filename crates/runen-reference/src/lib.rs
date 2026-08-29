@@ -94,19 +94,32 @@ pub struct RawPointerValue {
 /// taxonomy for the language.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UndefinedBehaviorKind {
-    RawReadTargetNotLive { target: StorageRegion },
-    RawReadConflictsWithExclusiveLoan { target: StorageRegion, loan: LoanId },
+    RawReadTargetNotLive {
+        target: StorageRegion,
+    },
+    RawReadConflictsWithExclusiveLoan {
+        target: StorageRegion,
+        loan: LoanId,
+    },
     RawReadConflictsWithReferenceAuthority {
         target: StorageRegion,
         authority: ReferenceAuthorityId,
     },
-    RawMoveTargetNotLive { target: StorageRegion },
-    RawMoveConflictsWithLoan { target: StorageRegion, loan: LoanId },
+    RawMoveTargetNotLive {
+        target: StorageRegion,
+    },
+    RawMoveConflictsWithLoan {
+        target: StorageRegion,
+        loan: LoanId,
+    },
     RawMoveConflictsWithReferenceAuthority {
         target: StorageRegion,
         authority: ReferenceAuthorityId,
     },
-    RawAssignConflictsWithLoan { target: StorageRegion, loan: LoanId },
+    RawAssignConflictsWithLoan {
+        target: StorageRegion,
+        loan: LoanId,
+    },
     RawAssignConflictsWithReferenceAuthority {
         target: StorageRegion,
         authority: ReferenceAuthorityId,
