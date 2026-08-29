@@ -226,11 +226,7 @@ fn reference_parameter_referent_may_not_contain_raw_or_nested_reference_leaves()
             parameters: vec![LocalId(0)],
             result: None,
             body: body(
-                vec![LocalDecl::new(
-                    "parameter",
-                    invalid_parameter_type,
-                    false,
-                )],
+                vec![LocalDecl::new("parameter", invalid_parameter_type, false)],
                 vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
             ),
         };
