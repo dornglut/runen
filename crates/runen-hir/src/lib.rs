@@ -114,11 +114,30 @@ pub enum IntrinsicType {
     F64,
 }
 
+/// Exact non-reference referent identity admitted by the first Shared-reference HIR slice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReferenceReferent {
+    Intrinsic(IntrinsicType),
+    Record(RecordId),
+}
+
+impl ReferenceReferent {
+    /// The ordinary source type denoted by this non-recursive referent identity.
+    #[must_use]
+    pub const fn ty(self) -> Type {
+        match self {
+            Self::Intrinsic(intrinsic) => Type::Intrinsic(intrinsic),
+            Self::Record(record) => Type::Record(record),
+        }
+    }
+}
+
 /// Resolved represented source type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type {
     Intrinsic(IntrinsicType),
     Record(RecordId),
+    SharedReference(ReferenceReferent),
 }
 
 /// Retained source-semantic owned-value duplicability for one nominal record.
@@ -210,7 +229,7 @@ pub struct Record {
 
 pub(crate) fn type_is_duplicable_in_records(ty: Type, records: &[Record]) -> bool {
     match ty {
-        Type::Intrinsic(_) => true,
+        Type::Intrinsic(_) | Type::SharedReference(_) => true,
         Type::Record(record) => records[record.0].duplicability == Duplicability::Duplicable,
     }
 }
@@ -372,6 +391,12 @@ pub enum ValueKind {
     BooleanAnd {
         left: Box<Value>,
         right: Box<Value>,
+    },
+    SharedBorrowRoot {
+        target: BindingId,
+    },
+    SharedDereferenceCopy {
+        reference: BindingId,
     },
     BindingUse {
         binding: BindingId,
@@ -545,10 +570,16 @@ pub enum DiagnosticKind {
     DuplicateRecordField,
     RecordContainmentCycle,
     InvalidRecordDuplicabilitySelection,
+    SharedReferenceField,
+    SharedReferenceResult,
+    MutableSharedReferenceLocal,
+    InvalidSharedReferenceReferent { referent: Type },
     DuplicateParameter,
     LocalShadowing,
     ExpectedValueBinding,
     UnavailableBinding,
+    ExpectedSharedReference,
+    BorrowedAssignmentTarget,
     ImmutableAssignmentTarget,
     ExpectedFunction,
     ArgumentCount { expected: usize, found: usize },
