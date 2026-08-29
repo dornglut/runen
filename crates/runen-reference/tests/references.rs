@@ -140,8 +140,11 @@ fn ending_shared_reborrow_restores_exclusive_replace_parent() {
                         src: Operand::ReferenceMove(ReferenceAccess::new(parent.clone())),
                     },
                     Statement::ReferenceAssign {
-                        dst: ReferenceAccess::new(parent),
+                        dst: ReferenceAccess::new(parent.clone()),
                         src: Operand::Move(held.into()),
+                    },
+                    Statement::Drop {
+                        place: parent.into(),
                     },
                 ],
                 Terminator::Return(Some(Operand::Move(target.into()))),
