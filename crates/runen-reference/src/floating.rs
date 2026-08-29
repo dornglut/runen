@@ -88,6 +88,18 @@ pub(super) fn mul_f64(left: RuntimeFloatValue, right: RuntimeFloatValue) -> Runt
     mul_standard(F64, left, right)
 }
 
+pub(super) fn div_f16(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    div_standard(F16, left, right)
+}
+
+pub(super) fn div_f32(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    div_standard(F32, left, right)
+}
+
+pub(super) fn div_f64(left: RuntimeFloatValue, right: RuntimeFloatValue) -> RuntimeFloatValue {
+    div_standard(F64, left, right)
+}
+
 fn add_standard(
     format: FloatFormat,
     left: RuntimeFloatValue,
@@ -129,6 +141,21 @@ fn mul_standard(
         }
         (RuntimeFloatValue::Represented(left), RuntimeFloatValue::Represented(right)) => {
             mul_represented(format, left, right)
+        }
+    }
+}
+
+fn div_standard(
+    format: FloatFormat,
+    left: RuntimeFloatValue,
+    right: RuntimeFloatValue,
+) -> RuntimeFloatValue {
+    match (left, right) {
+        (RuntimeFloatValue::NaNClass, _) | (_, RuntimeFloatValue::NaNClass) => {
+            RuntimeFloatValue::NaNClass
+        }
+        (RuntimeFloatValue::Represented(left), RuntimeFloatValue::Represented(right)) => {
+            div_represented(format, left, right)
         }
     }
 }
@@ -210,6 +237,33 @@ fn mul_represented(
             right_sign,
         ))),
         (left, right) => mul_nonzero_finite(format, left, right),
+    }
+}
+
+fn div_represented(
+    format: FloatFormat,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+) -> RuntimeFloatValue {
+    use BinaryFloatValue::{Infinity, Zero};
+
+    match (left, right) {
+        (Zero(_), Zero(_)) | (Infinity(_), Infinity(_)) => RuntimeFloatValue::NaNClass,
+        (left, Zero(right_sign)) => RuntimeFloatValue::Represented(Infinity(product_sign(
+            represented_sign(left),
+            right_sign,
+        ))),
+        (Zero(left_sign), right) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(left_sign, represented_sign(right))))
+        }
+        (Infinity(left_sign), right) => RuntimeFloatValue::Represented(Infinity(product_sign(
+            left_sign,
+            represented_sign(right),
+        ))),
+        (left, Infinity(right_sign)) => {
+            RuntimeFloatValue::Represented(Zero(product_sign(represented_sign(left), right_sign)))
+        }
+        (left, right) => div_nonzero_finite(format, left, right),
     }
 }
 
@@ -327,6 +381,27 @@ fn mul_nonzero_finite(
     let sign = product_sign(left_sign, right_sign);
 
     RuntimeFloatValue::Represented(round_exact_dyadic(format, sign, magnitude, exponent))
+}
+
+fn div_nonzero_finite(
+    format: FloatFormat,
+    left: BinaryFloatValue,
+    right: BinaryFloatValue,
+) -> RuntimeFloatValue {
+    let (left_sign, numerator, left_exponent) = exact_finite_dyadic(format, left);
+    let (right_sign, denominator, right_exponent) = exact_finite_dyadic(format, right);
+    let exponent = left_exponent
+        .checked_sub(right_exponent)
+        .expect("represented floating quotient exponent fits i32");
+    let sign = product_sign(left_sign, right_sign);
+
+    RuntimeFloatValue::Represented(round_exact_ratio(
+        format,
+        sign,
+        numerator,
+        denominator,
+        exponent,
+    ))
 }
 
 fn exact_finite_magnitude(
@@ -488,6 +563,157 @@ fn round_exact_dyadic(
                 .expect("represented floating exponent fits i16"),
         }
     }
+}
+
+fn round_exact_ratio(
+    format: FloatFormat,
+    sign: BinaryFloatSign,
+    numerator: u128,
+    denominator: u128,
+    exponent: i32,
+) -> BinaryFloatValue {
+    debug_assert_ne!(numerator, 0);
+    debug_assert_ne!(denominator, 0);
+    let ratio_exponent = ratio_floor_log2(numerator, denominator);
+    let mut value_exponent = ratio_exponent
+        .checked_add(exponent)
+        .expect("represented floating quotient exponent fits i32");
+    let precision_tail = i32::try_from(format.precision - 1).expect("precision tail fits i32");
+
+    if value_exponent > i32::from(format.emax) {
+        return BinaryFloatValue::Infinity(sign);
+    }
+
+    let (normalized_denominator, remainder) =
+        normalized_ratio_remainder(numerator, denominator, ratio_exponent);
+
+    if value_exponent < i32::from(format.emin) {
+        let quantum_exponent = i32::from(format.emin) - precision_tail;
+        let shift = value_exponent - quantum_exponent;
+        if shift < -1 {
+            return BinaryFloatValue::Zero(sign);
+        }
+
+        let significand = if shift == -1 {
+            u128::from(remainder != 0)
+        } else {
+            round_normalized_ratio(
+                normalized_denominator,
+                remainder,
+                u32::try_from(shift).expect("nonnegative subnormal ratio shift fits u32"),
+            )
+        };
+        if significand == 0 {
+            return BinaryFloatValue::Zero(sign);
+        }
+
+        let normal_threshold = 1_u128 << (format.precision - 1);
+        if significand < normal_threshold {
+            return BinaryFloatValue::Subnormal {
+                sign,
+                significand: u64::try_from(significand)
+                    .expect("represented subnormal significand fits u64"),
+            };
+        }
+        debug_assert_eq!(significand, normal_threshold);
+        return BinaryFloatValue::Normal {
+            sign,
+            significand: u64::try_from(normal_threshold)
+                .expect("represented normal significand fits u64"),
+            exponent: format.emin,
+        };
+    }
+
+    let mut significand =
+        round_normalized_ratio(normalized_denominator, remainder, format.precision - 1);
+    let carry = 1_u128 << format.precision;
+    if significand == carry {
+        significand >>= 1;
+        value_exponent += 1;
+    }
+
+    if value_exponent > i32::from(format.emax) {
+        BinaryFloatValue::Infinity(sign)
+    } else {
+        let normal_minimum = 1_u128 << (format.precision - 1);
+        debug_assert!((normal_minimum..carry).contains(&significand));
+        BinaryFloatValue::Normal {
+            sign,
+            significand: u64::try_from(significand)
+                .expect("represented normal significand fits u64"),
+            exponent: i16::try_from(value_exponent)
+                .expect("represented floating exponent fits i16"),
+        }
+    }
+}
+
+fn ratio_floor_log2(numerator: u128, denominator: u128) -> i32 {
+    let candidate = i32::try_from(numerator.ilog2()).expect("u128 bit index fits i32")
+        - i32::try_from(denominator.ilog2()).expect("u128 bit index fits i32");
+    let reaches_candidate = if candidate >= 0 {
+        numerator
+            >= denominator
+                .checked_shl(candidate as u32)
+                .expect("normalized finite quotient denominator fits u128")
+    } else {
+        numerator
+            .checked_shl(candidate.unsigned_abs())
+            .expect("normalized finite quotient numerator fits u128")
+            >= denominator
+    };
+
+    if reaches_candidate {
+        candidate
+    } else {
+        candidate - 1
+    }
+}
+
+fn normalized_ratio_remainder(
+    numerator: u128,
+    denominator: u128,
+    ratio_exponent: i32,
+) -> (u128, u128) {
+    if ratio_exponent >= 0 {
+        let normalized_denominator = denominator
+            .checked_shl(ratio_exponent as u32)
+            .expect("normalized finite quotient denominator fits u128");
+        let remainder = numerator
+            .checked_sub(normalized_denominator)
+            .expect("ratio floor exponent establishes normalized numerator bound");
+        debug_assert!(remainder < normalized_denominator);
+        (normalized_denominator, remainder)
+    } else {
+        let normalized_numerator = numerator
+            .checked_shl(ratio_exponent.unsigned_abs())
+            .expect("normalized finite quotient numerator fits u128");
+        let remainder = normalized_numerator
+            .checked_sub(denominator)
+            .expect("ratio floor exponent establishes normalized denominator bound");
+        debug_assert!(remainder < denominator);
+        (denominator, remainder)
+    }
+}
+
+fn round_normalized_ratio(denominator: u128, mut remainder: u128, fraction_bits: u32) -> u128 {
+    debug_assert!(remainder < denominator);
+    let mut significand = 1_u128;
+
+    for _ in 0..fraction_bits {
+        significand <<= 1;
+        remainder <<= 1;
+        if remainder >= denominator {
+            significand |= 1;
+            remainder -= denominator;
+        }
+    }
+
+    let doubled_remainder = remainder << 1;
+    if doubled_remainder > denominator || (doubled_remainder == denominator && significand & 1 == 1)
+    {
+        significand += 1;
+    }
+    significand
 }
 
 fn round_dyadic_to_integer_grid(magnitude: u128, exponent: i32, grid_exponent: i32) -> u128 {

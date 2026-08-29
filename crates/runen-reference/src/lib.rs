@@ -15,6 +15,7 @@ pub enum VerificationWriteKind {
     FloatAdd,
     FloatSub,
     FloatMul,
+    FloatDiv,
     Assign,
     InteriorAssign,
     RawAssign,

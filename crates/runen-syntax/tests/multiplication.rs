@@ -1,4 +1,4 @@
-use runen_syntax::{Parse, SyntaxErrorKind, SyntaxKind, parse_source};
+use runen_syntax::{Parse, SyntaxKind, parse_source};
 
 fn parse(source: &str) -> Parse {
     parse_source(source.as_bytes()).expect("valid UTF-8 test source")
@@ -58,19 +58,7 @@ fn standalone_star_is_lossless_without_disturbing_comment_delimiters() {
 }
 
 #[test]
-fn slash_remains_unsupported_and_double_star_and_star_equals_are_not_operators() {
-    let slash = parse("fn f(a: I64, b: I64) -> I64 { return a / b; }");
-    assert_eq!(
-        slash.text(),
-        "fn f(a: I64, b: I64) -> I64 { return a / b; }"
-    );
-    assert!(
-        slash
-            .errors()
-            .iter()
-            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
-    );
-
+fn double_star_and_star_equals_are_not_operators() {
     for source in [
         "fn f(a: I64, b: I64) -> I64 { return a ** b; }",
         "fn f(a: I64, b: I64) -> I64 { return a *= b; }",

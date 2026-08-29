@@ -128,6 +128,7 @@ pub enum SyntaxKind {
     RecordPatternRest,
     At,
     NumericContractSelectedValue,
+    Slash,
 }
 
 impl SyntaxKind {
@@ -293,6 +294,7 @@ impl Language for RunenLanguage {
             103 => SyntaxKind::RecordPatternRest,
             104 => SyntaxKind::At,
             105 => SyntaxKind::NumericContractSelectedValue,
+            106 => SyntaxKind::Slash,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

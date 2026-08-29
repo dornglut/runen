@@ -312,6 +312,23 @@ impl RuntimeValue {
         }
     }
 
+    fn floating_div(contract: NumericContract, left: Self, right: Self) -> Self {
+        match contract {
+            NumericContract::Standard => Self::standard_floating_div(left, right),
+            NumericContract::Reproducible => Self::standard_floating_div(left, right),
+            NumericContract::Fast => Self::standard_floating_div(left, right),
+        }
+    }
+
+    fn standard_floating_div(left: Self, right: Self) -> Self {
+        match (left, right) {
+            (Self::F16(left), Self::F16(right)) => Self::F16(crate::floating::div_f16(left, right)),
+            (Self::F32(left), Self::F32(right)) => Self::F32(crate::floating::div_f32(left, right)),
+            (Self::F64(left), Self::F64(right)) => Self::F64(crate::floating::div_f64(left, right)),
+            _ => unreachable!("validated FloatDiv has matching same-format floating operands"),
+        }
+    }
+
     fn into_observed_value(self) -> ObservedValue {
         match self {
             Self::Bool(value) => ObservedValue::Bool(value),
@@ -703,6 +720,12 @@ impl Machine {
                 left,
                 right,
             } => self.float_mul(frame_index, *contract, dst, left, right),
+            Statement::FloatDiv {
+                contract,
+                dst,
+                left,
+                right,
+            } => self.float_div(frame_index, *contract, dst, left, right),
             Statement::Borrow { loan, kind, src } => {
                 self.begin_borrow(frame_index, *loan, *kind, src);
                 Ok(())
@@ -1004,6 +1027,38 @@ impl Machine {
             VerificationEventKind::Write {
                 place: dst.clone(),
                 kind: VerificationWriteKind::FloatMul,
+            },
+        );
+        Ok(())
+    }
+
+    fn float_div(
+        &mut self,
+        frame_index: usize,
+        contract: NumericContract,
+        dst: &Place,
+        left: &Operand,
+        right: &Operand,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        let dst_ty = self.place_type(frame_index, dst);
+        let left = self.evaluate_operand(frame_index, left)?;
+        let right = self.evaluate_operand(frame_index, right)?;
+        let value = RuntimeValue::floating_div(contract, left, right);
+        {
+            let types = &self.program.as_program().types;
+            let frame = &mut self.frames[frame_index];
+            write_value(
+                types,
+                dst_ty,
+                place_state_mut(&mut frame.locals, dst),
+                value,
+            );
+        }
+        self.record(
+            frame_index,
+            VerificationEventKind::Write {
+                place: dst.clone(),
+                kind: VerificationWriteKind::FloatDiv,
             },
         );
         Ok(())
