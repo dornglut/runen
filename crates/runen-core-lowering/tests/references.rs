@@ -94,9 +94,11 @@ fn maps_only_used_shared_reference_types_once_per_hir_type() {
     let f = function(program, "f");
     let references = shared_reference_types(program);
     assert_eq!(references.len(), 2);
-    assert!(references.iter().all(|(_, _, permission)| {
-        *permission == ReferencePermission::Shared
-    }));
+    assert!(
+        references
+            .iter()
+            .all(|(_, _, permission)| { *permission == ReferencePermission::Shared })
+    );
 
     let expected_referents = BTreeSet::from([
         f.body.locals[f.parameters[0].0 as usize].ty,
@@ -112,8 +114,14 @@ fn maps_only_used_shared_reference_types_once_per_hir_type() {
     let point_reference_ty = f.body.locals[f.parameters[3].0 as usize].ty;
     assert_ne!(scalar_reference_ty, point_reference_ty);
     assert_eq!(local_named(f, "scalar_copy").0 as usize, 4);
-    assert_eq!(f.body.locals[local_named(f, "scalar_copy").0 as usize].ty, scalar_reference_ty);
-    assert_eq!(f.body.locals[local_named(f, "point_copy").0 as usize].ty, point_reference_ty);
+    assert_eq!(
+        f.body.locals[local_named(f, "scalar_copy").0 as usize].ty,
+        scalar_reference_ty
+    );
+    assert_eq!(
+        f.body.locals[local_named(f, "point_copy").0 as usize].ty,
+        point_reference_ty
+    );
 }
 
 #[test]
@@ -256,7 +264,8 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
     );
 
     let mut consuming_reference = hir("fn f(r: &I64) { let s: &I64 = r; }");
-    let HirStatement::Local { initializer, .. } = &mut consuming_reference.functions[0].body.statements[0]
+    let HirStatement::Local { initializer, .. } =
+        &mut consuming_reference.functions[0].body.statements[0]
     else {
         panic!("expected reference local");
     };
