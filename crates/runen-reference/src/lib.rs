@@ -58,6 +58,25 @@ pub enum ObservedValue {
     Struct(Vec<ObservedValue>),
 }
 
+/// Opaque verification identity for one dynamic safe-reference authority interval.
+///
+/// This number is not Core-observable and does not prescribe an implementation
+/// representation. Runtime authority identities are independent of body-local
+/// [`LoanId`] values and storage-instance identities.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ReferenceAuthorityId(pub u64);
+
+/// Verification representation of one runtime safe-reference value.
+///
+/// The exact referent type and permission are carried by the value's Core type. The
+/// runtime value contains only the semantic target region and the opaque dynamic
+/// authority identity required to authorize reference-relative access.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SafeReferenceValue {
+    pub target: StorageRegion,
+    pub authority: ReferenceAuthorityId,
+}
+
 /// Verification representation of one symbolic raw-pointer value.
 ///
 /// `target` identifies the structural storage region selected when the pointer was
@@ -77,9 +96,21 @@ pub struct RawPointerValue {
 pub enum UndefinedBehaviorKind {
     RawReadTargetNotLive { target: StorageRegion },
     RawReadConflictsWithExclusiveLoan { target: StorageRegion, loan: LoanId },
+    RawReadConflictsWithReferenceAuthority {
+        target: StorageRegion,
+        authority: ReferenceAuthorityId,
+    },
     RawMoveTargetNotLive { target: StorageRegion },
     RawMoveConflictsWithLoan { target: StorageRegion, loan: LoanId },
+    RawMoveConflictsWithReferenceAuthority {
+        target: StorageRegion,
+        authority: ReferenceAuthorityId,
+    },
     RawAssignConflictsWithLoan { target: StorageRegion, loan: LoanId },
+    RawAssignConflictsWithReferenceAuthority {
+        target: StorageRegion,
+        authority: ReferenceAuthorityId,
+    },
 }
 
 mod floating;
