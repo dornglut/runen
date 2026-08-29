@@ -15,7 +15,11 @@ fn count_kind(parse: &runen_syntax::Parse, kind: SyntaxKind) -> usize {
 #[test]
 fn lexes_standalone_ampersand_without_splitting_boolean_conjunction() {
     let conjunction = parse("fn f(a: Bool, b: Bool) -> Bool { return a && b; }");
-    assert!(conjunction.errors().is_empty(), "{:?}", conjunction.errors());
+    assert!(
+        conjunction.errors().is_empty(),
+        "{:?}",
+        conjunction.errors()
+    );
     assert_eq!(count_kind(&conjunction, SyntaxKind::AmpAmp), 1);
     assert_eq!(count_kind(&conjunction, SyntaxKind::Amp), 0);
 
@@ -48,25 +52,34 @@ fn refs(x: I64, r: &I64, foreign: &dep::Ticket) -> I64 {
 #[test]
 fn prefix_dereference_does_not_reinterpret_binary_multiplication() {
     let multiplication = parse("fn f(a: I64, b: I64) -> I64 { return a * b; }");
-    assert!(multiplication.errors().is_empty(), "{:?}", multiplication.errors());
+    assert!(
+        multiplication.errors().is_empty(),
+        "{:?}",
+        multiplication.errors()
+    );
     assert_eq!(count_kind(&multiplication, SyntaxKind::MulValue), 1);
     assert_eq!(
         count_kind(&multiplication, SyntaxKind::SharedDereferenceValue),
         0
     );
 
-    let dereference_then_multiply =
-        parse("fn f(r: &I64, x: I64) -> I64 { return *r * x; }");
+    let dereference_then_multiply = parse("fn f(r: &I64, x: I64) -> I64 { return *r * x; }");
     assert!(
         dereference_then_multiply.errors().is_empty(),
         "{:?}",
         dereference_then_multiply.errors()
     );
     assert_eq!(
-        count_kind(&dereference_then_multiply, SyntaxKind::SharedDereferenceValue),
+        count_kind(
+            &dereference_then_multiply,
+            SyntaxKind::SharedDereferenceValue
+        ),
         1
     );
-    assert_eq!(count_kind(&dereference_then_multiply, SyntaxKind::MulValue), 1);
+    assert_eq!(
+        count_kind(&dereference_then_multiply, SyntaxKind::MulValue),
+        1
+    );
 }
 
 #[test]
