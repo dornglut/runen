@@ -10,8 +10,8 @@ use crate::floating::{
     sub_f64,
 };
 use crate::{
-    ObservedValue, RawPointerValue, ReferenceAuthorityId, SafeReferenceValue, UndefinedBehaviorKind,
-    VerificationWriteKind,
+    ObservedValue, RawPointerValue, ReferenceAuthorityId, SafeReferenceValue,
+    UndefinedBehaviorKind, VerificationWriteKind,
 };
 
 /// Verification-only identity of one dynamic function activation.
@@ -1046,10 +1046,12 @@ impl Machine {
             });
         }
         if let Some(authority) = self.raw_reference_conflict(&pointer.target, true) {
-            return Err(UndefinedBehaviorKind::RawReadConflictsWithReferenceAuthority {
-                target: pointer.target,
-                authority,
-            });
+            return Err(
+                UndefinedBehaviorKind::RawReadConflictsWithReferenceAuthority {
+                    target: pointer.target,
+                    authority,
+                },
+            );
         }
 
         self.record(
@@ -1086,10 +1088,12 @@ impl Machine {
             });
         }
         if let Some(authority) = self.raw_reference_conflict(&pointer.target, false) {
-            return Err(UndefinedBehaviorKind::RawAssignConflictsWithReferenceAuthority {
-                target: pointer.target,
-                authority,
-            });
+            return Err(
+                UndefinedBehaviorKind::RawAssignConflictsWithReferenceAuthority {
+                    target: pointer.target,
+                    authority,
+                },
+            );
         }
 
         self.replace_resolved(frame_index, target, value, VerificationWriteKind::RawAssign);
@@ -1165,7 +1169,8 @@ impl Machine {
             }
             Operand::ReferenceRoot { permission, place } => {
                 let target = self.storage_region(frame_index, place);
-                let authority = self.allocate_reference_authority(target.clone(), *permission, None);
+                let authority =
+                    self.allocate_reference_authority(target.clone(), *permission, None);
                 Ok(RuntimeValue::SafeReference(SafeReferenceValue {
                     target,
                     authority,
@@ -1244,10 +1249,12 @@ impl Machine {
             });
         }
         if let Some(authority) = self.raw_reference_conflict(&pointer.target, false) {
-            return Err(UndefinedBehaviorKind::RawMoveConflictsWithReferenceAuthority {
-                target: pointer.target,
-                authority,
-            });
+            return Err(
+                UndefinedBehaviorKind::RawMoveConflictsWithReferenceAuthority {
+                    target: pointer.target,
+                    authority,
+                },
+            );
         }
 
         let target_ty = self.place_type(frame_index, &target);
@@ -1317,7 +1324,9 @@ impl Machine {
             .project_type(referent, &access.projections)
             .expect("validated reference access contains valid structural projections");
         let mut target = active.target.clone();
-        target.projections.extend(access.projections.iter().copied());
+        target
+            .projections
+            .extend(access.projections.iter().copied());
         ResolvedReferenceAccess {
             authority: reference.authority,
             permission,
@@ -1480,12 +1489,13 @@ impl Machine {
             self.reference_authorities.len(),
             "runtime authority identities are monotonic table indices"
         );
-        self.reference_authorities.push(Some(ActiveReferenceAuthority {
-            target,
-            permission,
-            parent,
-            carriers: 1,
-        }));
+        self.reference_authorities
+            .push(Some(ActiveReferenceAuthority {
+                target,
+                permission,
+                parent,
+                carriers: 1,
+            }));
         id
     }
 
@@ -1507,8 +1517,7 @@ impl Machine {
             .find_map(|(index, active)| {
                 let active = active.as_ref()?;
                 let conflicts = active.target.overlaps(target)
-                    && (!shared_read
-                        || active.permission.alias_kind() == BorrowKind::Exclusive);
+                    && (!shared_read || active.permission.alias_kind() == BorrowKind::Exclusive);
                 conflicts.then(|| {
                     ReferenceAuthorityId(
                         u64::try_from(index).expect("reference authority index exceeds u64::MAX"),
