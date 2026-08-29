@@ -4,6 +4,7 @@
 - [Control flow](control-flow.md)
 - [Functions and direct calls](functions.md)
 - [Borrowing](borrowing.md)
+- [References](references.md)
 - [Pointers and provenance](pointers.md)
 - [Unsafe semantics](unsafe.md)
 - [Effects](effects.md)

@@ -12,7 +12,7 @@ A safe abstraction implemented using unsafe operations MUST discharge those obli
 
 The proving-MIR `RawRead`, `RawMove`, and `RawAssign` operations defined by [Core pointers and provenance](pointers.md) are unsafe.
 
-For `RawRead`, the concrete target-liveness precondition is defined by the pointer specification and the active-loan shared-access compatibility requirement is defined by [Core borrowing](borrowing.md). A `RawRead` whose pointer operand is structurally and language-valid but whose concrete target violates either required access precondition has **undefined behavior**.
+For `RawRead`, the concrete target-liveness precondition is defined by the pointer specification and the combined active-alias shared target-access compatibility requirement is defined by [Core borrowing](borrowing.md). A `RawRead` whose pointer operand is structurally and language-valid but whose concrete target violates either required access precondition has **undefined behavior**.
 
 For `RawMove`, the pointer specification defines target selection, the complete-target liveness requirement, and reuse of the ordinary ownership-transfer lifecycle, while [Core borrowing](borrowing.md) defines its raw target exclusive-access compatibility requirement. A `RawMove` whose pointer operand is structurally and language-valid but whose concrete target is not fully Live or violates that compatibility requirement has **undefined behavior**.
 

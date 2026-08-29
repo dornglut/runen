@@ -109,7 +109,7 @@ Those are language-validation rules about accessing the pointer value. They are 
 For a language-valid `RawRead`, execution resolves the raw-pointer value's existing symbolic target region to the corresponding concrete structural place in the continuing dynamic storage instance. The operation has these unsafe target-access preconditions:
 
 - the complete target place MUST be fully Live at the read;
-- the target read MUST satisfy the active-loan shared-access compatibility rule defined by [Core borrowing](borrowing.md).
+- the target read MUST satisfy the combined active-alias **shared** target-access compatibility rule defined by [Core borrowing](borrowing.md).
 
 `RawRead` is classified as unsafe, and violation of either target-access precondition is undefined behavior, by [Core unsafe semantics](unsafe.md).
 
@@ -134,7 +134,7 @@ A language-valid `RawMove` proceeds conceptually as follows:
 1. obtain the raw-pointer value through `pointer` and snapshot that value's symbolic target structural storage region;
 2. resolve the snapshotted target to the corresponding concrete structural place in the continuing dynamic storage instance;
 3. require the complete target place to be fully Live;
-4. require the target ownership transfer to satisfy the active-loan **exclusive** compatibility rule defined by [Core borrowing](borrowing.md);
+4. require the target ownership transfer to satisfy the combined active-alias **exclusive** target-access compatibility rule defined by [Core borrowing](borrowing.md);
 5. apply the stored-value lifetime and ownership-transfer state transition defined for `Move` by [Core value and storage semantics](value-storage.md) to the resolved target;
 6. yield the transferred complete pointee value as the result of the operand.
 
@@ -169,7 +169,7 @@ A language-valid `RawAssign` proceeds conceptually as follows:
 1. obtain the raw-pointer value through `pointer` and snapshot that value's symbolic target structural storage region;
 2. resolve the snapshotted target to the corresponding concrete structural place in the continuing dynamic storage instance;
 3. evaluate `src` completely according to the ordinary Core operand semantics, including any unsafe preconditions of a `RawMove` source operand;
-4. require the target write to satisfy the active-loan **exclusive** compatibility rule defined by [Core borrowing](borrowing.md);
+4. require the target write to satisfy the combined active-alias **exclusive** target-access compatibility rule defined by [Core borrowing](borrowing.md);
 5. apply the source-first replacement lifecycle defined by [Core value and storage semantics](value-storage.md) to the resolved target using the already evaluated source value.
 
 The target snapshot in step 1 is semantically significant. Later source evaluation or target replacement does not retroactively change which target this `RawAssign` selected. Obtaining the pointer value for the snapshot does not itself consume or mutate that stored pointer value. Ordinary source evaluation and the target replacement can nevertheless affect storage that aliases the pointer operand place when their independently applicable semantics permit it.
@@ -217,7 +217,7 @@ Pointer-value transport does not reactivate, recreate, or extend any loan from w
 
 ## Determinism and verification
 
-For a fixed validated body and execution that has not entered undefined behavior, symbolic target selection, the currently defined provenance root, target resolution, successful `RawRead`, successful `RawMove`, and successful `RawAssign` behavior are deterministic from the storage identities, storage/value state, active-loan state, and operand semantics supplied by the owning Core semantics.
+For a fixed validated body and execution that has not entered undefined behavior, symbolic target selection, the currently defined provenance root, target resolution, successful `RawRead`, successful `RawMove`, and successful `RawAssign` behavior are deterministic from the storage identities, storage/value state, complete active alias-authority state, and operand semantics supplied by the owning Core semantics.
 
 Reference-oracle instrumentation MAY expose storage-instance identities, formed pointer targets, successful raw reads/moves/replacements, and detected unsafe-precondition violations to conformance tests. Exact static pointer-target bookkeeping retained solely to propagate defined path-state is verification-only and is not Runen-observable program behavior.
 
@@ -245,7 +245,7 @@ This revision deliberately does **not** define:
 - value validity or invalid bit patterns beyond the existing semantic-value and initialization requirements used by the defined operations;
 - dangling access outside the currently represented local-storage extents or the complete undefined-behavior taxonomy;
 - source `unsafe` syntax or unsafe blocks;
-- first-class references, reference lifetimes, or source borrow inference;
+- source reference/lifetime syntax or source borrow inference;
 - atomics, concurrency, data races, memory ordering, or synchronization;
 - source syntax, public library APIs, ABI, or FFI representation.
 
