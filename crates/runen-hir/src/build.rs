@@ -10,9 +10,9 @@ use crate::{
     BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
     LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, Record, RecordFieldValue,
-    RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTransientCleanup, Return,
-    SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind,
-    type_is_duplicable_in_records,
+    RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTransientCleanup,
+    ReferenceReferent, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value,
+    ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -75,12 +75,19 @@ struct StructuralOwnershipState {
     consumed_paths: BTreeSet<Vec<usize>>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ReferenceOrigin {
+    Local(BindingId),
+    External,
+}
+
 #[derive(Debug, Clone)]
 struct BindingState {
     id: BindingId,
     ty: Type,
     mutability: AssignmentMutability,
     ownership: StructuralOwnershipState,
+    reference_origin: Option<ReferenceOrigin>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -483,6 +490,13 @@ fn resolve_records(
                 });
             }
             let type_node = direct_child(&field_node, SyntaxKind::TypeRef);
+            if type_ref_is_shared_reference(&type_node) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::SharedReferenceField,
+                    location: location(record.unit, &type_node),
+                });
+                continue;
+            }
             if let Some(ty) = resolve_type(
                 record.module,
                 record.unit,
@@ -584,6 +598,14 @@ fn resolve_function_headers(
                 imports,
                 diagnostics,
             ) {
+                if !validate_shared_reference_referent(
+                    ty,
+                    records,
+                    location(function.unit, &type_node),
+                    diagnostics,
+                ) {
+                    continue;
+                }
                 validate_exported_signature_type(
                     function.accessibility,
                     ty,
@@ -618,6 +640,13 @@ fn resolve_function_headers(
                     diagnostics,
                 );
                 if let Some(ty) = ty {
+                    if matches!(ty, Type::SharedReference(_)) {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::SharedReferenceResult,
+                            location: location(function.unit, &type_node),
+                        });
+                        return None;
+                    }
                     validate_exported_signature_type(
                         function.accessibility,
                         ty,
@@ -656,8 +685,9 @@ fn validate_exported_signature_type(
     if accessibility != Accessibility::Exported {
         return;
     }
-    let Type::Record(record) = ty else {
-        return;
+    let record = match ty {
+        Type::Record(record) | Type::SharedReference(ReferenceReferent::Record(record)) => record,
+        Type::Intrinsic(_) | Type::SharedReference(ReferenceReferent::Intrinsic(_)) => return,
     };
     if records[record.0].accessibility == Accessibility::ModulePrivate {
         diagnostics.push(Diagnostic {
@@ -665,6 +695,33 @@ fn validate_exported_signature_type(
             location: location(unit, type_node),
         });
     }
+}
+
+fn validate_shared_reference_referent(
+    ty: Type,
+    records: &[Record],
+    type_location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> bool {
+    let Type::SharedReference(referent) = ty else {
+        return true;
+    };
+    let referent = referent.ty();
+    if type_is_duplicable_in_records(referent, records) {
+        true
+    } else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::InvalidSharedReferenceReferent { referent },
+            location: type_location,
+        });
+        false
+    }
+}
+
+fn type_ref_is_shared_reference(node: &SyntaxNode) -> bool {
+    node.children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::Amp)
 }
 
 fn resolve_type(
@@ -675,73 +732,85 @@ fn resolve_type(
     imports: &[UnitImports],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
-    if let Some(qualified) = node
+    let shared = type_ref_is_shared_reference(node);
+    let ordinary = if let Some(qualified) = node
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        return match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
-            EntityId::Record(id) => Some(Type::Record(id)),
+        match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
+            EntityId::Record(id) => Type::Record(id),
             EntityId::Function(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(unit, &qualified),
                 });
-                None
+                return None;
             }
+        }
+    } else {
+        let token = node
+            .children_with_tokens()
+            .filter_map(|element| element.into_token())
+            .find(|token| !token.kind().is_trivia() && token.kind() != SyntaxKind::Amp)
+            .expect("syntax-clean type reference contains one referent token");
+        let intrinsic = match token.kind() {
+            SyntaxKind::TyBool => Some(IntrinsicType::Bool),
+            SyntaxKind::TyI8 => Some(IntrinsicType::I8),
+            SyntaxKind::TyI16 => Some(IntrinsicType::I16),
+            SyntaxKind::TyI32 => Some(IntrinsicType::I32),
+            SyntaxKind::TyI64 => Some(IntrinsicType::I64),
+            SyntaxKind::TyU8 => Some(IntrinsicType::U8),
+            SyntaxKind::TyU16 => Some(IntrinsicType::U16),
+            SyntaxKind::TyU32 => Some(IntrinsicType::U32),
+            SyntaxKind::TyU64 => Some(IntrinsicType::U64),
+            SyntaxKind::TyF16 => Some(IntrinsicType::F16),
+            SyntaxKind::TyF32 => Some(IntrinsicType::F32),
+            SyntaxKind::TyF64 => Some(IntrinsicType::F64),
+            _ => None,
         };
-    }
-
-    let token = node
-        .children_with_tokens()
-        .filter_map(|element| element.into_token())
-        .find(|token| !token.kind().is_trivia())
-        .expect("syntax-clean type reference contains one type token");
-    let intrinsic = match token.kind() {
-        SyntaxKind::TyBool => Some(IntrinsicType::Bool),
-        SyntaxKind::TyI8 => Some(IntrinsicType::I8),
-        SyntaxKind::TyI16 => Some(IntrinsicType::I16),
-        SyntaxKind::TyI32 => Some(IntrinsicType::I32),
-        SyntaxKind::TyI64 => Some(IntrinsicType::I64),
-        SyntaxKind::TyU8 => Some(IntrinsicType::U8),
-        SyntaxKind::TyU16 => Some(IntrinsicType::U16),
-        SyntaxKind::TyU32 => Some(IntrinsicType::U32),
-        SyntaxKind::TyU64 => Some(IntrinsicType::U64),
-        SyntaxKind::TyF16 => Some(IntrinsicType::F16),
-        SyntaxKind::TyF32 => Some(IntrinsicType::F32),
-        SyntaxKind::TyF64 => Some(IntrinsicType::F64),
-        _ => None,
-    };
-    if let Some(intrinsic) = intrinsic {
-        return Some(Type::Intrinsic(intrinsic));
-    }
-
-    debug_assert_eq!(token.kind(), SyntaxKind::Ident);
-    let name = key(&token);
-    let token_location = SourceLocation {
-        unit,
-        range: token.text_range(),
-    };
-    match modules
-        .get(&module)
-        .and_then(|module| module.namespace.get(&name))
-        .copied()
-        .map(|entity| entity.entity)
-    {
-        Some(EntityId::Record(id)) => Some(Type::Record(id)),
-        Some(EntityId::Function(_)) => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::ExpectedRecordType,
-                location: token_location,
-            });
-            None
+        if let Some(intrinsic) = intrinsic {
+            Type::Intrinsic(intrinsic)
+        } else {
+            debug_assert_eq!(token.kind(), SyntaxKind::Ident);
+            let name = key(&token);
+            let token_location = SourceLocation {
+                unit,
+                range: token.text_range(),
+            };
+            match modules
+                .get(&module)
+                .and_then(|module| module.namespace.get(&name))
+                .copied()
+                .map(|entity| entity.entity)
+            {
+                Some(EntityId::Record(id)) => Type::Record(id),
+                Some(EntityId::Function(_)) => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::ExpectedRecordType,
+                        location: token_location,
+                    });
+                    return None;
+                }
+                None => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::UnresolvedName,
+                        location: token_location,
+                    });
+                    return None;
+                }
+            }
         }
-        None => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::UnresolvedName,
-                location: token_location,
-            });
-            None
-        }
+    };
+
+    if shared {
+        let referent = match ordinary {
+            Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
+            Type::Record(record) => ReferenceReferent::Record(record),
+            Type::SharedReference(_) => unreachable!("source reference type syntax is non-recursive"),
+        };
+        Some(Type::SharedReference(referent))
+    } else {
+        Some(ordinary)
     }
 }
 
@@ -877,6 +946,7 @@ fn record_duplicability_is_valid(
     let duplicable = records[id.0].fields.iter().all(|field| match field.ty {
         Type::Intrinsic(_) => true,
         Type::Record(target) => record_duplicability_is_valid(target, records, resolved),
+        Type::SharedReference(_) => false,
     });
     resolved[id.0] = Some(duplicable);
     duplicable
@@ -900,6 +970,8 @@ fn validate_body(
                 ty: parameter.ty,
                 mutability: AssignmentMutability::Immutable,
                 ownership: StructuralOwnershipState::default(),
+                reference_origin: matches!(parameter.ty, Type::SharedReference(_))
+                    .then_some(ReferenceOrigin::External),
             },
         );
     }
@@ -1259,6 +1331,8 @@ fn validate_if(
                 debug_assert_eq!(else_state.ty, enclosing.ty);
                 debug_assert_eq!(then_state.mutability, enclosing.mutability);
                 debug_assert_eq!(else_state.mutability, enclosing.mutability);
+                debug_assert_eq!(then_state.reference_origin, enclosing.reference_origin);
+                debug_assert_eq!(else_state.reference_origin, enclosing.reference_origin);
                 then_state.ownership == else_state.ownership
             });
 
@@ -1348,6 +1422,7 @@ fn validate_while(
                 .expect("normal while body retains every loop-head binding identity");
             debug_assert_eq!(body_state.ty, head.ty);
             debug_assert_eq!(body_state.mutability, head.mutability);
+            debug_assert_eq!(body_state.reference_origin, head.reference_origin);
             body_state.ownership == head.ownership
         });
 
@@ -1426,8 +1501,10 @@ fn ownership_matches_target(
     required: &BTreeMap<String, BindingState>,
 ) -> bool {
     required.values().all(|expected| {
-        binding_state_by_id(bindings, expected.id)
-            .is_some_and(|actual| actual.ownership == expected.ownership)
+        binding_state_by_id(bindings, expected.id).is_some_and(|actual| {
+            debug_assert_eq!(actual.reference_origin, expected.reference_origin);
+            actual.ownership == expected.ownership
+        })
     })
 }
 
@@ -1523,7 +1600,27 @@ fn validate_local(
         context.modules,
         context.imports,
         diagnostics,
-    );
+    )
+    .and_then(|ty| {
+        if matches!(ty, Type::SharedReference(_)) {
+            if mutability.is_mutable() {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::MutableSharedReferenceLocal,
+                    location: location(header.unit, &type_node),
+                });
+                return None;
+            }
+            if !validate_shared_reference_referent(
+                ty,
+                context.records,
+                location(header.unit, &type_node),
+                diagnostics,
+            ) {
+                return None;
+            }
+        }
+        Some(ty)
+    });
     let initializer = declared.and_then(|required| {
         let value_node = value_child(node);
         validate_value(
@@ -1554,6 +1651,12 @@ fn validate_local(
         return None;
     }
 
+    let reference_origin = reference_origin_for_value(&initializer, bindings);
+    debug_assert_eq!(
+        reference_origin.is_some(),
+        matches!(ty, Type::SharedReference(_))
+    );
+
     let binding = BindingId(*next_binding);
     *next_binding += 1;
     bindings.insert(
@@ -1563,6 +1666,7 @@ fn validate_local(
             ty,
             mutability,
             ownership: StructuralOwnershipState::default(),
+            reference_origin,
         },
     );
     Some(Statement::Local {
@@ -1573,6 +1677,21 @@ fn validate_local(
         initializer,
         location: local_location,
     })
+}
+
+fn reference_origin_for_value(
+    value: &Value,
+    bindings: &BTreeMap<String, BindingState>,
+) -> Option<ReferenceOrigin> {
+    match value.kind {
+        ValueKind::SharedBorrowRoot { target } => Some(ReferenceOrigin::Local(target)),
+        ValueKind::BindingUse { binding, .. } if matches!(value.ty, Type::SharedReference(_)) => {
+            binding_state_by_id(bindings, binding)
+                .expect("validated reference binding remains active")
+                .reference_origin
+        }
+        _ => None,
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -1952,6 +2071,7 @@ fn validate_record_destructure(
                 ty: resolved.ty,
                 mutability: AssignmentMutability::Immutable,
                 ownership: StructuralOwnershipState::default(),
+                reference_origin: None,
             },
         ));
     }
@@ -2020,6 +2140,17 @@ fn validate_assignment(
         bindings,
         diagnostics,
     )?;
+
+    if bindings
+        .values()
+        .any(|binding| binding.reference_origin == Some(ReferenceOrigin::Local(target)))
+    {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::BorrowedAssignmentTarget,
+            location: target_location,
+        });
+        return None;
+    }
 
     bindings
         .get_mut(&name)
@@ -2121,6 +2252,12 @@ fn validate_value(
         SyntaxKind::GroupedValue => {
             let inner = value_child(node);
             validate_value(header, &inner, required, context, bindings, diagnostics)
+        }
+        SyntaxKind::SharedBorrowValue => {
+            validate_shared_borrow(header, node, required, context, bindings, diagnostics)
+        }
+        SyntaxKind::SharedDereferenceValue => {
+            validate_shared_dereference(header, node, required, context, bindings, diagnostics)
         }
         SyntaxKind::NumericContractSelectedValue => validate_numeric_contract_selected_value(
             header,
@@ -2602,6 +2739,7 @@ fn validate_value(
                     .expect("conjunction RHS outcome retains every enclosing binding identity");
                 debug_assert_eq!(right_state.ty, left_state.ty);
                 debug_assert_eq!(right_state.mutability, left_state.mutability);
+                debug_assert_eq!(right_state.reference_origin, left_state.reference_origin);
                 right_state.ownership == left_state.ownership
             });
             if !equal {
@@ -2845,6 +2983,145 @@ fn validate_value(
         }
         _ => unreachable!("syntax-clean value has represented value kind"),
     }
+}
+
+fn validate_shared_borrow(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    bindings: &BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Value> {
+    let value_location = location(header.unit, node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let Some(binding) = bindings.get(&name) else {
+        let entity = context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name));
+        diagnostics.push(Diagnostic {
+            kind: if entity.is_some() {
+                DiagnosticKind::ExpectedValueBinding
+            } else {
+                DiagnosticKind::UnresolvedName
+            },
+            location: SourceLocation {
+                unit: header.unit,
+                range: token.text_range(),
+            },
+        });
+        return None;
+    };
+
+    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableBinding,
+            location: value_location,
+        });
+        return None;
+    }
+
+    let referent = match binding.ty {
+        Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
+        Type::Record(record) if context.type_is_duplicable(Type::Record(record)) => {
+            ReferenceReferent::Record(record)
+        }
+        Type::Record(_) | Type::SharedReference(_) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidSharedReferenceReferent {
+                    referent: binding.ty,
+                },
+                location: value_location,
+            });
+            return None;
+        }
+    };
+    let found = Type::SharedReference(referent);
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    Some(Value {
+        ty: found,
+        kind: ValueKind::SharedBorrowRoot { target: binding.id },
+        location: value_location,
+    })
+}
+
+fn validate_shared_dereference(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    bindings: &BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Value> {
+    let value_location = location(header.unit, node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let Some(binding) = bindings.get(&name) else {
+        let entity = context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name));
+        diagnostics.push(Diagnostic {
+            kind: if entity.is_some() {
+                DiagnosticKind::ExpectedValueBinding
+            } else {
+                DiagnosticKind::UnresolvedName
+            },
+            location: SourceLocation {
+                unit: header.unit,
+                range: token.text_range(),
+            },
+        });
+        return None;
+    };
+
+    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableBinding,
+            location: value_location,
+        });
+        return None;
+    }
+
+    let Type::SharedReference(referent) = binding.ty else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ExpectedSharedReference,
+            location: value_location,
+        });
+        return None;
+    };
+    debug_assert!(binding.reference_origin.is_some());
+    let found = referent.ty();
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    Some(Value {
+        ty: found,
+        kind: ValueKind::SharedDereferenceCopy {
+            reference: binding.id,
+        },
+        location: value_location,
+    })
 }
 
 fn validate_numeric_contract_selected_value(
@@ -4120,6 +4397,8 @@ fn is_value_node(kind: SyntaxKind) -> bool {
     matches!(
         kind,
         SyntaxKind::GroupedValue
+            | SyntaxKind::SharedBorrowValue
+            | SyntaxKind::SharedDereferenceValue
             | SyntaxKind::NumericContractSelectedValue
             | SyntaxKind::IntegerNegValue
             | SyntaxKind::IntegerComplementValue
