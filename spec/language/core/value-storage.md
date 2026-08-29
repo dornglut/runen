@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, non-replacing result storage for represented Core integer addition, subtraction, multiplication, exclusive-or, bitwise OR, and binary floating addition, subtraction, multiplication, and division, assignment, destruction domains, and cleanup.
 
-The shared/exclusive access authority required to reach storage while loans are active is owned by [Core borrowing](borrowing.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical value relations consumed by represented fixed-width integer addition, subtraction, multiplication, exclusive-or, and bitwise OR are owned by [Core integer semantics](numerics/integers.md). The numerical result relations, numeric-contract domain/default/refinement rules, and selected-contract numerical permissions consumed by represented binary floating addition, subtraction, multiplication, and division are owned by [Core floating-point semantics](numerics/floating-point.md).
+The shared/exclusive access authority required to reach storage while alias authorities are active is owned by [Core borrowing](borrowing.md). First-class safe-reference types/values, permission classes, reference-backed authority/carrier lifetime, and reference-relative access are owned by [Core references](references.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical value relations consumed by represented fixed-width integer addition, subtraction, multiplication, exclusive-or, and bitwise OR are owned by [Core integer semantics](numerics/integers.md). The numerical result relations, numeric-contract domain/default/refinement rules, and selected-contract numerical permissions consumed by represented binary floating addition, subtraction, multiplication, and division are owned by [Core floating-point semantics](numerics/floating-point.md).
 
 ## Terms
 
@@ -14,7 +14,7 @@ A semantic classification for values and places. This revision defines scalar or
 
 Every represented scalar type has one semantic **scalar kind** classifying its scalar value family. Scalar kind and the per-program type identity/type definition used to refer to one represented type are distinct facts; distinct represented type definitions MAY have the same scalar kind.
 
-This revision uses that distinction below for the `Bool` scalar kind. It does not by that fact enumerate, redefine, or unify the separately governed integer, floating, raw-pointer, or verification-fixture scalar semantics.
+This revision uses that distinction below for the `Bool` scalar kind. It does not by that fact enumerate, redefine, or unify the separately governed integer, floating, raw-pointer, safe-reference, or verification-fixture scalar semantics.
 
 A type may carry an **interior-mutable** semantic marker. The marker belongs to the proving-kernel type model; this revision does not define source syntax for declaring such a type.
 
@@ -30,7 +30,7 @@ The local's assignment-mutability flag does not determine alias exclusivity and 
 
 A static proving-MIR storage designation consisting of a local declaration plus zero or more structural field projections.
 
-A place denotes which structural storage is selected within the current execution's corresponding local storage instance; it is not itself a value, dynamic storage-instance identity, pointer, address, or provenance token.
+A place denotes which structural storage is selected within the current execution's corresponding local storage instance; it is not itself a value, dynamic storage-instance identity, pointer, address, reference, or provenance token.
 
 ### Sub-place
 
@@ -38,7 +38,7 @@ A place reached by projecting a field from an aggregate place.
 
 ### Value
 
-An initialized semantic datum whose structure is compatible with the type required by its use. The currently defined constant-value representation does not carry independent nominal type identity or dynamic raw-pointer provenance.
+An initialized semantic datum whose structure is compatible with the type required by its use. The currently defined constant-value representation does not carry independent nominal type identity, dynamic raw-pointer provenance, or safe-reference target/authority identity.
 
 A represented semantic value need not be directly fabricable by the current constant-value representation merely because an accepted runtime operation can produce and store that value. Constant fabrication is one operand-production capability, not the definition of the complete semantic runtime value domain. An operation that produces a semantic value outside the current constant carrier therefore does not by itself introduce a corresponding constant form.
 
@@ -50,16 +50,18 @@ The Bool values are not required physical bits, integers, source spellings, ABI 
 
 ### Assignment mutability
 
-Assignment mutability is permission for the ordinary `Assign` operation to replace or reinitialize storage rooted in a local.
+Assignment mutability is permission for ordinary `Assign` to replace or reinitialize storage through direct or explicit-loan-relative access rooted in a local.
 
-In the current Core proving MIR, ordinary assignment mutability is declared by the containing `LocalDecl.mutable` flag.
+In the current Core proving MIR, that ordinary local replacement permission is declared by the containing `LocalDecl.mutable` flag.
 
 Assignment mutability is independent of:
 
 - whether current alias authority is shared or exclusive;
 - whether a target lies inside an interior-mutable region.
 
-Therefore an exclusive loan does not make an immutable local ordinarily assignable, and an interior-mutable type does not make ordinary `Assign` legal on an immutable local.
+Therefore an exclusive explicit loan does not make an immutable local ordinarily assignable, and an interior-mutable type does not make ordinary direct/explicit-loan `Assign` legal on an immutable local.
+
+A cross-activation safe reference cannot re-query an originating activation's `LocalDecl.mutable` declaration. [Core references](references.md) therefore defines a distinct ExclusiveReplace reference capability whose successful formation proves and carries ordinary replacement permission for later reference-relative `Assign`. This does not make alias exclusivity and assignment permission the same semantic property.
 
 ### Interior-mutable region
 
@@ -72,7 +74,7 @@ Consequences:
 - an unmarked containing aggregate does not become wholly interior-mutable merely because one descendant type is marked;
 - a disjoint sibling outside the marked descendant region does not inherit the marker.
 
-Interior mutability is storage/type capability, not alias authority. It does not create or upgrade a loan, permit ownership-consuming access through a shared loan, or imply ordinary local assignment mutability.
+Interior mutability is storage/type capability, not alias authority. It does not create or upgrade an explicit loan or safe-reference authority, permit ownership-consuming access through shared authority, or imply ordinary local/reference replacement permission.
 
 ### Storage extent
 
@@ -84,7 +86,7 @@ Storage extent is independent of initialization state. Never-initialized, Live, 
 
 Ending, moving, destroying, or replacing a stored value does not by itself end the containing storage extent.
 
-Storage extent does not imply a physical address, allocation identity, relocation rule, or pointer provenance.
+Storage extent does not imply a physical address, allocation identity, relocation rule, pointer provenance, or safe-reference representation.
 
 ### Dynamic storage-instance identity
 
@@ -110,6 +112,8 @@ When a local's storage extent ends after cleanup, that dynamic storage instance 
 
 A static place resolved during execution therefore denotes a **structural storage region** within the current dynamic local storage instance: the root storage-instance identity plus the place's structural projection path. The projection path is structural semantics, not a byte offset or layout guarantee.
 
+[Core references](references.md) may retain that semantic structural region as a safe-reference target while the storage extent continues. Such retention does not convert the region identity into a physical address or require physical address stability.
+
 ### Stored-value lifetime
 
 A stored-value lifetime is the interval during which one scalar storage leaf is Live with one stored semantic value.
@@ -124,7 +128,7 @@ A stored-value lifetime ends when the stored value is consumed by move, destroye
 
 The current revision defines stored-value lifetime at scalar storage leaves. Aggregate initialization and liveness are derived recursively from the states of those leaves; an aggregate does not acquire a separate hidden lifetime identity.
 
-Transient values produced while evaluating constants, moves, copies, pointer formation, or represented integer- or floating-operation operands are semantic values. This revision does not give ordinary transient operand results independently addressable storage or a separately specified storage extent.
+Transient values produced while evaluating constants, moves, copies, pointer formation, safe-reference formation/reborrow, or represented integer- or floating-operation operands are semantic values. This revision does not give ordinary transient operand results independently addressable storage or a separately specified storage extent.
 
 ### Live
 
@@ -154,7 +158,7 @@ A wholly vacant place has an empty destruction domain.
 
 The destruction domain of a place at a semantic step is the ordered sequence of currently Live scalar leaf places recursively contained by that place.
 
-For a scalar place, the destruction domain is that place itself when Live and is empty when Never-initialized or Dead.
+For a scalar place, the destruction domain is the place itself when Live and is empty when Never-initialized or Dead. A safe-reference scalar leaf is an ordinary scalar member of this domain when Live; the reference-specific carrier consequence of destroying that value is owned by [Core references](references.md).
 
 For an aggregate place, the destruction domain is formed by recursively concatenating field destruction domains in reverse field declaration order.
 
@@ -184,7 +188,7 @@ The value MUST structurally match the type of `dst`.
 
 Initialization does not require the containing local to be mutable for ordinary assignment.
 
-After successful source evaluation, `Init` writes the complete value without destroying destination contents because a wholly vacant destination has no Live destruction domain. Each scalar leaf written by the operation becomes Live and begins a new stored-value lifetime, whether or not an earlier stored-value lifetime existed in that storage.
+After successful source evaluation, `Init` writes the complete value without destroying destination contents because a wholly vacant destination has no Live destruction domain. Each scalar leaf written by the operation becomes Live and begins a new stored-value lifetime, whether or not an earlier stored-value lifetime existed in that storage. When the written value contains safe-reference carriers, the write transports those existing carriers into destination storage without duplicating them, as defined by [Core references](references.md).
 
 `Init` remains an exclusive-access operation under the borrowing rules. Interior mutability does not weaken initialization access requirements.
 
@@ -667,7 +671,7 @@ The operation consumes only its explicit selected-contract same-format floating-
 
 `Read(src)` requires `src` to be fully initialized.
 
-`Read` does not transfer ownership, change initialization state, end any stored-value lifetime, or change storage-instance identity.
+`Read` does not transfer ownership, change initialization state, end any stored-value lifetime, change storage-instance identity, or alter safe-reference carrier count merely because the stored value read is itself a safe reference.
 
 Reading a partially initialized or Dead place is invalid in safe Core.
 
@@ -685,6 +689,8 @@ Moving a sub-place affects only that sub-place. Disjoint initialized sibling pla
 
 The semantic value produced by the move may subsequently be written into another place; such a write begins stored-value lifetimes at the destination rather than extending the ended source storage lifetimes.
 
+When the moved value contains safe-reference leaves, the move transfers their existing reference carriers without creating or ending the corresponding reference-backed authorities, as defined by [Core references](references.md).
+
 Move does not end the source storage extent or change its storage-instance identity.
 
 Interior mutability does not make `Move` a shared-authority operation. The borrowing rules continue to require exclusive alias authority for ownership transfer.
@@ -697,69 +703,88 @@ It produces an equal owned value while leaving `src` Live. The source stored-val
 
 When the produced copy is written into destination storage, that write begins distinct stored-value lifetimes at the destination leaves.
 
-For the structural types defined by this revision, an aggregate is copyable exactly when all of its fields are copyable. Raw-pointer leaf types are copyable; their pointer-specific target/provenance preservation is owned by [Core pointers and provenance](pointers.md).
+For the scalar/structural types defined by the represented Core owners:
 
-The general language mechanism that determines copyability is not defined by this revision.
+- raw-pointer leaf types are copyable; their pointer-specific target/provenance preservation is owned by [Core pointers and provenance](pointers.md);
+- Shared safe-reference leaf types are copyable; copying one creates an additional reference carrier for the same reference-backed authority under [Core references](references.md);
+- Exclusive and ExclusiveReplace safe-reference leaf types are not copyable; and
+- an aggregate is copyable exactly when all of its fields are copyable.
+
+Consequently copying a copyable aggregate recursively creates an additional carrier for every contained Shared reference leaf while leaving the source carriers/stored values Live. Copy itself does not create a new reference authority or reborrow.
+
+The general source-language mechanism that may expose or restrict a lower copy capability is not defined by this revision.
 
 ## Ordinary assignment
 
-`Assign(dst, value)` requires the local containing `dst` to be mutable for ordinary assignment.
+Ordinary `Assign` always requires exclusive alias authority for the selected destination under [Core borrowing](borrowing.md). It additionally requires one accepted ordinary replacement permission:
 
-It also requires the exclusive alias authority specified by [Core borrowing](borrowing.md). Interior-mutability markers do not weaken either ordinary-assignment requirement.
+- for direct or explicit-loan-relative destination access, the local containing the resolved destination MUST be mutable for ordinary assignment; or
+- for safe-reference-relative destination access, [Core references](references.md) MUST classify the governing reference as ExclusiveReplace.
 
-Unlike `Init`, `Assign` may target storage containing Live leaves and therefore may perform replacement. Its `dst` may be wholly Never-initialized, partially initialized, fully Live, or contain Dead subobjects.
+An Exclusive safe reference without the Replace capability therefore cannot perform ordinary `Assign` even though it supplies exclusive alias authority. Conversely, ExclusiveReplace does not change the originating local's declaration; it carries the previously established replacement permission across reference transport/calls.
+
+Interior-mutability markers do not weaken the ordinary replacement-permission requirement. Interior replacement remains the distinct operation below.
+
+Unlike `Init`, `Assign` may target storage containing Live leaves and therefore may perform replacement. Its destination may be wholly Never-initialized, partially initialized, fully Live, or contain Dead subobjects.
 
 Assignment evaluates conceptually as:
 
-1. evaluate the source operand completely;
-2. determine the destruction domain of `dst` from the resulting storage state;
-3. destroy exactly that domain in its defined order, ending those old stored-value lifetimes;
-4. write the new value into `dst`;
-5. mark all written leaves Live, beginning new stored-value lifetimes there.
+1. authorize and resolve the destination using the applicable direct, explicit-loan, or safe-reference access relation and require the applicable ordinary replacement permission above;
+2. evaluate the source operand completely;
+3. determine the destruction domain of the resolved destination from the resulting storage state;
+4. destroy exactly that domain in its defined order, ending those old stored-value lifetimes;
+5. write the new value into the destination;
+6. mark all written leaves Live, beginning new stored-value lifetimes there.
 
-The source-first rule is semantically significant. If source evaluation moves from storage related to `dst`, those moved leaves are already Dead when the destination destruction domain is determined and therefore MUST NOT be destroyed as part of replacement.
+The source-first rule is semantically significant. If source evaluation moves from storage related to the destination, those moved leaves are already Dead when the destination destruction domain is determined and therefore MUST NOT be destroyed as part of replacement.
 
-Assignment may therefore perform a mutable first write, replace a Live value, replace partial storage, or reinitialize storage after move or destruction.
+When old destination contents include safe-reference leaves, their carriers remain live throughout source evaluation and are removed only when those leaves are reached in the ordinary destruction domain. Safe-reference carriers in the new source value are then transported into the destination write without implicit duplication. These carrier consequences are owned by [Core references](references.md) and do not change the source-first storage order here.
+
+Assignment may therefore perform a permitted first write, replace a Live value, replace partial storage, or reinitialize storage after move or destruction.
 
 Never-initialized and Dead subobjects have nothing to destroy before the write.
 
-The source value MUST structurally match the type of `dst`.
+The source value MUST structurally match the type of the resolved destination.
 
 Assignment changes stored-value lifetimes but does not by itself end the destination storage extent or change its storage-instance identity.
 
 ## Interior assignment
 
-The proving MIR has a distinct interior-replacement operation:
+The proving MIR has a distinct interior-replacement operation. Its existing explicit-place-access form is written:
 
 ```text
 InteriorAssign { dst: PlaceAccess, src: Operand }
 ```
 
-`InteriorAssign` is legal only when the resolved concrete destination place lies within an interior-mutable region.
+The first safe-reference slice additionally permits the same semantic operation to use a reference-relative destination access from [Core references](references.md). This specification does not require one particular implementation enum representation for that alternative access category.
 
-It does **not** require the containing local to be mutable for ordinary assignment. Instead, its alias requirement is independently defined by [Core borrowing](borrowing.md): shared alias authority is sufficient at an interior-mutable target.
+`InteriorAssign` is legal only when the resolved concrete destination region lies within an interior-mutable region.
+
+It does **not** require ordinary local assignment mutability or ExclusiveReplace reference permission. Instead, its alias requirement is independently defined by [Core borrowing](borrowing.md): shared alias authority is sufficient at an interior-mutable target.
 
 `InteriorAssign` uses exactly the same replacement lifecycle and source-first ordering as ordinary `Assign`:
 
-1. authorize and resolve the destination access under the borrowing rules and require the resulting place to lie within an interior-mutable region;
+1. authorize and resolve the destination under the applicable explicit place-access or safe-reference-access rules and require the resulting target to lie within an interior-mutable region;
 2. evaluate the source operand completely;
-3. determine the destruction domain of `dst` from the resulting storage state;
+3. determine the destruction domain of the destination from the resulting storage state;
 4. destroy exactly that domain in its defined order;
-5. write the new value into `dst`;
+5. write the new value into the destination;
 6. mark all written leaves Live, beginning new stored-value lifetimes there.
 
 Like ordinary assignment, interior assignment is path-state tolerant. The destination may be Never-initialized, partially initialized, Live, or contain Dead subobjects. Only then-Live contents belong to the replacement destruction domain.
+
+Reference-carrier destruction/transport during an interior replacement occurs at those same destruction/write points under [Core references](references.md); no reference-specific replacement order is introduced.
 
 Interior assignment does not grant any other operation a weaker access requirement:
 
 - `Move` still requires exclusive alias authority;
 - `Drop` still requires exclusive alias authority;
-- exclusive reborrow still requires exclusive parent authority;
-- ordinary `Assign` still requires both exclusive alias authority and mutable-local permission.
+- exclusive explicit/reference reborrow still requires exclusive parent authority;
+- ordinary `Assign` still requires both exclusive alias authority and the applicable ordinary replacement permission.
 
-An exclusive loan may perform `InteriorAssign` only because exclusive authority includes shared authority; the interior-mutability marker remains independently required.
+An exclusive explicit loan may perform `InteriorAssign` only because exclusive authority includes shared authority; the interior-mutability marker remains independently required. Shared, Exclusive, and ExclusiveReplace safe references may likewise perform `InteriorAssign` only because each supplies at least shared alias authority and only when the target is independently interior-mutable.
 
-A shared loan may remain active across a legal interior replacement. The loan governs access to a structural storage region, while the replacement ends old stored-value lifetimes and begins new stored-value lifetimes within that continuing storage extent and storage instance. Borrowing owns the detailed access and delegation rules.
+A shared explicit loan or Shared safe reference may remain active across a legal interior replacement. The authority governs access to a structural storage region, while the replacement ends old stored-value lifetimes and begins new stored-value lifetimes within that continuing storage extent and storage instance. Borrowing/references own the detailed access and delegation rules.
 
 This revision does not define a `RefCell`-style runtime borrow guard, synchronization, atomics, or a source-level interior-mutability API.
 
@@ -769,7 +794,9 @@ Destruction consumes only currently Live stored values.
 
 Destroying a scalar Live place ends its stored-value lifetime and changes the leaf to Dead. Never-initialized and Dead storage has nothing to destroy during automatic cleanup.
 
-Destroying an aggregate destroys exactly its destruction domain. The recursive definition of that domain gives reverse declaration order for struct fields while skipping leaves that are not Live.
+When the destroyed scalar value is a safe reference, ending that stored-value lifetime removes exactly that reference carrier. It does not read, move, destroy, replace, or otherwise access the referenced pointee. Any resulting reference-authority termination is owned by [Core references](references.md).
+
+Destroying an aggregate destroys exactly its destruction domain. The recursive definition of that domain gives reverse declaration order for struct fields while skipping leaves that are not Live. Safe-reference carrier removal therefore occurs in that same existing field order when safe-reference leaves are present.
 
 `Drop(place)` requires a non-empty destruction domain. It destroys exactly that domain once. Destroyed leaves become Dead; Never-initialized leaves remain Never-initialized.
 
@@ -779,19 +806,21 @@ Destruction does not by itself end the containing storage extent or change its s
 
 Interior mutability does not weaken the exclusive alias authority required by explicit `Drop`.
 
-The current revision has no custom destructor body. A later custom-destructor specification may refine actions that occur during destruction, but it must preserve the selected destruction domain and ordering unless the canonical owner of those rules explicitly changes them.
+The current revision has no custom destructor body. Reference-carrier removal is a built-in semantic consequence of ending the stored safe-reference value's lifetime, not a custom destructor invocation. A later custom-destructor specification may refine actions that occur during destruction, but it must preserve the selected destruction domain and ordering unless the canonical owner of those rules explicitly changes them.
 
 ## Function termination cleanup
 
 On both defined `Return` and defined `Fault`, function locals are cleaned in reverse local declaration order.
 
-When a local is reached for cleanup, its then-current destruction domain is computed and destroyed. Partial initialization is therefore respected and Never-initialized, Dead, moved, or already-destroyed leaves are skipped.
+When a local is reached for cleanup, its then-current destruction domain is computed and destroyed. Partial initialization is therefore respected and Never-initialized, Dead, moved, or already-destroyed leaves are skipped. Safe-reference leaves reached by this ordinary destruction remove their carriers under [Core references](references.md).
 
 A local's storage extent and storage-instance identity continue through its cleanup and end after that cleanup completes. Structural sub-place storage ends with the containing local storage instance.
 
+Immediately before one local storage extent ends, the safe-reference validity relation additionally requires that no surviving safe-reference carrier or descendant reference authority anywhere in the still-live call stack target that local's storage instance. This is a validity condition consumed from [Core references](references.md); it does not reorder cleanup or add a second destruction pass.
+
 Defined `Fault` uses the same stored-value lifetime and destruction-domain rules as defined `Return`. `Fault` is a defined terminal state, not undefined behavior.
 
-When an applicable non-Core semantic contract defines termination of a represented Core function execution by a distinct cancellation outcome, that termination MUST use the same reverse-local cleanup order, then-current destruction-domain rules, and storage-extent ending rule above. This paragraph defines only the Core storage consequence once cancellation termination has already been selected by another canonical owner. It does not define cancellation request or observation, propagation, catch or unwind policy, custom destructor bodies, or source cancellation syntax, and it does not reclassify cancellation as a Core `Fault`.
+When an applicable non-Core semantic contract defines termination of a represented Core function execution by a distinct cancellation outcome, that termination MUST use the same reverse-local cleanup order, then-current destruction-domain rules, storage-extent ending rule, and applicable safe-reference storage-extent validity requirement above. This paragraph defines only the Core storage consequence once cancellation termination has already been selected by another canonical owner. It does not define cancellation request or observation, propagation, catch or unwind policy, custom destructor bodies, or source cancellation syntax, and it does not reclassify cancellation as a Core `Fault`.
 
 When [Core control flow](control-flow.md) selects a cyclic execution that diverges, no termination cleanup occurs merely because execution has run for a long time; there is no implicit step budget that ends storage extents.
 
@@ -799,20 +828,24 @@ When [Core control flow](control-flow.md) selects a cyclic execution that diverg
 
 For a fixed validated Core program using only the semantics defined here, operation admission, operand sequencing, dynamic local storage-instance creation, stored-value lifetime transitions, interior-mutability capability, non-replacing result-write occurrence, destruction domains, and destruction order are deterministic.
 
-Represented integer-operation result values are determined by their separately owned integer relations. Represented `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` results are each determined by the operation occurrence's explicit selected numeric contract and the corresponding separately owned floating-addition, floating-subtraction, floating-multiplication, or floating-division relation. Those relations may explicitly permit multiple numerical outcomes, including NaN-member variation and `fast`-specific result latitude. Such permitted numerical variation is semantic latitude owned by `numerics/floating-point.md`; it is not hidden storage or loan state and does not make host NaN propagation, backend behavior, physical encoding, scheduling, or container iteration order an additional semantic input.
+Represented integer-operation result values are determined by their separately owned integer relations. Represented `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` results are each determined by the operation occurrence's explicit selected numeric contract and the corresponding separately owned floating-addition, floating-subtraction, floating-multiplication, or floating-division relation. Those relations may explicitly permit multiple numerical outcomes, including NaN-member variation and `fast`-specific result latitude. Such permitted numerical variation is semantic latitude owned by `numerics/floating-point.md`; it is not hidden storage, explicit-loan, or reference-authority state and does not make host NaN propagation, backend behavior, physical encoding, scheduling, or container iteration order an additional semantic input.
 
 The actual verification token chosen to represent a storage-instance identity is not program-observable. Semantics depend on instance distinction and stability, not on a particular integer assignment.
 
-The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state and no new path-state component beyond the storage transitions it already performs. `IntegerAdd`, `IntegerSub`, `IntegerMul`, `IntegerXor`, `IntegerOr`, `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` likewise introduce no hidden storage-state component beyond their operand consequences and one non-replacing result initialization. `FloatAdd.contract`, `FloatSub.contract`, `FloatMul.contract`, and `FloatDiv.contract` are explicit operation semantic facts, not mutable runtime state.
+The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state beyond the reference/explicit-loan authority already supplied by their canonical owners and no new storage path-state component beyond the storage transitions it already performs. `IntegerAdd`, `IntegerSub`, `IntegerMul`, `IntegerXor`, `IntegerOr`, `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` likewise introduce no hidden storage-state component beyond their operand consequences and one non-replacing result initialization. `FloatAdd.contract`, `FloatSub.contract`, `FloatMul.contract`, and `FloatDiv.contract` are explicit operation semantic facts, not mutable runtime state.
 
-The semantics defined here do not depend on physical addresses, host arithmetic/bitwise/floating behavior, destruction behavior, container iteration order, physical scheduling, or backend behavior.
+Reference-carrier transfer, duplication, removal, and authority termination are separately owned by [Core references](references.md). This storage owner fixes the deterministic value-lifecycle points at which those consequences occur; it does not derive authority identity from destruction order or storage-instance numbering.
+
+The semantics defined here do not depend on physical addresses, host arithmetic/bitwise/floating behavior, host destruction behavior, container iteration order, physical scheduling, or backend behavior.
 
 ## Separate semantic owners
 
-This document does not define heap or raw allocation, deallocation, borrowing duration or loan delegation, first-class references, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add, integer-subtract, integer-multiply, integer-exclusive-or, integer-bitwise-OR, and selected-contract floating-addition, floating-subtraction, floating-multiplication, and floating-division relations, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing duration or explicit-loan delegation, safe-reference permission/authority/reborrow semantics, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add, integer-subtract, integer-multiply, integer-exclusive-or, integer-bitwise-OR, and selected-contract floating-addition, floating-subtraction, floating-multiplication, and floating-division relations, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
+
+First-class safe-reference types/values, reference-backed authority/carrier lifetime, reference formation/reborrow, reference access permissions, and safe-reference validity are owned by [Core references](references.md). This storage owner supplies the ordinary scalar/aggregate stored-value lifecycle and copyability relation that those reference-specific consequences consume.
 
 Raw-pointer type/value formation and provenance derived from the storage-instance identity defined here are owned by [Core pointers and provenance](pointers.md). That pointer specification does not change the storage extent or stored-value lifetime rules in this document. Fixed-width integer numerical value relations are owned by [Core integer semantics](numerics/integers.md); binary floating-addition, floating-subtraction, floating-multiplication, and floating-division numerical results and all numeric-contract authority are owned by [Core floating-point semantics](numerics/floating-point.md). This document owns only the represented operations' operand/storage/lifetime consequences and the explicit contract identity carried by `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` for consumption by that numerical owner.
 
 This revision defines only proving-kernel interior-mutability capability and replacement semantics; it does not define source spelling, library abstractions, dynamic borrow guards, synchronization mechanisms, or which future public types expose that capability.
 
-Where this revision defines storage or lifetime facts that later borrowing, pointer access, validity, control-flow, or concurrency concerns may depend on, their canonical owners govern the additional policy. In particular, a shared loan remaining active across an interior replacement implies stable structural storage identity for that continuing extent, but does not imply physical address stability, legal raw-pointer dereference, data-race freedom, or a first-class reference guarantee.
+Where this revision defines storage or lifetime facts that later borrowing, reference, pointer access, validity, control-flow, or concurrency concerns may depend on, their canonical owners govern the additional policy. In particular, a shared authority remaining active across an interior replacement implies stable semantic structural storage identity for that continuing extent, but does not imply physical address stability, legal raw-pointer dereference, data-race freedom, or a physical safe-reference representation.
