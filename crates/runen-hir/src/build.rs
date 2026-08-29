@@ -11,8 +11,8 @@ use crate::{
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
     LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, Record, RecordFieldValue,
     RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTransientCleanup,
-    ReferenceReferent, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation, Value,
-    ValueKind, type_is_duplicable_in_records,
+    ReferenceReferent, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation,
+    Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -806,7 +806,9 @@ fn resolve_type(
         let referent = match ordinary {
             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
             Type::Record(record) => ReferenceReferent::Record(record),
-            Type::SharedReference(_) => unreachable!("source reference type syntax is non-recursive"),
+            Type::SharedReference(_) => {
+                unreachable!("source reference type syntax is non-recursive")
+            }
         };
         Some(Type::SharedReference(referent))
     } else {
@@ -1683,10 +1685,10 @@ fn reference_origin_for_value(
     value: &Value,
     bindings: &BTreeMap<String, BindingState>,
 ) -> Option<ReferenceOrigin> {
-    match value.kind {
-        ValueKind::SharedBorrowRoot { target } => Some(ReferenceOrigin::Local(target)),
+    match &value.kind {
+        ValueKind::SharedBorrowRoot { target } => Some(ReferenceOrigin::Local(*target)),
         ValueKind::BindingUse { binding, .. } if matches!(value.ty, Type::SharedReference(_)) => {
-            binding_state_by_id(bindings, binding)
+            binding_state_by_id(bindings, *binding)
                 .expect("validated reference binding remains active")
                 .reference_origin
         }
