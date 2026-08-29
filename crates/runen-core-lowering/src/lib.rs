@@ -71,10 +71,12 @@ struct TypeMap {
 
 impl TypeMap {
     fn new(compilation: &hir::TypedCompilation) -> Result<Self, LoweringError> {
+        let reference_types = collect_used_shared_reference_types(compilation);
         let maximum_types = compilation
             .records
             .len()
             .checked_add(INTRINSICS.len())
+            .and_then(|count| count.checked_add(reference_types.len()))
             .ok_or(LoweringError::RepresentationLimit("Core type identity"))?;
         if index_u32(maximum_types - 1, "Core type identity").is_err() {
             return Err(LoweringError::RepresentationLimit("Core type identity"));
@@ -92,6 +94,9 @@ impl TypeMap {
         let mut visiting = BTreeSet::new();
         for record in &compilation.records {
             map.lower_record(compilation, record.id, &mut visiting)?;
+        }
+        for referent in reference_types {
+            map.lower_shared_reference(referent)?;
         }
         Ok(map)
     }
@@ -124,6 +129,11 @@ impl TypeMap {
                         "represented intrinsic type is not mapped",
                     ))?,
                 hir::Type::Record(record) => self.lower_record(compilation, record, visiting)?,
+                hir::Type::SharedReference(_) => {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "HIR record field contains a Shared-reference type",
+                    ));
+                }
             };
             fields.push(core::Field::new(field.name, field_ty));
         }
@@ -133,6 +143,37 @@ impl TypeMap {
             .types
             .push(core::TypeDef::structure(record.name, fields));
         self.mapped.insert(ty, mapped);
+        Ok(mapped)
+    }
+
+    fn lower_shared_reference(
+        &mut self,
+        referent: hir::ReferenceReferent,
+    ) -> Result<core::TypeId, LoweringError> {
+        let ty = hir::Type::SharedReference(referent);
+        if let Some(mapped) = self.mapped.get(&ty) {
+            return Ok(*mapped);
+        }
+
+        let referent_ty = self.get(referent.ty())?;
+        let referent_name = self
+            .types
+            .get(referent_ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "Shared-reference referent is absent from the Core type table",
+            ))?
+            .name
+            .clone();
+        let mapped = self.types.push(core::TypeDef::reference(
+            format!("&{referent_name}"),
+            referent_ty,
+            core::ReferencePermission::Shared,
+        ));
+        if self.mapped.insert(ty, mapped).is_some() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "duplicate HIR Shared-reference type mapping",
+            ));
+        }
         Ok(mapped)
     }
 
@@ -246,6 +287,58 @@ impl TypeMap {
             path.pop();
         }
         Ok(())
+    }
+}
+
+fn collect_used_shared_reference_types(
+    compilation: &hir::TypedCompilation,
+) -> BTreeSet<hir::ReferenceReferent> {
+    let mut referents = BTreeSet::new();
+    for function in &compilation.functions {
+        for parameter in &function.parameters {
+            if let hir::Type::SharedReference(referent) = parameter.ty {
+                referents.insert(referent);
+            }
+        }
+        collect_statement_shared_reference_types(&function.body.statements, &mut referents);
+    }
+    referents
+}
+
+fn collect_statement_shared_reference_types(
+    statements: &[hir::Statement],
+    referents: &mut BTreeSet<hir::ReferenceReferent>,
+) {
+    for statement in statements {
+        match statement {
+            hir::Statement::Local { ty, .. } => {
+                if let hir::Type::SharedReference(referent) = ty {
+                    referents.insert(*referent);
+                }
+            }
+            hir::Statement::Block(block) => {
+                collect_statement_shared_reference_types(&block.statements, referents);
+            }
+            hir::Statement::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_statement_shared_reference_types(&then_block.statements, referents);
+                if let Some(else_block) = else_block {
+                    collect_statement_shared_reference_types(&else_block.statements, referents);
+                }
+            }
+            hir::Statement::While { body, .. } => {
+                collect_statement_shared_reference_types(&body.statements, referents);
+            }
+            hir::Statement::RecordDestructure { .. }
+            | hir::Statement::Assignment { .. }
+            | hir::Statement::Call { .. }
+            | hir::Statement::Fault { .. }
+            | hir::Statement::Break { .. }
+            | hir::Statement::Continue { .. } => {}
+        }
     }
 }
 
@@ -1691,7 +1784,71 @@ impl<'a> FunctionLowerer<'a> {
                 self.current = join_target.0 as usize;
                 Ok(result)
             }
+            hir::ValueKind::SharedBorrowRoot { target } => {
+                let hir::Type::SharedReference(referent) = value.ty else {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Shared-borrow HIR value does not have a Shared-reference type",
+                    ));
+                };
+                let target_local = self.binding(*target)?;
+                let referent_ty = self.types.get(referent.ty())?;
+                if self.local_type(target_local)? != referent_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Shared-borrow target type does not match its reference referent",
+                    ));
+                }
+
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::ReferenceRoot {
+                        permission: core::ReferencePermission::Shared,
+                        place: core::Place::local(target_local),
+                    },
+                });
+                Ok(temporary)
+            }
+            hir::ValueKind::SharedDereferenceCopy { reference } => {
+                let referent = match value.ty {
+                    hir::Type::Intrinsic(intrinsic) => hir::ReferenceReferent::Intrinsic(intrinsic),
+                    hir::Type::Record(record) => hir::ReferenceReferent::Record(record),
+                    hir::Type::SharedReference(_) => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "Shared-dereference HIR value has a nested-reference result type",
+                        ));
+                    }
+                };
+                if !self.compilation.type_is_duplicable(value.ty) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Shared-dereference HIR referent is not source-duplicable",
+                    ));
+                }
+
+                let source = self.binding(*reference)?;
+                let expected_reference_ty = self.types.get(hir::Type::SharedReference(referent))?;
+                if self.local_type(source)? != expected_reference_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Shared-dereference binding type does not match its result referent",
+                    ));
+                }
+
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::ReferenceCopy(core::ReferenceAccess::new(
+                        core::Place::local(source),
+                    )),
+                });
+                Ok(temporary)
+            }
             hir::ValueKind::BindingUse { binding, ownership } => {
+                if matches!(value.ty, hir::Type::SharedReference(_))
+                    && *ownership != hir::OwnedUse::Duplicate
+                {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "Shared-reference binding use is not a source duplication",
+                    ));
+                }
                 let source = self.binding(*binding)?;
                 let temporary = self.push_temporary(value.ty)?;
                 let operand = match ownership {
