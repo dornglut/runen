@@ -24,7 +24,7 @@ pub enum Terminator {
     Fault(Fault),
 }
 
-/// Basic block in program-level Core basic block.
+/// Basic block in program-level Core MIR.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BasicBlock {
     pub statements: Vec<Statement>,
