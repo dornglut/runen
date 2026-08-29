@@ -24,7 +24,7 @@ pub enum Terminator {
     Fault(Fault),
 }
 
-/// Basic block in program-level Core MIR.
+/// Basic block in program-level Core basic block.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BasicBlock {
     pub statements: Vec<Statement>,
@@ -73,6 +73,8 @@ pub struct Function {
     pub name: String,
     pub parameters: Vec<LocalId>,
     pub result: Option<TypeId>,
+    /// Parameter-slot origin for the bounded scalar Shared-reference result contract.
+    pub shared_reference_result_origin: Option<usize>,
     pub body: Body,
 }
 
