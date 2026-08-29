@@ -190,10 +190,10 @@ fn stored_local_origin_rejects_target_replacement_after_rhs_validation() {
 #[test]
 fn normally_completed_call_temporary_borrow_does_not_persist_into_assignment() {
     compile(
-        "fn copy(r: &I64) -> I64 { return *r; }\
+        "fn read_ref(r: &I64) -> I64 { return *r; }\
          fn f(seed: I64) {\
              let mut x: I64 = seed;\
-             x = copy(&x);\
+             x = read_ref(&x);\
              x = 17;\
          }",
     )
