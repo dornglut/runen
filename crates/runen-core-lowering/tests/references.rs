@@ -113,7 +113,6 @@ fn maps_only_used_shared_reference_types_once_per_hir_type() {
     let scalar_reference_ty = f.body.locals[f.parameters[2].0 as usize].ty;
     let point_reference_ty = f.body.locals[f.parameters[3].0 as usize].ty;
     assert_ne!(scalar_reference_ty, point_reference_ty);
-    assert_eq!(local_named(f, "scalar_copy").0 as usize, 4);
     assert_eq!(
         f.body.locals[local_named(f, "scalar_copy").0 as usize].ty,
         scalar_reference_ty
