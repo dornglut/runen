@@ -426,7 +426,6 @@ struct Frame {
 #[derive(Clone, Debug)]
 struct ResolvedReferenceAccess {
     authority: ReferenceAuthorityId,
-    permission: ReferencePermission,
     target: StorageRegion,
     selected_ty: TypeId,
 }
@@ -1329,7 +1328,6 @@ impl Machine {
             .extend(access.projections.iter().copied());
         ResolvedReferenceAccess {
             authority: reference.authority,
-            permission,
             target,
             selected_ty,
         }
