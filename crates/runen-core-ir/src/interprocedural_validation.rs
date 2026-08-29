@@ -49,6 +49,7 @@ pub enum MirValidationErrorKind {
     UnexpectedSharedReferenceResultOrigin,
     InvalidSharedReferenceResultOriginSlot(usize),
     SharedReferenceResultRequiresShared(TypeId),
+    SharedReferenceResultOriginRequiresShared(TypeId),
     SharedReferenceResultOriginTypeMismatch {
         expected: TypeId,
         found: TypeId,
@@ -337,9 +338,9 @@ fn validate_result_contract(
         };
     };
 
-    let definition = types.get(result).ok_or_else(|| {
-        function_error(function_id, MirValidationErrorKind::UnknownType(result))
-    })?;
+    let definition = types
+        .get(result)
+        .ok_or_else(|| function_error(function_id, MirValidationErrorKind::UnknownType(result)))?;
 
     if types.is_result_transfer_safe(result) {
         return if function.shared_reference_result_origin.is_none() {
@@ -383,6 +384,14 @@ fn validate_result_contract(
         .local(*parameter)
         .expect("parameter validation establishes the designated origin local")
         .ty;
+    if let Some((_, permission)) = types.reference(found)
+        && permission != ReferencePermission::Shared
+    {
+        return Err(function_error(
+            function_id,
+            MirValidationErrorKind::SharedReferenceResultOriginRequiresShared(found),
+        ));
+    }
     if found != result {
         return Err(function_error(
             function_id,
