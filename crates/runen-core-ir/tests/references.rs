@@ -128,17 +128,11 @@ fn reference_copyability_follows_permission_and_structural_recursion() {
     ));
     let shared_pair = types.push(TypeDef::structure(
         "SharedPair",
-        vec![
-            Field::new("left", shared),
-            Field::new("right", shared),
-        ],
+        vec![Field::new("left", shared), Field::new("right", shared)],
     ));
     let exclusive_pair = types.push(TypeDef::structure(
         "ExclusivePair",
-        vec![
-            Field::new("left", shared),
-            Field::new("right", exclusive),
-        ],
+        vec![Field::new("left", shared), Field::new("right", exclusive)],
     ));
 
     assert!(types.is_copy(shared));
@@ -314,7 +308,10 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         functions: vec![immutable_replace],
     })
     .expect_err("ExclusiveReplace root requires ordinary direct assignment permission");
-    assert_eq!(error.kind, MirValidationErrorKind::AssignToImmutable(LocalId(0)));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::AssignToImmutable(LocalId(0))
+    );
 }
 
 #[test]
@@ -614,9 +611,8 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
     })
     .expect("ExclusiveReplace authorizes ordinary replacement through the reference");
 
-    let interior_i64 = types.push(
-        TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability(),
-    );
+    let interior_i64 =
+        types.push(TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability());
     let shared_interior = types.push(TypeDef::reference(
         "SharedInteriorI64",
         interior_i64,
@@ -769,9 +765,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
     .expect_err("Exclusive parent cannot create ExclusiveReplace child");
     assert_eq!(
         error.kind,
-        MirValidationErrorKind::ReferencePermissionRequired(
-            ReferencePermission::ExclusiveReplace
-        )
+        MirValidationErrorKind::ReferencePermissionRequired(ReferencePermission::ExclusiveReplace)
     );
 
     let pair_ty = types.push(TypeDef::structure(
