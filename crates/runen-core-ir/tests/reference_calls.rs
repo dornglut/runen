@@ -418,10 +418,7 @@ fn call_retains_all_arguments_before_checking_full_reference_authority() {
                     ],
                     Terminator::Call {
                         function: FunctionId(1),
-                        arguments: vec![
-                            Operand::Move(child.into()),
-                            Operand::Move(parent.into()),
-                        ],
+                        arguments: vec![Operand::Move(child.into()), Operand::Move(parent.into())],
                         destination: None,
                         target: BasicBlockId(1),
                     },
