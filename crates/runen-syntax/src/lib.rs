@@ -144,26 +144,6 @@ impl SyntaxKind {
         )
     }
 
-    pub(crate) const fn is_type_start(self) -> bool {
-        matches!(
-            self,
-            Self::Amp
-                | Self::Ident
-                | Self::TyBool
-                | Self::TyI8
-                | Self::TyI16
-                | Self::TyI32
-                | Self::TyI64
-                | Self::TyU8
-                | Self::TyU16
-                | Self::TyU32
-                | Self::TyU64
-                | Self::TyF16
-                | Self::TyF32
-                | Self::TyF64
-        )
-    }
-
     pub(crate) const fn is_value_start(self) -> bool {
         matches!(
             self,
