@@ -129,6 +129,9 @@ pub enum SyntaxKind {
     At,
     NumericContractSelectedValue,
     Slash,
+    Amp,
+    SharedBorrowValue,
+    SharedDereferenceValue,
 }
 
 impl SyntaxKind {
@@ -138,25 +141,6 @@ impl SyntaxKind {
         matches!(
             self,
             Self::Bom | Self::Whitespace | Self::LineComment | Self::BlockComment
-        )
-    }
-
-    pub(crate) const fn is_type_start(self) -> bool {
-        matches!(
-            self,
-            Self::Ident
-                | Self::TyBool
-                | Self::TyI8
-                | Self::TyI16
-                | Self::TyI32
-                | Self::TyI64
-                | Self::TyU8
-                | Self::TyU16
-                | Self::TyU32
-                | Self::TyU64
-                | Self::TyF16
-                | Self::TyF32
-                | Self::TyF64
         )
     }
 
@@ -295,6 +279,9 @@ impl Language for RunenLanguage {
             104 => SyntaxKind::At,
             105 => SyntaxKind::NumericContractSelectedValue,
             106 => SyntaxKind::Slash,
+            107 => SyntaxKind::Amp,
+            108 => SyntaxKind::SharedBorrowValue,
+            109 => SyntaxKind::SharedDereferenceValue,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

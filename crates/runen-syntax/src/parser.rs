@@ -670,7 +670,10 @@ impl Parser<'_> {
     fn parse_return_statement(&mut self) {
         self.builder.start_node(SyntaxKind::ReturnStatement.into());
         self.expect(SyntaxKind::KwReturn, ExpectedSyntax::Item);
-        if self.current().is_some_and(SyntaxKind::is_value_start) {
+        if self
+            .current()
+            .is_some_and(|kind| value_start_in(kind, ValueContext::Ordinary))
+        {
             self.parse_value();
         }
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
@@ -679,14 +682,19 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) {
         self.builder.start_node(SyntaxKind::TypeRef.into());
+        self.eat(SyntaxKind::Amp);
+        self.parse_reference_referent_type();
+        self.builder.finish_node();
+    }
+
+    fn parse_reference_referent_type(&mut self) {
         if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
             self.parse_qualified_module_member();
-        } else if self.current().is_some_and(SyntaxKind::is_type_start) {
+        } else if self.current().is_some_and(is_reference_referent_type_start) {
             self.bump();
         } else {
             self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Type));
         }
-        self.builder.finish_node();
     }
 
     fn parse_value(&mut self) {
@@ -763,7 +771,7 @@ impl Parser<'_> {
         if (self.at(SyntaxKind::Star) || self.at(SyntaxKind::Slash))
             && self
                 .peek_nontrivia(1)
-                .is_some_and(SyntaxKind::is_value_start)
+                .is_some_and(|kind| value_start_in(kind, context))
         {
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::MulValue.into());
@@ -775,6 +783,12 @@ impl Parser<'_> {
 
     fn parse_value_in(&mut self, context: ValueContext) {
         match self.current() {
+            Some(SyntaxKind::Amp) if matches!(context, ValueContext::Ordinary) => {
+                self.parse_shared_borrow_value();
+            }
+            Some(SyntaxKind::Star) if matches!(context, ValueContext::Ordinary) => {
+                self.parse_shared_dereference_value();
+            }
             Some(SyntaxKind::At)
                 if matches!(context, ValueContext::Ordinary) && self.at_fast_selector_start() =>
             {
@@ -906,6 +920,22 @@ impl Parser<'_> {
                 }
             }
         }
+    }
+
+    fn parse_shared_borrow_value(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::SharedBorrowValue.into());
+        self.expect(SyntaxKind::Amp, ExpectedSyntax::Value);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.builder.finish_node();
+    }
+
+    fn parse_shared_dereference_value(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::SharedDereferenceValue.into());
+        self.expect(SyntaxKind::Star, ExpectedSyntax::Value);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.builder.finish_node();
     }
 
     fn parse_numeric_contract_selected_value(&mut self) {
@@ -1352,4 +1382,29 @@ impl Parser<'_> {
             );
         self.errors.push(SyntaxError::new(kind, range));
     }
+}
+
+const fn is_reference_referent_type_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::Ident
+            | SyntaxKind::TyBool
+            | SyntaxKind::TyI8
+            | SyntaxKind::TyI16
+            | SyntaxKind::TyI32
+            | SyntaxKind::TyI64
+            | SyntaxKind::TyU8
+            | SyntaxKind::TyU16
+            | SyntaxKind::TyU32
+            | SyntaxKind::TyU64
+            | SyntaxKind::TyF16
+            | SyntaxKind::TyF32
+            | SyntaxKind::TyF64
+    )
+}
+
+const fn value_start_in(kind: SyntaxKind, context: ValueContext) -> bool {
+    kind.is_value_start()
+        || (matches!(context, ValueContext::Ordinary)
+            && matches!(kind, SyntaxKind::Amp | SyntaxKind::Star))
 }

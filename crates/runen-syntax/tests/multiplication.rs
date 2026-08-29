@@ -58,18 +58,11 @@ fn standalone_star_is_lossless_without_disturbing_comment_delimiters() {
 }
 
 #[test]
-fn double_star_and_star_equals_are_not_operators() {
-    for source in [
-        "fn f(a: I64, b: I64) -> I64 { return a ** b; }",
-        "fn f(a: I64, b: I64) -> I64 { return a *= b; }",
-    ] {
-        let parsed = parse(source);
-        assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty());
-        assert_eq!(count(&parsed, SyntaxKind::MulValue), 0);
-    }
-
+fn adjacent_dereference_rhs_is_not_exponentiation_and_star_equals_remains_invalid() {
     let double = parse("fn f(a: I64, b: I64) -> I64 { return a ** b; }");
+    assert!(double.errors().is_empty(), "{:?}", double.errors());
+    assert_eq!(count(&double, SyntaxKind::MulValue), 1);
+    assert_eq!(count(&double, SyntaxKind::SharedDereferenceValue), 1);
     assert!(
         nontrivia_kinds(&double)
             .windows(2)
@@ -77,6 +70,8 @@ fn double_star_and_star_equals_are_not_operators() {
     );
 
     let assign = parse("fn f(a: I64, b: I64) -> I64 { return a *= b; }");
+    assert!(!assign.errors().is_empty());
+    assert_eq!(count(&assign, SyntaxKind::MulValue), 0);
     assert!(
         nontrivia_kinds(&assign)
             .windows(2)

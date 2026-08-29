@@ -1,4 +1,4 @@
-use runen_syntax::{Parse, SyntaxErrorKind, SyntaxKind, parse_source};
+use runen_syntax::{Parse, SyntaxKind, parse_source};
 
 fn parse(source: &str) -> Parse {
     parse_source(source.as_bytes()).expect("valid UTF-8 test source")
@@ -40,7 +40,7 @@ fn conjunction_kinds_append_without_renumbering_existing_syntax() {
 }
 
 #[test]
-fn conjunction_lexing_uses_one_adjacent_token_and_preserves_invalid_boundaries() {
+fn conjunction_lexing_keeps_longest_match_with_standalone_ampersand() {
     let assign_like = parse("fn f(a: Bool, b: Bool) { let value: Bool = a &&= b; }");
     assert_eq!(
         nontrivia_kinds(&assign_like)
@@ -55,31 +55,20 @@ fn conjunction_lexing_uses_one_adjacent_token_and_preserves_invalid_boundaries()
     assert!(
         nontrivia_kinds(&triple)
             .windows(2)
-            .any(|window| window == [SyntaxKind::AmpAmp, SyntaxKind::ErrorToken])
+            .any(|window| window == [SyntaxKind::AmpAmp, SyntaxKind::Amp])
     );
-    assert!(
-        triple
-            .errors()
-            .iter()
-            .any(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
-    );
+    assert!(triple.errors().is_empty(), "{:?}", triple.errors());
+    assert_eq!(count(&triple, SyntaxKind::SharedBorrowValue), 1);
 
     let spaced = parse("fn f(a: Bool, b: Bool) { let value: Bool = a & & b; }");
     assert_eq!(
         nontrivia_kinds(&spaced)
             .iter()
-            .filter(|kind| **kind == SyntaxKind::ErrorToken)
+            .filter(|kind| **kind == SyntaxKind::Amp)
             .count(),
         2
     );
-    assert!(
-        spaced
-            .errors()
-            .iter()
-            .filter(|error| error.kind() == SyntaxErrorKind::UnrecognizedToken)
-            .count()
-            >= 2
-    );
+    assert!(!spaced.errors().is_empty());
 }
 
 #[test]
