@@ -682,11 +682,8 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) {
         self.builder.start_node(SyntaxKind::TypeRef.into());
-        if self.eat(SyntaxKind::Amp) {
-            self.parse_reference_referent_type();
-        } else {
-            self.parse_reference_referent_type();
-        }
+        self.eat(SyntaxKind::Amp);
+        self.parse_reference_referent_type();
         self.builder.finish_node();
     }
 
@@ -926,7 +923,8 @@ impl Parser<'_> {
     }
 
     fn parse_shared_borrow_value(&mut self) {
-        self.builder.start_node(SyntaxKind::SharedBorrowValue.into());
+        self.builder
+            .start_node(SyntaxKind::SharedBorrowValue.into());
         self.expect(SyntaxKind::Amp, ExpectedSyntax::Value);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.builder.finish_node();
