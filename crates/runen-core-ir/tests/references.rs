@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, BorrowKind, Field, Function, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, Program, ReferenceAccess, ReferencePermission,
+    BasicBlock, BasicBlockId, Body, BorrowKind, Field, Function, LoanDecl, LoanId, LocalDecl,
+    LocalId, MirValidationErrorKind, Operand, Place, Program, ReferenceAccess, ReferencePermission,
     ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 
@@ -405,7 +405,7 @@ fn reference_root_and_explicit_borrow_share_one_conflict_domain() {
         },
     };
     let error = validate_program(Program {
-        types,
+        types: types.clone(),
         functions: vec![loan_after_reference],
     })
     .expect_err("root explicit borrow conflicts with overlapping exclusive reference authority");
