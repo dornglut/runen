@@ -188,12 +188,17 @@ fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
                 permission,
             }) => {
                 if types.get(*referent).is_none() {
-                    return Err(program_error(MirValidationErrorKind::UnknownType(*referent)));
-                }
-                if reference_pairs.insert((*referent, *permission), ty).is_some() {
-                    return Err(program_error(MirValidationErrorKind::DuplicateReferenceType(
-                        ty,
+                    return Err(program_error(MirValidationErrorKind::UnknownType(
+                        *referent,
                     )));
+                }
+                if reference_pairs
+                    .insert((*referent, *permission), ty)
+                    .is_some()
+                {
+                    return Err(program_error(
+                        MirValidationErrorKind::DuplicateReferenceType(ty),
+                    ));
                 }
             }
             TypeKind::Scalar(_) | TypeKind::Struct(_) => {}
@@ -618,7 +623,9 @@ fn validate_static_statement(
             MirValidationErrorKind::IntegerOrRequiresInteger,
             point,
         ),
-        Statement::FloatAdd { dst, left, right, .. } => validate_static_binary_numeric(
+        Statement::FloatAdd {
+            dst, left, right, ..
+        } => validate_static_binary_numeric(
             types,
             body,
             dst,
@@ -628,7 +635,9 @@ fn validate_static_statement(
             MirValidationErrorKind::FloatAddRequiresFloat,
             point,
         ),
-        Statement::FloatSub { dst, left, right, .. } => validate_static_binary_numeric(
+        Statement::FloatSub {
+            dst, left, right, ..
+        } => validate_static_binary_numeric(
             types,
             body,
             dst,
@@ -638,7 +647,9 @@ fn validate_static_statement(
             MirValidationErrorKind::FloatSubRequiresFloat,
             point,
         ),
-        Statement::FloatMul { dst, left, right, .. } => validate_static_binary_numeric(
+        Statement::FloatMul {
+            dst, left, right, ..
+        } => validate_static_binary_numeric(
             types,
             body,
             dst,
@@ -648,7 +659,9 @@ fn validate_static_statement(
             MirValidationErrorKind::FloatMulRequiresFloat,
             point,
         ),
-        Statement::FloatDiv { dst, left, right, .. } => validate_static_binary_numeric(
+        Statement::FloatDiv {
+            dst, left, right, ..
+        } => validate_static_binary_numeric(
             types,
             body,
             dst,
@@ -705,11 +718,7 @@ fn validate_static_statement(
         }
         Statement::ReferenceAssign { dst, src } => {
             let (_, permission, expected) = reference_access_type(types, body, dst, point)?;
-            require_reference_permission(
-                permission,
-                ReferencePermission::ExclusiveReplace,
-                point,
-            )?;
+            require_reference_permission(permission, ReferencePermission::ExclusiveReplace, point)?;
             validate_operand_type(types, body, src, expected, point)
         }
         Statement::InteriorAssign { dst, src } => {
@@ -958,7 +967,11 @@ fn require_interior_mutable_place(
     place: &Place,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
-    if is_interior_mutable_from_root(types, body.local(place.local).unwrap().ty, &place.projections) {
+    if is_interior_mutable_from_root(
+        types,
+        body.local(place.local).unwrap().ty,
+        &place.projections,
+    ) {
         Ok(())
     } else {
         Err(point_error(
@@ -1071,14 +1084,16 @@ fn reference_access_type(
             MirValidationErrorKind::ReferenceAccessRequiresReference(reference_ty),
         ));
     };
-    let selected = types.project_type(referent, &access.projections).ok_or_else(|| {
-        point_error(
-            point,
-            MirValidationErrorKind::InvalidReferenceProjection {
-                projections: access.projections.clone(),
-            },
-        )
-    })?;
+    let selected = types
+        .project_type(referent, &access.projections)
+        .ok_or_else(|| {
+            point_error(
+                point,
+                MirValidationErrorKind::InvalidReferenceProjection {
+                    projections: access.projections.clone(),
+                },
+            )
+        })?;
     Ok((referent, permission, selected))
 }
 
@@ -1555,7 +1570,9 @@ fn validate_state_statement(
                 return Ok(DefinedStep::NoDefinedContinuation);
             }
         }
-        Statement::FloatAdd { dst, left, right, .. } => {
+        Statement::FloatAdd {
+            dst, left, right, ..
+        } => {
             if matches!(
                 validate_state_binary_numeric(
                     types,
@@ -1572,7 +1589,9 @@ fn validate_state_statement(
                 return Ok(DefinedStep::NoDefinedContinuation);
             }
         }
-        Statement::FloatSub { dst, left, right, .. } => {
+        Statement::FloatSub {
+            dst, left, right, ..
+        } => {
             if matches!(
                 validate_state_binary_numeric(
                     types,
@@ -1589,7 +1608,9 @@ fn validate_state_statement(
                 return Ok(DefinedStep::NoDefinedContinuation);
             }
         }
-        Statement::FloatMul { dst, left, right, .. } => {
+        Statement::FloatMul {
+            dst, left, right, ..
+        } => {
             if matches!(
                 validate_state_binary_numeric(
                     types,
@@ -1606,7 +1627,9 @@ fn validate_state_statement(
                 return Ok(DefinedStep::NoDefinedContinuation);
             }
         }
-        Statement::FloatDiv { dst, left, right, .. } => {
+        Statement::FloatDiv {
+            dst, left, right, ..
+        } => {
             if matches!(
                 validate_state_binary_numeric(
                     types,
@@ -1639,9 +1662,7 @@ fn validate_state_statement(
 
             let (place, parent) = match src {
                 PlaceAccess::Direct(place) => {
-                    if let Some(conflicting) =
-                        borrow_conflict(&state.active_loans, place, *kind)
-                    {
+                    if let Some(conflicting) = borrow_conflict(&state.active_loans, place, *kind) {
                         return Err(point_error(
                             point,
                             MirValidationErrorKind::BorrowConflict {
@@ -1650,11 +1671,7 @@ fn validate_state_statement(
                             },
                         ));
                     }
-                    if reference_conflict_with_local(
-                        &state.reference_authorities,
-                        place,
-                        *kind,
-                    ) {
+                    if reference_conflict_with_local(&state.reference_authorities, place, *kind) {
                         return Err(point_error(
                             point,
                             MirValidationErrorKind::BorrowConflictWithReferenceAuthority {
@@ -1968,7 +1985,9 @@ fn validate_operand_state(
     point: &MirPoint,
 ) -> Result<DefinedStep<ValidationValue>, MirValidationError> {
     match operand {
-        Operand::Constant(value) => Ok(DefinedStep::Continue(validation_value_from_constant(value))),
+        Operand::Constant(value) => {
+            Ok(DefinedStep::Continue(validation_value_from_constant(value)))
+        }
         Operand::Move(src) => {
             let place = resolve_authorized_access(
                 &state.active_loans,
@@ -2086,15 +2105,8 @@ fn validate_operand_state(
                 BorrowKind::Shared => AccessRequirement::Shared,
                 BorrowKind::Exclusive => AccessRequirement::Exclusive,
             };
-            let resolved = resolve_reference_access(
-                types,
-                body,
-                state,
-                src,
-                requirement,
-                None,
-                point,
-            )?;
+            let resolved =
+                resolve_reference_access(types, body, state, src, requirement, None, point)?;
             if !resolved.permission.permits(*permission) {
                 return Err(point_error(
                     point,
@@ -2125,7 +2137,8 @@ fn validate_operand_state(
                 point,
             )?;
             require_region_fully_live(state, &resolved.target, point)?;
-            let value = take_region_value(types, body, state, &resolved.target, resolved.selected_ty);
+            let value =
+                take_region_value(types, body, state, &resolved.target, resolved.selected_ty);
             Ok(DefinedStep::Continue(value))
         }
         Operand::ReferenceCopy(src) => {
@@ -2139,7 +2152,8 @@ fn validate_operand_state(
                 point,
             )?;
             require_region_fully_live(state, &resolved.target, point)?;
-            let value = clone_region_value(types, body, state, &resolved.target, resolved.selected_ty);
+            let value =
+                clone_region_value(types, body, state, &resolved.target, resolved.selected_ty);
             Ok(DefinedStep::Continue(value))
         }
     }
@@ -2262,7 +2276,11 @@ fn clone_validation_value(
     }
 }
 
-fn take_validation_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState) -> ValidationValue {
+fn take_validation_value(
+    types: &TypeTable,
+    ty: TypeId,
+    state: &mut ObjectState,
+) -> ValidationValue {
     let definition = types
         .get(ty)
         .expect("validated Core MIR references only known types");
@@ -2353,21 +2371,16 @@ fn destroy_region_live(
                 projections: region.projections.clone(),
             };
             let (locals, authorities) = (&mut state.locals, &mut state.reference_authorities);
-            destroy_object_live(
-                types,
-                ty,
-                place_state_mut(locals, &place),
-                authorities,
-            );
+            destroy_object_live(types, ty, place_state_mut(locals, &place), authorities);
         }
         ValidationRegionRoot::External(id) => {
             let index = id.0 as usize;
-            let (external_regions, authorities) =
-                (&mut state.external_regions, &mut state.reference_authorities);
-            let object = projected_state_mut(
-                &mut external_regions[index].state,
-                &region.projections,
+            let (external_regions, authorities) = (
+                &mut state.external_regions,
+                &mut state.reference_authorities,
             );
+            let object =
+                projected_state_mut(&mut external_regions[index].state, &region.projections);
             destroy_object_live(types, ty, object, authorities);
         }
     }
@@ -2451,12 +2464,7 @@ fn write_region_value(
                 local,
                 projections: region.projections.clone(),
             };
-            write_validation_value(
-                types,
-                ty,
-                place_state_mut(&mut state.locals, &place),
-                value,
-            );
+            write_validation_value(types, ty, place_state_mut(&mut state.locals, &place), value);
         }
         ValidationRegionRoot::External(id) => {
             let external = &mut state.external_regions[id.0 as usize];
@@ -2531,10 +2539,11 @@ fn region_type(
     region: &ValidationRegion,
 ) -> TypeId {
     let root_ty = match region.root {
-        ValidationRegionRoot::Local(local) => body
-            .local(local)
-            .expect("validated local region names a current-function local")
-            .ty,
+        ValidationRegionRoot::Local(local) => {
+            body.local(local)
+                .expect("validated local region names a current-function local")
+                .ty
+        }
         ValidationRegionRoot::External(id) => state.external_regions[id.0 as usize].ty,
     };
     types
@@ -2632,10 +2641,11 @@ fn is_interior_mutable_region(
     region: &ValidationRegion,
 ) -> bool {
     let root_ty = match region.root {
-        ValidationRegionRoot::Local(local) => body
-            .local(local)
-            .expect("validated local region names a current-function local")
-            .ty,
+        ValidationRegionRoot::Local(local) => {
+            body.local(local)
+                .expect("validated local region names a current-function local")
+                .ty
+        }
         ValidationRegionRoot::External(id) => state.external_regions[id.0 as usize].ty,
     };
     is_interior_mutable_from_root(types, root_ty, &region.projections)
@@ -2687,9 +2697,7 @@ fn resolve_reference_access(
     if requirement == AccessRequirement::Exclusive && permission == ReferencePermission::Shared {
         return Err(point_error(
             point,
-            MirValidationErrorKind::ReferencePermissionRequired(
-                ReferencePermission::Exclusive,
-            ),
+            MirValidationErrorKind::ReferencePermissionRequired(ReferencePermission::Exclusive),
         ));
     }
     if let Some(required) = exact_permission
@@ -2757,9 +2765,7 @@ fn remove_reference_carrier(
     normalize_reference_authorities(authorities);
 }
 
-fn normalize_reference_authorities(
-    authorities: &mut Vec<Option<ActiveReferenceAuthority>>,
-) {
+fn normalize_reference_authorities(authorities: &mut Vec<Option<ActiveReferenceAuthority>>) {
     loop {
         let mut changed = false;
 
