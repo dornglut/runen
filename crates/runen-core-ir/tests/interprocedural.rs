@@ -551,7 +551,7 @@ fn raw_pointer_containing_signatures_are_rejected() {
     .expect_err("raw-pointer values do not cross activations in this slice");
     assert_eq!(
         error.kind,
-        MirValidationErrorKind::CallTransferUnsafe(pointer_ty)
+        MirValidationErrorKind::ParameterTransferUnsafe(pointer_ty)
     );
     assert_eq!(error.location, MirLocation::Function(FunctionId(0)));
 }
@@ -578,7 +578,7 @@ fn raw_pointer_containing_results_are_rejected() {
     .expect_err("raw-pointer results do not cross activations in this slice");
     assert_eq!(
         error.kind,
-        MirValidationErrorKind::CallTransferUnsafe(pointer_ty)
+        MirValidationErrorKind::ResultTransferUnsafe(pointer_ty)
     );
     assert_eq!(error.location, MirLocation::Function(FunctionId(0)));
 }
@@ -760,7 +760,8 @@ fn ordinary_source_scalar_tags_are_copyable_without_value_carriers() {
     for (index, tag) in tags.into_iter().enumerate() {
         let ty = types.push(TypeDef::scalar(format!("scalar-{index}"), tag));
         assert!(types.is_copy(ty));
-        assert!(types.is_call_transfer_safe(ty));
+        assert!(types.is_parameter_transfer_safe(ty));
+        assert!(types.is_result_transfer_safe(ty));
     }
 }
 
@@ -852,7 +853,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         ),
     };
     let error = validate_program(Program {
-        types,
+        types: types.clone(),
         functions: vec![bad_access],
     })
     .expect_err("malformed AddressOf access fails before Branch Bool admission");
@@ -990,7 +991,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     let error = validate_program(Program {
-        types,
+        types: types.clone(),
         functions: vec![raw_i64],
     })
     .expect_err("RawMove through non-Bool pointee is not branch-admissible");
