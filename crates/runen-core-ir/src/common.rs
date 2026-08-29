@@ -32,6 +32,16 @@ pub struct StorageRegion {
     pub projections: Vec<Projection>,
 }
 
+impl StorageRegion {
+    /// Whether two dynamic structural regions denote overlapping storage.
+    #[must_use]
+    pub fn overlaps(&self, other: &Self) -> bool {
+        self.instance == other.instance
+            && (self.projections.starts_with(&other.projections)
+                || other.projections.starts_with(&self.projections))
+    }
+}
+
 /// Stable-in-one-function identifier for a semantic loan declaration.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LoanId(pub u32);
@@ -39,6 +49,37 @@ pub struct LoanId(pub u32);
 /// Stable-in-one-function identifier for a basic block.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BasicBlockId(pub u32);
+
+/// Exact semantic permission carried by one safe-reference type.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReferencePermission {
+    Shared,
+    Exclusive,
+    ExclusiveReplace,
+}
+
+impl ReferencePermission {
+    #[must_use]
+    pub fn alias_kind(self) -> BorrowKind {
+        match self {
+            Self::Shared => BorrowKind::Shared,
+            Self::Exclusive | Self::ExclusiveReplace => BorrowKind::Exclusive,
+        }
+    }
+
+    #[must_use]
+    pub fn permits(self, requested: Self) -> bool {
+        matches!(
+            (self, requested),
+            (Self::Shared, Self::Shared)
+                | (Self::Exclusive, Self::Shared | Self::Exclusive)
+                | (
+                    Self::ExclusiveReplace,
+                    Self::Shared | Self::Exclusive | Self::ExclusiveReplace
+                )
+        )
+    }
+}
 
 /// Scalar or leaf kinds represented by the Core proving kernel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -62,6 +103,13 @@ pub enum ScalarType {
     /// `RawAssign` replacement. Broader pointer access remains outside this type. The
     /// pointee edge is semantic indirection rather than structural containment.
     RawPointer(TypeId),
+    /// First-class safe reference to one exact referent type under one permission.
+    ///
+    /// The referent edge is semantic indirection rather than structural containment.
+    Reference {
+        referent: TypeId,
+        permission: ReferencePermission,
+    },
     /// Verification-only non-copy scalar used to make destruction observable to tests.
     /// This is not a Runen language scalar primitive.
     TrackedFixture,
@@ -163,6 +211,21 @@ impl TypeDef {
     }
 
     #[must_use]
+    pub fn reference(
+        name: impl Into<String>,
+        referent: TypeId,
+        permission: ReferencePermission,
+    ) -> Self {
+        Self::scalar(
+            name,
+            ScalarType::Reference {
+                referent,
+                permission,
+            },
+        )
+    }
+
+    #[must_use]
     pub fn structure(name: impl Into<String>, fields: Vec<Field>) -> Self {
         Self {
             name: name.into(),
@@ -228,6 +291,35 @@ impl TypeTable {
         }
     }
 
+    #[must_use]
+    pub fn reference(&self, ty: TypeId) -> Option<(TypeId, ReferencePermission)> {
+        match &self.get(ty)?.kind {
+            TypeKind::Scalar(ScalarType::Reference {
+                referent,
+                permission,
+            }) => Some((*referent, *permission)),
+            TypeKind::Scalar(_) | TypeKind::Struct(_) => None,
+        }
+    }
+
+    #[must_use]
+    pub fn reference_type_id(
+        &self,
+        referent: TypeId,
+        permission: ReferencePermission,
+    ) -> Option<TypeId> {
+        self.defs.iter().enumerate().find_map(|(index, def)| {
+            matches!(
+                def.kind,
+                TypeKind::Scalar(ScalarType::Reference {
+                    referent: found_referent,
+                    permission: found_permission,
+                }) if found_referent == referent && found_permission == permission
+            )
+            .then(|| TypeId(u32::try_from(index).expect("type table exceeds u32::MAX")))
+        })
+    }
+
     /// Copyability in the represented Core subset is structural and compiler-known.
     #[must_use]
     pub fn is_copy(&self, ty: TypeId) -> bool {
@@ -245,25 +337,67 @@ impl TypeTable {
                 | ScalarType::F16
                 | ScalarType::F32
                 | ScalarType::F64
-                | ScalarType::RawPointer(_),
+                | ScalarType::RawPointer(_)
+                | ScalarType::Reference {
+                    permission: ReferencePermission::Shared,
+                    ..
+                },
             )) => true,
-            Some(TypeKind::Scalar(ScalarType::TrackedFixture)) | None => false,
+            Some(TypeKind::Scalar(
+                ScalarType::TrackedFixture
+                | ScalarType::Reference {
+                    permission:
+                        ReferencePermission::Exclusive | ReferencePermission::ExclusiveReplace,
+                    ..
+                },
+            ))
+            | None => false,
             Some(TypeKind::Struct(fields)) => fields.iter().all(|field| self.is_copy(field.ty)),
         }
     }
 
-    /// Whether an owned value of this type may cross a represented function call.
-    ///
-    /// The first interprocedural Core relation excludes every value shape that
-    /// contains a raw-pointer leaf. This is independent of ordinary Core copyability.
+    /// Whether a type may be the structural referent of a transferred safe reference.
     #[must_use]
-    pub fn is_call_transfer_safe(&self, ty: TypeId) -> bool {
+    pub fn is_reference_parameter_referent_safe(&self, ty: TypeId) -> bool {
         match self.get(ty).map(|def| &def.kind) {
-            Some(TypeKind::Scalar(ScalarType::RawPointer(_))) | None => false,
+            Some(TypeKind::Scalar(
+                ScalarType::RawPointer(_) | ScalarType::Reference { .. },
+            ))
+            | None => false,
             Some(TypeKind::Scalar(_)) => true,
             Some(TypeKind::Struct(fields)) => fields
                 .iter()
-                .all(|field| self.is_call_transfer_safe(field.ty)),
+                .all(|field| self.is_reference_parameter_referent_safe(field.ty)),
+        }
+    }
+
+    /// Whether an owned value of this type may cross into a represented parameter.
+    #[must_use]
+    pub fn is_parameter_transfer_safe(&self, ty: TypeId) -> bool {
+        match self.get(ty).map(|def| &def.kind) {
+            Some(TypeKind::Scalar(ScalarType::RawPointer(_))) | None => false,
+            Some(TypeKind::Scalar(ScalarType::Reference { referent, .. })) => {
+                self.is_reference_parameter_referent_safe(*referent)
+            }
+            Some(TypeKind::Scalar(_)) => true,
+            Some(TypeKind::Struct(fields)) => fields
+                .iter()
+                .all(|field| self.is_parameter_transfer_safe(field.ty)),
+        }
+    }
+
+    /// Whether an owned value of this type may cross out as a represented result.
+    #[must_use]
+    pub fn is_result_transfer_safe(&self, ty: TypeId) -> bool {
+        match self.get(ty).map(|def| &def.kind) {
+            Some(TypeKind::Scalar(
+                ScalarType::RawPointer(_) | ScalarType::Reference { .. },
+            ))
+            | None => false,
+            Some(TypeKind::Scalar(_)) => true,
+            Some(TypeKind::Struct(fields)) => fields
+                .iter()
+                .all(|field| self.is_result_transfer_safe(field.ty)),
         }
     }
 
@@ -286,9 +420,9 @@ impl TypeTable {
 
     /// Checks whether a MIR constant has the declared structural type.
     ///
-    /// Non-null raw pointers are intentionally absent from [`Value`] and therefore
-    /// cannot be fabricated as constants. They are initially formed at runtime by
-    /// [`Operand::AddressOf`] and may then be transported by ordinary or raw moves.
+    /// Non-null raw pointers and safe references are intentionally absent from [`Value`] and
+    /// therefore cannot be fabricated as constants. They are initially formed by their
+    /// dedicated dynamic-storage operations and may then be transported by ordinary moves.
     #[must_use]
     pub fn value_matches(&self, ty: TypeId, value: &Value) -> bool {
         let Some(def) = self.get(ty) else {
@@ -322,7 +456,12 @@ impl TypeTable {
                         .zip(values)
                         .all(|(field, value)| self.value_matches(field.ty, value))
             }
-            (TypeKind::Scalar(ScalarType::RawPointer(_)), _) => false,
+            (
+                TypeKind::Scalar(
+                    ScalarType::RawPointer(_) | ScalarType::Reference { .. },
+                ),
+                _,
+            ) => false,
             _ => false,
         }
     }
@@ -330,8 +469,8 @@ impl TypeTable {
 
 /// Constant value representation used by Core proving MIR and verification fixtures.
 ///
-/// Dynamic raw-pointer values are deliberately not represented here because their
-/// storage-instance provenance exists only during execution.
+/// Dynamic raw-pointer and safe-reference values are deliberately not represented here because
+/// their storage/authority identity exists only during execution.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Bool(bool),
@@ -475,6 +614,30 @@ impl From<Place> for PlaceAccess {
     }
 }
 
+/// Reference-relative access: first select a stored safe-reference carrier, then project within its
+/// semantic referent region.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ReferenceAccess {
+    pub reference: PlaceAccess,
+    pub projections: Vec<Projection>,
+}
+
+impl ReferenceAccess {
+    #[must_use]
+    pub fn new(reference: impl Into<PlaceAccess>) -> Self {
+        Self {
+            reference: reference.into(),
+            projections: Vec::new(),
+        }
+    }
+
+    #[must_use]
+    pub fn field(mut self, index: u32) -> Self {
+        self.projections.push(Projection::Field(index));
+        self
+    }
+}
+
 /// Local storage declaration.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalDecl {
@@ -506,6 +669,20 @@ pub enum Operand {
     Copy(PlaceAccess),
     /// Forms a non-null symbolic raw pointer to existing storage.
     AddressOf(PlaceAccess),
+    /// Forms one root safe reference from direct existing storage.
+    ReferenceRoot {
+        permission: ReferencePermission,
+        place: Place,
+    },
+    /// Forms one child safe-reference authority from a stored parent safe reference.
+    ReferenceReborrow {
+        permission: ReferencePermission,
+        src: ReferenceAccess,
+    },
+    /// Ownership transfer from a safe-reference referent.
+    ReferenceMove(ReferenceAccess),
+    /// Non-consuming owned duplication from a safe-reference referent.
+    ReferenceCopy(ReferenceAccess),
 }
 
 /// Numeric contract selected for one governed Core numeric operation occurrence.
@@ -589,16 +766,24 @@ pub enum Statement {
     EndBorrow { loan: LoanId },
     /// Non-consuming Core read. The current proving MIR discards the resulting value.
     Read { src: PlaceAccess },
+    /// Non-consuming read through a stored safe-reference value.
+    ReferenceRead { src: ReferenceAccess },
     /// Unsafe non-consuming read through a stored raw-pointer value.
     RawRead { pointer: PlaceAccess },
     /// Unsafe source-first replacement through a stored raw-pointer value.
     RawAssign { pointer: PlaceAccess, src: Operand },
     /// Ordinary mutable write/replacement/re-initialization.
     Assign { dst: PlaceAccess, src: Operand },
+    /// Ordinary source-first replacement through an ExclusiveReplace safe reference.
+    ReferenceAssign { dst: ReferenceAccess, src: Operand },
     /// Interior-mutable write/replacement/re-initialization.
     InteriorAssign { dst: PlaceAccess, src: Operand },
+    /// Interior-mutable replacement through a safe reference.
+    ReferenceInteriorAssign { dst: ReferenceAccess, src: Operand },
     /// Explicit destruction of all currently live subobjects in the accessed place.
     Drop { place: PlaceAccess },
+    /// Explicit destruction through an Exclusive or ExclusiveReplace safe reference.
+    ReferenceDrop { place: ReferenceAccess },
 }
 
 /// Defined fault reason for the reference machine.
