@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for function-local binding identity, lexical scope and lookup precedence, binding assignment mutability, binding lifecycle, ordinary whole-binding owned-value use, whole-binding assignment legality, and the points at which a binding's structural ownership state begins, persists, resets, or ends.
+This document owns the represented source semantics for function-local binding identity, lexical scope and lookup precedence, binding assignment mutability, binding lifecycle, ordinary whole-binding owned-value use, whole-binding assignment legality, first-slice Shared-reference local contextual admission, and the points at which a binding's structural ownership state begins, persists, resets, or ends.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), structural paths, structural ownership state, path availability, consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), and callable parameter-slot types from [Source callables](callables.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), structural paths, structural ownership state, path availability, consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), callable parameter-slot types from [Source callables](callables.md), and Shared-reference target/authority/carrier/lifetime rules from [Source Shared references](references.md). It does not redefine those owners.
 
-Represented binding-rooted field-path selection, direct field accessibility, and final-field duplicate-or-consume value production are owned by [Source field-value access](field-access.md). Represented recursive record-pattern selection, including bounded node-local rest/omission, and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer, local initialization, assignment replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md). Represented conditional selection, zero/one/two normal-outcome composition, bounded `while` condition/body selection, and loop backedge-state admission are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/while/return spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented binding-rooted field-path selection, direct field accessibility, and final-field duplicate-or-consume value production are owned by [Source field-value access](field-access.md). Represented recursive record-pattern selection, including bounded node-local rest/omission, and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer including reference carriers, local initialization, assignment replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md). Represented conditional selection, zero/one/two normal-outcome composition, bounded `while` condition/body selection, and loop backedge-state admission are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/while/return/reference spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define structural ownership mathematics, normal-continuation presence, conditional or loop selection/successor composition, field lookup, pattern structure, general expression evaluation, references, traits, ABI, Core liveness, or an implementation representation.
+This document does not define structural ownership mathematics, Shared reference formation/dereference/authority semantics, normal-continuation presence, conditional or loop selection/successor composition, field lookup, pattern structure, general expression evaluation, traits, ABI, Core liveness, or an implementation representation.
 
 ## Function-local binding identity
 
@@ -27,9 +27,9 @@ Parameter lexical keys, binding identities, and assignment-mutability classifica
 
 Parameter bindings and every represented function-local binding occupy one **function-local value-binding domain**.
 
-A represented binding identity is independent of original identifier spelling, token/source offset, parser node, physical address, compiler collection index, HIR/Core identifier choice, and runtime storage identity.
+A represented binding identity is independent of original identifier spelling, token/source offset, parser node, physical address, compiler collection index, HIR/Core identifier choice, runtime storage identity, or source Shared-authority identity.
 
-For the function form represented by `concrete-syntax.md`, concrete parameter source order maps to callable parameter-slot order and each parameter identifier supplies the lexical key for its corresponding parameter binding. Every represented concrete parameter binding is immutable for assignment purposes.
+For the function form represented by `concrete-syntax.md`, concrete parameter source order maps to callable parameter-slot order and each parameter identifier supplies the lexical key for its corresponding parameter binding. Every represented concrete parameter binding is immutable for assignment purposes, including a parameter whose type is `SharedRef(T)`.
 
 ## Ordinary local declarations
 
@@ -47,7 +47,14 @@ The initializer is resolved and typed in the lexical environment that exists bef
 
 The concrete forms in `concrete-syntax.md` establish immutable `let name: Type = Value;` and mutable `let mut name: Type = Value;` bindings. This revision defines no inferred local type or uninitialized local form.
 
-After successful initializer transfer, the new local begins with one complete structural owned-value root of its declared type and the initial empty consumed-path state from `structural-ownership.md`.
+For first-slice Shared-reference types, contextual local admission is stricter:
+
+- `let name: &T = Value;` may establish an immutable ordinary local when `SharedRef(T)` is valid under `references.md`; and
+- `let mut name: &T = Value;` is source-invalid in this slice.
+
+This immutable-only rule is a source reference-lifetime boundary. It does not redefine the general assignment-mutability classification of non-reference locals and does not imply a hidden `const` or type-level mutability dimension.
+
+After successful initializer transfer, the new local begins with one complete structural owned-value root of its declared type and the initial empty consumed-path state from `structural-ownership.md`. When the initialized value is a Shared reference, the local additionally stores the produced reference carrier whose authority/lifetime consequence is owned by `references.md`; no second structural ownership state is introduced.
 
 ## Pattern-introduced local bindings
 
@@ -77,6 +84,8 @@ The binding-leaf source order defined by `patterns.md` is the declaration order 
 
 Each successfully established pattern binding begins with one complete structural owned-value root of its exact binding type and the initial empty consumed-path state from `structural-ownership.md`.
 
+First-slice nominal record fields cannot have `SharedRef(T)` type, so the represented record pattern relation cannot introduce a Shared-reference binding in this slice. No borrow-binding mode is implied.
+
 A pattern with no binding leaves introduces no function-local binding and therefore does not change the lookup environment by itself.
 
 ## Abstract lexical scopes
@@ -87,11 +96,13 @@ The root body braces in `concrete-syntax.md` delimit the root lexical scope. Eac
 
 Each explicit represented conditional arm is one ordinary `BlockStatement` and therefore one child lexical scope. A then arm and explicit else arm of the same conditional are sibling scopes. An omitted else introduces no synthetic lexical scope under `control-flow.md`. Each represented `while` body is likewise one ordinary `BlockStatement` child scope; repeated dynamic iterations re-enter that same static source scope rather than creating new source binding identities.
 
-The semantic scope tree does not prescribe parser nodes, source ranges, HIR scope identifiers, Core blocks, or physical storage lifetime.
+The semantic scope tree does not prescribe parser nodes, source ranges, HIR scope identifiers, Core blocks, physical storage lifetime, or a physical address for a borrow target.
 
 A parameter binding belongs to the function root scope and is in scope throughout the represented function body, including descendant lexical scopes while those scopes are active.
 
 An ordinary local or pattern-introduced local binding is in scope from immediately after its successful declaration/initialization boundary through the end of its containing lexical scope, including descendant lexical scopes while execution remains in that activation. A return terminates the activation under `function-execution.md` rather than creating a later point in the ended scope.
+
+These existing containment/cleanup relations are consumed by `references.md` to prove the first-slice implicit lexical reference lifetime. This binding owner does not add lifetime names or a second scope tree.
 
 ## Function-local shadowing and key reuse
 
@@ -121,13 +132,15 @@ Only when no active parameter/local binding resolves the key does lookup fall th
 
 Lookup MUST NOT skip an active function-local binding merely because the consuming context would prefer a module-level entity of another category.
 
-The concrete whole-binding value use, binding-rooted `FieldValueUse` root, direct binding-root pattern scrutinee, whole-binding assignment target, and unqualified direct-call target consume this precedence. A wrong-category selected entity is rejected rather than bypassed.
+The concrete whole-binding value use, binding-rooted `FieldValueUse` root, direct binding-root pattern scrutinee, whole-binding assignment target, unqualified direct-call target, root Shared-borrow operand `&x`, and bounded Shared-dereference operand `*r` consume this precedence. A wrong-category selected entity is rejected rather than bypassed.
+
+For `&x`, `references.md` additionally requires the resolved entity to be one active parameter or ordinary local binding and selects only its complete root. For `*r`, `references.md` additionally requires the resolved binding to have exact type `SharedRef(T)`.
 
 A nominal record-pattern head is not a function-local value-binding lookup. `patterns.md` defines each represented record-pattern head through same-module nominal-record declaration lookup independently of active local bindings with equal keys.
 
 Source-unit module aliases remain the distinct qualified-lookup mechanism owned by `names-modules.md`. The concrete `alias::member` direct-call target resolves through that mechanism rather than this unqualified lookup.
 
-Beyond the represented two-part module alias/member qualification, operation-specific field selectors, and bounded record-pattern field selection, this revision defines no arbitrary member lookup, nested module paths, labels, generic parameters, lifetime names, methods, associated items, or another future name domain.
+Beyond the represented two-part module alias/member qualification, operation-specific field selectors, bounded record-pattern field selection, and bounded Shared reference root/dereference lookup above, this revision defines no arbitrary member lookup, nested module paths, labels, generic parameters, lifetime names, methods, associated items, or another future name domain.
 
 ## Binding assignment mutability
 
@@ -136,11 +149,13 @@ Every represented parameter/local binding is exactly one of:
 - **immutable**; or
 - **mutable**.
 
-Assignment mutability is a binding property independent of source type identity, structural ownership state, source owned-value duplicability, callable-signature identity/equality, and future alias/borrow authority.
+Assignment mutability is a binding property independent of source type identity, structural ownership state, source owned-value duplicability, callable-signature identity/equality, and Shared alias authority.
 
 Consuming an owned value from an immutable binding, including a represented structural subvalue when `field-access.md` or `patterns.md` permits that consumption, is valid. Immutability restricts assignment/reinitialization; it does not require the binding to retain ownership of every subvalue.
 
 Represented parameters are immutable. Ordinary locals are immutable unless their concrete declaration carries `mut`. Every binding introduced by the represented record pattern is immutable. No parameter-mutability or pattern-binding-mutability form is represented.
+
+A first-slice local whose declared type is `SharedRef(T)` MUST be immutable; the otherwise represented mutable-local form is invalid for that type.
 
 Assignment to an immutable binding is source-invalid regardless of whether its complete structural root is fully available, partially available, or unavailable.
 
@@ -159,6 +174,8 @@ This document owns only the binding lifecycle around that structural state:
 - successful whole-binding replacement establishes a fresh complete structural ownership state for the replacement value; and
 - lexical/activation termination ends whatever binding ownership remains according to `function-execution.md`.
 
+Shared-reference authority/carrier state is deliberately distinct from this consumed-path state. `references.md` owns that authority relation. Root Shared-borrow formation leaves the target binding's structural ownership state unchanged, and the duplicable-referent restriction ensures the existing first-slice structural value/field/pattern producers reachable through a borrowed target remain non-consuming.
+
 Entering or normally exiting a child lexical scope does not itself change the structural ownership state of an ancestor binding. Valid ownership transitions or assignment affecting an ancestor inside the child remain in force at the following parent-scope program point when the applicable control-flow relation admits that normal continuation.
 
 Structural source paths, prefix-free consumed-path state, fully/partially/unavailable classification, path consumption, and recursive remaining-frontier selection are defined only by `structural-ownership.md`. They are not redefined here.
@@ -169,7 +186,7 @@ For the represented statement-level conditional, `control-flow.md` owns normal-c
 - when exactly one normal outcome exists, every enclosing binding continues with exactly the state from that sole normal outcome, without comparison against a returning outcome; and
 - when zero normal outcomes exist, there is no following binding state because the conditional has no normal continuation.
 
-For the represented bounded `while`, `control-flow.md` likewise owns the complete state relation. Let `H` be the enclosing binding environment immediately before condition evaluation and let successful condition validation produce `C`:
+For the represented bounded `while`, `control-flow.md` likewise owns the complete structural state relation. Let `H` be the enclosing binding environment immediately before condition evaluation and let successful condition validation produce `C`:
 
 - the false loop outcome continues normally with exactly `C`;
 - the true outcome validates one ordinary child block from `C`;
@@ -177,7 +194,9 @@ For the represented bounded `while`, `control-flow.md` likewise owns the complet
 - a body with no normal continuation contributes no backedge state and requires no backedge-state equality check; and
 - assignment mutability is unchanged: only explicit accepted assignment to a mutable binding may restore complete ownership before a backedge, while immutable bindings receive no implicit restoration.
 
-This binding owner does not derive a successor or backedge state by union, intersection, normalization, widening, lower Core path state, fixed-point iteration, or another merge rule.
+This first Shared-reference slice adds no source authority state to those existing structural conditional/backedge comparisons. Shared reference carriers stored in immutable reference bindings have lexical lifetime and cannot be moved/rebound by ordinary source use; target-side permitted uses are non-consuming. The reference validity relation therefore requires no union, intersection, widening, or second control-flow join lattice here.
+
+This binding owner does not derive a successor or backedge structural state by union, intersection, normalization, widening, lower Core path state, fixed-point iteration, or another merge rule.
 
 Future refutable matches, catch/recovery forms, additional loop forms, or other control-flow forms require their own accepted definite-state relations; this document adds none beyond the bounded `while` relation owned by `control-flow.md`.
 
@@ -197,33 +216,39 @@ If the binding's source type is non-duplicable:
 1. transfer/consume the complete owned value through the empty structural path; and
 2. apply the canonical successful-consumption transition from `structural-ownership.md`.
 
+For a binding of exact type `SharedRef(T)`, the type is duplicable. The successful duplicate therefore has the reference-carrier consequence owned by `references.md`: it creates another carrier naming the same Shared authority/target while retaining the stored source carrier. This is not a reborrow or new root authority.
+
 Ordinary whole-binding use of a partially available or unavailable complete root is source-invalid, not a defined runtime moved-state fault.
 
 The concrete `IdentifierUse` value form maps to this operation after lookup resolves one parameter/local binding.
 
-This relation does not define field-value production or record-pattern ownership. Those owners may use non-empty structural paths without first applying ordinary whole-binding use to the complete root.
+This relation does not define field-value production, record-pattern ownership, or Shared dereference. Those owners may use their own bounded receiving relations without first applying ordinary whole-binding use to the complete target root.
 
 ## Whole-binding assignment and reinitialization
 
 A represented whole-binding assignment target MUST resolve through the function-local lookup relation above and MUST denote one represented parameter/local binding. The binding MUST be mutable.
 
+Additionally, the target binding root MUST NOT currently be targeted by any active source Shared authority under `references.md`.
+
 The RHS MUST produce exactly one owned source value whose type is exactly equal under `types.md` to the target binding's declared source type.
 
-The target may have a fully available, partially available, or unavailable complete structural root when assignment begins. Successful assignment always replaces/reinitializes the complete binding value.
+The target may have a fully available, partially available, or unavailable complete structural root when assignment begins. Successful assignment always replaces/reinitializes the complete binding value. An active Shared borrow is a separate rejection condition even when the current structural root would otherwise be replaceable.
 
-The target remains in scope during RHS evaluation. Every RHS use observes the target's current structural ownership state. A consuming RHS may therefore change that state before replacement completes.
+The target remains in scope during RHS evaluation. Every RHS use observes the target's current structural ownership and Shared-authority state. A consuming RHS may therefore change structural ownership state before replacement completes. A Shared authority established or retained during RHS evaluation likewise remains controlling at the replacement point.
 
-After successful RHS production, `function-execution.md` owns source-first replacement ordering:
+After successful RHS production and after the active-Shared-authority prohibition is satisfied, `function-execution.md` owns source-first replacement ordering:
 
 1. select and end ownership of the target's then-current remaining old-value frontier through `structural-ownership.md`;
 2. transfer the successfully produced replacement value into the target; and
 3. establish a fresh complete structural ownership state with an empty consumed-path set.
 
-Thus a mutable binding may be reinitialized from any represented structural ownership state, while an immutable binding may not be assigned in any state.
+Thus a mutable binding may be reinitialized from any represented structural ownership state only when no active Shared reference authority currently targets its complete root, while an immutable binding may not be assigned in any state.
 
-A defined fault or divergence during RHS evaluation performs no replacement/reset merely because assignment was intended. Ownership transitions that completed while evaluating the RHS remain in force under their existing owners.
+A first-slice Shared-reference local itself cannot be an assignment target because reference locals are immutable.
 
-This assignment relation defines no field assignment, partial-field reinitialization, general source place/lvalue, borrow/reference target, interior mutability, or destructuring assignment.
+A defined fault or divergence during RHS evaluation performs no replacement/reset merely because assignment was intended. Ownership and Shared-authority transitions that completed while evaluating the RHS remain in force under their existing owners.
+
+This assignment relation defines no field assignment, partial-field reinitialization, general source place/lvalue, reference-relative assignment, interior mutability, or destructuring assignment.
 
 ## Binding cleanup and discard boundary
 
@@ -231,36 +256,43 @@ When represented execution ends a binding's ownership, its remaining owned sourc
 
 `function-execution.md` owns when that frontier is selected and the ordering between bindings, scopes, parameters, activations, assignment replacement, normal return, and defined-fault cleanup.
 
+When a binding's remaining owned value is a first-slice Shared reference, ending that value additionally removes its source reference carrier at that existing cleanup point under `references.md`. The reference-specific consequence adds no custom cleanup body and does not access the referent.
+
+The existing reverse local/declaration and activation cleanup ordering is part of the first-slice lexical lifetime proof in `references.md`: reference locals end before the earlier target/source extent whose validity their initialization consumed.
+
 A binding is not source-invalid solely because one or more remaining owned subvalues are non-duplicable when its scope or activation terminates. This revision defines no source `drop` ability, must-consume classification, custom destructor, or unused-value prohibition.
 
 Zero-field and recursively zero-leaf frontier members remain source-owned values even when faithful Core refinement emits no scalar destruction operation.
 
-## Function, call, assignment, pattern, control-flow, and fault boundary
+## Function, call, assignment, pattern, control-flow, reference, and fault boundary
 
-This document defines body-local binding identity, scope, lookup, assignment mutability, binding lifecycle around structural ownership, ordinary whole-binding use, and assignment legality/reset.
+This document defines body-local binding identity, scope, lookup, assignment mutability, binding lifecycle around structural ownership, first-slice reference-local contextual admission, ordinary whole-binding use, and assignment legality/reset.
 
 It does not redefine the execution relation owned by `function-execution.md`, including:
 
 - function body execution and normal-continuation presence;
 - direct-call argument evaluation and parameter transfer;
+- Shared-reference produced-carrier transfer/caller suspension consequences;
 - assignment RHS evaluation, old-value cleanup, and replacement transfer;
 - result production and return transfer;
 - dynamic activation identity or recursion;
 - lexical-scope/caller/callee cleanup sequencing; or
 - defined-fault propagation across activations.
 
+It does not redefine Shared root-borrow formation, reference authority/carrier identity, dereference/copy, lexical reference lifetime validity, or source-to-Core reference refinement from `references.md`.
+
 It does not redefine represented conditional or bounded-`while` condition/body selection, normal-successor composition, or loop backedge admission from `control-flow.md`.
 
 It likewise does not redefine field-path selection/production from `field-access.md`, pattern structure/ownership from `patterns.md`, or structural ownership mathematics from `structural-ownership.md`.
 
-Indirect calls, function values, closures, references/pass modes, broader panic/catch forms, and other future execution relations remain outside this owner.
+Indirect calls, function values, closures, mutable/exclusive references, reference pass modes, lifetime names, broader panic/catch forms, and other future execution relations remain outside this owner.
 
 ## Implementation boundary
 
 This revision does not add or require parser, lossless-syntax, HIR, Core MIR production, runtime, or backend representation.
 
-A faithful implementation MAY retain structural ownership for bindings using resolved field indices or another implementation identity after source field resolution, but those representations are not source semantic identity. Core path state or scalar liveness MUST NOT become the binding's source ownership authority, including when a represented conditional establishes a normal successor or a represented `while` validates one backedge.
+A faithful implementation MAY retain structural ownership for bindings using resolved field indices or another implementation identity after source field resolution, but those representations are not source semantic identity. Core path state, scalar liveness, or reference-authority IDs MUST NOT become the binding's source ownership/reference authority, including when a represented conditional establishes a normal successor or a represented `while` validates one backedge.
 
 ## Further boundaries
 
-Beyond the represented concrete subset, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, field assignment or partial-field reinitialization, arbitrary member/method lookup, additional refutable/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, additional loop forms or general loop fixed-point inference, catch/recovery joins, references/borrows/lifetime inference, closures/captures, generics, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the represented concrete subset, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, field assignment or partial-field reinitialization, arbitrary member/method lookup, additional refutable/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, additional loop forms or general loop fixed-point inference, catch/recovery joins, mutable/exclusive references, reference reborrow, field/path reference targets, reference-containing aggregates/results, lifetime names/parameters/non-lexical shortening, raw pointers/source `unsafe`, closures/captures, generics, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
