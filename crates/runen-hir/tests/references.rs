@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, ReferenceReferent, SourceUnit, Statement, Type,
-    TypedCompilation, ValueKind, build_typed_hir,
+    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, ReferenceReferent, SourceUnit, Statement,
+    Type, TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -101,9 +101,7 @@ fn accepts_intrinsic_and_selected_record_referents_but_rejects_nonduplicable_rec
     )
     .expect("intrinsic and selected-record Shared referents must validate");
     let point = hir.records[0].id;
-    assert!(hir.type_is_duplicable(Type::SharedReference(
-        ReferenceReferent::Record(point)
-    )));
+    assert!(hir.type_is_duplicable(Type::SharedReference(ReferenceReferent::Record(point))));
 
     let errors = compile("record Ticket { value: I64 } fn f(r: &Ticket) {}")
         .expect_err("non-duplicable nominal referent must be rejected");
@@ -122,8 +120,7 @@ fn restricts_shared_reference_types_to_parameters_and_immutable_locals() {
 
     let field = compile("record Holder { value: &I64 }")
         .expect_err("Shared-reference record field is outside the first source slice");
-    assert!(has_diagnostic(&field, |kind| kind
-        == DiagnosticKind::SharedReferenceField));
+    assert!(has_diagnostic(&field, |kind| kind == DiagnosticKind::SharedReferenceField));
 
     let mutable = compile("fn f(x: I64) { let mut r: &I64 = &x; }")
         .expect_err("Shared-reference ordinary local must be immutable");
@@ -143,8 +140,7 @@ fn exported_reference_parameter_preserves_private_nominal_referent_accessibility
 fn borrow_and_dereference_require_exact_lookup_and_types() {
     let unresolved = compile("fn f() { let r: &I64 = &missing; }")
         .expect_err("borrow target must resolve through function-local lookup");
-    assert!(has_diagnostic(&unresolved, |kind| kind
-        == DiagnosticKind::UnresolvedName));
+    assert!(has_diagnostic(&unresolved, |kind| kind == DiagnosticKind::UnresolvedName));
 
     let mismatch = compile("fn f(x: I64) { let r: &I32 = &x; }")
         .expect_err("root borrow must match the exact referent type");
@@ -184,7 +180,8 @@ fn stored_local_origin_rejects_target_replacement_after_rhs_validation() {
         let errors = compile(source)
             .expect_err("stored Shared carrier must protect its target at replacement time");
         assert!(
-            has_diagnostic(&errors, |kind| kind == DiagnosticKind::BorrowedAssignmentTarget),
+            has_diagnostic(&errors, |kind| kind
+                == DiagnosticKind::BorrowedAssignmentTarget),
             "missing borrowed-target diagnostic: {errors:?}"
         );
     }
@@ -235,7 +232,10 @@ fn external_reference_parameters_duplicate_and_dereference_without_local_target_
         returned.kind,
         ValueKind::SharedDereferenceCopy { reference } if reference == *local_reference
     ));
-    assert!(!matches!(initializer.kind, ValueKind::SharedBorrowRoot { .. }));
+    assert!(!matches!(
+        initializer.kind,
+        ValueKind::SharedBorrowRoot { .. }
+    ));
 }
 
 #[test]
