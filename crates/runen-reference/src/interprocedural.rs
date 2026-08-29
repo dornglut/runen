@@ -1,14 +1,18 @@
 use runen_core_ir::{
     BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, NumericContract, Operand, Place,
-    PlaceAccess, Projection, ScalarType, Statement, StorageInstanceId, StorageRegion, Terminator,
-    TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
+    PlaceAccess, Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement,
+    StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram,
+    Value,
 };
 
 use crate::floating::{
     RuntimeFloatValue, add_f16, add_f32, add_f64, mul_f16, mul_f32, mul_f64, sub_f16, sub_f32,
     sub_f64,
 };
-use crate::{ObservedValue, RawPointerValue, UndefinedBehaviorKind, VerificationWriteKind};
+use crate::{
+    ObservedValue, RawPointerValue, ReferenceAuthorityId, SafeReferenceValue, UndefinedBehaviorKind,
+    VerificationWriteKind,
+};
 
 /// Verification-only identity of one dynamic function activation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -107,6 +111,7 @@ enum RuntimeValue {
     F32(RuntimeFloatValue),
     F64(RuntimeFloatValue),
     RawPointer(RawPointerValue),
+    SafeReference(SafeReferenceValue),
     TrackedFixture(u64),
     Struct(Vec<RuntimeValue>),
 }
@@ -263,69 +268,59 @@ impl RuntimeValue {
 
     fn floating_add(contract: NumericContract, left: Self, right: Self) -> Self {
         match contract {
-            NumericContract::Standard => Self::standard_floating_add(left, right),
-            NumericContract::Reproducible => Self::standard_floating_add(left, right),
-            NumericContract::Fast => Self::standard_floating_add(left, right),
-        }
-    }
-
-    fn standard_floating_add(left: Self, right: Self) -> Self {
-        match (left, right) {
-            (Self::F16(left), Self::F16(right)) => Self::F16(add_f16(left, right)),
-            (Self::F32(left), Self::F32(right)) => Self::F32(add_f32(left, right)),
-            (Self::F64(left), Self::F64(right)) => Self::F64(add_f64(left, right)),
-            _ => unreachable!("validated FloatAdd has matching same-format floating operands"),
+            NumericContract::Standard | NumericContract::Reproducible | NumericContract::Fast => {
+                match (left, right) {
+                    (Self::F16(left), Self::F16(right)) => Self::F16(add_f16(left, right)),
+                    (Self::F32(left), Self::F32(right)) => Self::F32(add_f32(left, right)),
+                    (Self::F64(left), Self::F64(right)) => Self::F64(add_f64(left, right)),
+                    _ => unreachable!("validated FloatAdd has matching same-format operands"),
+                }
+            }
         }
     }
 
     fn floating_sub(contract: NumericContract, left: Self, right: Self) -> Self {
         match contract {
-            NumericContract::Standard => Self::standard_floating_sub(left, right),
-            NumericContract::Reproducible => Self::standard_floating_sub(left, right),
-            NumericContract::Fast => Self::standard_floating_sub(left, right),
-        }
-    }
-
-    fn standard_floating_sub(left: Self, right: Self) -> Self {
-        match (left, right) {
-            (Self::F16(left), Self::F16(right)) => Self::F16(sub_f16(left, right)),
-            (Self::F32(left), Self::F32(right)) => Self::F32(sub_f32(left, right)),
-            (Self::F64(left), Self::F64(right)) => Self::F64(sub_f64(left, right)),
-            _ => unreachable!("validated FloatSub has matching same-format floating operands"),
+            NumericContract::Standard | NumericContract::Reproducible | NumericContract::Fast => {
+                match (left, right) {
+                    (Self::F16(left), Self::F16(right)) => Self::F16(sub_f16(left, right)),
+                    (Self::F32(left), Self::F32(right)) => Self::F32(sub_f32(left, right)),
+                    (Self::F64(left), Self::F64(right)) => Self::F64(sub_f64(left, right)),
+                    _ => unreachable!("validated FloatSub has matching same-format operands"),
+                }
+            }
         }
     }
 
     fn floating_mul(contract: NumericContract, left: Self, right: Self) -> Self {
         match contract {
-            NumericContract::Standard => Self::standard_floating_mul(left, right),
-            NumericContract::Reproducible => Self::standard_floating_mul(left, right),
-            NumericContract::Fast => Self::standard_floating_mul(left, right),
-        }
-    }
-
-    fn standard_floating_mul(left: Self, right: Self) -> Self {
-        match (left, right) {
-            (Self::F16(left), Self::F16(right)) => Self::F16(mul_f16(left, right)),
-            (Self::F32(left), Self::F32(right)) => Self::F32(mul_f32(left, right)),
-            (Self::F64(left), Self::F64(right)) => Self::F64(mul_f64(left, right)),
-            _ => unreachable!("validated FloatMul has matching same-format floating operands"),
+            NumericContract::Standard | NumericContract::Reproducible | NumericContract::Fast => {
+                match (left, right) {
+                    (Self::F16(left), Self::F16(right)) => Self::F16(mul_f16(left, right)),
+                    (Self::F32(left), Self::F32(right)) => Self::F32(mul_f32(left, right)),
+                    (Self::F64(left), Self::F64(right)) => Self::F64(mul_f64(left, right)),
+                    _ => unreachable!("validated FloatMul has matching same-format operands"),
+                }
+            }
         }
     }
 
     fn floating_div(contract: NumericContract, left: Self, right: Self) -> Self {
         match contract {
-            NumericContract::Standard => Self::standard_floating_div(left, right),
-            NumericContract::Reproducible => Self::standard_floating_div(left, right),
-            NumericContract::Fast => Self::standard_floating_div(left, right),
-        }
-    }
-
-    fn standard_floating_div(left: Self, right: Self) -> Self {
-        match (left, right) {
-            (Self::F16(left), Self::F16(right)) => Self::F16(crate::floating::div_f16(left, right)),
-            (Self::F32(left), Self::F32(right)) => Self::F32(crate::floating::div_f32(left, right)),
-            (Self::F64(left), Self::F64(right)) => Self::F64(crate::floating::div_f64(left, right)),
-            _ => unreachable!("validated FloatDiv has matching same-format floating operands"),
+            NumericContract::Standard | NumericContract::Reproducible | NumericContract::Fast => {
+                match (left, right) {
+                    (Self::F16(left), Self::F16(right)) => {
+                        Self::F16(crate::floating::div_f16(left, right))
+                    }
+                    (Self::F32(left), Self::F32(right)) => {
+                        Self::F32(crate::floating::div_f32(left, right))
+                    }
+                    (Self::F64(left), Self::F64(right)) => {
+                        Self::F64(crate::floating::div_f64(left, right))
+                    }
+                    _ => unreachable!("validated FloatDiv has matching same-format operands"),
+                }
+            }
         }
     }
 
@@ -347,9 +342,9 @@ impl RuntimeValue {
             Self::Struct(values) => {
                 ObservedValue::Struct(values.into_iter().map(Self::into_observed_value).collect())
             }
-            Self::RawPointer(_) => {
-                unreachable!("validated entry result is call-transfer-safe and pointer-free")
-            }
+            Self::RawPointer(_) | Self::SafeReference(_) => unreachable!(
+                "validated entry result is result-transfer-safe and contains no pointer/reference"
+            ),
         }
     }
 }
@@ -405,6 +400,14 @@ struct ActiveLoan {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+struct ActiveReferenceAuthority {
+    target: StorageRegion,
+    permission: ReferencePermission,
+    parent: Option<ReferenceAuthorityId>,
+    carriers: u64,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct Continuation {
     destination: Option<Place>,
     target: BasicBlockId,
@@ -420,12 +423,22 @@ struct Frame {
     return_to: Option<Continuation>,
 }
 
+#[derive(Clone, Debug)]
+struct ResolvedReferenceAccess {
+    authority: ReferenceAuthorityId,
+    permission: ReferencePermission,
+    target: StorageRegion,
+    selected_ty: TypeId,
+}
+
 /// Executable abstract machine for validated interprocedural Core programs.
 pub struct Machine {
     program: ValidatedProgram,
     frames: Vec<Frame>,
+    reference_authorities: Vec<Option<ActiveReferenceAuthority>>,
     next_activation: u64,
     next_storage_instance: u64,
+    next_reference_authority: u64,
     verification_events: Vec<VerificationEvent>,
 }
 
@@ -443,8 +456,10 @@ impl Machine {
         let mut machine = Self {
             program,
             frames: Vec::new(),
+            reference_authorities: Vec::new(),
             next_activation: 1,
             next_storage_instance: 1,
+            next_reference_authority: 0,
             verification_events: Vec::new(),
         };
         let frame = machine.create_frame(entry, Vec::new(), None);
@@ -484,9 +499,7 @@ impl Machine {
             }
 
             match block.terminator {
-                Terminator::Goto(target) => {
-                    self.frames[frame_index].current = target;
-                }
+                Terminator::Goto(target) => self.frames[frame_index].current = target,
                 Terminator::Branch {
                     condition,
                     true_target,
@@ -687,45 +700,98 @@ impl Machine {
     ) -> Result<(), UndefinedBehaviorKind> {
         match statement {
             Statement::Init { dst, src } => self.initialize(frame_index, dst, src),
-            Statement::IntegerAdd { dst, left, right } => {
-                self.integer_add(frame_index, dst, left, right)
-            }
-            Statement::IntegerSub { dst, left, right } => {
-                self.integer_sub(frame_index, dst, left, right)
-            }
-            Statement::IntegerMul { dst, left, right } => {
-                self.integer_mul(frame_index, dst, left, right)
-            }
-            Statement::IntegerXor { dst, left, right } => {
-                self.integer_xor(frame_index, dst, left, right)
-            }
-            Statement::IntegerOr { dst, left, right } => {
-                self.integer_or(frame_index, dst, left, right)
-            }
+            Statement::IntegerAdd { dst, left, right } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::IntegerAdd,
+                RuntimeValue::wrapping_integer_add,
+            ),
+            Statement::IntegerSub { dst, left, right } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::IntegerSub,
+                RuntimeValue::wrapping_integer_sub,
+            ),
+            Statement::IntegerMul { dst, left, right } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::IntegerMul,
+                RuntimeValue::wrapping_integer_mul,
+            ),
+            Statement::IntegerXor { dst, left, right } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::IntegerXor,
+                RuntimeValue::integer_xor,
+            ),
+            Statement::IntegerOr { dst, left, right } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::IntegerOr,
+                RuntimeValue::integer_or,
+            ),
             Statement::FloatAdd {
                 contract,
                 dst,
                 left,
                 right,
-            } => self.float_add(frame_index, *contract, dst, left, right),
+            } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::FloatAdd,
+                |left, right| RuntimeValue::floating_add(*contract, left, right),
+            ),
             Statement::FloatSub {
                 contract,
                 dst,
                 left,
                 right,
-            } => self.float_sub(frame_index, *contract, dst, left, right),
+            } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::FloatSub,
+                |left, right| RuntimeValue::floating_sub(*contract, left, right),
+            ),
             Statement::FloatMul {
                 contract,
                 dst,
                 left,
                 right,
-            } => self.float_mul(frame_index, *contract, dst, left, right),
+            } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::FloatMul,
+                |left, right| RuntimeValue::floating_mul(*contract, left, right),
+            ),
             Statement::FloatDiv {
                 contract,
                 dst,
                 left,
                 right,
-            } => self.float_div(frame_index, *contract, dst, left, right),
+            } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::FloatDiv,
+                |left, right| RuntimeValue::floating_div(*contract, left, right),
+            ),
             Statement::Borrow { loan, kind, src } => {
                 self.begin_borrow(frame_index, *loan, *kind, src);
                 Ok(())
@@ -738,6 +804,10 @@ impl Machine {
                 self.read(frame_index, src);
                 Ok(())
             }
+            Statement::ReferenceRead { src } => {
+                self.reference_read(frame_index, src);
+                Ok(())
+            }
             Statement::RawRead { pointer } => self.raw_read(frame_index, pointer),
             Statement::RawAssign { pointer, src } => self.raw_assign(frame_index, pointer, src),
             Statement::Assign { dst, src } => {
@@ -746,8 +816,18 @@ impl Machine {
             Statement::InteriorAssign { dst, src } => {
                 self.replace(frame_index, dst, src, VerificationWriteKind::InteriorAssign)
             }
+            Statement::ReferenceAssign { dst, src } => {
+                self.reference_replace(frame_index, dst, src)
+            }
+            Statement::ReferenceInteriorAssign { dst, src } => {
+                self.reference_replace(frame_index, dst, src)
+            }
             Statement::Drop { place } => {
                 self.drop_explicit(frame_index, place);
+                Ok(())
+            }
+            Statement::ReferenceDrop { place } => {
+                self.reference_drop(frame_index, place);
                 Ok(())
             }
         }
@@ -781,17 +861,22 @@ impl Machine {
         Ok(())
     }
 
-    fn integer_add(
+    fn binary_write<F>(
         &mut self,
         frame_index: usize,
         dst: &Place,
         left: &Operand,
         right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
+        kind: VerificationWriteKind,
+        operation: F,
+    ) -> Result<(), UndefinedBehaviorKind>
+    where
+        F: FnOnce(RuntimeValue, RuntimeValue) -> RuntimeValue,
+    {
         let dst_ty = self.place_type(frame_index, dst);
         let left = self.evaluate_operand(frame_index, left)?;
         let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::wrapping_integer_add(left, right);
+        let value = operation(left, right);
         {
             let types = &self.program.as_program().types;
             let frame = &mut self.frames[frame_index];
@@ -806,259 +891,7 @@ impl Machine {
             frame_index,
             VerificationEventKind::Write {
                 place: dst.clone(),
-                kind: VerificationWriteKind::IntegerAdd,
-            },
-        );
-        Ok(())
-    }
-
-    fn integer_sub(
-        &mut self,
-        frame_index: usize,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::wrapping_integer_sub(left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::IntegerSub,
-            },
-        );
-        Ok(())
-    }
-
-    fn integer_mul(
-        &mut self,
-        frame_index: usize,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::wrapping_integer_mul(left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::IntegerMul,
-            },
-        );
-        Ok(())
-    }
-
-    fn integer_xor(
-        &mut self,
-        frame_index: usize,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::integer_xor(left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::IntegerXor,
-            },
-        );
-        Ok(())
-    }
-
-    fn integer_or(
-        &mut self,
-        frame_index: usize,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::integer_or(left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::IntegerOr,
-            },
-        );
-        Ok(())
-    }
-
-    fn float_add(
-        &mut self,
-        frame_index: usize,
-        contract: NumericContract,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::floating_add(contract, left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::FloatAdd,
-            },
-        );
-        Ok(())
-    }
-
-    fn float_sub(
-        &mut self,
-        frame_index: usize,
-        contract: NumericContract,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::floating_sub(contract, left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::FloatSub,
-            },
-        );
-        Ok(())
-    }
-
-    fn float_mul(
-        &mut self,
-        frame_index: usize,
-        contract: NumericContract,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::floating_mul(contract, left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::FloatMul,
-            },
-        );
-        Ok(())
-    }
-
-    fn float_div(
-        &mut self,
-        frame_index: usize,
-        contract: NumericContract,
-        dst: &Place,
-        left: &Operand,
-        right: &Operand,
-    ) -> Result<(), UndefinedBehaviorKind> {
-        let dst_ty = self.place_type(frame_index, dst);
-        let left = self.evaluate_operand(frame_index, left)?;
-        let right = self.evaluate_operand(frame_index, right)?;
-        let value = RuntimeValue::floating_div(contract, left, right);
-        {
-            let types = &self.program.as_program().types;
-            let frame = &mut self.frames[frame_index];
-            write_value(
-                types,
-                dst_ty,
-                place_state_mut(&mut frame.locals, dst),
-                value,
-            );
-        }
-        self.record(
-            frame_index,
-            VerificationEventKind::Write {
-                place: dst.clone(),
-                kind: VerificationWriteKind::FloatDiv,
+                kind,
             },
         );
         Ok(())
@@ -1140,9 +973,46 @@ impl Machine {
         );
     }
 
+    fn reference_replace(
+        &mut self,
+        actor_frame: usize,
+        dst: &ReferenceAccess,
+        src: &Operand,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        let resolved = self.resolve_reference_access(actor_frame, dst);
+        let target = resolved.target;
+        let selected_ty = resolved.selected_ty;
+        let value = self.evaluate_operand(actor_frame, src)?;
+        let (target_frame, target_place) = self.frame_place_for_storage_region(&target);
+        self.drop_place_contents(target_frame, &target_place);
+        let types = &self.program.as_program().types;
+        write_value(
+            types,
+            selected_ty,
+            place_state_mut(&mut self.frames[target_frame].locals, &target_place),
+            value,
+        );
+        Ok(())
+    }
+
     fn read(&mut self, frame_index: usize, src: &PlaceAccess) {
         let src = self.resolve_access(frame_index, src);
         self.record(frame_index, VerificationEventKind::Read(src));
+    }
+
+    fn reference_read(&self, actor_frame: usize, src: &ReferenceAccess) {
+        let resolved = self.resolve_reference_access(actor_frame, src);
+        let (target_frame, target_place) = self.frame_place_for_storage_region(&resolved.target);
+        assert!(
+            place_state(&self.frames[target_frame].locals, &target_place).fully_live(),
+            "validated reference read reaches a fully-live referent"
+        );
+    }
+
+    fn reference_drop(&mut self, actor_frame: usize, access: &ReferenceAccess) {
+        let resolved = self.resolve_reference_access(actor_frame, access);
+        let (target_frame, target_place) = self.frame_place_for_storage_region(&resolved.target);
+        self.drop_place_contents(target_frame, &target_place);
     }
 
     fn raw_read(
@@ -1173,6 +1043,12 @@ impl Machine {
             return Err(UndefinedBehaviorKind::RawReadConflictsWithExclusiveLoan {
                 target: pointer.target,
                 loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
+            });
+        }
+        if let Some(authority) = self.raw_reference_conflict(&pointer.target, true) {
+            return Err(UndefinedBehaviorKind::RawReadConflictsWithReferenceAuthority {
+                target: pointer.target,
+                authority,
             });
         }
 
@@ -1207,6 +1083,12 @@ impl Machine {
             return Err(UndefinedBehaviorKind::RawAssignConflictsWithLoan {
                 target: pointer.target,
                 loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
+            });
+        }
+        if let Some(authority) = self.raw_reference_conflict(&pointer.target, false) {
+            return Err(UndefinedBehaviorKind::RawAssignConflictsWithReferenceAuthority {
+                target: pointer.target,
+                authority,
             });
         }
 
@@ -1246,69 +1128,15 @@ impl Machine {
                 }
                 Ok(value)
             }
-            Operand::RawMove(pointer_access) => {
-                let pointer_place = self.resolve_access(frame_index, pointer_access);
-                let pointer = self.raw_pointer_at(frame_index, &pointer_place);
-                let target = self.place_for_storage_region(frame_index, &pointer.target);
-
-                if !place_state(&self.frames[frame_index].locals, &target).fully_live() {
-                    return Err(UndefinedBehaviorKind::RawMoveTargetNotLive {
-                        target: pointer.target,
-                    });
-                }
-
-                if let Some((index, _)) = self.frames[frame_index]
-                    .active_loans
-                    .iter()
-                    .enumerate()
-                    .find(|(_, active)| {
-                        active
-                            .as_ref()
-                            .is_some_and(|active| active.place.overlaps(&target))
-                    })
-                {
-                    return Err(UndefinedBehaviorKind::RawMoveConflictsWithLoan {
-                        target: pointer.target,
-                        loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
-                    });
-                }
-
-                let target_ty = self.place_type(frame_index, &target);
-                let value = {
-                    let types = &self.program.as_program().types;
-                    let frame = &mut self.frames[frame_index];
-                    take_value(
-                        types,
-                        target_ty,
-                        place_state_mut(&mut frame.locals, &target),
-                    )
-                };
-                self.record(
-                    frame_index,
-                    VerificationEventKind::RawMove {
-                        pointer,
-                        target: target.clone(),
-                    },
-                );
-                if let RuntimeValue::RawPointer(pointer) = &value {
-                    self.record(
-                        frame_index,
-                        VerificationEventKind::RawPointerMove {
-                            place: target,
-                            pointer: pointer.clone(),
-                        },
-                    );
-                }
-                Ok(value)
-            }
+            Operand::RawMove(pointer_access) => self.raw_move(frame_index, pointer_access),
             Operand::Copy(src) => {
                 let src = self.resolve_access(frame_index, src);
                 let src_ty = self.place_type(frame_index, &src);
-                let value = clone_value(
-                    &self.program.as_program().types,
-                    src_ty,
-                    place_state(&self.frames[frame_index].locals, &src),
-                );
+                let value = {
+                    let types = &self.program.as_program().types;
+                    let state = place_state(&self.frames[frame_index].locals, &src);
+                    clone_value(types, src_ty, state, &mut self.reference_authorities)
+                };
                 self.record(frame_index, VerificationEventKind::Copy(src.clone()));
                 if let RuntimeValue::RawPointer(pointer) = &value {
                     self.record(
@@ -1335,7 +1163,120 @@ impl Machine {
                 );
                 Ok(RuntimeValue::RawPointer(pointer))
             }
+            Operand::ReferenceRoot { permission, place } => {
+                let target = self.storage_region(frame_index, place);
+                let authority = self.allocate_reference_authority(target.clone(), *permission, None);
+                Ok(RuntimeValue::SafeReference(SafeReferenceValue {
+                    target,
+                    authority,
+                }))
+            }
+            Operand::ReferenceReborrow { permission, src } => {
+                let parent = self.resolve_reference_access(frame_index, src);
+                let authority = self.allocate_reference_authority(
+                    parent.target.clone(),
+                    *permission,
+                    Some(parent.authority),
+                );
+                Ok(RuntimeValue::SafeReference(SafeReferenceValue {
+                    target: parent.target,
+                    authority,
+                }))
+            }
+            Operand::ReferenceMove(src) => {
+                let resolved = self.resolve_reference_access(frame_index, src);
+                let (target_frame, target_place) =
+                    self.frame_place_for_storage_region(&resolved.target);
+                let value = {
+                    let types = &self.program.as_program().types;
+                    let frame = &mut self.frames[target_frame];
+                    take_value(
+                        types,
+                        resolved.selected_ty,
+                        place_state_mut(&mut frame.locals, &target_place),
+                    )
+                };
+                Ok(value)
+            }
+            Operand::ReferenceCopy(src) => {
+                let resolved = self.resolve_reference_access(frame_index, src);
+                let (target_frame, target_place) =
+                    self.frame_place_for_storage_region(&resolved.target);
+                let types = &self.program.as_program().types;
+                let state = place_state(&self.frames[target_frame].locals, &target_place);
+                Ok(clone_value(
+                    types,
+                    resolved.selected_ty,
+                    state,
+                    &mut self.reference_authorities,
+                ))
+            }
         }
+    }
+
+    fn raw_move(
+        &mut self,
+        frame_index: usize,
+        pointer_access: &PlaceAccess,
+    ) -> Result<RuntimeValue, UndefinedBehaviorKind> {
+        let pointer_place = self.resolve_access(frame_index, pointer_access);
+        let pointer = self.raw_pointer_at(frame_index, &pointer_place);
+        let target = self.place_for_storage_region(frame_index, &pointer.target);
+
+        if !place_state(&self.frames[frame_index].locals, &target).fully_live() {
+            return Err(UndefinedBehaviorKind::RawMoveTargetNotLive {
+                target: pointer.target,
+            });
+        }
+        if let Some((index, _)) = self.frames[frame_index]
+            .active_loans
+            .iter()
+            .enumerate()
+            .find(|(_, active)| {
+                active
+                    .as_ref()
+                    .is_some_and(|active| active.place.overlaps(&target))
+            })
+        {
+            return Err(UndefinedBehaviorKind::RawMoveConflictsWithLoan {
+                target: pointer.target,
+                loan: LoanId(u32::try_from(index).expect("loan index exceeds u32::MAX")),
+            });
+        }
+        if let Some(authority) = self.raw_reference_conflict(&pointer.target, false) {
+            return Err(UndefinedBehaviorKind::RawMoveConflictsWithReferenceAuthority {
+                target: pointer.target,
+                authority,
+            });
+        }
+
+        let target_ty = self.place_type(frame_index, &target);
+        let value = {
+            let types = &self.program.as_program().types;
+            let frame = &mut self.frames[frame_index];
+            take_value(
+                types,
+                target_ty,
+                place_state_mut(&mut frame.locals, &target),
+            )
+        };
+        self.record(
+            frame_index,
+            VerificationEventKind::RawMove {
+                pointer,
+                target: target.clone(),
+            },
+        );
+        if let RuntimeValue::RawPointer(pointer) = &value {
+            self.record(
+                frame_index,
+                VerificationEventKind::RawPointerMove {
+                    place: target,
+                    pointer: pointer.clone(),
+                },
+            );
+        }
+        Ok(value)
     }
 
     fn raw_pointer_at(&self, frame_index: usize, place: &Place) -> RawPointerValue {
@@ -1344,6 +1285,44 @@ impl Machine {
                 pointer.clone()
             }
             _ => unreachable!("validated raw-pointer access reaches a fully-live pointer value"),
+        }
+    }
+
+    fn resolve_reference_access(
+        &self,
+        frame_index: usize,
+        access: &ReferenceAccess,
+    ) -> ResolvedReferenceAccess {
+        let carrier_place = self.resolve_access(frame_index, &access.reference);
+        let carrier_ty = self.access_type(frame_index, &access.reference);
+        let (referent, permission) = self
+            .program
+            .as_program()
+            .types
+            .reference(carrier_ty)
+            .expect("validated reference access uses a safe-reference carrier");
+        let reference = match place_state(&self.frames[frame_index].locals, &carrier_place) {
+            ObjectState::Leaf(LeafState::Live(RuntimeValue::SafeReference(reference))) => {
+                reference.clone()
+            }
+            _ => unreachable!("validated reference access reaches a live reference carrier"),
+        };
+        let active = self.reference_authority(reference.authority);
+        debug_assert_eq!(active.target, reference.target);
+        debug_assert_eq!(active.permission, permission);
+        let selected_ty = self
+            .program
+            .as_program()
+            .types
+            .project_type(referent, &access.projections)
+            .expect("validated reference access contains valid structural projections");
+        let mut target = active.target.clone();
+        target.projections.extend(access.projections.iter().copied());
+        ResolvedReferenceAccess {
+            authority: reference.authority,
+            permission,
+            target,
+            selected_ty,
         }
     }
 
@@ -1374,6 +1353,33 @@ impl Machine {
         }
     }
 
+    /// Resolve a safe-reference target across every currently active frame.
+    fn frame_place_for_storage_region(&self, region: &StorageRegion) -> (usize, Place) {
+        self.frames
+            .iter()
+            .enumerate()
+            .find_map(|(frame_index, frame)| {
+                frame
+                    .locals
+                    .iter()
+                    .position(|local| local.instance == region.instance)
+                    .map(|local_index| {
+                        (
+                            frame_index,
+                            Place {
+                                local: LocalId(
+                                    u32::try_from(local_index)
+                                        .expect("local index exceeds u32::MAX"),
+                                ),
+                                projections: region.projections.clone(),
+                            },
+                        )
+                    })
+            })
+            .expect("validated safe reference targets storage in an active frame")
+    }
+
+    /// Resolve raw-pointer storage within the actor frame only.
     fn place_for_storage_region(&self, frame_index: usize, region: &StorageRegion) -> Place {
         let local_index = self.frames[frame_index]
             .locals
@@ -1393,6 +1399,13 @@ impl Machine {
             let local_id =
                 LocalId(u32::try_from(local_index).expect("local index exceeds u32::MAX"));
             self.drop_place_contents(frame_index, &Place::local(local_id));
+            let instance = self.frames[frame_index].locals[local_index].instance;
+            assert!(
+                !self.reference_authorities.iter().any(|active| active
+                    .as_ref()
+                    .is_some_and(|active| active.target.instance == instance)),
+                "validated Core cleanup cannot end storage targeted by a surviving reference authority"
+            );
         }
     }
 
@@ -1400,15 +1413,13 @@ impl Machine {
         let ty = self.place_type(frame_index, place);
         let activation = self.frames[frame_index].activation;
         let types = &self.program.as_program().types;
-        let state = place_state_mut(&mut self.frames[frame_index].locals, place);
-        drop_live_values(
-            types,
-            ty,
-            state,
-            place,
-            activation,
+        let (frames, authorities, trace) = (
+            &mut self.frames,
+            &mut self.reference_authorities,
             &mut self.verification_events,
         );
+        let state = place_state_mut(&mut frames[frame_index].locals, place);
+        drop_live_values(types, ty, state, place, activation, authorities, trace);
     }
 
     fn place_type(&self, frame_index: usize, place: &Place) -> TypeId {
@@ -1429,11 +1440,145 @@ impl Machine {
             .expect("validated Core MIR contains only valid projections")
     }
 
+    fn access_type(&self, frame_index: usize, access: &PlaceAccess) -> TypeId {
+        match access {
+            PlaceAccess::Direct(place) => self.place_type(frame_index, place),
+            PlaceAccess::Loan { loan, projections } => {
+                let frame = &self.frames[frame_index];
+                let function = self
+                    .program
+                    .as_program()
+                    .function(frame.function)
+                    .expect("validated frame references a known function");
+                let declaration = function
+                    .body
+                    .loan(*loan)
+                    .expect("validated Core MIR references only known loans");
+                self.program
+                    .as_program()
+                    .types
+                    .project_type(declaration.ty, projections)
+                    .expect("validated loan access contains valid projections")
+            }
+        }
+    }
+
+    fn allocate_reference_authority(
+        &mut self,
+        target: StorageRegion,
+        permission: ReferencePermission,
+        parent: Option<ReferenceAuthorityId>,
+    ) -> ReferenceAuthorityId {
+        let id = ReferenceAuthorityId(self.next_reference_authority);
+        self.next_reference_authority = self
+            .next_reference_authority
+            .checked_add(1)
+            .expect("verification reference-authority identity exhausted");
+        let index = authority_index(id);
+        assert_eq!(
+            index,
+            self.reference_authorities.len(),
+            "runtime authority identities are monotonic table indices"
+        );
+        self.reference_authorities.push(Some(ActiveReferenceAuthority {
+            target,
+            permission,
+            parent,
+            carriers: 1,
+        }));
+        id
+    }
+
+    fn reference_authority(&self, authority: ReferenceAuthorityId) -> &ActiveReferenceAuthority {
+        self.reference_authorities
+            .get(authority_index(authority))
+            .and_then(Option::as_ref)
+            .expect("live reference carrier names an active runtime authority")
+    }
+
+    fn raw_reference_conflict(
+        &self,
+        target: &StorageRegion,
+        shared_read: bool,
+    ) -> Option<ReferenceAuthorityId> {
+        self.reference_authorities
+            .iter()
+            .enumerate()
+            .find_map(|(index, active)| {
+                let active = active.as_ref()?;
+                let conflicts = active.target.overlaps(target)
+                    && (!shared_read
+                        || active.permission.alias_kind() == BorrowKind::Exclusive);
+                conflicts.then(|| {
+                    ReferenceAuthorityId(
+                        u64::try_from(index).expect("reference authority index exceeds u64::MAX"),
+                    )
+                })
+            })
+    }
+
     fn record(&mut self, frame_index: usize, kind: VerificationEventKind) {
         self.verification_events.push(VerificationEvent {
             activation: self.frames[frame_index].activation,
             kind,
         });
+    }
+}
+
+fn authority_index(authority: ReferenceAuthorityId) -> usize {
+    usize::try_from(authority.0).expect("reference authority identity exceeds usize::MAX")
+}
+
+fn increment_reference_carrier(
+    authorities: &mut [Option<ActiveReferenceAuthority>],
+    authority: ReferenceAuthorityId,
+) {
+    let active = authorities[authority_index(authority)]
+        .as_mut()
+        .expect("copied live reference carrier names an active authority");
+    active.carriers = active
+        .carriers
+        .checked_add(1)
+        .expect("runtime reference carrier count overflow");
+}
+
+fn remove_reference_carrier(
+    authorities: &mut [Option<ActiveReferenceAuthority>],
+    authority: ReferenceAuthorityId,
+) {
+    let active = authorities[authority_index(authority)]
+        .as_mut()
+        .expect("destroyed live reference carrier names an active authority");
+    active.carriers = active
+        .carriers
+        .checked_sub(1)
+        .expect("runtime reference carrier count underflow");
+    try_end_reference_authority(authorities, authority);
+}
+
+fn try_end_reference_authority(
+    authorities: &mut [Option<ActiveReferenceAuthority>],
+    authority: ReferenceAuthorityId,
+) {
+    let index = authority_index(authority);
+    let Some(active) = authorities[index].as_ref() else {
+        return;
+    };
+    if active.carriers != 0
+        || authorities.iter().any(|candidate| {
+            candidate
+                .as_ref()
+                .is_some_and(|candidate| candidate.parent == Some(authority))
+        })
+    {
+        return;
+    }
+    let parent = authorities[index]
+        .take()
+        .expect("authority remains active until end")
+        .parent;
+    if let Some(parent) = parent {
+        try_end_reference_authority(authorities, parent);
     }
 }
 
@@ -1516,6 +1661,11 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Ru
             RuntimeValue::RawPointer(value),
         ) => *leaf = LeafState::Live(RuntimeValue::RawPointer(value)),
         (
+            TypeKind::Scalar(ScalarType::Reference { .. }),
+            ObjectState::Leaf(leaf),
+            RuntimeValue::SafeReference(value),
+        ) => *leaf = LeafState::Live(RuntimeValue::SafeReference(value)),
+        (
             TypeKind::Scalar(ScalarType::TrackedFixture),
             ObjectState::Leaf(leaf),
             RuntimeValue::TrackedFixture(value),
@@ -1533,11 +1683,29 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Ru
     }
 }
 
-fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> RuntimeValue {
+fn clone_value(
+    types: &TypeTable,
+    ty: TypeId,
+    state: &ObjectState,
+    authorities: &mut [Option<ActiveReferenceAuthority>],
+) -> RuntimeValue {
     let definition = types
         .get(ty)
         .expect("validated Core MIR references only known types");
     match (&definition.kind, state) {
+        (
+            TypeKind::Scalar(ScalarType::Reference {
+                permission: ReferencePermission::Shared,
+                ..
+            }),
+            ObjectState::Leaf(LeafState::Live(RuntimeValue::SafeReference(reference))),
+        ) => {
+            increment_reference_carrier(authorities, reference.authority);
+            RuntimeValue::SafeReference(reference.clone())
+        }
+        (TypeKind::Scalar(ScalarType::Reference { .. }), _) => {
+            unreachable!("validated Copy cannot duplicate an exclusive safe reference")
+        }
         (TypeKind::Scalar(_), ObjectState::Leaf(LeafState::Live(value))) => value.clone(),
         (TypeKind::Struct(fields), ObjectState::Aggregate(states))
             if fields.len() == states.len() =>
@@ -1546,7 +1714,7 @@ fn clone_value(types: &TypeTable, ty: TypeId, state: &ObjectState) -> RuntimeVal
                 fields
                     .iter()
                     .zip(states)
-                    .map(|(field, state)| clone_value(types, field.ty, state))
+                    .map(|(field, state)| clone_value(types, field.ty, state, authorities))
                     .collect(),
             )
         }
@@ -1588,6 +1756,7 @@ fn drop_live_values(
     state: &mut ObjectState,
     place: &Place,
     activation: ActivationId,
+    authorities: &mut [Option<ActiveReferenceAuthority>],
     trace: &mut Vec<VerificationEvent>,
 ) {
     let definition = types
@@ -1605,6 +1774,9 @@ fn drop_live_values(
                             id,
                         },
                     });
+                }
+                LeafState::Live(RuntimeValue::SafeReference(reference)) => {
+                    remove_reference_carrier(authorities, reference.authority);
                 }
                 LeafState::Live(_) => {}
                 LeafState::NeverInitialized => *leaf = LeafState::NeverInitialized,
@@ -1625,6 +1797,7 @@ fn drop_live_values(
                     &mut states[index],
                     &field_place,
                     activation,
+                    authorities,
                     trace,
                 );
             }
