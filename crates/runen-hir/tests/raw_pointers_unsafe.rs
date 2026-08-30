@@ -57,12 +57,7 @@ fn retains_raw_pointer_types_formation_copy_and_valid_retargeting() {
         ValueKind::RawAddressRoot { target } if target == f.parameters[0].binding
     ));
 
-    let Statement::Local {
-        ty,
-        initializer,
-        ..
-    } = &f.body.statements[1]
-    else {
+    let Statement::Local { ty, initializer, .. } = &f.body.statements[1] else {
         panic!("expected copied raw-pointer local");
     };
     assert_eq!(*ty, scalar_ty);
@@ -125,10 +120,8 @@ fn raw_move_requires_unsafe_full_target_availability_and_no_shared_authority() {
     )
     .expect("unsafe RawMove from a fully available target must validate");
 
-    let outside = compile(
-        "fn f(x: I64) { let p: raw I64 = raw &x; let moved: I64 = raw move p; }",
-    )
-    .expect_err("RawMove outside unsafe must be rejected");
+    let outside = compile("fn f(x: I64) { let p: raw I64 = raw &x; let moved: I64 = raw move p; }")
+        .expect_err("RawMove outside unsafe must be rejected");
     assert!(has_diagnostic(
         &outside,
         DiagnosticKind::UnsafeOperationOutsideUnsafeBlock
@@ -383,7 +376,10 @@ fn rejects_raw_pointer_interfaces_recursive_pointees_and_raw_address_of_indirect
 
     let parameter = compile("fn f(p: raw I64) {}")
         .expect_err("raw-pointer parameters remain outside the source slice");
-    assert!(has_diagnostic(&parameter, DiagnosticKind::RawPointerParameter));
+    assert!(has_diagnostic(
+        &parameter,
+        DiagnosticKind::RawPointerParameter
+    ));
 
     let result = compile("fn f(x: I64) -> raw I64 { return raw &x; }")
         .expect_err("raw-pointer results remain outside the source slice");
@@ -395,10 +391,11 @@ fn rejects_raw_pointer_interfaces_recursive_pointees_and_raw_address_of_indirect
     ] {
         let errors = compile(source)
             .expect_err("raw address target must have a non-indirection pointee type");
-        assert!(errors.iter().any(|error| matches!(
-            error.kind,
-            DiagnosticKind::InvalidRawPointerPointee { .. }
-        )));
+        assert!(
+            errors
+                .iter()
+                .any(|error| matches!(error.kind, DiagnosticKind::InvalidRawPointerPointee { .. }))
+        );
     }
 }
 
