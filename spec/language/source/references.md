@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the first represented source-language safe-reference relation: Shared reference type/value semantics, whole-binding root borrow targets, Shared reference authority and carrier lifetime, source-validation origin provenance, root Shared-borrow formation, bounded Shared dereference/copy production, implicit lexical lifetime validity, Shared-reference parameter/result transfer consequences, and the source-to-Core refinement obligations of this bounded slice.
 
-It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, and assignment from [Source function-local bindings](local-bindings.md); structural root availability from [Source structural ownership](structural-ownership.md); function entity/parameter/result-origin callable structure from [Source callables](callables.md); direct-call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
+It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, and assignment from [Source function-local bindings](local-bindings.md); structural root availability from [Source structural ownership](structural-ownership.md); function entity/parameter/result-origin callable structure from [Source callables](callables.md); direct-call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); the independently owned raw-pointer/unsafe relation from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md) where its operations interact with active Shared authority; and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
 
 The lower refinement target is the accepted Shared safe-reference relation in [Core references](../core/references.md) and the parameter/result-transfer plus Shared-reference result-origin relation in [Core functions and direct calls](../core/functions.md). Core reference identity, `StorageRegion`, reference-authority identity, Core liveness, and proving representation are not source-language authority.
 
-This first source slice is intentionally Shared-only. It does not expose Core `Exclusive` or `ExclusiveReplace`, source reborrow, source reference mutation, raw pointers, source `unsafe`, reference-containing aggregate results, multiple or derived result origins, named lifetimes, or a general source place/lvalue/address category.
+This reference relation remains intentionally Shared-only. It does not expose Core `Exclusive` or `ExclusiveReplace`, source reborrow, source reference mutation, reference-containing aggregate results, multiple or derived result origins, named lifetimes, or a general source place/lvalue/address category. Raw pointers and lexical unsafe admission are represented independently by `raw-pointers-unsafe.md`; their existence does not grant raw pointers safe-reference authority or widen this reference relation.
 
 ## Shared reference source type
 
@@ -30,13 +30,13 @@ A source type `T` is **first-slice Shared-referent-admissible** exactly when all
 
 1. `T` is a represented source value type under `types.md`;
 2. `T` is duplicable under the source-semantic duplicability relation from `types.md`; and
-3. the structural source value shape of `T` contains no Shared reference type.
+3. the structural source value shape of `T` contains neither a Shared reference type nor a raw-pointer type.
 
-Because this source revision defines no raw-pointer source type, no source raw-pointer clause is required by this predicate. The lower refinement of every admitted referent MUST still satisfy the current Core reference-parameter referent-safety boundary.
+The explicit raw-pointer exclusion is required now that `RawPtr(T)` is a represented source value type. It preserves the current Core reference-parameter referent-safety boundary and prevents this Shared-reference slice from transporting raw-pointer provenance through a safe referent domain.
 
 A Shared reference type is represented in this slice only when its referent is first-slice Shared-referent-admissible.
 
-This duplicable-referent restriction is a bounded source-language admission rule, not a claim that safe Shared references fundamentally require duplicable referents. Later source revisions may widen the source operation set and referent domain only under an accepted owner.
+This duplicable/referent-shape restriction is a bounded source-language admission rule, not a claim that safe Shared references fundamentally require duplicable or raw-pointer-free referents. Later source revisions may widen the source operation set and referent domain only under an accepted owner.
 
 ## Contextual type admission
 
@@ -52,6 +52,8 @@ It is source-invalid in this first slice as:
 - the declared type of a mutable ordinary local binding;
 - the referent of another Shared reference type; or
 - a function result when the callable result-origin admission from `callables.md` is missing or ambiguous.
+
+`RawPtr(T)` is not a first-slice Shared-reference referent under the admission rule above.
 
 Pattern-introduced local bindings cannot acquire a Shared reference type because first-slice nominal record fields cannot have Shared reference type.
 
@@ -70,7 +72,7 @@ Neither target nor authority identity is program-observable data. They cannot be
 
 A source Shared reference is not a raw pointer, Core `ReferenceAuthorityId`, Core `StorageRegion`, Core `LoanId`, static Core `Place`, physical address, lifetime name, module binding, or source structural-ownership path by itself.
 
-Source reference values arise only from root Shared-borrow formation or source duplication/transport of an existing valid Shared reference value. A contract-bearing direct-call result is such identity-preserving transport; it does not fabricate a new reference. No literal or record construction fabricates one.
+Source reference values arise only from root Shared-borrow formation or source duplication/transport of an existing valid Shared reference value. A contract-bearing direct-call result is such identity-preserving transport; it does not fabricate a new reference. No literal, raw-pointer operation, or record construction fabricates one.
 
 ## Source-validation origin provenance
 
@@ -116,7 +118,7 @@ as a root borrow target.
 
 The dynamic target identity is the selected binding instance in the current source function activation. This source-semantic identity exists only to define the safe reference/lifetime relation. It does not expose a physical storage location or require the source binding to have a stable physical address.
 
-A later source owner may introduce structural borrow targets or another source place relation only explicitly. Existing structural source paths from `structural-ownership.md` do not silently become addressable places because this root relation exists.
+A later source owner may introduce structural borrow targets or another source place relation only explicitly. Existing structural source paths from `structural-ownership.md` do not silently become addressable places because this root relation exists. The separate complete-root raw-address target from `raw-pointers-unsafe.md` likewise does not create such a general place category.
 
 ## Root Shared-borrow formation
 
@@ -132,7 +134,7 @@ Formation is source-valid only when:
 4. the dynamic target binding extent is active; and
 5. Shared alias admission succeeds against every active source reference authority targeting that same binding root.
 
-Because this first slice contains only Shared source authorities, overlapping Shared authorities are mutually compatible. Formation therefore fails no alias check merely because another Shared root authority for the same target is active.
+Because this reference slice contains only Shared source authorities, overlapping Shared authorities are mutually compatible. Formation therefore fails no alias check merely because another Shared root authority for the same target is active. A raw-pointer value carries no source reference authority and therefore does not itself conflict with Shared-borrow formation.
 
 Successful formation:
 
@@ -168,14 +170,17 @@ While one or more source Shared authorities target binding root `x`, source oper
 The following remain permitted when otherwise source-valid:
 
 - non-consuming ordinary whole-binding duplicate use;
-- non-consuming binding-root field-value production; and
-- non-consuming direct-root pattern binding production.
+- non-consuming binding-root field-value production;
+- non-consuming direct-root pattern binding production; and
+- raw address formation of the complete root under `raw-pointers-unsafe.md`, because formation itself performs no pointee access and creates no authority.
 
 Whole-binding assignment or reinitialization of `x` is source-invalid while any Shared authority for `x` remains active.
 
-No first-slice source field assignment, partial-field reinitialization, interior mutation, reference assignment, ownership-moving dereference, or explicit drop operation exists.
+The separately owned raw ownership move and raw replacement operations require exclusive raw target compatibility. Under the currently represented source authority set, `raw-pointers-unsafe.md` therefore rejects either operation while any active Shared authority targets `x`, even when a raw pointer to `x` was formed before or during that Shared authority interval.
 
-The first-slice referent restriction is significant here. If `T` is first-slice Shared-referent-admissible, then `T` is source-duplicable. For a positively duplicable nominal record, every structurally contained field source type is likewise duplicable under `types.md`. Consequently the currently represented ordinary value, field-value, and record-pattern uses reachable within a first-slice borrowed target do not consume a structural path merely because they produce a value.
+No first-slice source field assignment, partial-field reinitialization, safe-reference assignment, ownership-moving safe dereference, or explicit safe-reference drop operation exists.
+
+The first-slice referent restriction is significant here. If `T` is first-slice Shared-referent-admissible, then `T` is source-duplicable and its structural value shape contains neither Shared references nor raw pointers. For a positively duplicable nominal record, every structurally contained field source type is likewise duplicable under `types.md`. Consequently the currently represented ordinary value, field-value, and record-pattern uses reachable within a first-slice borrowed target do not consume a structural path merely because they produce a value, and they cannot extract a raw-pointer provenance fact from the referent.
 
 This reference slice therefore adds no second consumed-path set, borrow mark inside `structural-ownership.md`, control-flow union/intersection, or source alias-state join. Shared authority is a distinct dynamic source validity relation whose lexical lifetime is established below.
 
@@ -218,7 +223,7 @@ Successful `*r`:
 3. leaves the stored reference carrier unchanged; and
 4. creates no new source reference carrier or authority.
 
-This is a duplicate-value dereference only. The first slice defines no source dereference Move, Drop, Assign, InteriorAssign, structural field-relative reference access, or reborrow.
+This is a duplicate-value safe dereference only. The first slice defines no source safe-reference dereference Move, Drop, Assign, InteriorAssign, structural field-relative reference access, or reborrow. The separately owned raw ownership move is not a safe-reference dereference operation.
 
 ## Implicit lexical lifetime validity
 
@@ -270,7 +275,7 @@ That external target extent is valid for the complete callee activation under th
 
 Within independent body validation, parameter slot `i` begins with `ParameterOrigin(i)` even when another slot may dynamically alias it in some call. This is the source-level distinction consumed by the result-origin contract.
 
-The first-slice source operation set cannot move, drop, assign, or interior-mutate the external referent through the Shared reference. Therefore every normally returning source-valid callee leaves that external referent fully owned/live, satisfying the lower Core normal-return referent requirement by construction.
+The first-slice safe-reference operation set cannot move, drop, assign, or interior-mutate the external referent through the Shared reference. The independent raw-pointer source slice also cannot receive a `RawPtr` through a parameter and excludes raw pointers from Shared referents. Therefore every normally returning source-valid callee leaves that external referent fully owned/live, satisfying the lower Core normal-return referent requirement by construction.
 
 ## Shared-reference result-origin validity
 
@@ -320,7 +325,7 @@ The normal call boundary creates no root authority, reborrow, semantic reference
 
 On defined fault there is no Shared-reference result value or caller-side result provenance. On divergence the caller remains suspended and no synthetic result is produced.
 
-No source reborrow is implied at an argument or result boundary.
+No source reborrow is implied at an argument or result boundary. Raw-pointer values remain excluded from call transfer under the separate raw-pointer/callable admission boundary.
 
 ## Source-to-Core refinement
 
@@ -342,32 +347,28 @@ The following facts remain source authority and MUST NOT be reconstructed from l
 
 - source binding identity and lookup;
 - borrowable-binding-root eligibility;
-- source referent duplicability/reference-free admission;
+- source referent duplicability and Shared/raw-pointer-free admission;
 - contextual restriction to parameters, immutable locals, and the one contract-bearing Shared-reference result form;
 - source-validation origin provenance and advertised source result-origin selection;
 - lexical source lifetime validity;
 - source assignment prohibition while Shared authority is active; and
 - source type/accessibility validity.
 
-A frontend/lowerer may choose HIR/Core identifiers and other implementation structures freely only when they preserve these source facts. Core `StorageRegion`, reference-authority identifiers, local numbering, path liveness, or machine behavior do not retroactively define source semantics.
+A frontend/lowerer may choose HIR/Core identifiers and other implementation structures freely only when they preserve these source facts. Core `StorageRegion`, reference-authority identifiers, local numbering, path liveness, raw-pointer representation, or machine behavior do not retroactively define source semantics.
 
-## Raw-pointer and unsafe separation
+## Raw-pointer and unsafe interaction
 
-Every operation represented here is safe by construction and refines only to accepted safe-reference Core operations.
+Raw-pointer values, raw address formation, raw ownership move/replacement, lexical unsafe admission, pointer-origin provenance, and their source-to-Core refinement are owned independently by `raw-pointers-unsafe.md`.
 
-This document defines no:
+Their relationship to this Shared-reference owner is intentionally narrow:
 
-- raw-pointer source type or value;
-- address exposure or numeric address;
-- reference-to-raw conversion;
-- pointer arithmetic, cast, null, or provenance manipulation;
-- source `unsafe` lexical/callable form;
-- unsafe-operation admission;
-- safe-public-contract wrapper validation;
-- ABI/layout/FFI/linkage relation;
-- representation validity, address stability, relocation, or pinning rule.
+- a raw pointer is not a safe reference and carries no Shared authority;
+- `RawPtr(T)` is not an admissible Shared referent in this slice;
+- raw address formation does not itself conflict with an active Shared authority because it does not access the pointee value;
+- raw ownership move and raw replacement require exclusive raw-target compatibility and are source-invalid while an active Shared authority targets the same root; and
+- unsafe admission never weakens or ends a Shared authority.
 
-Those relations remain independently deferred until an accepted concrete consumer requires them.
+This document therefore grants no reference-to-raw conversion, raw-to-reference conversion, pointer arithmetic/cast/null relation, or alternate escape path for a Shared reference.
 
 ## Explicit first-slice exclusions
 
@@ -376,16 +377,16 @@ This revision does not define:
 - source `Exclusive` or `ExclusiveReplace` reference types;
 - `&mut` or another mutable/exclusive source reference spelling;
 - source reborrow or child reference authority;
-- Shared references to non-duplicable referents;
+- Shared references to non-duplicable or raw-pointer-containing referents;
 - reference-containing nominal record fields/aggregates;
 - recursive nominal types through reference fields;
 - mutable/rebindable reference locals;
 - nested Shared reference referents;
 - field/path borrow targets;
 - reference-relative field access;
-- reference Move, Drop, Assign, or InteriorAssign;
+- safe-reference Move, Drop, Assign, or InteriorAssign;
 - reference-containing aggregate function results, multiple or explicit source result-origin choices, derived/subregion reference results, static/global reference origins, or Exclusive/ExclusiveReplace reference results;
 - lifetime names, parameters, explicit outlives constraints, or non-lexical shortening;
 - closures/captures, generics/traits/coherence, const/static storage, async/tasks, or package behavior.
 
-The bounded one-origin identity-preserving Shared-reference result relation above is the only reference-result form represented by this revision. The absence of the excluded relations does not infer them from Core or another language. Each requires its own accepted source owner or explicit extension of this owner.
+The bounded one-origin identity-preserving Shared-reference result relation above is the only reference-result form represented by this revision. The independently represented raw-pointer/unsafe slice does not widen that result relation. The absence of the excluded reference relations does not infer them from Core, raw-pointer semantics, or another language. Each requires its own accepted source owner or explicit extension of this owner.
