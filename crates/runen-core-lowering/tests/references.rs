@@ -251,6 +251,100 @@ fn defined_fault_cleans_transferred_and_duplicated_reference_carriers() {
 }
 
 #[test]
+fn shared_reference_result_lowers_exact_type_and_origin_slot() {
+    let lowered = lower_source("fn id(x: I64, r: &I64) -> &I64 { return r; }");
+    let program = lowered.as_program();
+    let id = function(program, "id");
+    let result = id.result.expect("Shared-reference result type is retained");
+
+    assert_eq!(id.shared_reference_result_origin, Some(1));
+    assert_eq!(result, id.body.locals[id.parameters[1].0 as usize].ty);
+    assert_eq!(shared_reference_types(program).len(), 1);
+}
+
+#[test]
+fn shared_reference_result_round_trip_and_existing_carrier_coexist() {
+    let report = execute_source(
+        "fn id(r: &I64) -> &I64 { return r; }\
+         fn entry() -> I64 {\
+             let x: I64 = 47;\
+             let original: &I64 = &x;\
+             let returned: &I64 = id(original);\
+             let a: I64 = *original;\
+             let b: I64 = *returned;\
+             return a + b;\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(94)));
+}
+
+#[test]
+fn temporary_shared_argument_survives_as_result_until_lexical_cleanup() {
+    let report = execute_source(
+        "fn id(r: &I64) -> &I64 { return r; }\
+         fn entry() -> I64 {\
+             let mut x: I64 = 5;\
+             {\
+                 let returned: &I64 = id(&x);\
+                 let observed: I64 = *returned;\
+             }\
+             x = 61;\
+             return x;\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(61)));
+}
+
+#[test]
+fn nested_shared_reference_result_forwarding_executes() {
+    let report = execute_source(
+        "fn inner(r: &I64) -> &I64 { return r; }\
+         fn middle(r: &I64) -> &I64 { return inner(r); }\
+         fn entry() -> I64 {\
+             let x: I64 = 53;\
+             let returned: &I64 = middle(&x);\
+             return *returned;\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(53)));
+}
+
+#[test]
+fn recursive_shared_reference_result_forwarding_lowers_without_execution() {
+    let lowered = lower_source("fn recursive(r: &I64) -> &I64 { return recursive(r); }");
+    let recursive = function(lowered.as_program(), "recursive");
+    assert_eq!(recursive.shared_reference_result_origin, Some(0));
+    assert_eq!(
+        recursive.result,
+        Some(recursive.body.locals[recursive.parameters[0].0 as usize].ty)
+    );
+}
+
+#[test]
+fn contract_bearing_shared_reference_result_fault_has_no_program_result() {
+    let report = execute_source(
+        "fn fail(r: &I64) -> &I64 { fault; }\
+         fn entry() -> I64 {\
+             let x: I64 = 67;\
+             let returned: &I64 = fail(&x);\
+             return *returned;\
+         }",
+        "entry",
+    );
+    assert_eq!(
+        report.terminal,
+        TerminalStatus::Faulted("source.explicit".to_owned())
+    );
+    assert_eq!(report.result, None);
+}
+
+#[test]
 fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
     let mut field_reference = hir("record Holder { value: I64 } fn f(holder: Holder) {}");
     field_reference.records[0].fields[0].ty =

@@ -514,6 +514,7 @@ pub struct Function {
     pub accessibility: Accessibility,
     pub parameters: Vec<Parameter>,
     pub result: Option<Type>,
+    pub shared_reference_result_origin: Option<usize>,
     pub body: Body,
     pub location: SourceLocation,
 }
@@ -571,7 +572,9 @@ pub enum DiagnosticKind {
     RecordContainmentCycle,
     InvalidRecordDuplicabilitySelection,
     SharedReferenceField,
-    SharedReferenceResult,
+    MissingSharedReferenceResultOrigin,
+    AmbiguousSharedReferenceResultOrigin,
+    SharedReferenceResultOriginMismatch,
     MutableSharedReferenceLocal,
     InvalidSharedReferenceReferent { referent: Type },
     DuplicateParameter,
