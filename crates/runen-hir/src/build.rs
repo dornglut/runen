@@ -9,10 +9,10 @@ use crate::{
     Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
     BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
-    LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee, Record,
-    RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
-    RecordPatternTransientCleanup, ReferenceReferent, Return, SourceLocation, SourceUnit, Statement,
-    Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
+    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
+    RecordPatternTransientCleanup, ReferenceReferent, Return, SourceLocation, SourceUnit,
+    Statement, Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -1180,30 +1180,15 @@ fn validate_body_statement(
             next_binding,
             diagnostics,
         ),
-        SyntaxKind::AssignmentStatement => validate_assignment(
-            header,
-            node,
-            context,
-            value_context,
-            bindings,
-            diagnostics,
-        ),
-        SyntaxKind::RawAssignStatement => validate_raw_assign(
-            header,
-            node,
-            context,
-            value_context,
-            bindings,
-            diagnostics,
-        ),
-        SyntaxKind::CallStatement => validate_call_statement(
-            header,
-            node,
-            context,
-            value_context,
-            bindings,
-            diagnostics,
-        ),
+        SyntaxKind::AssignmentStatement => {
+            validate_assignment(header, node, context, value_context, bindings, diagnostics)
+        }
+        SyntaxKind::RawAssignStatement => {
+            validate_raw_assign(header, node, context, value_context, bindings, diagnostics)
+        }
+        SyntaxKind::CallStatement => {
+            validate_call_statement(header, node, context, value_context, bindings, diagnostics)
+        }
         SyntaxKind::FaultStatement => Some(Statement::Fault {
             location: location(header.unit, node),
         }),
@@ -1613,7 +1598,10 @@ fn validate_while(
             debug_assert_eq!(body_state.ty, head.ty);
             debug_assert_eq!(body_state.mutability, head.mutability);
             debug_assert_eq!(body_state.reference_origin, head.reference_origin);
-            debug_assert_eq!(body_state.raw_pointer_target_domain, head.raw_pointer_target_domain);
+            debug_assert_eq!(
+                body_state.raw_pointer_target_domain,
+                head.raw_pointer_target_domain
+            );
             body_state.ownership == head.ownership
         });
         let pointer_equal = pointer_origins_match_target(&body_bindings, &loop_head);
@@ -1873,7 +1861,12 @@ fn validate_local(
     });
     let raw_pointer_target_domain = declared
         .is_some_and(|ty| matches!(ty, Type::RawPointer(_)))
-        .then(|| bindings.values().map(|binding| binding.id).collect::<BTreeSet<_>>());
+        .then(|| {
+            bindings
+                .values()
+                .map(|binding| binding.id)
+                .collect::<BTreeSet<_>>()
+        });
     let initializer = declared.and_then(|required| {
         let value_node = value_child(node);
         validate_value(
@@ -2609,14 +2602,8 @@ fn validate_call_statement(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let call = direct_child(node, SyntaxKind::DirectCall);
-    let (function, arguments, result) = validate_call(
-        header,
-        &call,
-        context,
-        value_context,
-        bindings,
-        diagnostics,
-    )?;
+    let (function, arguments, result) =
+        validate_call(header, &call, context, value_context, bindings, diagnostics)?;
     if result.is_some() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ResultCallUsedAsStatement,
@@ -2639,14 +2626,7 @@ fn validate_terminal_return(
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Return {
-    let returned = validate_return(
-        header,
-        node,
-        context,
-        value_context,
-        bindings,
-        diagnostics,
-    );
+    let returned = validate_return(header, node, context, value_context, bindings, diagnostics);
     if header.result.is_some() && returned.value.is_none() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ExpectedResultValue,
@@ -3458,14 +3438,8 @@ fn validate_value(
             None
         }
         SyntaxKind::DirectCall => {
-            let (function, arguments, result) = validate_call(
-                header,
-                node,
-                context,
-                value_context,
-                bindings,
-                diagnostics,
-            )?;
+            let (function, arguments, result) =
+                validate_call(header, node, context, value_context, bindings, diagnostics)?;
             let Some(ty) = result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
