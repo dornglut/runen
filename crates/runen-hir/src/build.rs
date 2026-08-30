@@ -1009,7 +1009,7 @@ fn visit_record(
                 location: field.location,
             });
         } else if state[target.0] == 0 {
-            visit_record(target, records, state, diagnostics);
+            visit_record(target, records, &mut state, diagnostics);
         }
     }
     state[id.0] = 2;
@@ -1151,6 +1151,10 @@ fn validate_body(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_body_statement(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -1270,6 +1274,10 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_block(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -1392,6 +1400,10 @@ fn validate_block(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_if(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -1530,6 +1542,10 @@ fn validate_if(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_while(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -2440,14 +2456,6 @@ fn validate_assignment(
         }
     };
 
-    if active_shared_authority_targets(bindings, value_context, target) {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::BorrowedAssignmentTarget,
-            location: target_location,
-        });
-        return None;
-    }
-
     let value_node = value_child(node);
     let value = validate_value(
         header,
@@ -2458,6 +2466,14 @@ fn validate_assignment(
         bindings,
         diagnostics,
     )?;
+
+    if active_shared_authority_targets(bindings, value_context, target) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::BorrowedAssignmentTarget,
+            location: target_location,
+        });
+        return None;
+    }
 
     let incoming_pointer_origin = if matches!(target_ty, Type::RawPointer(_)) {
         let origin = pointer_origin_for_value(&value, bindings)
@@ -3894,6 +3910,10 @@ fn validate_numeric_contract_selected_value(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_add(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -3951,6 +3971,10 @@ fn validate_float_add(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_sub(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -4008,6 +4032,10 @@ fn validate_float_sub(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_mul(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -4065,6 +4093,10 @@ fn validate_float_mul(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_div(
     header: &FunctionHeader,
     node: &SyntaxNode,
