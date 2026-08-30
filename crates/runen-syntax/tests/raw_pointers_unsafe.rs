@@ -38,7 +38,10 @@ fn parses_exact_raw_type_values_assignment_and_unsafe_wrapper_nodes() {
     assert_eq!(parsed.text(), source);
 
     let root = parsed.syntax();
-    let node_kinds = root.descendants().map(|node| node.kind()).collect::<Vec<_>>();
+    let node_kinds = root
+        .descendants()
+        .map(|node| node.kind())
+        .collect::<Vec<_>>();
     assert_eq!(
         node_kinds
             .iter()
@@ -87,7 +90,10 @@ fn parses_qualified_raw_pointee_and_contextual_keys_without_reserving_them() {
     );
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let root = parsed.syntax();
-    assert!(root.descendants().any(|node| node.kind() == SyntaxKind::QualifiedModuleMember));
+    assert!(
+        root.descendants()
+            .any(|node| node.kind() == SyntaxKind::QualifiedModuleMember)
+    );
 
     let contextual = root
         .descendants_with_tokens()
@@ -95,7 +101,11 @@ fn parses_qualified_raw_pointee_and_contextual_keys_without_reserving_them() {
         .filter(|token| token.text() == "move" || token.text() == "assign")
         .collect::<Vec<_>>();
     assert_eq!(contextual.len(), 2);
-    assert!(contextual.iter().all(|token| token.kind() == SyntaxKind::Ident));
+    assert!(
+        contextual
+            .iter()
+            .all(|token| token.kind() == SyntaxKind::Ident)
+    );
 }
 
 #[test]
@@ -103,7 +113,9 @@ fn raw_values_are_not_conditional_atoms_but_are_allowed_inside_call_arguments() 
     let direct = parse("fn f(p: raw Bool) { if raw move p { } }");
     assert!(!direct.errors().is_empty());
 
-    let nested = parse("fn pred(x: Bool) -> Bool { return x; } fn f(p: raw Bool) { if pred(raw move p) { } }");
+    let nested = parse(
+        "fn pred(x: Bool) -> Bool { return x; } fn f(p: raw Bool) { if pred(raw move p) { } }",
+    );
     assert!(nested.errors().is_empty(), "{:?}", nested.errors());
     assert!(
         nested
@@ -125,7 +137,10 @@ fn rejects_recursive_type_constructors_and_wrong_contextual_raw_keys() {
         "fn f() { unsafe; }",
     ] {
         let parsed = parse(source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly parsed cleanly: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly parsed cleanly: {source}"
+        );
     }
 }
 
