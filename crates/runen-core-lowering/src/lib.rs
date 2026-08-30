@@ -528,7 +528,7 @@ impl<'a> FunctionLowerer<'a> {
             name: self.function.name.clone(),
             parameters: self.parameter_locals,
             result,
-            shared_reference_result_origin: None,
+            shared_reference_result_origin: self.function.shared_reference_result_origin,
             body: core::Body {
                 locals: self.locals,
                 loans: Vec::new(),
