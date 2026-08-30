@@ -1009,7 +1009,7 @@ fn visit_record(
                 location: field.location,
             });
         } else if state[target.0] == 0 {
-            visit_record(target, records, &mut state, diagnostics);
+            visit_record(target, records, state, diagnostics);
         }
     }
     state[id.0] = 2;
