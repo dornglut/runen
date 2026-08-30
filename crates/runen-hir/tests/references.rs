@@ -112,20 +112,144 @@ fn accepts_intrinsic_and_selected_record_referents_but_rejects_nonduplicable_rec
 }
 
 #[test]
-fn restricts_shared_reference_types_to_parameters_and_immutable_locals() {
-    let result = compile("fn f(x: I64) -> &I64 { return &x; }")
-        .expect_err("Shared-reference result type is outside the first source slice");
-    assert!(has_diagnostic(&result, |kind| kind
-        == DiagnosticKind::SharedReferenceResult));
+fn shared_reference_result_requires_unique_exact_parameter_origin() {
+    let missing = compile("fn f(x: I64) -> &I64 { return &x; }")
+        .expect_err("Shared-reference result without an exact Shared parameter must be rejected");
+    assert!(has_diagnostic(&missing, |kind| kind
+        == DiagnosticKind::MissingSharedReferenceResultOrigin));
+
+    let ambiguous = compile("fn f(a: &I64, b: &I64) -> &I64 { return a; }")
+        .expect_err("multiple exact Shared parameters leave the elided result origin ambiguous");
+    assert!(has_diagnostic(&ambiguous, |kind| kind
+        == DiagnosticKind::AmbiguousSharedReferenceResultOrigin));
 
     let field = compile("record Holder { value: &I64 }")
-        .expect_err("Shared-reference record field is outside the first source slice");
+        .expect_err("Shared-reference record field remains outside the source slice");
     assert!(has_diagnostic(&field, |kind| kind == DiagnosticKind::SharedReferenceField));
 
     let mutable = compile("fn f(x: I64) { let mut r: &I64 = &x; }")
-        .expect_err("Shared-reference ordinary local must be immutable");
+        .expect_err("Shared-reference ordinary local must remain immutable");
     assert!(has_diagnostic(&mutable, |kind| kind
         == DiagnosticKind::MutableSharedReferenceLocal));
+}
+
+#[test]
+fn shared_reference_result_retains_direct_nonzero_and_local_duplicate_origins() {
+    let hir = compile(
+        "fn direct(r: &I64) -> &I64 { return r; }\
+         fn nonzero(x: I64, r: &I64) -> &I64 { return r; }\
+         fn local(r: &I64) -> &I64 { let s: &I64 = r; return s; }",
+    )
+    .expect("unique exact Shared parameter origins must validate");
+
+    assert_eq!(function(&hir, "direct").shared_reference_result_origin, Some(0));
+    assert_eq!(function(&hir, "nonzero").shared_reference_result_origin, Some(1));
+    let local = function(&hir, "local");
+    assert_eq!(local.shared_reference_result_origin, Some(0));
+    let Statement::Local { initializer, .. } = &local.body.statements[0] else {
+        panic!("expected copied Shared-reference local");
+    };
+    assert!(matches!(
+        initializer.kind,
+        ValueKind::BindingUse {
+            binding,
+            ownership: OwnedUse::Duplicate,
+        } if binding == local.parameters[0].binding
+    ));
+}
+
+#[test]
+fn shared_reference_result_origin_composes_through_nested_recursive_and_mutual_calls() {
+    let hir = compile(
+        "fn inner(r: &I64) -> &I64 { return r; }\
+         fn outer(r: &I64) -> &I64 { return inner(r); }\
+         fn recursive(r: &I64) -> &I64 { return recursive(r); }\
+         fn left(r: &I64) -> &I64 { return right(r); }\
+         fn right(r: &I64) -> &I64 { return left(r); }",
+    )
+    .expect("call summaries must compose Shared result provenance without body expansion");
+
+    for name in ["inner", "outer", "recursive", "left", "right"] {
+        assert_eq!(function(&hir, name).shared_reference_result_origin, Some(0));
+    }
+
+    let outer = function(&hir, "outer");
+    let returned = outer
+        .body
+        .terminal_return
+        .as_ref()
+        .and_then(|returned| returned.value.as_ref())
+        .expect("outer returns the nested call result");
+    assert!(matches!(returned.kind, ValueKind::DirectCall { .. }));
+
+    let recursive = function(&hir, "recursive");
+    let returned = recursive
+        .body
+        .terminal_return
+        .as_ref()
+        .and_then(|returned| returned.value.as_ref())
+        .expect("recursive function returns its recursive call result");
+    assert!(matches!(
+        returned.kind,
+        ValueKind::DirectCall { function, .. } if function == recursive.id
+    ));
+}
+
+#[test]
+fn shared_reference_result_rejects_fresh_and_wrong_composed_origins() {
+    for source in [
+        "fn f(r: &I64, x: I64) -> &I64 { return &x; }",
+        "fn f(r: &I64, x: I64) -> &I64 { let s: &I64 = &x; return s; }",
+        "fn id(r: &I64) -> &I64 { return r; }\
+         fn f(r: &I64, x: I64) -> &I64 { return id(&x); }",
+    ] {
+        let errors = compile(source)
+            .expect_err("Shared result identity must match the advertised parameter origin");
+        assert!(
+            has_diagnostic(&errors, |kind| kind
+                == DiagnosticKind::SharedReferenceResultOriginMismatch),
+            "missing Shared result origin mismatch: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn returned_call_result_local_preserves_caller_target_protection() {
+    let errors = compile(
+        "fn id(r: &I64) -> &I64 { return r; }\
+         fn f(seed: I64, replacement: I64) {\
+             let mut x: I64 = seed;\
+             let returned: &I64 = id(&x);\
+             x = replacement;\
+         }",
+    )
+    .expect_err("stored returned Shared carrier must keep protecting its caller-local target");
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::BorrowedAssignmentTarget));
+}
+
+#[test]
+fn exported_shared_reference_results_preserve_nominal_accessibility() {
+    let hir = compile(
+        "export record copy Public { value: I64 }\
+         export fn id(r: &Public) -> &Public { return r; }",
+    )
+    .expect("exported Shared result may expose an exported duplicable nominal referent");
+    assert_eq!(function(&hir, "id").shared_reference_result_origin, Some(0));
+
+    let errors = compile(
+        "record copy Hidden { value: I64 }\
+         export fn id(r: &Hidden) -> &Hidden { return r; }",
+    )
+    .expect_err("private nominal referent must not leak through parameter or result signature");
+    let accessibility_errors = errors
+        .iter()
+        .filter(|error| error.kind == DiagnosticKind::PrivateTypeInExportedSignature)
+        .count();
+    assert_eq!(
+        accessibility_errors, 2,
+        "both exported parameter and exported Shared result accessibility must be checked"
+    );
 }
 
 #[test]
