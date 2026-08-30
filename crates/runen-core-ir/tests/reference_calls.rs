@@ -27,6 +27,7 @@ fn shared_reference_parameter_reads_suspended_caller_storage() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -68,6 +69,7 @@ fn shared_reference_parameter_reads_suspended_caller_storage() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -100,6 +102,7 @@ fn exclusive_replace_parameter_may_move_then_restore_before_return() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -141,6 +144,7 @@ fn exclusive_replace_parameter_may_move_then_restore_before_return() {
         name: "round_trip".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("reference", reference_ty, false),
@@ -183,6 +187,7 @@ fn reference_result_type_remains_outside_the_transfer_boundary() {
         name: "invalid_reference_result".into(),
         parameters: Vec::new(),
         result: Some(shared_i64),
+        shared_reference_result_origin: None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -225,6 +230,7 @@ fn reference_parameter_referent_may_not_contain_raw_or_nested_reference_leaves()
             name: "invalid_reference_parameter".into(),
             parameters: vec![LocalId(0)],
             result: None,
+            shared_reference_result_origin: None,
             body: body(
                 vec![LocalDecl::new("parameter", invalid_parameter_type, false)],
                 vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -252,6 +258,7 @@ fn call_result_destination_is_admitted_before_argument_effects() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![
@@ -275,6 +282,7 @@ fn call_result_destination_is_admitted_before_argument_effects() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![BasicBlock::new(
@@ -311,6 +319,7 @@ fn call_arguments_are_left_to_right_before_final_reference_admission() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -349,6 +358,7 @@ fn call_arguments_are_left_to_right_before_final_reference_admission() {
         name: "consume_then_borrow".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("value", i64_ty, false),
@@ -388,6 +398,7 @@ fn call_retains_all_arguments_before_checking_full_reference_authority() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -431,6 +442,7 @@ fn call_retains_all_arguments_before_checking_full_reference_authority() {
         name: "borrow_both".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("child", shared_i64, false),
@@ -465,6 +477,7 @@ fn reference_parameter_return_requires_live_external_referent_but_fault_does_not
         name: "invalid_return".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("reference", replace_i64, false),
@@ -490,6 +503,7 @@ fn reference_parameter_return_requires_live_external_referent_but_fault_does_not
         name: "fault".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("reference", replace_i64, false),
@@ -534,6 +548,7 @@ fn temporary_child_borrowed_call_restores_parent_authority() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -590,6 +605,7 @@ fn temporary_child_borrowed_call_restores_parent_authority() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -631,6 +647,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -687,6 +704,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
         name: "middle".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![
@@ -707,6 +725,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
         name: "inner".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
