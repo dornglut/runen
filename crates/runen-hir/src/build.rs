@@ -66,6 +66,7 @@ struct FunctionHeader {
     accessibility: Accessibility,
     parameters: Vec<Parameter>,
     result: Option<Type>,
+    shared_reference_result_origin: Option<usize>,
     body: SyntaxNode,
     location: SourceLocation,
 }
@@ -78,7 +79,7 @@ struct StructuralOwnershipState {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReferenceOrigin {
     Local(BindingId),
-    External,
+    Parameter(usize),
 }
 
 #[derive(Debug, Clone)]
@@ -223,6 +224,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             accessibility: header.accessibility,
             parameters: header.parameters.clone(),
             result: header.result,
+            shared_reference_result_origin: header.shared_reference_result_origin,
             body,
             location: header.location,
         });
@@ -625,6 +627,7 @@ fn resolve_function_headers(
             }
         }
 
+        let mut shared_reference_result_origin = None;
         let result = function
             .node
             .children()
@@ -638,25 +641,41 @@ fn resolve_function_headers(
                     modules,
                     imports,
                     diagnostics,
-                );
-                if let Some(ty) = ty {
-                    if matches!(ty, Type::SharedReference(_)) {
-                        diagnostics.push(Diagnostic {
-                            kind: DiagnosticKind::SharedReferenceResult,
-                            location: location(function.unit, &type_node),
-                        });
-                        return None;
-                    }
-                    validate_exported_signature_type(
-                        function.accessibility,
-                        ty,
-                        records,
-                        function.unit,
-                        &type_node,
-                        diagnostics,
-                    );
+                )?;
+                if !validate_shared_reference_referent(
+                    ty,
+                    records,
+                    location(function.unit, &type_node),
+                    diagnostics,
+                ) {
+                    return None;
                 }
-                ty
+                validate_exported_signature_type(
+                    function.accessibility,
+                    ty,
+                    records,
+                    function.unit,
+                    &type_node,
+                    diagnostics,
+                );
+                if matches!(ty, Type::SharedReference(_)) {
+                    let mut matching = parameters
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, parameter)| parameter.ty == ty);
+                    match (matching.next(), matching.next()) {
+                        (None, _) => diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
+                            location: location(function.unit, &type_node),
+                        }),
+                        (Some((slot, _)), None) => shared_reference_result_origin = Some(slot),
+                        (Some(_), Some(_)) => diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
+                            location: location(function.unit, &type_node),
+                        }),
+                    }
+                }
+                Some(ty)
             });
         let body = direct_child(&function.node, SyntaxKind::Body);
         headers.push(FunctionHeader {
@@ -667,6 +686,7 @@ fn resolve_function_headers(
             accessibility: function.accessibility,
             parameters,
             result,
+            shared_reference_result_origin,
             body,
             location: function.location,
         });
@@ -964,7 +984,7 @@ fn validate_body(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Body {
     let mut bindings = BTreeMap::<String, BindingState>::new();
-    for parameter in &header.parameters {
+    for (slot, parameter) in header.parameters.iter().enumerate() {
         bindings.insert(
             parameter.name.clone(),
             BindingState {
@@ -973,7 +993,7 @@ fn validate_body(
                 mutability: AssignmentMutability::Immutable,
                 ownership: StructuralOwnershipState::default(),
                 reference_origin: matches!(parameter.ty, Type::SharedReference(_))
-                    .then_some(ReferenceOrigin::External),
+                    .then_some(ReferenceOrigin::Parameter(slot)),
             },
         );
     }
@@ -1653,7 +1673,7 @@ fn validate_local(
         return None;
     }
 
-    let reference_origin = reference_origin_for_value(&initializer, bindings);
+    let reference_origin = reference_origin_for_value(&initializer, bindings, context);
     debug_assert_eq!(
         reference_origin.is_some(),
         matches!(ty, Type::SharedReference(_))
@@ -1684,6 +1704,7 @@ fn validate_local(
 fn reference_origin_for_value(
     value: &Value,
     bindings: &BTreeMap<String, BindingState>,
+    context: &BodyResolutionContext<'_>,
 ) -> Option<ReferenceOrigin> {
     match &value.kind {
         ValueKind::SharedBorrowRoot { target } => Some(ReferenceOrigin::Local(*target)),
@@ -1691,6 +1712,19 @@ fn reference_origin_for_value(
             binding_state_by_id(bindings, *binding)
                 .expect("validated reference binding remains active")
                 .reference_origin
+        }
+        ValueKind::DirectCall {
+            function,
+            arguments,
+        } if matches!(value.ty, Type::SharedReference(_)) => {
+            let target = &context.headers[function.0];
+            let slot = target
+                .shared_reference_result_origin
+                .expect("validated Shared-reference call result retains an origin slot");
+            let argument = arguments
+                .get(slot)
+                .expect("validated call retains the advertised origin argument");
+            reference_origin_for_value(argument, bindings, context)
         }
         _ => None,
     }
@@ -2234,6 +2268,16 @@ fn validate_return(
         }
         (_, None) => None,
     };
+
+    if let (Some(origin), Some(value)) = (header.shared_reference_result_origin, value.as_ref())
+        && reference_origin_for_value(value, bindings, context)
+            != Some(ReferenceOrigin::Parameter(origin))
+    {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::SharedReferenceResultOriginMismatch,
+            location: value.location,
+        });
+    }
 
     Return {
         value,
