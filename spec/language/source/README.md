@@ -5,6 +5,7 @@
 - [Names and modules](names-modules.md)
 - [Type foundation](types.md)
 - [Shared references](references.md)
+- [Raw pointers and unsafe admission](raw-pointers-unsafe.md)
 - [Literal semantics](literals.md)
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
