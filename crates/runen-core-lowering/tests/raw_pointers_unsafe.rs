@@ -450,3 +450,21 @@ fn lowering_rejects_malformed_raw_pointer_interfaces_instead_of_widening_source(
         ))
     );
 }
+
+#[test]
+fn pointer_retarget_and_copy_preserve_exact_runtime_target_provenance() {
+    let report = execute_source(
+        "fn entry() -> I64 {\
+             let x: I64 = 11;\
+             let y: I64 = 17;\
+             let mut p: raw I64 = raw &x;\
+             p = raw &y;\
+             let q: raw I64 = p;\
+             unsafe { raw assign q = 29; }\
+             return x + y;\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(40)));
+}
