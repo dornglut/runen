@@ -142,8 +142,14 @@ fn shared_reference_result_retains_direct_nonzero_and_local_duplicate_origins() 
     )
     .expect("unique exact Shared parameter origins must validate");
 
-    assert_eq!(function(&hir, "direct").shared_reference_result_origin, Some(0));
-    assert_eq!(function(&hir, "nonzero").shared_reference_result_origin, Some(1));
+    assert_eq!(
+        function(&hir, "direct").shared_reference_result_origin,
+        Some(0)
+    );
+    assert_eq!(
+        function(&hir, "nonzero").shared_reference_result_origin,
+        Some(1)
+    );
     let local = function(&hir, "local");
     assert_eq!(local.shared_reference_result_origin, Some(0));
     let Statement::Local { initializer, .. } = &local.body.statements[0] else {
