@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use runen_core_ir::{
-    BasicBlockId, FunctionId, LocalId, Operand, Place, PlaceAccess, ScalarType,
-    Statement as CoreStatement, Terminator, TypeId, TypeKind, ValidatedProgram,
+    FunctionId, LocalId, Operand, PlaceAccess, ScalarType, Statement as CoreStatement, Terminator,
+    TypeId, TypeKind, ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
