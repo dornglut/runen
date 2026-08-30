@@ -2044,13 +2044,18 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(temporary)
             }
             hir::ValueKind::BindingUse { binding, ownership } => {
-                if matches!(
-                    value.ty,
-                    hir::Type::SharedReference(_) | hir::Type::RawPointer(_)
-                ) && *ownership != hir::OwnedUse::Duplicate
+                if matches!(value.ty, hir::Type::SharedReference(_))
+                    && *ownership != hir::OwnedUse::Duplicate
                 {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "reference or raw-pointer binding use is not a source duplication",
+                        "Shared-reference binding use is not a source duplication",
+                    ));
+                }
+                if matches!(value.ty, hir::Type::RawPointer(_))
+                    && *ownership != hir::OwnedUse::Duplicate
+                {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "raw-pointer binding use is not a source duplication",
                     ));
                 }
                 let source = self.binding(*binding)?;
