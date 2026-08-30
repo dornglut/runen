@@ -72,11 +72,13 @@ struct TypeMap {
 impl TypeMap {
     fn new(compilation: &hir::TypedCompilation) -> Result<Self, LoweringError> {
         let reference_types = collect_used_shared_reference_types(compilation);
+        let raw_pointer_types = collect_used_raw_pointer_types(compilation);
         let maximum_types = compilation
             .records
             .len()
             .checked_add(INTRINSICS.len())
             .and_then(|count| count.checked_add(reference_types.len()))
+            .and_then(|count| count.checked_add(raw_pointer_types.len()))
             .ok_or(LoweringError::RepresentationLimit("Core type identity"))?;
         if index_u32(maximum_types - 1, "Core type identity").is_err() {
             return Err(LoweringError::RepresentationLimit("Core type identity"));
@@ -97,6 +99,9 @@ impl TypeMap {
         }
         for referent in reference_types {
             map.lower_shared_reference(referent)?;
+        }
+        for pointee in raw_pointer_types {
+            map.lower_raw_pointer(pointee)?;
         }
         Ok(map)
     }
@@ -132,6 +137,11 @@ impl TypeMap {
                 hir::Type::SharedReference(_) => {
                     return Err(LoweringError::InvalidHirInvariant(
                         "HIR record field contains a Shared-reference type",
+                    ));
+                }
+                hir::Type::RawPointer(_) => {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "HIR record field contains a raw-pointer type",
                     ));
                 }
             };
@@ -177,6 +187,36 @@ impl TypeMap {
         Ok(mapped)
     }
 
+    fn lower_raw_pointer(
+        &mut self,
+        pointee: hir::RawPointerPointee,
+    ) -> Result<core::TypeId, LoweringError> {
+        let ty = hir::Type::RawPointer(pointee);
+        if let Some(mapped) = self.mapped.get(&ty) {
+            return Ok(*mapped);
+        }
+
+        let pointee_ty = self.get(pointee.ty())?;
+        let pointee_name = self
+            .types
+            .get(pointee_ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "raw-pointer pointee is absent from the Core type table",
+            ))?
+            .name
+            .clone();
+        let mapped = self.types.push(core::TypeDef::raw_pointer(
+            format!("raw {pointee_name}"),
+            pointee_ty,
+        ));
+        if self.mapped.insert(ty, mapped).is_some() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "duplicate HIR raw-pointer type mapping",
+            ));
+        }
+        Ok(mapped)
+    }
+
     fn get(&self, ty: hir::Type) -> Result<core::TypeId, LoweringError> {
         self.mapped
             .get(&ty)
@@ -184,6 +224,21 @@ impl TypeMap {
             .ok_or(LoweringError::InvalidHirInvariant(
                 "HIR type is absent from the lowering type map",
             ))
+    }
+
+    fn raw_pointer_pointee(&self, ty: core::TypeId) -> Result<core::TypeId, LoweringError> {
+        let definition = self
+            .types
+            .get(ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "lowered Core type is absent from the type table",
+            ))?;
+        match &definition.kind {
+            core::TypeKind::Scalar(core::ScalarType::RawPointer(pointee)) => Ok(*pointee),
+            _ => Err(LoweringError::InvalidHirInvariant(
+                "HIR raw-pointer binding does not lower to a Core raw-pointer type",
+            )),
+        }
     }
 
     fn project_type(
@@ -334,6 +389,55 @@ fn collect_statement_shared_reference_types(
             }
             hir::Statement::RecordDestructure { .. }
             | hir::Statement::Assignment { .. }
+            | hir::Statement::RawAssign { .. }
+            | hir::Statement::Call { .. }
+            | hir::Statement::Fault { .. }
+            | hir::Statement::Break { .. }
+            | hir::Statement::Continue { .. } => {}
+        }
+    }
+}
+
+fn collect_used_raw_pointer_types(
+    compilation: &hir::TypedCompilation,
+) -> BTreeSet<hir::RawPointerPointee> {
+    let mut pointees = BTreeSet::new();
+    for function in &compilation.functions {
+        collect_statement_raw_pointer_types(&function.body.statements, &mut pointees);
+    }
+    pointees
+}
+
+fn collect_statement_raw_pointer_types(
+    statements: &[hir::Statement],
+    pointees: &mut BTreeSet<hir::RawPointerPointee>,
+) {
+    for statement in statements {
+        match statement {
+            hir::Statement::Local { ty, .. } => {
+                if let hir::Type::RawPointer(pointee) = ty {
+                    pointees.insert(*pointee);
+                }
+            }
+            hir::Statement::Block(block) => {
+                collect_statement_raw_pointer_types(&block.statements, pointees);
+            }
+            hir::Statement::If {
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_statement_raw_pointer_types(&then_block.statements, pointees);
+                if let Some(else_block) = else_block {
+                    collect_statement_raw_pointer_types(&else_block.statements, pointees);
+                }
+            }
+            hir::Statement::While { body, .. } => {
+                collect_statement_raw_pointer_types(&body.statements, pointees);
+            }
+            hir::Statement::RecordDestructure { .. }
+            | hir::Statement::Assignment { .. }
+            | hir::Statement::RawAssign { .. }
             | hir::Statement::Call { .. }
             | hir::Statement::Fault { .. }
             | hir::Statement::Break { .. }
@@ -392,6 +496,24 @@ impl<'a> FunctionLowerer<'a> {
         functions: &'a BTreeMap<hir::FunctionId, core::FunctionId>,
         function: &'a hir::Function,
     ) -> Result<Self, LoweringError> {
+        if function
+            .parameters
+            .iter()
+            .any(|parameter| matches!(parameter.ty, hir::Type::RawPointer(_)))
+        {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR function parameter contains a raw-pointer type",
+            ));
+        }
+        if function
+            .result
+            .is_some_and(|result| matches!(result, hir::Type::RawPointer(_)))
+        {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR function result contains a raw-pointer type",
+            ));
+        }
+
         let mut lowerer = Self {
             compilation,
             types,
@@ -471,6 +593,7 @@ impl<'a> FunctionLowerer<'a> {
                     self.register_source_locals(&body.statements)?;
                 }
                 hir::Statement::Assignment { .. }
+                | hir::Statement::RawAssign { .. }
                 | hir::Statement::Call { .. }
                 | hir::Statement::Fault { .. }
                 | hir::Statement::Break { .. }
@@ -574,6 +697,9 @@ impl<'a> FunctionLowerer<'a> {
                         src: core::Operand::Move(core::Place::local(value).into()),
                     });
                 }
+                hir::Statement::RawAssign { pointer, value, .. } => {
+                    self.lower_raw_assign(*pointer, value)?;
+                }
                 hir::Statement::Call {
                     function,
                     arguments,
@@ -626,6 +752,7 @@ impl<'a> FunctionLowerer<'a> {
             | hir::Statement::Local { .. }
             | hir::Statement::RecordDestructure { .. }
             | hir::Statement::Assignment { .. }
+            | hir::Statement::RawAssign { .. }
             | hir::Statement::Call { .. } => true,
         }
     }
@@ -696,6 +823,37 @@ impl<'a> FunctionLowerer<'a> {
                 });
             }
         }
+        Ok(())
+    }
+
+    fn lower_raw_assign(
+        &mut self,
+        pointer: hir::BindingId,
+        value: &hir::Value,
+    ) -> Result<(), LoweringError> {
+        let pointer_local = self.binding(pointer)?;
+        let pointer_ty = self.local_type(pointer_local)?;
+        let pointee_ty = self.types.raw_pointer_pointee(pointer_ty)?;
+
+        let snapshot = self.push_core_temporary(pointer_ty)?;
+        self.push_statement(core::Statement::Init {
+            dst: core::Place::local(snapshot),
+            src: core::Operand::Copy(core::Place::local(pointer_local).into()),
+        });
+
+        let value_local = self.lower_value(value)?;
+        if self.local_type(value_local)? != pointee_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "raw assignment RHS type does not match pointer pointee",
+            ));
+        }
+        self.push_statement(core::Statement::RawAssign {
+            pointer: core::Place::local(snapshot).into(),
+            src: core::Operand::Move(core::Place::local(value_local).into()),
+        });
+        self.push_statement(core::Statement::Drop {
+            place: core::Place::local(snapshot).into(),
+        });
         Ok(())
     }
 
@@ -1818,6 +1976,11 @@ impl<'a> FunctionLowerer<'a> {
                             "Shared-dereference HIR value has a nested-reference result type",
                         ));
                     }
+                    hir::Type::RawPointer(_) => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "Shared-dereference HIR value has a raw-pointer result type",
+                        ));
+                    }
                 };
                 if !self.compilation.type_is_duplicable(value.ty) {
                     return Err(LoweringError::InvalidHirInvariant(
@@ -1842,12 +2005,57 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(temporary)
             }
+            hir::ValueKind::RawAddressRoot { target } => {
+                let hir::Type::RawPointer(pointee) = value.ty else {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "raw-address HIR value does not have a raw-pointer type",
+                    ));
+                };
+                let target_local = self.binding(*target)?;
+                let pointee_ty = self.types.get(pointee.ty())?;
+                if self.local_type(target_local)? != pointee_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "raw-address target type does not match its pointer pointee",
+                    ));
+                }
+
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::AddressOf(core::Place::local(target_local).into()),
+                });
+                Ok(temporary)
+            }
+            hir::ValueKind::RawMove { pointer } => {
+                let pointer_local = self.binding(*pointer)?;
+                let pointer_ty = self.local_type(pointer_local)?;
+                let pointee_ty = self.types.raw_pointer_pointee(pointer_ty)?;
+                if self.types.get(value.ty)? != pointee_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "raw-move HIR result type does not match pointer pointee",
+                    ));
+                }
+
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::RawMove(core::Place::local(pointer_local).into()),
+                });
+                Ok(temporary)
+            }
             hir::ValueKind::BindingUse { binding, ownership } => {
                 if matches!(value.ty, hir::Type::SharedReference(_))
                     && *ownership != hir::OwnedUse::Duplicate
                 {
                     return Err(LoweringError::InvalidHirInvariant(
                         "Shared-reference binding use is not a source duplication",
+                    ));
+                }
+                if matches!(value.ty, hir::Type::RawPointer(_))
+                    && *ownership != hir::OwnedUse::Duplicate
+                {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "raw-pointer binding use is not a source duplication",
                     ));
                 }
                 let source = self.binding(*binding)?;
@@ -2079,6 +2287,10 @@ impl<'a> FunctionLowerer<'a> {
 
     fn push_temporary(&mut self, ty: hir::Type) -> Result<core::LocalId, LoweringError> {
         let ty = self.types.get(ty)?;
+        self.push_core_temporary(ty)
+    }
+
+    fn push_core_temporary(&mut self, ty: core::TypeId) -> Result<core::LocalId, LoweringError> {
         let id = self.next_local_id()?;
         let name = format!("$tmp{}", self.next_temp);
         self.next_temp =

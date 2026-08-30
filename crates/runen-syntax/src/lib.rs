@@ -132,6 +132,12 @@ pub enum SyntaxKind {
     Amp,
     SharedBorrowValue,
     SharedDereferenceValue,
+    KwRaw,
+    KwUnsafe,
+    RawAddressOfValue,
+    RawMoveValue,
+    RawAssignStatement,
+    UnsafeBlockStatement,
 }
 
 impl SyntaxKind {
@@ -282,6 +288,12 @@ impl Language for RunenLanguage {
             107 => SyntaxKind::Amp,
             108 => SyntaxKind::SharedBorrowValue,
             109 => SyntaxKind::SharedDereferenceValue,
+            110 => SyntaxKind::KwRaw,
+            111 => SyntaxKind::KwUnsafe,
+            112 => SyntaxKind::RawAddressOfValue,
+            113 => SyntaxKind::RawMoveValue,
+            114 => SyntaxKind::RawAssignStatement,
+            115 => SyntaxKind::UnsafeBlockStatement,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -470,6 +482,8 @@ pub(crate) fn reserved_identifier_kind(key: &str) -> Option<SyntaxKind> {
         "continue" => Some(SyntaxKind::KwContinue),
         "import" => Some(SyntaxKind::KwImport),
         "export" => Some(SyntaxKind::KwExport),
+        "raw" => Some(SyntaxKind::KwRaw),
+        "unsafe" => Some(SyntaxKind::KwUnsafe),
         "true" => Some(SyntaxKind::KwTrue),
         "false" => Some(SyntaxKind::KwFalse),
         "Bool" => Some(SyntaxKind::TyBool),

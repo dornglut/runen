@@ -132,12 +132,31 @@ impl ReferenceReferent {
     }
 }
 
+/// Exact non-pointer pointee identity admitted by the first raw-pointer HIR slice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum RawPointerPointee {
+    Intrinsic(IntrinsicType),
+    Record(RecordId),
+}
+
+impl RawPointerPointee {
+    /// The ordinary source type denoted by this non-recursive pointee identity.
+    #[must_use]
+    pub const fn ty(self) -> Type {
+        match self {
+            Self::Intrinsic(intrinsic) => Type::Intrinsic(intrinsic),
+            Self::Record(record) => Type::Record(record),
+        }
+    }
+}
+
 /// Resolved represented source type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type {
     Intrinsic(IntrinsicType),
     Record(RecordId),
     SharedReference(ReferenceReferent),
+    RawPointer(RawPointerPointee),
 }
 
 /// Retained source-semantic owned-value duplicability for one nominal record.
@@ -229,7 +248,7 @@ pub struct Record {
 
 pub(crate) fn type_is_duplicable_in_records(ty: Type, records: &[Record]) -> bool {
     match ty {
-        Type::Intrinsic(_) | Type::SharedReference(_) => true,
+        Type::Intrinsic(_) | Type::SharedReference(_) | Type::RawPointer(_) => true,
         Type::Record(record) => records[record.0].duplicability == Duplicability::Duplicable,
     }
 }
@@ -398,6 +417,12 @@ pub enum ValueKind {
     SharedDereferenceCopy {
         reference: BindingId,
     },
+    RawAddressRoot {
+        target: BindingId,
+    },
+    RawMove {
+        pointer: BindingId,
+    },
     BindingUse {
         binding: BindingId,
         ownership: OwnedUse,
@@ -457,6 +482,11 @@ pub enum Statement {
     },
     Assignment {
         target: BindingId,
+        value: Value,
+        location: SourceLocation,
+    },
+    RawAssign {
+        pointer: BindingId,
         value: Value,
         location: SourceLocation,
     },
@@ -572,16 +602,25 @@ pub enum DiagnosticKind {
     RecordContainmentCycle,
     InvalidRecordDuplicabilitySelection,
     SharedReferenceField,
+    RawPointerField,
+    RawPointerParameter,
+    RawPointerResult,
     MissingSharedReferenceResultOrigin,
     AmbiguousSharedReferenceResultOrigin,
     SharedReferenceResultOriginMismatch,
     MutableSharedReferenceLocal,
     InvalidSharedReferenceReferent { referent: Type },
+    InvalidRawPointerPointee { pointee: Type },
     DuplicateParameter,
     LocalShadowing,
     ExpectedValueBinding,
     UnavailableBinding,
     ExpectedSharedReference,
+    ExpectedRawPointer,
+    RawPointerTargetExtentMismatch,
+    UnsafeOperationOutsideUnsafeBlock,
+    RawMoveTargetUnavailable,
+    RawTargetSharedAuthorityConflict,
     BorrowedAssignmentTarget,
     ImmutableAssignmentTarget,
     ExpectedFunction,
@@ -612,11 +651,15 @@ pub enum DiagnosticKind {
     ResultCallUsedAsStatement,
     BooleanConjunctionOwnershipMismatch,
     ConditionalOwnershipMismatch,
+    ConditionalPointerOriginMismatch,
     LoopOwnershipMismatch,
+    LoopPointerOriginMismatch,
     BreakOutsideLoop,
     ContinueOutsideLoop,
     BreakOwnershipMismatch,
     ContinueOwnershipMismatch,
+    BreakPointerOriginMismatch,
+    ContinuePointerOriginMismatch,
     UnreachableStatement,
     MissingResultReturn,
     ExpectedResultValue,

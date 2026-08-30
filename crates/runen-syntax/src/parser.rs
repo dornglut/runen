@@ -264,6 +264,8 @@ impl Parser<'_> {
                 }
                 Some(SyntaxKind::KwIf) => self.parse_if_statement(),
                 Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
+                Some(SyntaxKind::KwRaw) => self.parse_raw_assign_statement(),
+                Some(SyntaxKind::KwUnsafe) => self.parse_unsafe_block_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
@@ -338,6 +340,8 @@ impl Parser<'_> {
                 }
                 Some(SyntaxKind::KwIf) => self.parse_if_statement(),
                 Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
+                Some(SyntaxKind::KwRaw) => self.parse_raw_assign_statement(),
+                Some(SyntaxKind::KwUnsafe) => self.parse_unsafe_block_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
@@ -351,6 +355,14 @@ impl Parser<'_> {
         if !missing_close {
             self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
         }
+        self.builder.finish_node();
+    }
+
+    fn parse_unsafe_block_statement(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::UnsafeBlockStatement.into());
+        self.expect(SyntaxKind::KwUnsafe, ExpectedSyntax::Statement);
+        self.parse_block_statement();
         self.builder.finish_node();
     }
 
@@ -440,6 +452,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::KwContinue)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwWhile)
+                || self.at(SyntaxKind::KwRaw)
+                || self.at(SyntaxKind::KwUnsafe)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
@@ -468,6 +482,8 @@ impl Parser<'_> {
                         SyntaxKind::KwContinue,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwWhile,
+                        SyntaxKind::KwRaw,
+                        SyntaxKind::KwUnsafe,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                     ])
@@ -485,6 +501,8 @@ impl Parser<'_> {
                         SyntaxKind::KwContinue,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwWhile,
+                        SyntaxKind::KwRaw,
+                        SyntaxKind::KwUnsafe,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
@@ -518,6 +536,8 @@ impl Parser<'_> {
                         SyntaxKind::KwContinue,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwWhile,
+                        SyntaxKind::KwRaw,
+                        SyntaxKind::KwUnsafe,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
@@ -543,6 +563,8 @@ impl Parser<'_> {
                     SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
+                    SyntaxKind::KwRaw,
+                    SyntaxKind::KwUnsafe,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -616,6 +638,8 @@ impl Parser<'_> {
                     SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
+                    SyntaxKind::KwRaw,
+                    SyntaxKind::KwUnsafe,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -631,6 +655,23 @@ impl Parser<'_> {
     fn parse_assignment_statement(&mut self) {
         self.builder
             .start_node(SyntaxKind::AssignmentStatement.into());
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        self.parse_value();
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_raw_assign_statement(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::RawAssignStatement.into());
+        self.expect(SyntaxKind::KwRaw, ExpectedSyntax::Statement);
+        if self.at_contextual_ident(0, "assign") {
+            self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        } else {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+            self.recover_one();
+        }
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
         self.parse_value();
@@ -682,7 +723,9 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) {
         self.builder.start_node(SyntaxKind::TypeRef.into());
-        self.eat(SyntaxKind::Amp);
+        if !self.eat(SyntaxKind::KwRaw) {
+            self.eat(SyntaxKind::Amp);
+        }
         self.parse_reference_referent_type();
         self.builder.finish_node();
     }
@@ -788,6 +831,9 @@ impl Parser<'_> {
             }
             Some(SyntaxKind::Star) if matches!(context, ValueContext::Ordinary) => {
                 self.parse_shared_dereference_value();
+            }
+            Some(SyntaxKind::KwRaw) if matches!(context, ValueContext::Ordinary) => {
+                self.parse_raw_value();
             }
             Some(SyntaxKind::At)
                 if matches!(context, ValueContext::Ordinary) && self.at_fast_selector_start() =>
@@ -896,6 +942,7 @@ impl Parser<'_> {
                             SyntaxKind::KwContinue,
                             SyntaxKind::KwIf,
                             SyntaxKind::KwWhile,
+                            SyntaxKind::KwUnsafe,
                             SyntaxKind::KwElse,
                             SyntaxKind::KwReturn,
                         ]) || self.at_any(TOP_LEVEL_STARTERS)
@@ -911,6 +958,7 @@ impl Parser<'_> {
                             SyntaxKind::KwContinue,
                             SyntaxKind::KwIf,
                             SyntaxKind::KwWhile,
+                            SyntaxKind::KwUnsafe,
                             SyntaxKind::KwReturn,
                         ]) || self.at_any(TOP_LEVEL_STARTERS)
                     }
@@ -920,6 +968,37 @@ impl Parser<'_> {
                 }
             }
         }
+    }
+
+    fn parse_raw_value(&mut self) {
+        debug_assert!(self.at(SyntaxKind::KwRaw));
+        match self.peek_nontrivia(1) {
+            Some(SyntaxKind::Amp) => self.parse_raw_address_of_value(),
+            Some(SyntaxKind::Ident) if self.at_contextual_ident(1, "move") => {
+                self.parse_raw_move_value();
+            }
+            _ => {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
+                self.recover_one();
+            }
+        }
+    }
+
+    fn parse_raw_address_of_value(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::RawAddressOfValue.into());
+        self.expect(SyntaxKind::KwRaw, ExpectedSyntax::Value);
+        self.expect(SyntaxKind::Amp, ExpectedSyntax::Value);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.builder.finish_node();
+    }
+
+    fn parse_raw_move_value(&mut self) {
+        self.builder.start_node(SyntaxKind::RawMoveValue.into());
+        self.expect(SyntaxKind::KwRaw, ExpectedSyntax::Value);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.builder.finish_node();
     }
 
     fn parse_shared_borrow_value(&mut self) {
@@ -1005,6 +1084,7 @@ impl Parser<'_> {
                 SyntaxKind::KwContinue,
                 SyntaxKind::KwIf,
                 SyntaxKind::KwWhile,
+                SyntaxKind::KwUnsafe,
                 SyntaxKind::KwElse,
                 SyntaxKind::KwReturn,
             ])
@@ -1115,6 +1195,8 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::KwContinue)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwWhile)
+                || self.at(SyntaxKind::KwRaw)
+                || self.at(SyntaxKind::KwUnsafe)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
@@ -1151,6 +1233,8 @@ impl Parser<'_> {
                         SyntaxKind::KwContinue,
                         SyntaxKind::KwIf,
                         SyntaxKind::KwWhile,
+                        SyntaxKind::KwRaw,
+                        SyntaxKind::KwUnsafe,
                         SyntaxKind::KwElse,
                         SyntaxKind::KwReturn,
                         SyntaxKind::KwImport,
@@ -1175,6 +1259,8 @@ impl Parser<'_> {
                     SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
+                    SyntaxKind::KwRaw,
+                    SyntaxKind::KwUnsafe,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -1220,6 +1306,7 @@ impl Parser<'_> {
                 || self.at(SyntaxKind::KwContinue)
                 || self.at(SyntaxKind::KwIf)
                 || self.at(SyntaxKind::KwWhile)
+                || self.at(SyntaxKind::KwUnsafe)
                 || self.at(SyntaxKind::KwElse)
                 || self.at(SyntaxKind::KwReturn)
                 || self.at_any(TOP_LEVEL_STARTERS)
@@ -1249,6 +1336,8 @@ impl Parser<'_> {
                     SyntaxKind::KwContinue,
                     SyntaxKind::KwIf,
                     SyntaxKind::KwWhile,
+                    SyntaxKind::KwRaw,
+                    SyntaxKind::KwUnsafe,
                     SyntaxKind::KwElse,
                     SyntaxKind::KwReturn,
                     SyntaxKind::KwImport,
@@ -1296,15 +1385,16 @@ impl Parser<'_> {
         self.peek_nontrivia_token(index).map(|token| token.kind)
     }
 
-    fn at_fast_selector_start(&self) -> bool {
-        if self.current() != Some(SyntaxKind::At) {
-            return false;
-        }
-        let Some(token) = self.peek_nontrivia_token(1) else {
+    fn at_contextual_ident(&self, index: usize, expected: &str) -> bool {
+        let Some(token) = self.peek_nontrivia_token(index) else {
             return false;
         };
         token.kind == SyntaxKind::Ident
-            && identifier_key(&self.source[token.start..token.end]).as_deref() == Some("fast")
+            && identifier_key(&self.source[token.start..token.end]).as_deref() == Some(expected)
+    }
+
+    fn at_fast_selector_start(&self) -> bool {
+        self.current() == Some(SyntaxKind::At) && self.at_contextual_ident(1, "fast")
     }
 
     fn at(&self, kind: SyntaxKind) -> bool {
@@ -1406,5 +1496,5 @@ const fn is_reference_referent_type_start(kind: SyntaxKind) -> bool {
 const fn value_start_in(kind: SyntaxKind, context: ValueContext) -> bool {
     kind.is_value_start()
         || (matches!(context, ValueContext::Ordinary)
-            && matches!(kind, SyntaxKind::Amp | SyntaxKind::Star))
+            && matches!(kind, SyntaxKind::Amp | SyntaxKind::Star | SyntaxKind::KwRaw))
 }

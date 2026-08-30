@@ -9,10 +9,10 @@ use crate::{
     Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
     BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
-    LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, Record, RecordFieldValue,
-    RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTransientCleanup,
-    ReferenceReferent, Return, SourceLocation, SourceUnit, Statement, Type, TypedCompilation,
-    Value, ValueKind, type_is_duplicable_in_records,
+    LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
+    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
+    RecordPatternTransientCleanup, ReferenceReferent, Return, SourceLocation, SourceUnit,
+    Statement, Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -89,6 +89,8 @@ struct BindingState {
     mutability: AssignmentMutability,
     ownership: StructuralOwnershipState,
     reference_origin: Option<ReferenceOrigin>,
+    pointer_origin: Option<BindingId>,
+    raw_pointer_target_domain: Option<BTreeSet<BindingId>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -151,6 +153,12 @@ impl BodyResolutionContext<'_> {
 struct ControlValidationContext {
     scopes: Vec<ScopeFrame>,
     loops: Vec<LoopTarget>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct ValueValidationContext {
+    unsafe_active: bool,
+    held_shared_targets: BTreeSet<BindingId>,
 }
 
 #[derive(Debug)]
@@ -499,6 +507,13 @@ fn resolve_records(
                 });
                 continue;
             }
+            if type_ref_is_raw_pointer(&type_node) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::RawPointerField,
+                    location: location(record.unit, &type_node),
+                });
+                continue;
+            }
             if let Some(ty) = resolve_type(
                 record.module,
                 record.unit,
@@ -600,6 +615,13 @@ fn resolve_function_headers(
                 imports,
                 diagnostics,
             ) {
+                if matches!(ty, Type::RawPointer(_)) {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::RawPointerParameter,
+                        location: location(function.unit, &type_node),
+                    });
+                    continue;
+                }
                 if !validate_shared_reference_referent(
                     ty,
                     records,
@@ -642,6 +664,13 @@ fn resolve_function_headers(
                     imports,
                     diagnostics,
                 )?;
+                if matches!(ty, Type::RawPointer(_)) {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::RawPointerResult,
+                        location: location(function.unit, &type_node),
+                    });
+                    return None;
+                }
                 if !validate_shared_reference_referent(
                     ty,
                     records,
@@ -706,8 +735,12 @@ fn validate_exported_signature_type(
         return;
     }
     let record = match ty {
-        Type::Record(record) | Type::SharedReference(ReferenceReferent::Record(record)) => record,
-        Type::Intrinsic(_) | Type::SharedReference(ReferenceReferent::Intrinsic(_)) => return,
+        Type::Record(record)
+        | Type::SharedReference(ReferenceReferent::Record(record))
+        | Type::RawPointer(RawPointerPointee::Record(record)) => record,
+        Type::Intrinsic(_)
+        | Type::SharedReference(ReferenceReferent::Intrinsic(_))
+        | Type::RawPointer(RawPointerPointee::Intrinsic(_)) => return,
     };
     if records[record.0].accessibility == Accessibility::ModulePrivate {
         diagnostics.push(Diagnostic {
@@ -738,10 +771,48 @@ fn validate_shared_reference_referent(
     }
 }
 
+fn raw_pointer_pointee_type_is_valid(ty: Type, records: &[Record]) -> bool {
+    match ty {
+        Type::Intrinsic(_) => true,
+        Type::Record(record) => records[record.0]
+            .fields
+            .iter()
+            .all(|field| raw_pointer_pointee_type_is_valid(field.ty, records)),
+        Type::SharedReference(_) | Type::RawPointer(_) => false,
+    }
+}
+
+fn validate_raw_pointer_pointee(
+    ty: Type,
+    records: &[Record],
+    type_location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> bool {
+    let Type::RawPointer(pointee) = ty else {
+        return true;
+    };
+    let pointee = pointee.ty();
+    if raw_pointer_pointee_type_is_valid(pointee, records) {
+        true
+    } else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::InvalidRawPointerPointee { pointee },
+            location: type_location,
+        });
+        false
+    }
+}
+
 fn type_ref_is_shared_reference(node: &SyntaxNode) -> bool {
     node.children_with_tokens()
         .filter_map(|element| element.into_token())
         .any(|token| token.kind() == SyntaxKind::Amp)
+}
+
+fn type_ref_is_raw_pointer(node: &SyntaxNode) -> bool {
+    node.children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::KwRaw)
 }
 
 fn resolve_type(
@@ -753,6 +824,8 @@ fn resolve_type(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
     let shared = type_ref_is_shared_reference(node);
+    let raw = type_ref_is_raw_pointer(node);
+    debug_assert!(!(shared && raw));
     let ordinary = if let Some(qualified) = node
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
@@ -771,7 +844,10 @@ fn resolve_type(
         let token = node
             .children_with_tokens()
             .filter_map(|element| element.into_token())
-            .find(|token| !token.kind().is_trivia() && token.kind() != SyntaxKind::Amp)
+            .find(|token| {
+                !token.kind().is_trivia()
+                    && !matches!(token.kind(), SyntaxKind::Amp | SyntaxKind::KwRaw)
+            })
             .expect("syntax-clean type reference contains one referent token");
         let intrinsic = match token.kind() {
             SyntaxKind::TyBool => Some(IntrinsicType::Bool),
@@ -826,11 +902,20 @@ fn resolve_type(
         let referent = match ordinary {
             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
             Type::Record(record) => ReferenceReferent::Record(record),
-            Type::SharedReference(_) => {
+            Type::SharedReference(_) | Type::RawPointer(_) => {
                 unreachable!("source reference type syntax is non-recursive")
             }
         };
         Some(Type::SharedReference(referent))
+    } else if raw {
+        let pointee = match ordinary {
+            Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
+            Type::Record(record) => RawPointerPointee::Record(record),
+            Type::SharedReference(_) | Type::RawPointer(_) => {
+                unreachable!("source raw-pointer type syntax is non-recursive")
+            }
+        };
+        Some(Type::RawPointer(pointee))
     } else {
         Some(ordinary)
     }
@@ -968,7 +1053,7 @@ fn record_duplicability_is_valid(
     let duplicable = records[id.0].fields.iter().all(|field| match field.ty {
         Type::Intrinsic(_) => true,
         Type::Record(target) => record_duplicability_is_valid(target, records, resolved),
-        Type::SharedReference(_) => false,
+        Type::SharedReference(_) | Type::RawPointer(_) => false,
     });
     resolved[id.0] = Some(duplicable);
     duplicable
@@ -994,6 +1079,8 @@ fn validate_body(
                 ownership: StructuralOwnershipState::default(),
                 reference_origin: matches!(parameter.ty, Type::SharedReference(_))
                     .then_some(ReferenceOrigin::Parameter(slot)),
+                pointer_origin: None,
+                raw_pointer_target_domain: None,
             },
         );
     }
@@ -1005,6 +1092,7 @@ fn validate_body(
         headers,
     };
     let mut control = ControlValidationContext::default();
+    let value_context = ValueValidationContext::default();
     let mut statements = Vec::new();
     let mut terminal_return = None;
     let mut has_normal_continuation = true;
@@ -1023,6 +1111,7 @@ fn validate_body(
                 header,
                 &node,
                 &context,
+                &value_context,
                 &mut bindings,
                 diagnostics,
             ));
@@ -1034,6 +1123,7 @@ fn validate_body(
             header,
             &node,
             &context,
+            &value_context,
             &mut bindings,
             &mut control,
             next_binding,
@@ -1061,27 +1151,47 @@ fn validate_body(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_body_statement(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     match node.kind() {
-        SyntaxKind::LocalDeclaration => {
-            validate_local(header, node, context, bindings, next_binding, diagnostics)
-        }
-        SyntaxKind::RecordDestructuringDeclaration => {
-            validate_record_destructure(header, node, context, bindings, next_binding, diagnostics)
-        }
+        SyntaxKind::LocalDeclaration => validate_local(
+            header,
+            node,
+            context,
+            value_context,
+            bindings,
+            next_binding,
+            diagnostics,
+        ),
+        SyntaxKind::RecordDestructuringDeclaration => validate_record_destructure(
+            header,
+            node,
+            context,
+            value_context,
+            bindings,
+            next_binding,
+            diagnostics,
+        ),
         SyntaxKind::AssignmentStatement => {
-            validate_assignment(header, node, context, bindings, diagnostics)
+            validate_assignment(header, node, context, value_context, bindings, diagnostics)
+        }
+        SyntaxKind::RawAssignStatement => {
+            validate_raw_assign(header, node, context, value_context, bindings, diagnostics)
         }
         SyntaxKind::CallStatement => {
-            validate_call_statement(header, node, context, bindings, diagnostics)
+            validate_call_statement(header, node, context, value_context, bindings, diagnostics)
         }
         SyntaxKind::FaultStatement => Some(Statement::Fault {
             location: location(header.unit, node),
@@ -1096,15 +1206,32 @@ fn validate_body_statement(
             header,
             node,
             context,
+            value_context,
             bindings,
             control,
             next_binding,
             diagnostics,
         )),
+        SyntaxKind::UnsafeBlockStatement => {
+            let block = direct_child(node, SyntaxKind::BlockStatement);
+            let mut unsafe_context = value_context.clone();
+            unsafe_context.unsafe_active = true;
+            Some(validate_block(
+                header,
+                &block,
+                context,
+                &unsafe_context,
+                bindings,
+                control,
+                next_binding,
+                diagnostics,
+            ))
+        }
         SyntaxKind::IfStatement => validate_if(
             header,
             node,
             context,
+            value_context,
             bindings,
             control,
             next_binding,
@@ -1114,6 +1241,7 @@ fn validate_body_statement(
             header,
             node,
             context,
+            value_context,
             bindings,
             control,
             next_binding,
@@ -1141,14 +1269,20 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
         | Statement::Local { .. }
         | Statement::RecordDestructure { .. }
         | Statement::Assignment { .. }
+        | Statement::RawAssign { .. }
         | Statement::Call { .. } => true,
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_block(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
@@ -1175,6 +1309,7 @@ fn validate_block(
                 header,
                 &child,
                 context,
+                value_context,
                 bindings,
                 diagnostics,
             ));
@@ -1186,6 +1321,7 @@ fn validate_block(
             header,
             &child,
             context,
+            value_context,
             bindings,
             control,
             next_binding,
@@ -1211,6 +1347,7 @@ fn validate_block(
                         .extend(bindings.iter().map(|binding| binding.binding));
                 }
                 Statement::Assignment { .. }
+                | Statement::RawAssign { .. }
                 | Statement::Call { .. }
                 | Statement::Fault { .. }
                 | Statement::Break { .. }
@@ -1263,10 +1400,15 @@ fn validate_block(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_if(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
@@ -1279,6 +1421,7 @@ fn validate_if(
         &condition_node,
         Type::Intrinsic(IntrinsicType::Bool),
         context,
+        value_context,
         &mut post_condition,
         diagnostics,
     )?;
@@ -1298,6 +1441,7 @@ fn validate_if(
         header,
         &then_node,
         context,
+        value_context,
         &mut then_bindings,
         control,
         next_binding,
@@ -1315,6 +1459,7 @@ fn validate_if(
             header,
             &else_node,
             context,
+            value_context,
             &mut else_bindings,
             control,
             next_binding,
@@ -1340,7 +1485,7 @@ fn validate_if(
 
     match (then_normal, else_normal) {
         (true, true) => {
-            let equal = post_condition.values().all(|enclosing| {
+            let ownership_equal = post_condition.values().all(|enclosing| {
                 let then_state = then_bindings
                     .values()
                     .find(|state| state.id == enclosing.id)
@@ -1355,14 +1500,31 @@ fn validate_if(
                 debug_assert_eq!(else_state.mutability, enclosing.mutability);
                 debug_assert_eq!(then_state.reference_origin, enclosing.reference_origin);
                 debug_assert_eq!(else_state.reference_origin, enclosing.reference_origin);
+                debug_assert_eq!(
+                    then_state.raw_pointer_target_domain,
+                    enclosing.raw_pointer_target_domain
+                );
+                debug_assert_eq!(
+                    else_state.raw_pointer_target_domain,
+                    enclosing.raw_pointer_target_domain
+                );
                 then_state.ownership == else_state.ownership
             });
+            let pointer_equal = pointer_origins_match_target(&then_bindings, &else_bindings);
 
-            if !equal {
+            if !ownership_equal {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ConditionalOwnershipMismatch,
                     location: location(header.unit, node),
                 });
+            }
+            if !pointer_equal {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ConditionalPointerOriginMismatch,
+                    location: location(header.unit, node),
+                });
+            }
+            if !ownership_equal || !pointer_equal {
                 return None;
             }
             *bindings = then_bindings;
@@ -1380,10 +1542,15 @@ fn validate_if(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_while(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
@@ -1397,6 +1564,7 @@ fn validate_while(
         &condition_node,
         Type::Intrinsic(IntrinsicType::Bool),
         context,
+        value_context,
         &mut post_condition,
         diagnostics,
     )?;
@@ -1417,6 +1585,7 @@ fn validate_while(
         header,
         &body_node,
         context,
+        value_context,
         &mut body_bindings,
         control,
         next_binding,
@@ -1437,7 +1606,7 @@ fn validate_while(
     }
 
     if body.has_normal_continuation {
-        let equal = loop_head.values().all(|head| {
+        let ownership_equal = loop_head.values().all(|head| {
             let body_state = body_bindings
                 .values()
                 .find(|state| state.id == head.id)
@@ -1445,14 +1614,27 @@ fn validate_while(
             debug_assert_eq!(body_state.ty, head.ty);
             debug_assert_eq!(body_state.mutability, head.mutability);
             debug_assert_eq!(body_state.reference_origin, head.reference_origin);
+            debug_assert_eq!(
+                body_state.raw_pointer_target_domain,
+                head.raw_pointer_target_domain
+            );
             body_state.ownership == head.ownership
         });
+        let pointer_equal = pointer_origins_match_target(&body_bindings, &loop_head);
 
-        if !equal {
+        if !ownership_equal {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::LoopOwnershipMismatch,
                 location: location(header.unit, node),
             });
+        }
+        if !pointer_equal {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::LoopPointerOriginMismatch,
+                location: location(header.unit, node),
+            });
+        }
+        if !ownership_equal || !pointer_equal {
             return None;
         }
     }
@@ -1492,7 +1674,9 @@ fn validate_loop_transfer(
     } else {
         &target.head
     };
-    if !ownership_matches_target(bindings, required) {
+    let ownership_equal = ownership_matches_target(bindings, required);
+    let pointer_equal = pointer_origins_match_target(bindings, required);
+    if !ownership_equal {
         diagnostics.push(Diagnostic {
             kind: if is_break {
                 DiagnosticKind::BreakOwnershipMismatch
@@ -1501,6 +1685,18 @@ fn validate_loop_transfer(
             },
             location: transfer_location,
         });
+    }
+    if !pointer_equal {
+        diagnostics.push(Diagnostic {
+            kind: if is_break {
+                DiagnosticKind::BreakPointerOriginMismatch
+            } else {
+                DiagnosticKind::ContinuePointerOriginMismatch
+            },
+            location: transfer_location,
+        });
+    }
+    if !ownership_equal || !pointer_equal {
         return None;
     }
 
@@ -1525,7 +1721,27 @@ fn ownership_matches_target(
     required.values().all(|expected| {
         binding_state_by_id(bindings, expected.id).is_some_and(|actual| {
             debug_assert_eq!(actual.reference_origin, expected.reference_origin);
+            debug_assert_eq!(
+                actual.raw_pointer_target_domain,
+                expected.raw_pointer_target_domain
+            );
             actual.ownership == expected.ownership
+        })
+    })
+}
+
+fn pointer_origins_match_target(
+    bindings: &BTreeMap<String, BindingState>,
+    required: &BTreeMap<String, BindingState>,
+) -> bool {
+    required.values().all(|expected| {
+        binding_state_by_id(bindings, expected.id).is_some_and(|actual| {
+            debug_assert_eq!(actual.ty, expected.ty);
+            debug_assert_eq!(
+                actual.raw_pointer_target_domain,
+                expected.raw_pointer_target_domain
+            );
+            actual.pointer_origin == expected.pointer_origin
         })
     })
 }
@@ -1558,6 +1774,13 @@ fn binding_state_by_id(
     binding: BindingId,
 ) -> Option<&BindingState> {
     bindings.values().find(|state| state.id == binding)
+}
+
+fn binding_state_by_id_mut(
+    bindings: &mut BTreeMap<String, BindingState>,
+    binding: BindingId,
+) -> Option<&mut BindingState> {
+    bindings.values_mut().find(|state| state.id == binding)
 }
 
 fn remaining_ownership_frontier(
@@ -1598,6 +1821,7 @@ fn validate_local(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1641,8 +1865,24 @@ fn validate_local(
                 return None;
             }
         }
+        if !validate_raw_pointer_pointee(
+            ty,
+            context.records,
+            location(header.unit, &type_node),
+            diagnostics,
+        ) {
+            return None;
+        }
         Some(ty)
     });
+    let raw_pointer_target_domain = declared
+        .is_some_and(|ty| matches!(ty, Type::RawPointer(_)))
+        .then(|| {
+            bindings
+                .values()
+                .map(|binding| binding.id)
+                .collect::<BTreeSet<_>>()
+        });
     let initializer = declared.and_then(|required| {
         let value_node = value_child(node);
         validate_value(
@@ -1650,6 +1890,7 @@ fn validate_local(
             &value_node,
             required,
             context,
+            value_context,
             bindings,
             diagnostics,
         )
@@ -1678,6 +1919,17 @@ fn validate_local(
         reference_origin.is_some(),
         matches!(ty, Type::SharedReference(_))
     );
+    let pointer_origin = pointer_origin_for_value(&initializer, bindings);
+    debug_assert_eq!(pointer_origin.is_some(), matches!(ty, Type::RawPointer(_)));
+    if let (Some(origin), Some(domain)) = (pointer_origin, raw_pointer_target_domain.as_ref())
+        && !domain.contains(&origin)
+    {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::RawPointerTargetExtentMismatch,
+            location: initializer.location,
+        });
+        return None;
+    }
 
     let binding = BindingId(*next_binding);
     *next_binding += 1;
@@ -1689,6 +1941,8 @@ fn validate_local(
             mutability,
             ownership: StructuralOwnershipState::default(),
             reference_origin,
+            pointer_origin,
+            raw_pointer_target_domain,
         },
     );
     Some(Statement::Local {
@@ -1728,6 +1982,32 @@ fn reference_origin_for_value(
         }
         _ => None,
     }
+}
+
+fn pointer_origin_for_value(
+    value: &Value,
+    bindings: &BTreeMap<String, BindingState>,
+) -> Option<BindingId> {
+    match &value.kind {
+        ValueKind::RawAddressRoot { target } => Some(*target),
+        ValueKind::BindingUse { binding, .. } if matches!(value.ty, Type::RawPointer(_)) => {
+            binding_state_by_id(bindings, *binding)
+                .expect("validated raw-pointer binding remains active")
+                .pointer_origin
+        }
+        _ => None,
+    }
+}
+
+fn active_shared_authority_targets(
+    bindings: &BTreeMap<String, BindingState>,
+    value_context: &ValueValidationContext,
+    target: BindingId,
+) -> bool {
+    value_context.held_shared_targets.contains(&target)
+        || bindings
+            .values()
+            .any(|binding| binding.reference_origin == Some(ReferenceOrigin::Local(target)))
 }
 
 #[derive(Debug, Clone)]
@@ -1956,6 +2236,7 @@ fn validate_record_destructure(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -2059,6 +2340,7 @@ fn validate_record_destructure(
             &producer_node,
             Type::Record(record),
             context,
+            value_context,
             &mut producer_bindings,
             diagnostics,
         )?;
@@ -2108,6 +2390,8 @@ fn validate_record_destructure(
                 mutability: AssignmentMutability::Immutable,
                 ownership: StructuralOwnershipState::default(),
                 reference_origin: None,
+                pointer_origin: None,
+                raw_pointer_target_domain: None,
             },
         ));
     }
@@ -2129,6 +2413,7 @@ fn validate_assignment(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
@@ -2139,7 +2424,7 @@ fn validate_assignment(
         range: target_token.text_range(),
     };
 
-    let (target, target_ty) = match bindings.get(&name) {
+    let (target, target_ty, target_domain) = match bindings.get(&name) {
         Some(binding) => {
             if !binding.mutability.is_mutable() {
                 diagnostics.push(Diagnostic {
@@ -2148,7 +2433,11 @@ fn validate_assignment(
                 });
                 return None;
             }
-            (binding.id, binding.ty)
+            (
+                binding.id,
+                binding.ty,
+                binding.raw_pointer_target_domain.clone(),
+            )
         }
         None => {
             let entity = context
@@ -2173,14 +2462,12 @@ fn validate_assignment(
         &value_node,
         target_ty,
         context,
+        value_context,
         bindings,
         diagnostics,
     )?;
 
-    if bindings
-        .values()
-        .any(|binding| binding.reference_origin == Some(ReferenceOrigin::Local(target)))
-    {
+    if active_shared_authority_targets(bindings, value_context, target) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::BorrowedAssignmentTarget,
             location: target_location,
@@ -2188,10 +2475,31 @@ fn validate_assignment(
         return None;
     }
 
-    bindings
+    let incoming_pointer_origin = if matches!(target_ty, Type::RawPointer(_)) {
+        let origin = pointer_origin_for_value(&value, bindings)
+            .expect("validated raw-pointer value retains exact source origin");
+        let domain = target_domain
+            .as_ref()
+            .expect("validated raw-pointer local retains lexical target domain");
+        if !domain.contains(&origin) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::RawPointerTargetExtentMismatch,
+                location: value.location,
+            });
+            return None;
+        }
+        Some(origin)
+    } else {
+        None
+    };
+
+    let target_state = bindings
         .get_mut(&name)
-        .expect("resolved assignment target remains in the active binding scope")
-        .ownership = StructuralOwnershipState::default();
+        .expect("resolved assignment target remains in the active binding scope");
+    target_state.ownership = StructuralOwnershipState::default();
+    if matches!(target_ty, Type::RawPointer(_)) {
+        target_state.pointer_origin = incoming_pointer_origin;
+    }
 
     Some(Statement::Assignment {
         target,
@@ -2200,16 +2508,118 @@ fn validate_assignment(
     })
 }
 
+fn validate_raw_assign(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
+    bindings: &mut BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let statement_location = location(header.unit, node);
+    if !value_context.unsafe_active {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnsafeOperationOutsideUnsafeBlock,
+            location: statement_location,
+        });
+        return None;
+    }
+
+    let identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let [_, pointer_token] = identifiers.as_slice() else {
+        unreachable!("syntax-clean raw assignment has contextual assign and pointer identifiers");
+    };
+    let pointer_name = key(pointer_token);
+    let pointer_location = SourceLocation {
+        unit: header.unit,
+        range: pointer_token.text_range(),
+    };
+    let (pointer, pointee, target) = match bindings.get(&pointer_name) {
+        Some(binding) => {
+            if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnavailableBinding,
+                    location: pointer_location,
+                });
+                return None;
+            }
+            let Type::RawPointer(pointee) = binding.ty else {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRawPointer,
+                    location: pointer_location,
+                });
+                return None;
+            };
+            (
+                binding.id,
+                pointee,
+                binding
+                    .pointer_origin
+                    .expect("validated raw-pointer binding retains exact source origin"),
+            )
+        }
+        None => {
+            let entity = context
+                .modules
+                .get(&header.module)
+                .and_then(|module| module.namespace.get(&pointer_name));
+            diagnostics.push(Diagnostic {
+                kind: if entity.is_some() {
+                    DiagnosticKind::ExpectedValueBinding
+                } else {
+                    DiagnosticKind::UnresolvedName
+                },
+                location: pointer_location,
+            });
+            return None;
+        }
+    };
+
+    let value_node = value_child(node);
+    let value = validate_value(
+        header,
+        &value_node,
+        pointee.ty(),
+        context,
+        value_context,
+        bindings,
+        diagnostics,
+    )?;
+
+    if active_shared_authority_targets(bindings, value_context, target) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::RawTargetSharedAuthorityConflict,
+            location: statement_location,
+        });
+        return None;
+    }
+
+    binding_state_by_id_mut(bindings, target)
+        .expect("validated raw-pointer origin names an active target binding")
+        .ownership = StructuralOwnershipState::default();
+
+    Some(Statement::RawAssign {
+        pointer,
+        value,
+        location: statement_location,
+    })
+}
+
 fn validate_call_statement(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let call = direct_child(node, SyntaxKind::DirectCall);
     let (function, arguments, result) =
-        validate_call(header, &call, context, bindings, diagnostics)?;
+        validate_call(header, &call, context, value_context, bindings, diagnostics)?;
     if result.is_some() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ResultCallUsedAsStatement,
@@ -2228,10 +2638,11 @@ fn validate_terminal_return(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Return {
-    let returned = validate_return(header, node, context, bindings, diagnostics);
+    let returned = validate_return(header, node, context, value_context, bindings, diagnostics);
     if header.result.is_some() && returned.value.is_none() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ExpectedResultValue,
@@ -2245,6 +2656,7 @@ fn validate_return(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Return {
@@ -2256,6 +2668,7 @@ fn validate_return(
             &value_node,
             required,
             context,
+            value_context,
             bindings,
             diagnostics,
         ),
@@ -2290,6 +2703,7 @@ fn validate_value(
     node: &SyntaxNode,
     required: Type,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -2297,7 +2711,15 @@ fn validate_value(
     match node.kind() {
         SyntaxKind::GroupedValue => {
             let inner = value_child(node);
-            validate_value(header, &inner, required, context, bindings, diagnostics)
+            validate_value(
+                header,
+                &inner,
+                required,
+                context,
+                value_context,
+                bindings,
+                diagnostics,
+            )
         }
         SyntaxKind::SharedBorrowValue => {
             validate_shared_borrow(header, node, required, context, bindings, diagnostics)
@@ -2305,11 +2727,24 @@ fn validate_value(
         SyntaxKind::SharedDereferenceValue => {
             validate_shared_dereference(header, node, required, context, bindings, diagnostics)
         }
+        SyntaxKind::RawAddressOfValue => {
+            validate_raw_address(header, node, required, context, bindings, diagnostics)
+        }
+        SyntaxKind::RawMoveValue => validate_raw_move(
+            header,
+            node,
+            required,
+            context,
+            value_context,
+            bindings,
+            diagnostics,
+        ),
         SyntaxKind::NumericContractSelectedValue => validate_numeric_contract_selected_value(
             header,
             node,
             required,
             context,
+            value_context,
             bindings,
             diagnostics,
         ),
@@ -2341,6 +2776,7 @@ fn validate_value(
                 &operand_node,
                 required,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2381,6 +2817,7 @@ fn validate_value(
                 &operand_node,
                 required,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2401,6 +2838,7 @@ fn validate_value(
                     required,
                     NumericContract::Standard,
                     context,
+                    value_context,
                     bindings,
                     diagnostics,
                 )
@@ -2430,6 +2868,7 @@ fn validate_value(
                     &left_node,
                     required,
                     context,
+                    value_context,
                     &mut operand_bindings,
                     diagnostics,
                 )?;
@@ -2438,6 +2877,7 @@ fn validate_value(
                     &right_node,
                     required,
                     context,
+                    value_context,
                     &mut operand_bindings,
                     diagnostics,
                 )?;
@@ -2467,6 +2907,7 @@ fn validate_value(
                     required,
                     NumericContract::Standard,
                     context,
+                    value_context,
                     bindings,
                     diagnostics,
                 )
@@ -2496,6 +2937,7 @@ fn validate_value(
                     &left_node,
                     required,
                     context,
+                    value_context,
                     &mut operand_bindings,
                     diagnostics,
                 )?;
@@ -2504,6 +2946,7 @@ fn validate_value(
                     &right_node,
                     required,
                     context,
+                    value_context,
                     &mut operand_bindings,
                     diagnostics,
                 )?;
@@ -2542,6 +2985,7 @@ fn validate_value(
                     required,
                     NumericContract::Standard,
                     context,
+                    value_context,
                     bindings,
                     diagnostics,
                 ),
@@ -2561,6 +3005,7 @@ fn validate_value(
                     required,
                     NumericContract::Standard,
                     context,
+                    value_context,
                     bindings,
                     diagnostics,
                 ),
@@ -2592,6 +3037,7 @@ fn validate_value(
                         &left_node,
                         required,
                         context,
+                        value_context,
                         &mut operand_bindings,
                         diagnostics,
                     )?;
@@ -2600,6 +3046,7 @@ fn validate_value(
                         &right_node,
                         required,
                         context,
+                        value_context,
                         &mut operand_bindings,
                         diagnostics,
                     )?;
@@ -2659,6 +3106,7 @@ fn validate_value(
                 &left_node,
                 required,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2667,6 +3115,7 @@ fn validate_value(
                 &right_node,
                 required,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2716,6 +3165,7 @@ fn validate_value(
                 &left_node,
                 required,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2724,6 +3174,7 @@ fn validate_value(
                 &right_node,
                 required,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2765,6 +3216,7 @@ fn validate_value(
                 &left_node,
                 found,
                 context,
+                value_context,
                 &mut left_bindings,
                 diagnostics,
             )?;
@@ -2774,6 +3226,7 @@ fn validate_value(
                 &right_node,
                 found,
                 context,
+                value_context,
                 &mut right_bindings,
                 diagnostics,
             )?;
@@ -2786,6 +3239,11 @@ fn validate_value(
                 debug_assert_eq!(right_state.ty, left_state.ty);
                 debug_assert_eq!(right_state.mutability, left_state.mutability);
                 debug_assert_eq!(right_state.reference_origin, left_state.reference_origin);
+                debug_assert_eq!(right_state.pointer_origin, left_state.pointer_origin);
+                debug_assert_eq!(
+                    right_state.raw_pointer_target_domain,
+                    left_state.raw_pointer_target_domain
+                );
                 right_state.ownership == left_state.ownership
             });
             if !equal {
@@ -2844,6 +3302,7 @@ fn validate_value(
                 &left_node,
                 found,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2852,6 +3311,7 @@ fn validate_value(
                 &right_node,
                 found,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2886,6 +3346,7 @@ fn validate_value(
                 &operand_node,
                 found,
                 context,
+                value_context,
                 &mut operand_bindings,
                 diagnostics,
             )?;
@@ -2994,7 +3455,7 @@ fn validate_value(
         }
         SyntaxKind::DirectCall => {
             let (function, arguments, result) =
-                validate_call(header, node, context, bindings, diagnostics)?;
+                validate_call(header, node, context, value_context, bindings, diagnostics)?;
             let Some(ty) = result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
@@ -3021,14 +3482,201 @@ fn validate_value(
                 location: value_location,
             })
         }
-        SyntaxKind::RecordConstruction => {
-            validate_record_construction(header, node, required, context, bindings, diagnostics)
-        }
-        SyntaxKind::FieldValueUse => {
-            validate_field_value_use(header, node, required, context, bindings, diagnostics)
-        }
+        SyntaxKind::RecordConstruction => validate_record_construction(
+            header,
+            node,
+            required,
+            context,
+            value_context,
+            bindings,
+            diagnostics,
+        ),
+        SyntaxKind::FieldValueUse => validate_field_value_use(
+            header,
+            node,
+            required,
+            context,
+            value_context,
+            bindings,
+            diagnostics,
+        ),
         _ => unreachable!("syntax-clean value has represented value kind"),
     }
+}
+
+fn validate_raw_address(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    bindings: &BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Value> {
+    let value_location = location(header.unit, node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let Some(binding) = bindings.get(&name) else {
+        let entity = context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name));
+        diagnostics.push(Diagnostic {
+            kind: if entity.is_some() {
+                DiagnosticKind::ExpectedValueBinding
+            } else {
+                DiagnosticKind::UnresolvedName
+            },
+            location: SourceLocation {
+                unit: header.unit,
+                range: token.text_range(),
+            },
+        });
+        return None;
+    };
+
+    let pointee = match binding.ty {
+        Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
+        Type::Record(record) => RawPointerPointee::Record(record),
+        Type::SharedReference(_) | Type::RawPointer(_) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidRawPointerPointee {
+                    pointee: binding.ty,
+                },
+                location: value_location,
+            });
+            return None;
+        }
+    };
+    let found = Type::RawPointer(pointee);
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    Some(Value {
+        ty: found,
+        kind: ValueKind::RawAddressRoot { target: binding.id },
+        location: value_location,
+    })
+}
+
+fn validate_raw_move(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
+    bindings: &mut BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Value> {
+    let value_location = location(header.unit, node);
+    if !value_context.unsafe_active {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnsafeOperationOutsideUnsafeBlock,
+            location: value_location,
+        });
+        return None;
+    }
+
+    let identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let [_, pointer_token] = identifiers.as_slice() else {
+        unreachable!("syntax-clean raw move has contextual move and pointer identifiers");
+    };
+    let pointer_name = key(pointer_token);
+    let pointer_location = SourceLocation {
+        unit: header.unit,
+        range: pointer_token.text_range(),
+    };
+    let (pointer, pointee, target) = match bindings.get(&pointer_name) {
+        Some(binding) => {
+            if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnavailableBinding,
+                    location: pointer_location,
+                });
+                return None;
+            }
+            let Type::RawPointer(pointee) = binding.ty else {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRawPointer,
+                    location: pointer_location,
+                });
+                return None;
+            };
+            (
+                binding.id,
+                pointee,
+                binding
+                    .pointer_origin
+                    .expect("validated raw-pointer binding retains exact source origin"),
+            )
+        }
+        None => {
+            let entity = context
+                .modules
+                .get(&header.module)
+                .and_then(|module| module.namespace.get(&pointer_name));
+            diagnostics.push(Diagnostic {
+                kind: if entity.is_some() {
+                    DiagnosticKind::ExpectedValueBinding
+                } else {
+                    DiagnosticKind::UnresolvedName
+                },
+                location: pointer_location,
+            });
+            return None;
+        }
+    };
+
+    let target_state = binding_state_by_id(bindings, target)
+        .expect("validated raw-pointer origin names an active target binding");
+    if target_state.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::RawMoveTargetUnavailable,
+            location: value_location,
+        });
+        return None;
+    }
+    if active_shared_authority_targets(bindings, value_context, target) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::RawTargetSharedAuthorityConflict,
+            location: value_location,
+        });
+        return None;
+    }
+
+    let found = pointee.ty();
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    binding_state_by_id_mut(bindings, target)
+        .expect("validated raw-pointer origin names an active target binding")
+        .ownership
+        .consume_path(&[]);
+
+    Some(Value {
+        ty: found,
+        kind: ValueKind::RawMove { pointer },
+        location: value_location,
+    })
 }
 
 fn validate_shared_borrow(
@@ -3074,7 +3722,7 @@ fn validate_shared_borrow(
         Type::Record(record) if context.type_is_duplicable(Type::Record(record)) => {
             ReferenceReferent::Record(record)
         }
-        Type::Record(_) | Type::SharedReference(_) => {
+        Type::Record(_) | Type::SharedReference(_) | Type::RawPointer(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSharedReferenceReferent {
                     referent: binding.ty,
@@ -3175,6 +3823,7 @@ fn validate_numeric_contract_selected_value(
     node: &SyntaxNode,
     required: Type,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -3212,6 +3861,7 @@ fn validate_numeric_contract_selected_value(
                     required,
                     NumericContract::Fast,
                     context,
+                    value_context,
                     bindings,
                     diagnostics,
                 ),
@@ -3221,6 +3871,7 @@ fn validate_numeric_contract_selected_value(
                     required,
                     NumericContract::Fast,
                     context,
+                    value_context,
                     bindings,
                     diagnostics,
                 ),
@@ -3233,6 +3884,7 @@ fn validate_numeric_contract_selected_value(
             required,
             NumericContract::Fast,
             context,
+            value_context,
             bindings,
             diagnostics,
         ),
@@ -3242,6 +3894,7 @@ fn validate_numeric_contract_selected_value(
             required,
             NumericContract::Fast,
             context,
+            value_context,
             bindings,
             diagnostics,
         ),
@@ -3257,12 +3910,17 @@ fn validate_numeric_contract_selected_value(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_add(
     header: &FunctionHeader,
     node: &SyntaxNode,
     required: Type,
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -3287,6 +3945,7 @@ fn validate_float_add(
         &left_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3295,6 +3954,7 @@ fn validate_float_add(
         &right_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3311,12 +3971,17 @@ fn validate_float_add(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_sub(
     header: &FunctionHeader,
     node: &SyntaxNode,
     required: Type,
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -3341,6 +4006,7 @@ fn validate_float_sub(
         &left_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3349,6 +4015,7 @@ fn validate_float_sub(
         &right_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3365,12 +4032,17 @@ fn validate_float_sub(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_mul(
     header: &FunctionHeader,
     node: &SyntaxNode,
     required: Type,
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -3395,6 +4067,7 @@ fn validate_float_mul(
         &left_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3403,6 +4076,7 @@ fn validate_float_mul(
         &right_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3419,12 +4093,17 @@ fn validate_float_mul(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and value-proof state explicitly"
+)]
 fn validate_float_div(
     header: &FunctionHeader,
     node: &SyntaxNode,
     required: Type,
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -3449,6 +4128,7 @@ fn validate_float_div(
         &left_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3457,6 +4137,7 @@ fn validate_float_div(
         &right_node,
         required,
         context,
+        value_context,
         &mut operand_bindings,
         diagnostics,
     )?;
@@ -3478,6 +4159,7 @@ fn validate_field_value_use(
     node: &SyntaxNode,
     required: Type,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -3542,6 +4224,7 @@ fn validate_field_value_use(
             &producer_node,
             receiver_ty,
             context,
+            value_context,
             &mut producer_bindings,
             diagnostics,
         )?;
@@ -3774,6 +4457,7 @@ fn validate_record_construction(
     node: &SyntaxNode,
     required: Type,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Value> {
@@ -3855,6 +4539,7 @@ fn validate_record_construction(
             &value_node,
             record_decl.fields[field].ty,
             context,
+            value_context,
             bindings,
             diagnostics,
         )?;
@@ -4370,6 +5055,7 @@ fn validate_call(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
     bindings: &mut BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<(FunctionId, Vec<Value>, Option<Type>)> {
@@ -4393,15 +5079,23 @@ fn validate_call(
     }
 
     let mut arguments = Vec::with_capacity(argument_nodes.len());
+    let mut argument_context = value_context.clone();
     for (argument_node, parameter) in argument_nodes.into_iter().zip(&target.parameters) {
         let argument = validate_value(
             header,
             &argument_node,
             parameter.ty,
             context,
+            &argument_context,
             bindings,
             diagnostics,
         )?;
+        if matches!(argument.ty, Type::SharedReference(_))
+            && let Some(ReferenceOrigin::Local(target)) =
+                reference_origin_for_value(&argument, bindings, context)
+        {
+            argument_context.held_shared_targets.insert(target);
+        }
         arguments.push(argument);
     }
 
@@ -4445,6 +5139,8 @@ fn is_value_node(kind: SyntaxKind) -> bool {
         SyntaxKind::GroupedValue
             | SyntaxKind::SharedBorrowValue
             | SyntaxKind::SharedDereferenceValue
+            | SyntaxKind::RawAddressOfValue
+            | SyntaxKind::RawMoveValue
             | SyntaxKind::NumericContractSelectedValue
             | SyntaxKind::IntegerNegValue
             | SyntaxKind::IntegerComplementValue
