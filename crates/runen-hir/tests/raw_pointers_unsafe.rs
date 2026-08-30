@@ -419,3 +419,97 @@ fn ordinary_assignment_preserves_existing_rhs_first_shared_diagnostic_order() {
         "replacement admission must not run when RHS production fails: {errors:?}"
     );
 }
+
+#[test]
+fn same_scope_and_same_loop_entry_targets_are_valid_for_later_pointer_locals() {
+    compile(
+        "fn f(flag: Bool, seed: I64) {\
+             let ancestor: I64 = seed;\
+             {\
+                 let earlier: I64 = seed;\
+                 let mut p: raw I64 = raw &ancestor;\
+                 p = raw &earlier;\
+             }\
+             while flag {\
+                 let earlier: I64 = seed;\
+                 let p: raw I64 = raw &earlier;\
+                 unsafe { raw assign p = 2; }\
+                 break;\
+             }\
+         }",
+    )
+    .expect("ancestor, earlier same-scope, and same-loop-entry targets must be in a later pointer local's lexical domain");
+}
+
+#[test]
+fn restored_pointer_origins_validate_on_normal_continue_and_break_loop_paths() {
+    compile(
+        "fn f(flag: Bool, a: I64, b: I64) {\
+             let mut p: raw I64 = raw &a;\
+             while flag { p = raw &b; p = raw &a; }\
+             while flag { p = raw &b; p = raw &a; continue; }\
+             while flag { p = raw &b; p = raw &a; break; }\
+         }",
+    )
+    .expect("normal backedge, continue, and break paths must accept an exactly restored pointer origin");
+}
+
+#[test]
+fn raw_move_rejects_partial_targets_and_consumes_even_duplicable_targets() {
+    let partial = compile(
+        "record Ticket { value: I64 }\
+         record Pair { left: Ticket, right: Ticket }\
+         fn take(value: Ticket) {}\
+         fn f(pair: Pair) {\
+             let p: raw Pair = raw &pair;\
+             take(pair.left);\
+             unsafe { let moved: Pair = raw move p; }\
+         }",
+    )
+    .expect_err("RawMove from a partially available target must be rejected");
+    assert!(has_diagnostic(
+        &partial,
+        DiagnosticKind::RawMoveTargetUnavailable
+    ));
+
+    let consumed_copy = compile(
+        "fn f(x: I64) {\
+             let p: raw I64 = raw &x;\
+             unsafe { let moved: I64 = raw move p; }\
+             let observed: I64 = x;\
+         }",
+    )
+    .expect_err("RawMove must consume a complete target even when its type is otherwise duplicable");
+    assert!(has_diagnostic(
+        &consumed_copy,
+        DiagnosticKind::UnavailableBinding
+    ));
+}
+
+#[test]
+fn raw_address_and_raw_move_report_exact_required_type_mismatches() {
+    let raw_address = compile("fn f(x: I64) { let p: raw Bool = raw &x; }")
+        .expect_err("raw address result must match the exact required pointer pointee type");
+    assert!(raw_address.iter().any(|error| matches!(
+        error.kind,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::RawPointer(RawPointerPointee::Intrinsic(IntrinsicType::Bool)),
+            found: Type::RawPointer(RawPointerPointee::Intrinsic(IntrinsicType::I64)),
+        }
+    )));
+
+    let raw_move = compile(
+        "fn f(x: I64) {\
+             let p: raw I64 = raw &x;\
+             unsafe { let moved: Bool = raw move p; }\
+         }",
+    )
+    .expect_err("RawMove result must match the exact required pointee type");
+    assert!(raw_move.iter().any(|error| matches!(
+        error.kind,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Intrinsic(IntrinsicType::Bool),
+            found: Type::Intrinsic(IntrinsicType::I64),
+        }
+    )));
+}
