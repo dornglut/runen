@@ -16,7 +16,7 @@ pub enum LoweringError {
     CoreValidation(core::MirValidationError),
 }
 
-/// Lower one accepted typed HIR compilation into the represented Core form that has passed
+/// Lower one accepted typed HIR compilation into a Core program that has passed
 /// the canonical Core validator.
 pub fn lower(compilation: &hir::TypedCompilation) -> Result<core::ValidatedProgram, LoweringError> {
     Lowerer::new(compilation)?.lower()
@@ -205,9 +205,10 @@ impl TypeMap {
             ))?
             .name
             .clone();
-        let mapped = self
-            .types
-            .push(core::TypeDef::raw_pointer(format!("raw {pointee_name}"), pointee_ty));
+        let mapped = self.types.push(core::TypeDef::raw_pointer(
+            format!("raw {pointee_name}"),
+            pointee_ty,
+        ));
         if self.mapped.insert(ty, mapped).is_some() {
             return Err(LoweringError::InvalidHirInvariant(
                 "duplicate HIR raw-pointer type mapping",
@@ -232,8 +233,8 @@ impl TypeMap {
             .ok_or(LoweringError::InvalidHirInvariant(
                 "lowered Core type is absent from the type table",
             ))?;
-        match definition.kind {
-            core::TypeKind::Scalar(core::ScalarType::RawPointer(pointee)) => Ok(pointee),
+        match &definition.kind {
+            core::TypeKind::Scalar(core::ScalarType::RawPointer(pointee)) => Ok(*pointee),
             _ => Err(LoweringError::InvalidHirInvariant(
                 "HIR raw-pointer binding does not lower to a Core raw-pointer type",
             )),
@@ -504,7 +505,10 @@ impl<'a> FunctionLowerer<'a> {
                 "HIR function parameter contains a raw-pointer type",
             ));
         }
-        if function.result.is_some_and(|result| matches!(result, hir::Type::RawPointer(_))) {
+        if function
+            .result
+            .is_some_and(|result| matches!(result, hir::Type::RawPointer(_)))
+        {
             return Err(LoweringError::InvalidHirInvariant(
                 "HIR function result contains a raw-pointer type",
             ));
