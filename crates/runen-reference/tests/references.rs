@@ -30,6 +30,7 @@ fn shared_reference_copy_keeps_authority_alive_after_original_carrier_drops() {
         name: "main".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -103,6 +104,7 @@ fn aggregate_shared_reference_copy_recursively_tracks_carriers() {
         name: "main".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -178,6 +180,7 @@ fn reference_assign_evaluates_reference_copy_source_before_old_carrier_destructi
         name: "main".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -257,6 +260,7 @@ fn ending_shared_reborrow_restores_exclusive_replace_parent() {
         name: "main".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -338,6 +342,7 @@ fn raw_read_coexists_with_overlapping_shared_reference_authority() {
         name: "main".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -404,6 +409,7 @@ fn raw_read_reports_overlapping_exclusive_reference_authority() {
         name: "main".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -470,6 +476,7 @@ fn raw_move_reports_overlapping_shared_reference_authority() {
         name: "main".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -537,6 +544,7 @@ fn raw_assign_reports_overlapping_shared_reference_authority() {
         name: "main".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),

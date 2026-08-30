@@ -73,6 +73,8 @@ pub struct Function {
     pub name: String,
     pub parameters: Vec<LocalId>,
     pub result: Option<TypeId>,
+    /// Parameter-slot origin for the bounded scalar Shared-reference result contract.
+    pub shared_reference_result_origin: Option<usize>,
     pub body: Body,
 }
 

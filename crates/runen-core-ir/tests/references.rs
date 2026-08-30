@@ -208,6 +208,7 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         name: "wrong_type".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", bool_ty, false),
@@ -247,6 +248,7 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         name: "uninitialized".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -279,6 +281,7 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         name: "immutable_replace".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -327,6 +330,7 @@ fn reference_root_and_explicit_borrow_share_one_conflict_domain() {
         name: "reference_after_loan".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -374,6 +378,7 @@ fn reference_root_and_explicit_borrow_share_one_conflict_domain() {
         name: "loan_after_reference".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -431,6 +436,7 @@ fn direct_access_observes_active_reference_authority() {
         name: "direct_conflict".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -493,6 +499,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         name: "shared_move".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -522,6 +529,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         name: "shared_drop".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -549,6 +557,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         name: "exclusive_assign".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -577,6 +586,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         name: "replace_assign".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -621,6 +631,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         name: "shared_interior_assign".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", interior_i64, false),
@@ -658,6 +669,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         name: "shared_plain_interior_assign".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -707,6 +719,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         name: "strengthen_shared".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -739,6 +752,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         name: "strengthen_exclusive".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -782,6 +796,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         name: "disjoint".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", pair_ty, false),
@@ -837,6 +852,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         name: "overlapping_move".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", pair_ty, false),
@@ -901,6 +917,7 @@ fn cleanup_enforces_storage_extent_and_accepts_zero_leaf_reference_targets() {
         name: "bad_cleanup_order".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("reference", shared_i64, false),
@@ -944,6 +961,7 @@ fn cleanup_enforces_storage_extent_and_accepts_zero_leaf_reference_targets() {
         name: "zero_leaf".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", empty_ty, false),
@@ -989,6 +1007,7 @@ fn reborrow_drop_loop_has_finite_canonical_authority_state() {
         name: "reborrow_loop".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),

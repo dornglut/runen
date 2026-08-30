@@ -13,6 +13,7 @@ fn program_initializing(scalar: ScalarType, value: Value) -> Program {
             name: "entry".into(),
             parameters: Vec::new(),
             result: None,
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![LocalDecl::new("value", ty, false)],
                 loans: Vec::new(),
@@ -94,6 +95,7 @@ fn structural_constants_recursively_preserve_non_i64_integer_variants() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: None,
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![LocalDecl::new("pair", pair_ty, false)],
                 loans: Vec::new(),

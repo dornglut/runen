@@ -7,6 +7,7 @@ pub fn one_function_program(types: TypeTable, body: Body) -> Program {
             name: "one_function_regression".into(),
             parameters: Vec::new(),
             result: None,
+            shared_reference_result_origin: None,
             body,
         }],
     }

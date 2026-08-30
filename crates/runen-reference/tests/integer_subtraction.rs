@@ -17,6 +17,7 @@ fn execute_integer_sub(scalar: ScalarType, left: Value, right: Value) -> Executi
         name: "main".into(),
         parameters: Vec::new(),
         result: Some(ty),
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![
                 LocalDecl::new("left", ty, false),

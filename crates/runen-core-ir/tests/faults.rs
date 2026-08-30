@@ -27,6 +27,7 @@ fn explicit_fault_is_valid_without_return_value_in_result_function() {
         name: "faulting_result".into(),
         parameters: Vec::new(),
         result: Some(result_ty),
+        shared_reference_result_origin: None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Fault(first))],
@@ -48,6 +49,7 @@ fn explicit_fault_contributes_no_cfg_successor_state() {
         name: "no_fault_successor".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("uninitialized", i64_ty, false)],
             vec![
@@ -76,6 +78,7 @@ fn explicit_fault_has_no_operand_or_target_to_validate() {
         name: "fault_only".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(

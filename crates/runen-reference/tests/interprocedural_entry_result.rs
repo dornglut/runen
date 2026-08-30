@@ -12,6 +12,7 @@ fn outer_result_bearing_entry_preserves_result_across_entry_cleanup() {
         name: "entry".into(),
         parameters: Vec::new(),
         result: Some(tracked),
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![
                 LocalDecl::new("result", tracked, false),

@@ -8,6 +8,7 @@ pub fn one_function_program(types: TypeTable, body: Body) -> Program {
             name: "fixture".into(),
             parameters: Vec::new(),
             result: None,
+            shared_reference_result_origin: None,
             body,
         }],
     }

@@ -45,6 +45,15 @@ pub enum MirValidationErrorKind {
     DuplicateReferenceType(TypeId),
     ParameterTransferUnsafe(TypeId),
     ResultTransferUnsafe(TypeId),
+    MissingSharedReferenceResultOrigin,
+    UnexpectedSharedReferenceResultOrigin,
+    InvalidSharedReferenceResultOriginSlot(usize),
+    SharedReferenceResultRequiresShared(TypeId),
+    SharedReferenceResultOriginRequiresShared(TypeId),
+    SharedReferenceResultOriginTypeMismatch {
+        expected: TypeId,
+        found: TypeId,
+    },
     ArgumentCount {
         expected: usize,
         found: usize,
@@ -66,6 +75,7 @@ pub enum MirValidationErrorKind {
     ReferenceTargetNotLive,
     ReferenceAuthorityNotActive,
     ReferenceAuthorityIncomplete,
+    SharedReferenceResultOriginMismatch,
     ReferenceFormationConflictsWithLoan {
         place: Place,
         loan: LoanId,
@@ -272,10 +282,6 @@ fn validate_function_declarations(
         }
     }
 
-    if let Some(result) = function.result {
-        require_known_result_type(types, function_id, result)?;
-    }
-
     let mut parameters = HashSet::new();
     for parameter in &function.parameters {
         if !parameters.insert(*parameter) {
@@ -292,7 +298,8 @@ fn validate_function_declarations(
         })?;
         require_known_parameter_type(types, function_id, local.ty)?;
     }
-    Ok(())
+
+    validate_result_contract(types, function_id, function)
 }
 
 fn require_known_parameter_type(
@@ -315,21 +322,83 @@ fn require_known_parameter_type(
     Ok(())
 }
 
-fn require_known_result_type(
+fn validate_result_contract(
     types: &TypeTable,
-    function: FunctionId,
-    ty: TypeId,
+    function_id: FunctionId,
+    function: &Function,
 ) -> Result<(), MirValidationError> {
-    if types.get(ty).is_none() {
+    let Some(result) = function.result else {
+        return if function.shared_reference_result_origin.is_none() {
+            Ok(())
+        } else {
+            Err(function_error(
+                function_id,
+                MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
+            ))
+        };
+    };
+
+    let definition = types
+        .get(result)
+        .ok_or_else(|| function_error(function_id, MirValidationErrorKind::UnknownType(result)))?;
+
+    if types.is_result_transfer_safe(result) {
+        return if function.shared_reference_result_origin.is_none() {
+            Ok(())
+        } else {
+            Err(function_error(
+                function_id,
+                MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
+            ))
+        };
+    }
+
+    let TypeKind::Scalar(ScalarType::Reference { permission, .. }) = &definition.kind else {
         return Err(function_error(
-            function,
-            MirValidationErrorKind::UnknownType(ty),
+            function_id,
+            MirValidationErrorKind::ResultTransferUnsafe(result),
+        ));
+    };
+
+    if *permission != ReferencePermission::Shared {
+        return Err(function_error(
+            function_id,
+            MirValidationErrorKind::SharedReferenceResultRequiresShared(result),
         ));
     }
-    if !types.is_result_transfer_safe(ty) {
+
+    let Some(origin_slot) = function.shared_reference_result_origin else {
         return Err(function_error(
-            function,
-            MirValidationErrorKind::ResultTransferUnsafe(ty),
+            function_id,
+            MirValidationErrorKind::MissingSharedReferenceResultOrigin,
+        ));
+    };
+    let Some(parameter) = function.parameters.get(origin_slot) else {
+        return Err(function_error(
+            function_id,
+            MirValidationErrorKind::InvalidSharedReferenceResultOriginSlot(origin_slot),
+        ));
+    };
+    let found = function
+        .body
+        .local(*parameter)
+        .expect("parameter validation establishes the designated origin local")
+        .ty;
+    if let Some((_, permission)) = types.reference(found)
+        && permission != ReferencePermission::Shared
+    {
+        return Err(function_error(
+            function_id,
+            MirValidationErrorKind::SharedReferenceResultOriginRequiresShared(found),
+        ));
+    }
+    if found != result {
+        return Err(function_error(
+            function_id,
+            MirValidationErrorKind::SharedReferenceResultOriginTypeMismatch {
+                expected: result,
+                found,
+            },
         ));
     }
     Ok(())
@@ -1234,6 +1303,7 @@ struct ActiveReferenceAuthority {
     permission: ReferencePermission,
     parent: Option<ValidationReferenceAuthorityId>,
     carriers: u32,
+    is_result_origin: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1270,12 +1340,17 @@ fn validate_path_state(
         reference_authorities: Vec::new(),
     };
 
-    for parameter in &function.parameters {
+    for (slot, parameter) in function.parameters.iter().enumerate() {
         let ty = body
             .local(*parameter)
             .expect("declaration validation establishes parameter local")
             .ty;
-        let value = parameter_validation_value(types, ty, &mut state);
+        let value = parameter_validation_value(
+            types,
+            ty,
+            &mut state,
+            function.shared_reference_result_origin == Some(slot),
+        );
         write_validation_value(
             types,
             ty,
@@ -1345,13 +1420,24 @@ fn validate_path_state(
                 cleanup_function(types, body, &mut state, &point)?;
             }
             Terminator::Return(value) => {
-                if let Some(value) = value
-                    && matches!(
-                        validate_operand_state(types, body, &mut state, value, &point)?,
-                        DefinedStep::NoDefinedContinuation
-                    )
-                {
-                    continue 'worklist;
+                let result = if let Some(value) = value {
+                    let DefinedStep::Continue(value) =
+                        validate_operand_state(types, body, &mut state, value, &point)?
+                    else {
+                        continue 'worklist;
+                    };
+                    Some(value)
+                } else {
+                    None
+                };
+                if function.shared_reference_result_origin.is_some() {
+                    require_shared_reference_result_origin(
+                        result
+                            .as_ref()
+                            .expect("static validation establishes a contract-bearing result"),
+                        &state,
+                        &point,
+                    )?;
                 }
                 require_external_regions_fully_live(&state, &point)?;
                 cleanup_function(types, body, &mut state, &point)?;
@@ -1407,13 +1493,22 @@ fn validate_path_state(
                 for (ty, value) in &held {
                     restore_transferred_referents(types, *ty, value, &mut state);
                 }
-                destroy_transient_values(types, &held, &mut state);
+
+                let returned_result = callee
+                    .shared_reference_result_origin
+                    .map(|slot| held[slot].1.clone());
+                if let Some(origin_slot) = callee.shared_reference_result_origin {
+                    destroy_transient_values_except(types, &held, origin_slot, &mut state);
+                } else {
+                    destroy_transient_values(types, &held, &mut state);
+                }
 
                 if let Some(destination) = destination {
                     let result_ty = callee
                         .result
                         .expect("static validation establishes result destination shape");
-                    let value = unknown_result_validation_value(types, result_ty);
+                    let value = returned_result
+                        .unwrap_or_else(|| unknown_result_validation_value(types, result_ty));
                     write_validation_value(
                         types,
                         result_ty,
@@ -2056,6 +2151,7 @@ fn validate_operand_state(
                     permission: *permission,
                     parent: None,
                     carriers: 1,
+                    is_result_origin: false,
                 },
             );
             Ok(DefinedStep::Continue(ValidationValue::Scalar(
@@ -2082,6 +2178,7 @@ fn validate_operand_state(
                     permission: *permission,
                     parent: Some(resolved.authority),
                     carriers: 1,
+                    is_result_origin: false,
                 },
             );
             Ok(DefinedStep::Continue(ValidationValue::Scalar(
@@ -2146,6 +2243,7 @@ fn parameter_validation_value(
     types: &TypeTable,
     ty: TypeId,
     state: &mut ValidationState,
+    is_result_origin: bool,
 ) -> ValidationValue {
     match &types.get(ty).expect("validated type identity exists").kind {
         TypeKind::Scalar(ScalarType::RawPointer(_)) => {
@@ -2170,24 +2268,31 @@ fn parameter_validation_value(
                     permission: *permission,
                     parent: None,
                     carriers: 1,
+                    is_result_origin,
                 },
             );
             ValidationValue::Scalar(ValidationScalar::Reference(authority))
         }
-        TypeKind::Scalar(_) => ValidationValue::Scalar(ValidationScalar::NonPointer),
-        TypeKind::Struct(fields) => ValidationValue::Struct(
-            fields
-                .iter()
-                .map(|field| parameter_validation_value(types, field.ty, state))
-                .collect(),
-        ),
+        TypeKind::Scalar(_) => {
+            debug_assert!(!is_result_origin);
+            ValidationValue::Scalar(ValidationScalar::NonPointer)
+        }
+        TypeKind::Struct(fields) => {
+            debug_assert!(!is_result_origin);
+            ValidationValue::Struct(
+                fields
+                    .iter()
+                    .map(|field| parameter_validation_value(types, field.ty, state, false))
+                    .collect(),
+            )
+        }
     }
 }
 
 fn unknown_result_validation_value(types: &TypeTable, ty: TypeId) -> ValidationValue {
     match &types.get(ty).expect("validated type identity exists").kind {
         TypeKind::Scalar(ScalarType::RawPointer(_) | ScalarType::Reference { .. }) => {
-            unreachable!("result-transfer validation excludes pointer/reference values")
+            unreachable!("ordinary result-transfer validation excludes pointer/reference values")
         }
         TypeKind::Scalar(_) => ValidationValue::Scalar(ValidationScalar::NonPointer),
         TypeKind::Struct(fields) => ValidationValue::Struct(
@@ -2406,6 +2511,21 @@ fn destroy_transient_values(
     state: &mut ValidationState,
 ) {
     for (ty, value) in held.iter().rev() {
+        destroy_validation_value(types, *ty, value, &mut state.reference_authorities);
+    }
+    normalize_reference_authorities(&mut state.reference_authorities);
+}
+
+fn destroy_transient_values_except(
+    types: &TypeTable,
+    held: &[(TypeId, ValidationValue)],
+    excluded: usize,
+    state: &mut ValidationState,
+) {
+    for (index, (ty, value)) in held.iter().enumerate().rev() {
+        if index == excluded {
+            continue;
+        }
         destroy_validation_value(types, *ty, value, &mut state.reference_authorities);
     }
     normalize_reference_authorities(&mut state.reference_authorities);
@@ -2749,7 +2869,7 @@ fn normalize_reference_authorities(authorities: &mut [Option<ActiveReferenceAuth
             let Some(active) = authorities[index].as_ref() else {
                 continue;
             };
-            if active.carriers != 0 {
+            if active.carriers != 0 || active.is_result_origin {
                 continue;
             }
             let children = reference_children(authorities, index);
@@ -2831,6 +2951,43 @@ fn authority_retains_full_advertised_permission(
         BorrowKind::Exclusive => AccessRequirement::Exclusive,
     };
     !reference_delegated_child(authorities, authority, &active.target, requirement)
+}
+
+fn require_shared_reference_result_origin(
+    value: &ValidationValue,
+    state: &ValidationState,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    let ValidationValue::Scalar(ValidationScalar::Reference(authority)) = value else {
+        unreachable!("static validation establishes a scalar Shared-reference result")
+    };
+    let Some(active) = state
+        .reference_authorities
+        .get(authority.0 as usize)
+        .and_then(Option::as_ref)
+    else {
+        return Err(point_error(
+            point,
+            MirValidationErrorKind::SharedReferenceResultOriginMismatch,
+        ));
+    };
+    if !active.is_result_origin {
+        return Err(point_error(
+            point,
+            MirValidationErrorKind::SharedReferenceResultOriginMismatch,
+        ));
+    }
+    if !authority_retains_full_advertised_permission(
+        &state.reference_authorities,
+        *authority,
+        ReferencePermission::Shared,
+    ) {
+        return Err(point_error(
+            point,
+            MirValidationErrorKind::ReferenceAuthorityIncomplete,
+        ));
+    }
+    Ok(())
 }
 
 fn require_call_value_admissible(

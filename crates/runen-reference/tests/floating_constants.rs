@@ -16,6 +16,7 @@ fn execute_direct_result(scalar: ScalarType, value: Value) -> runen_reference::E
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(result_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: Vec::new(),
                 loans: Vec::new(),
@@ -116,6 +117,7 @@ fn floating_value_survives_init_copy_and_move_exactly() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(f32_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![
                     LocalDecl::new("source", f32_ty, false),
@@ -166,6 +168,7 @@ fn floating_value_survives_assignment_and_move_exactly() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(f32_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![LocalDecl::new("target", f32_ty, true)],
                 loans: Vec::new(),
@@ -219,6 +222,7 @@ fn f64_round_trips_through_direct_call_argument_and_result() {
         name: "entry".into(),
         parameters: Vec::new(),
         result: Some(f64_ty),
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![LocalDecl::new("result", f64_ty, false)],
             loans: Vec::new(),
@@ -244,6 +248,7 @@ fn f64_round_trips_through_direct_call_argument_and_result() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(f64_ty),
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![LocalDecl::new("value", f64_ty, false)],
             loans: Vec::new(),
@@ -292,6 +297,7 @@ fn mixed_floating_struct_round_trips_through_storage() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(pair_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![LocalDecl::new("pair", pair_ty, false)],
                 loans: Vec::new(),
