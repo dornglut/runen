@@ -42,6 +42,7 @@ fn execute_float_mul_with_contract(
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![LocalDecl::new("result", ty, false)],
                 loans: Vec::new(),
@@ -212,6 +213,7 @@ fn produced_nan_is_a_runtime_operand_and_propagates_through_float_mul() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(f32_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![
                     LocalDecl::new("nan", f32_ty, false),
@@ -376,6 +378,7 @@ fn operand_effects_precede_exactly_one_distinct_float_mul_write() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(f32_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![
                     LocalDecl::new("left", f32_ty, false),
