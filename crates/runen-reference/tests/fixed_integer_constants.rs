@@ -13,6 +13,7 @@ fn execute_direct_result(scalar: ScalarType, value: Value) -> runen_reference::E
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(result_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: Vec::new(),
                 loans: Vec::new(),
@@ -94,6 +95,7 @@ fn non_i64_values_survive_init_copy_assign_and_move() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(u32_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![
                     LocalDecl::new("source", u32_ty, false),
@@ -148,6 +150,7 @@ fn u64_max_round_trips_through_call_argument_and_result() {
         name: "entry".into(),
         parameters: Vec::new(),
         result: Some(u64_ty),
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![LocalDecl::new("result", u64_ty, false)],
             loans: Vec::new(),
@@ -173,6 +176,7 @@ fn u64_max_round_trips_through_call_argument_and_result() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(u64_ty),
+        shared_reference_result_origin: None,
         body: Body {
             locals: vec![LocalDecl::new("value", u64_ty, false)],
             loans: Vec::new(),
@@ -218,6 +222,7 @@ fn mixed_fixed_width_struct_round_trips_through_storage() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(pair_ty),
+            shared_reference_result_origin: None,
             body: Body {
                 locals: vec![LocalDecl::new("pair", pair_ty, false)],
                 loans: Vec::new(),
