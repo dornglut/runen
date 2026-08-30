@@ -744,11 +744,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
     .expect("nested normal calls restore borrowed authority before each caller continuation");
 }
 
-fn expect_function_error(
-    types: TypeTable,
-    function: Function,
-    expected: MirValidationErrorKind,
-) {
+fn expect_function_error(types: TypeTable, function: Function, expected: MirValidationErrorKind) {
     let error = validate_program(Program {
         types,
         functions: vec![function],
@@ -789,7 +785,10 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             parameters: Vec::new(),
             result: None,
             shared_reference_result_origin: Some(0),
-            body: body(Vec::new(), vec![BasicBlock::new(Vec::new(), Terminator::Return(None))]),
+            body: body(
+                Vec::new(),
+                vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+            ),
         },
         MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
     );
@@ -801,7 +800,10 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             parameters: Vec::new(),
             result: Some(i64_ty),
             shared_reference_result_origin: Some(0),
-            body: body(Vec::new(), vec![BasicBlock::new(Vec::new(), Terminator::Return(None))]),
+            body: body(
+                Vec::new(),
+                vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+            ),
         },
         MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
     );
