@@ -451,7 +451,9 @@ fn restored_pointer_origins_validate_on_normal_continue_and_break_loop_paths() {
              while flag { p = raw &b; p = raw &a; break; }\
          }",
     )
-    .expect("normal backedge, continue, and break paths must accept an exactly restored pointer origin");
+    .expect(
+        "normal backedge, continue, and break paths must accept an exactly restored pointer origin",
+    );
 }
 
 #[test]
@@ -479,7 +481,9 @@ fn raw_move_rejects_partial_targets_and_consumes_even_duplicable_targets() {
              let observed: I64 = x;\
          }",
     )
-    .expect_err("RawMove must consume a complete target even when its type is otherwise duplicable");
+    .expect_err(
+        "RawMove must consume a complete target even when its type is otherwise duplicable",
+    );
     assert!(has_diagnostic(
         &consumed_copy,
         DiagnosticKind::UnavailableBinding
