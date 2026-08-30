@@ -115,9 +115,18 @@ fn maps_each_used_raw_pointer_type_once_and_lowers_address_copy_and_retarget() {
         .map(|(_, pointee)| *pointee)
         .collect::<BTreeSet<_>>();
     assert_eq!(actual_pointees, expected_pointees);
-    assert_eq!(f.body.locals[scalar.0 as usize].ty, f.body.locals[copied.0 as usize].ty);
-    assert_eq!(f.body.locals[scalar.0 as usize].ty, f.body.locals[retarget.0 as usize].ty);
-    assert_ne!(f.body.locals[scalar.0 as usize].ty, f.body.locals[record_ptr.0 as usize].ty);
+    assert_eq!(
+        f.body.locals[scalar.0 as usize].ty,
+        f.body.locals[copied.0 as usize].ty
+    );
+    assert_eq!(
+        f.body.locals[scalar.0 as usize].ty,
+        f.body.locals[retarget.0 as usize].ty
+    );
+    assert_ne!(
+        f.body.locals[scalar.0 as usize].ty,
+        f.body.locals[record_ptr.0 as usize].ty
+    );
 
     let statements = f
         .body
@@ -182,10 +191,12 @@ fn raw_move_lowers_to_exact_operand_and_executes_defined() {
     let report = execute_source(source, "entry");
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(ObservedValue::I64(41)));
-    assert!(report.verification_events.iter().any(|event| matches!(
-        event.kind,
-        VerificationEventKind::RawMove { .. }
-    )));
+    assert!(
+        report
+            .verification_events
+            .iter()
+            .any(|event| matches!(event.kind, VerificationEventKind::RawMove { .. }))
+    );
 }
 
 #[test]
@@ -239,11 +250,16 @@ fn raw_assign_snapshots_pointer_before_rhs_call_and_writes_only_on_normal_contin
             && place.local == pointer
             && place.projections.is_empty()
     )));
-    assert!(continuation_block.statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::Drop { place }
-            if direct_local(place) == Some(raw_assign)
-    )));
+    assert!(
+        continuation_block
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Drop { place }
+                    if direct_local(place) == Some(raw_assign)
+            ))
+    );
 }
 
 #[test]
@@ -377,26 +393,30 @@ fn recursive_rhs_places_raw_assign_only_on_normal_call_continuation() {
         .expect("recursive RHS must lower to a call with normal continuation");
 
     let continuation_block = &entry.body.blocks[continuation.0 as usize];
-    assert!(continuation_block.statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::RawAssign { .. }
-    )));
+    assert!(
+        continuation_block
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, CoreStatement::RawAssign { .. }))
+    );
     assert!(
         entry.body.blocks[..=call_block_index]
             .iter()
             .flat_map(|block| block.statements.iter())
             .all(|statement| !matches!(statement, CoreStatement::RawAssign { .. }))
     );
-    assert!(entry.body.blocks[call_block_index]
-        .statements
-        .iter()
-        .any(|statement| matches!(
-            statement,
-            CoreStatement::Init {
-                src: Operand::Copy(PlaceAccess::Direct(place)),
-                ..
-            } if place.local == pointer && place.projections.is_empty()
-        )));
+    assert!(
+        entry.body.blocks[call_block_index]
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Init {
+                    src: Operand::Copy(PlaceAccess::Direct(place)),
+                    ..
+                } if place.local == pointer && place.projections.is_empty()
+            ))
+    );
 }
 
 #[test]
