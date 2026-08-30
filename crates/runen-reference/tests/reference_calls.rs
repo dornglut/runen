@@ -29,6 +29,7 @@ fn transferred_shared_reference_reads_suspended_caller_storage() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -67,6 +68,7 @@ fn transferred_shared_reference_reads_suspended_caller_storage() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -107,6 +109,7 @@ fn exclusive_replace_parameter_moves_and_restores_suspended_caller_target() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -145,6 +148,7 @@ fn exclusive_replace_parameter_moves_and_restores_suspended_caller_target() {
         name: "round_trip".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("reference", reference_ty, false),
@@ -202,6 +206,7 @@ fn temporary_child_borrowed_call_restores_parent_at_runtime() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -261,6 +266,7 @@ fn temporary_child_borrowed_call_restores_parent_at_runtime() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -308,6 +314,7 @@ fn nested_borrowed_call_resolves_original_target_across_three_frames() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -367,6 +374,7 @@ fn nested_borrowed_call_resolves_original_target_across_three_frames() {
         name: "middle".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![
@@ -387,6 +395,7 @@ fn nested_borrowed_call_resolves_original_target_across_three_frames() {
         name: "inner".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -427,6 +436,7 @@ fn call_fault_cleanup_destroys_callee_carrier_before_caller_storage_ends() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -462,6 +472,7 @@ fn call_fault_cleanup_destroys_callee_carrier_before_caller_storage_ends() {
         name: "fault".into(),
         parameters: vec![LocalId(0)],
         result: None,
+        shared_reference_result_origin: None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
