@@ -306,7 +306,7 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         ),
     };
     let error = validate_program(Program {
-        types: types.clone(),
+        types,
         functions: vec![immutable_replace],
     })
     .expect_err("ExclusiveReplace root requires ordinary direct assignment permission");
@@ -685,7 +685,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         ),
     };
     let error = validate_program(Program {
-        types: types.clone(),
+        types,
         functions: vec![shared_plain_interior_assign],
     })
     .expect_err("reference permission never substitutes for interior mutability");
@@ -896,7 +896,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         ),
     };
     let error = validate_program(Program {
-        types: types.clone(),
+        types,
         functions: vec![overlapping_move],
     })
     .expect_err("overlapping Shared child suspends parent exclusive access");
