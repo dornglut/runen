@@ -57,7 +57,10 @@ fn retains_raw_pointer_types_formation_copy_and_valid_retargeting() {
         ValueKind::RawAddressRoot { target } if target == f.parameters[0].binding
     ));
 
-    let Statement::Local { ty, initializer, .. } = &f.body.statements[1] else {
+    let Statement::Local {
+        ty, initializer, ..
+    } = &f.body.statements[1]
+    else {
         panic!("expected copied raw-pointer local");
     };
     assert_eq!(*ty, scalar_ty);
