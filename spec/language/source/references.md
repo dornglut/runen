@@ -1,392 +1,467 @@
-# Source Shared References
+# Source Safe References
 
 Status: **provisional normative; incomplete**
 
-This document owns the first represented source-language safe-reference relation: Shared reference type/value semantics, whole-binding root borrow targets, Shared reference authority and carrier lifetime, source-validation origin provenance, root Shared-borrow formation, bounded Shared dereference/copy production, implicit lexical lifetime validity, Shared-reference parameter/result transfer consequences, and the source-to-Core refinement obligations of this bounded slice.
+This document owns the represented source-language safe-reference relation: Shared and replacement-capable exclusive reference types and values, complete-root safe-reference targets, source safe-authority compatibility, reference authority/carrier lifetime, source-validation origin provenance, root formation, bounded complete-referent dereference, explicit complete-referent reborrow, replacement through a replacement-capable reference, parameter/result transfer consequences, external-referent structural ownership, implicit lexical lifetime validity, and source-to-Core refinement for this bounded slice.
 
-It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, and assignment from [Source function-local bindings](local-bindings.md); structural root availability from [Source structural ownership](structural-ownership.md); function entity/parameter/result-origin callable structure from [Source callables](callables.md); direct-call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); the independently owned raw-pointer/unsafe relation from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md) where its operations interact with active Shared authority; and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
+It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, ordinary value use, and assignment from [Source function-local bindings](local-bindings.md); structural root availability, consumption, replacement reset, and remaining ownership frontiers from [Source structural ownership](structural-ownership.md); function entity/parameter/result-origin callable structure from [Source callables](callables.md); direct-call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); represented control-flow state composition from [Source control flow](control-flow.md); the independently owned raw-pointer/unsafe relation from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
 
-The lower refinement target is the accepted Shared safe-reference relation in [Core references](../core/references.md) and the parameter/result-transfer plus Shared-reference result-origin relation in [Core functions and direct calls](../core/functions.md). Core reference identity, `StorageRegion`, reference-authority identity, Core liveness, and proving representation are not source-language authority.
+The lower refinement target is the accepted safe-reference relation in [Core references](../core/references.md) and the parameter/result-transfer plus Shared-reference result-origin relation in [Core functions and direct calls](../core/functions.md). Core reference identity, `StorageRegion`, reference-authority identity, Core liveness, and proving representation are not source-language authority.
 
-This reference relation remains intentionally Shared-only. It does not expose Core `Exclusive` or `ExclusiveReplace`, source reborrow, source reference mutation, reference-containing aggregate results, multiple or derived result origins, named lifetimes, or a general source place/lvalue/address category. Raw pointers and lexical unsafe admission are represented independently by `raw-pointers-unsafe.md`; their existence does not grant raw pointers safe-reference authority or widen this reference relation.
+This source relation represents Shared references and one replacement-capable exclusive class. It does not expose plain Core `Exclusive`, reference-containing aggregate fields/results, multiple or derived result-origin contracts, named lifetimes, non-lexical lifetime shortening, field-relative reference access, or a general source place/lvalue/address category.
 
-## Shared reference source type
+## Source reference types
 
-For every first-slice admissible referent source type `T`, the represented source type domain contains one **Shared reference type** `SharedRef(T)`.
+For every admissible referent source type `T`, the represented source type domain may contain:
 
-Its concrete spelling is `&T` under `concrete-syntax.md`.
+- `SharedRef(T)`, concretely spelled `&T`; and
+- `ExclusiveReplaceRef(T)`, concretely spelled `&mut T`.
 
-Two Shared reference source types are equal exactly when their referent source types are equal under `types.md`.
+A safe-reference source type is identified exactly by its referent source type and permission class. Two safe-reference source types are equal exactly when both dimensions are equal under the source type-equality relation from `types.md`.
 
-The referent type is therefore a semantic type-identity dimension. Lifetime, target binding identity, dynamic authority identity, lexical source location, storage identity, physical address, ABI representation, and lower Core type identifier are not source type-identity dimensions in this slice.
+Lifetime, target binding identity, dynamic authority identity, lexical source location, storage identity, physical address, ABI representation, and lower Core type identifier are not source type-identity dimensions.
 
-A Shared reference type is source-duplicable. Duplicating one Shared reference value creates another source reference carrier for the same source Shared authority and target; it does not form a second root borrow or a child authority.
+`SharedRef(T)` is source-duplicable. Duplicating one Shared reference value creates another carrier for the same source Shared authority and target; it does not form a new root or child authority.
 
-The `SharedRef(T)` referent edge is semantic indirection rather than direct structural record containment. This first slice nevertheless forbids Shared reference record fields and nested Shared reference referents, so it does not yet alter the acyclic represented nominal-record containment relation from `types.md`.
+`ExclusiveReplaceRef(T)` is source-non-duplicable. Ordinary owned transfer moves its single carrier. No source Copy, implicit duplication, or compatibility alias exists for this class.
+
+Safe-reference referent edges are semantic indirection rather than direct nominal-record containment. This slice still forbids safe-reference record fields and nested safe-reference referents.
 
 ## Referent admission
 
-A source type `T` is **first-slice Shared-referent-admissible** exactly when all of the following hold:
+A source type `T` is **Shared-referent-admissible** exactly when all of the following hold:
 
 1. `T` is a represented source value type under `types.md`;
 2. `T` is duplicable under the source-semantic duplicability relation from `types.md`; and
-3. the structural source value shape of `T` contains neither a Shared reference type nor a raw-pointer type.
+3. the structural source value shape of `T` contains neither a safe-reference type nor a raw-pointer type.
 
-The explicit raw-pointer exclusion is required now that `RawPtr(T)` is a represented source value type. It preserves the current Core reference-parameter referent-safety boundary and prevents this Shared-reference slice from transporting raw-pointer provenance through a safe referent domain.
+This preserves the previously accepted Shared-reference referent domain.
 
-A Shared reference type is represented in this slice only when its referent is first-slice Shared-referent-admissible.
+A source type `T` is **replacement-reference-referent-admissible** exactly when all of the following hold:
 
-This duplicable/referent-shape restriction is a bounded source-language admission rule, not a claim that safe Shared references fundamentally require duplicable or raw-pointer-free referents. Later source revisions may widen the source operation set and referent domain only under an accepted owner.
+1. `T` is one represented intrinsic scalar or nominal record source type under `types.md`; and
+2. the structural source value shape of `T` contains neither a safe-reference type nor a raw-pointer type.
+
+Replacement-reference referents may therefore be duplicable or non-duplicable nominal values. `SharedRef`, `ExclusiveReplaceRef`, and `RawPtr` are not admissible replacement-reference referents.
+
+These bounded restrictions preserve the current Core transferable-referent safety boundary. They do not claim that future safe references fundamentally require the same exclusions.
 
 ## Contextual type admission
 
-A represented `SharedRef(T)` is admitted directly only in these source declaration contexts:
+A represented `SharedRef(T)` is admitted directly only as:
 
 - one function parameter type;
 - one immutable ordinary local binding type; or
-- one function result type satisfying the unique Shared-reference result-origin contract from `callables.md`.
+- one function result type satisfying the exact identity-preserving Shared result-origin contract from `callables.md` and this document.
 
-It is source-invalid in this first slice as:
+A represented `ExclusiveReplaceRef(T)` is admitted directly only as:
+
+- one function parameter type; or
+- one immutable ordinary local binding type.
+
+A safe-reference type is source-invalid in this slice as:
 
 - a nominal record field type;
-- the declared type of a mutable ordinary local binding;
-- the referent of another Shared reference type; or
-- a function result when the callable result-origin admission from `callables.md` is missing or ambiguous.
+- the declared type of a mutable/rebindable reference local;
+- the referent of another safe-reference type; or
+- a function result when its permission class is `ExclusiveReplace`.
 
-`RawPtr(T)` is not a first-slice Shared-reference referent under the admission rule above.
+A `SharedRef(T)` result remains invalid when the callable result-origin admission is missing or ambiguous. `RawPtr(T)` is not an admissible safe-reference referent.
 
-Pattern-introduced local bindings cannot acquire a Shared reference type because first-slice nominal record fields cannot have Shared reference type.
+Pattern-introduced local bindings cannot acquire a safe-reference type because represented nominal record fields cannot contain safe references.
 
-These are source contextual-admission restrictions. They do not redefine Core type legality and do not imply that later source revisions must preserve the same restricted contexts.
+## Source reference values
 
-## Source reference value
+Every represented source safe-reference value contains exactly the dynamic semantic facts required by this relation:
 
-A represented source Shared reference value contains exactly the dynamic semantic facts required by this source relation:
-
-- one dynamic **source borrow target** selected as described below; and
-- one opaque dynamic **source Shared-authority identity** authorizing shared access to that target.
-
-Its source type separately fixes the exact referent source type.
+- one dynamic source reference target;
+- one opaque dynamic source reference-authority identity; and
+- the permission class fixed by its source type.
 
 Neither target nor authority identity is program-observable data. They cannot be compared, converted to integers, serialized, named by source syntax, or used as physical addresses.
 
-A source Shared reference is not a raw pointer, Core `ReferenceAuthorityId`, Core `StorageRegion`, Core `LoanId`, static Core `Place`, physical address, lifetime name, module binding, or source structural-ownership path by itself.
+A source safe reference is not a raw pointer, Core `ReferenceAuthorityId`, Core `StorageRegion`, Core `LoanId`, static Core `Place`, physical address, lifetime name, module binding, or source structural-ownership path by itself.
 
-Source reference values arise only from root Shared-borrow formation or source duplication/transport of an existing valid Shared reference value. A contract-bearing direct-call result is such identity-preserving transport; it does not fabricate a new reference. No literal, raw-pointer operation, or record construction fabricates one.
+Source safe-reference values arise only from root formation, explicit reborrow, or ordinary transport of an existing valid safe-reference value. No literal, raw-pointer operation, record construction, or implementation convenience fabricates one.
 
 ## Source-validation origin provenance
 
-In addition to the dynamic target/authority pair above, source validation tracks one non-observable **reference-origin provenance** for each represented Shared-reference value flow.
+Source validation tracks one non-observable **reference-origin provenance** for each represented Shared-reference value flow where result-origin validity can depend on identity.
 
-This provenance exists to distinguish independently advertised callable origins. It is not runtime data, not a third program-observable field of a reference value, not a source type-identity dimension, and not a lifetime name.
+This provenance is not runtime data, a source type-identity dimension, or a lifetime name. It exists to distinguish exact incoming authority identity from freshly formed or freshly reborrowed authority.
 
-Within validation of one function body, provenance is established and transported exactly as follows:
+Within validation of one function body:
 
-- a Shared-reference parameter in callable slot `i` begins with provenance **ParameterOrigin(i)**, independently of whether one particular dynamic caller passes another slot a carrier naming the same target or authority;
-- root `&x` formation begins with provenance **RootOrigin(x)** for the selected source binding identity;
+- a Shared-reference parameter in callable slot `i` begins with provenance **ParameterOrigin(i)**;
+- root `&x` formation begins with **RootOrigin(x)** for the selected binding identity;
 - ordinary Shared-reference duplication preserves provenance unchanged;
 - transfer into an immutable Shared-reference local preserves provenance unchanged;
-- ordinary use of such a local or parameter preserves its stored provenance in the produced duplicate; and
-- a successful contract-bearing Shared-reference direct call whose advertised result origin is parameter slot `j` produces caller-side provenance exactly equal to the provenance of the caller argument value supplied to slot `j`.
+- ordinary use of such a local or parameter preserves provenance unchanged;
+- every explicit reborrow creates a fresh authority and therefore a fresh **ReborrowOrigin** distinct from the parent's origin, even when it targets the same complete referent;
+- a successful contract-bearing Shared-reference direct call whose advertised result origin is parameter slot `j` produces caller-side provenance exactly equal to the caller argument value supplied to slot `j`.
 
-`RootOrigin(x)` and `ParameterOrigin(i)` are source-validation identities, not values available to source code. Distinct parameter slots have distinct provenance even when their dynamic arguments happen to alias or carry the same authority. Consequently a function advertising slot `i` cannot satisfy that contract by returning slot `j` merely because some caller passes equivalent or aliased references.
+Distinct parameter slots have distinct provenance even when dynamic arguments happen to alias or carry the same authority. A callee-created root or child reborrow therefore cannot satisfy an advertised Shared result merely because it reaches the same root or parent.
 
-Nested and recursive calls compose without callee-body expansion: the callee validates its own body against its local `ParameterOrigin(j)`, while its callable summary maps a successful result back to the caller-side provenance of the argument supplied to that advertised slot.
+A caller-created Shared child passed to an identity-preserving Shared function may be returned when the callee preserves that exact incoming child authority: inside the callee it is `ParameterOrigin(i)`, while the callable summary maps the successful result back to the caller-side `ReborrowOrigin` unchanged.
 
-A faithful typed frontend MAY encode these provenance facts in any representation that preserves the relation, but it MUST NOT infer an advertised result origin from body dataflow after callable validation or collapse distinct parameter-slot origins into one undifferentiated external-origin class.
+A faithful typed frontend MAY encode provenance differently, but it MUST preserve exact authority-origin distinctions and MUST NOT reconstruct an advertised result origin from body dataflow after callable validation.
 
-## Borrowable binding root
+## Safe-reference target domains
 
-The first source slice defines exactly one borrow-target category: a **borrowable binding root**.
+This slice has two complete-referent target categories.
 
-A borrowable binding root is one active parameter binding or ordinary local binding in the current source function activation, selected through the unqualified function-local lookup relation from `local-bindings.md`.
+### Local binding root
 
-The target is the complete empty structural path of that binding root. This first slice does not admit:
+A local-root safe-reference target is the complete empty structural path of one active parameter or ordinary local binding selected through the unqualified function-local lookup relation from `local-bindings.md`.
 
-- a non-empty field path;
-- a pattern path independently of its root binding;
-- a producer-backed transient;
-- a direct-call result;
-- a record-construction transient;
-- a field-receiver transient;
-- a pattern-scrutinee transient;
-- a dereference result;
-- an arbitrary temporary; or
-- a general source expression/place/lvalue
+Shared root formation may select an admissible active parameter or ordinary local. Replacement-capable root formation is narrower and may select only a mutable ordinary local, as defined below.
 
-as a root borrow target.
+No root formation selects a non-empty field path, pattern path independently of its root binding, producer transient, direct-call result, record-construction transient, dereference result, arbitrary temporary, or general source expression/place/lvalue.
 
-The dynamic target identity is the selected binding instance in the current source function activation. This source-semantic identity exists only to define the safe reference/lifetime relation. It does not expose a physical storage location or require the source binding to have a stable physical address.
+### External referent structural root
 
-A later source owner may introduce structural borrow targets or another source place relation only explicitly. Existing structural source paths from `structural-ownership.md` do not silently become addressable places because this root relation exists. The separate complete-root raw-address target from `raw-pointers-unsafe.md` likewise does not create such a general place category.
+Every `ExclusiveReplaceRef(T)` parameter establishes exactly one non-binding **external referent structural root** of exact root type `T` for the callee activation.
 
-## Root Shared-borrow formation
+That root consumes the structural ownership relation from `structural-ownership.md`:
 
-The concrete `&x` form from `concrete-syntax.md` requests one root Shared borrow.
+- it begins fully available with an empty consumed-path set at successful call entry;
+- `*r` ownership Move consumes its complete root;
+- `*r = value` replacement restores complete ownership with an empty consumed-path set;
+- complete-referent child reborrows target the same structural domain; and
+- normal completion must satisfy the restoration law below.
 
-Let `x` resolve to one active parameter/local binding whose declared source type is `T`, and let the surrounding receiving position require exact source type `SharedRef(U)`.
+This structural root is validation state for storage owned by a still-live suspended ancestor activation. It is not a local binding, does not introduce a lexical identifier, and does not duplicate the caller's binding structural state. For a local-root reference target, operations update that existing binding's structural ownership state instead of creating a second domain.
+
+## Canonical source safe-authority compatibility
+
+This document owns one canonical **source safe-authority compatibility** relation. Direct/root operation owners consume it rather than defining parallel alias rules.
+
+For one target region/root:
+
+- a **Shared requirement** is satisfied exactly when no overlapping active source exclusive safe authority exists;
+- an **Exclusive requirement** is satisfied exactly when no overlapping active source safe authority of either kind exists.
+
+`SharedRef` authorities are shared. `ExclusiveReplaceRef` authorities are exclusive; replacement capability is an additional operation permission, not a third alias kind.
+
+For direct operations on an original local root, every active overlapping safe-reference branch is considered, including a root replacement-capable authority whose own retained reference-relative capability has been reduced by a child. A Shared child does not legalize unrelated direct access to the original root. The live root replacement-capable authority continues to block direct operations requiring Shared compatibility until that authority branch actually ends.
+
+For reference-relative operations through a parent reference, delegation to active children constrains only that parent's retained capability under the child rules below. A Shared child leaves the overlapping parent with Shared reference-relative capability; a replacement-capable child suspends overlapping parent access until that child branch ends.
+
+The represented direct/root operations consume the compatibility classes as follows:
+
+- non-consuming ordinary whole-binding duplicate use: Shared requirement;
+- non-consuming binding-root field-value production: Shared requirement;
+- non-consuming direct-root pattern production: Shared requirement;
+- Shared root formation: Shared requirement;
+- raw address formation: Shared requirement;
+- consuming ordinary whole-binding use: Exclusive requirement;
+- consuming binding-root field-value production: Exclusive requirement;
+- consuming direct-root pattern production: Exclusive requirement;
+- whole-binding assignment/reinitialization: Exclusive requirement;
+- replacement-capable root formation: Exclusive requirement;
+- raw ownership move: Exclusive requirement; and
+- raw replacement: Exclusive requirement at its post-source commit point.
+
+Source `unsafe` does not weaken this relation.
+
+## Root Shared-reference formation
+
+Concrete `&x` requests one root Shared borrow.
+
+Let `x` resolve to one active parameter or ordinary local binding whose declared source type is `T`, and let the surrounding receiving position require exact source type `SharedRef(U)`.
 
 Formation is source-valid only when:
 
 1. `T` and `U` are exactly equal source types;
-2. `T` is first-slice Shared-referent-admissible;
-3. the complete structural root of `x` is fully available under `structural-ownership.md` immediately before formation;
-4. the dynamic target binding extent is active; and
-5. Shared alias admission succeeds against every active source reference authority targeting that same binding root.
+2. `T` is Shared-referent-admissible;
+3. the complete structural root of `x` is fully available immediately before formation;
+4. the target binding extent is active; and
+5. the canonical Shared requirement succeeds for the complete target root.
 
-Because this reference slice contains only Shared source authorities, overlapping Shared authorities are mutually compatible. Formation therefore fails no alias check merely because another Shared root authority for the same target is active. A raw-pointer value carries no source reference authority and therefore does not itself conflict with Shared-borrow formation.
+Successful formation creates one fresh Shared authority and carrier with `RootOrigin(x)`, leaves target ownership/value unchanged, and performs no target read, move, mutation, destruction, or replacement.
 
-Successful formation:
+Independent `&x` root formations create independent Shared authorities when compatibility permits them.
 
-1. creates one fresh source Shared-authority identity over the complete dynamic binding root;
-2. creates one source reference carrier naming that authority;
-3. produces one owned Shared reference value carrying that target/authority relation and `RootOrigin(x)` provenance; and
-4. leaves the target binding's structural ownership state and semantic value unchanged.
+## Root replacement-capable formation
 
-Formation does not duplicate, consume, move, mutate, replace, destroy, or otherwise read out the target value.
+Concrete `&mut x` requests one root replacement-capable exclusive reference.
 
-## Shared authority and reference carriers
+Let `x` resolve to one active ordinary local binding whose declared source type is `T`, and let the receiving position require exact source type `ExclusiveReplaceRef(U)`.
 
-Every live source Shared reference scalar value is one **source reference carrier** for its Shared-authority identity.
+Formation is source-valid only when:
 
-A source Shared authority remains active exactly while at least one live source carrier names it. This first slice has no source child/reborrow authority relation, so no child-only extension rule is required.
+1. `T` and `U` are exactly equal source types;
+2. `T` is replacement-reference-referent-admissible;
+3. `x` is an ordinary local binding, not a parameter;
+4. `x` is mutable under `local-bindings.md`;
+5. the complete structural root of `x` is fully available;
+6. the target binding extent is active; and
+7. the canonical Exclusive requirement succeeds for the complete target root.
+
+Parameters are not replacement-capable root targets because represented parameters do not establish ordinary local replacement permission.
+
+Successful formation creates one fresh replacement-capable exclusive authority and one carrier, leaves the target value/ownership unchanged, and performs no target read, move, mutation, destruction, or replacement.
+
+## Authority and carrier lifecycle
+
+Every live source safe-reference scalar value is one **source reference carrier** for its authority identity.
+
+A source reference authority remains active while either:
+
+- it has at least one live carrier; or
+- it has an active child authority, directly or transitively.
+
+When an authority has no carrier and no active child, it ends. Carrierless ancestors terminate transitively when their last descendant branch ends.
 
 Carrier consequences are:
 
-- root formation creates one carrier;
-- source duplication of a Shared reference creates one additional carrier naming the same target and authority;
-- transfer of an already produced reference value into a receiving local/parameter/result position transfers that produced carrier and does not create another authority;
-- lexical/activation cleanup of a live Shared reference value removes that carrier; and
-- the Shared authority ends when its final carrier ends.
+- root formation creates one carrier and one fresh root authority;
+- Shared duplication creates one additional carrier for the same authority;
+- replacement-capable references are non-copyable and ordinary whole-binding use moves the existing carrier;
+- initialization, parameter transfer, result transfer, and ordinary owned-value transport transfer an existing produced carrier rather than creating an authority;
+- explicit reborrow creates one fresh child authority and one child carrier without moving/copying the parent carrier;
+- lexical/activation cleanup of a live reference removes that carrier; and
+- cleanup of a reference value does not access its referent.
 
-This is source-semantic alias/lifetime bookkeeping. It does not require physical reference counting, garbage collection, hidden heap allocation, runtime counters, or a custom destructor.
+Reference locals are immutable. This slice performs no non-lexical authority shortening merely because a carrier is no longer textually used.
 
-Independent `&x` root formations create independent Shared authorities even when they target the same binding root. Those authorities may coexist because the first slice admits Shared/Shared aliasing.
+## Direct target consequences
 
-## Consequences for the borrowed target
+While active safe authority overlaps a local root, direct operations on that root remain governed by their existing operation owners plus the canonical compatibility relation above.
 
-While one or more source Shared authorities target binding root `x`, source operations on `x` remain governed by their existing owners plus this Shared-alias restriction.
+A direct non-consuming duplicate/path operation may proceed only under the Shared requirement. A direct ownership-consuming path operation or whole-binding assignment may proceed only under the Exclusive requirement.
 
-The following remain permitted when otherwise source-valid:
+Thus an active root replacement-capable authority blocks unrelated direct access to its target even when that authority currently has only a Shared child and the parent's retained reference-relative capability is Shared. Ending the child alone does not end the root authority; direct access becomes eligible only after the complete conflicting authority branch ends.
 
-- non-consuming ordinary whole-binding duplicate use;
-- non-consuming binding-root field-value production;
-- non-consuming direct-root pattern binding production; and
-- raw address formation of the complete root under `raw-pointers-unsafe.md`, because formation itself performs no pointee access and creates no authority.
+No separate borrow mark is added to `structural-ownership.md`. Safe authority and structural consumed-path state are distinct validation relations.
 
-Whole-binding assignment or reinitialization of `x` is source-invalid while any Shared authority for `x` remains active.
+## Ordinary safe-reference binding use
 
-The separately owned raw ownership move and raw replacement operations require exclusive raw target compatibility. Under the currently represented source authority set, `raw-pointers-unsafe.md` therefore rejects either operation while any active Shared authority targets `x`, even when a raw pointer to `x` was formed before or during that Shared authority interval.
+Ordinary whole-binding use of `SharedRef(T)` follows the existing duplicable-value relation:
 
-No first-slice source field assignment, partial-field reinitialization, safe-reference assignment, ownership-moving safe dereference, or explicit safe-reference drop operation exists.
+1. the reference binding root must be fully available;
+2. one additional carrier for the same target/authority is produced;
+3. provenance is preserved; and
+4. the stored reference binding remains owned and available.
 
-The first-slice referent restriction is significant here. If `T` is first-slice Shared-referent-admissible, then `T` is source-duplicable and its structural value shape contains neither Shared references nor raw pointers. For a positively duplicable nominal record, every structurally contained field source type is likewise duplicable under `types.md`. Consequently the currently represented ordinary value, field-value, and record-pattern uses reachable within a first-slice borrowed target do not consume a structural path merely because they produce a value, and they cannot extract a raw-pointer provenance fact from the referent.
+Ordinary whole-binding use of `ExclusiveReplaceRef(T)` follows the existing non-duplicable ownership-transfer relation:
 
-This reference slice therefore adds no second consumed-path set, borrow mark inside `structural-ownership.md`, control-flow union/intersection, or source alias-state join. Shared authority is a distinct dynamic source validity relation whose lexical lifetime is established below.
+1. the reference binding root must be fully available;
+2. the stored carrier is moved into the produced value without creating another carrier or authority;
+3. the moved-from reference binding root becomes consumed under `structural-ownership.md`; and
+4. target, authority identity, permission, and any applicable validation provenance are preserved.
 
-## Shared reference duplication and ordinary use
+Moving the carrier itself is not a target access. Active child authorities may keep the parent authority alive even when a parent carrier is temporarily absent.
 
-Because `SharedRef(T)` is source-duplicable, ordinary whole-binding use of one Shared-reference parameter/local binding follows the existing duplicable-value relation from `local-bindings.md`.
+## Complete-referent dereference
 
-Successful use:
+Concrete `*r` is one bounded complete-referent owned-value producer.
 
-1. requires the reference binding's complete structural root to be fully available;
-2. produces another owned Shared reference value with the same target, authority identity, and source-validation origin provenance;
-3. creates one additional carrier for that authority; and
-4. leaves the original reference binding owned and available.
+`r` resolves to one active parameter/local binding whose exact type is either `SharedRef(T)` or `ExclusiveReplaceRef(T)`. The stored reference carrier is obtained non-consumingly; dereference does not move/copy the carrier merely to select its target.
 
-An ordinary source use of a first-slice Shared reference therefore never moves the original carrier.
+For `SharedRef(T)`, successful `*r` requires a live carrier/authority, active target extent, fully available complete target, retained Shared authority, and an exact surrounding required type `T`. It produces one duplicate owned `T`, leaves target ownership unchanged, and creates no reference carrier or authority.
 
-The produced carrier is then transferred into the applicable receiving position under `function-execution.md`.
+For `ExclusiveReplaceRef(T)`:
 
-## Shared dereference/copy producer
+- when `T` is duplicable, `*r` requires retained Shared reference-relative authority plus a fully available complete target and produces one non-consuming duplicate of `T`;
+- when `T` is non-duplicable, `*r` requires retained Exclusive reference-relative authority plus a fully available complete target and ownership-moves the complete referent `T`, consuming the complete target structural root while target storage and reference authority remain live.
 
-The concrete `*r` form from `concrete-syntax.md` is one bounded source owned-value producer.
+The complete target structural state is the existing local binding root for a local-root reference or the external referent structural root for a replacement-capable parameter.
 
-`r` resolves through the existing unqualified function-local lookup relation and MUST denote one active parameter/local binding of exact source type `SharedRef(T)`.
+No explicit source safe-reference Drop, interior assignment, field-relative dereference, or general dereference place is represented.
 
-The operation obtains the stored Shared reference value non-consumingly. It does not duplicate or consume the reference carrier merely to select its target.
+## Complete-referent replacement
 
-The dereference producer is source-valid only when:
+Concrete statement `*r = Value;` is represented only when `r` has exact type `ExclusiveReplaceRef(T)`.
 
-- the source reference carrier is live;
-- its source Shared authority remains active;
-- its target binding extent remains active; and
-- the surrounding receiving position accepts exact source type `T`.
+Replacement is source-first:
 
-`T` is already duplicable by Shared-referent admission.
+1. resolve `r` and identify its current complete referent domain without consuming the destination carrier;
+2. validate and evaluate the RHS producer under exact required type `T`;
+3. if RHS evaluation faults or diverges, perform no outer referent replacement;
+4. after successful RHS production, require the destination reference carrier still to be live and its authority branch to retain full replacement-capable exclusive authority over the complete referent;
+5. select and end the referent's then-current remaining ownership frontier;
+6. install the produced exact-`T` value; and
+7. reset that referent structural ownership state to complete with an empty consumed-path set.
 
-Successful `*r`:
+The RHS may itself move from the referent through the same reference when otherwise valid. The outer replacement therefore selects the remaining frontier only after successful RHS evaluation.
 
-1. produces one duplicate owned source value of exact type `T` through the existing source duplicability capability;
-2. leaves the referenced target semantic value/ownership state unchanged;
-3. leaves the stored reference carrier unchanged; and
-4. creates no new source reference carrier or authority.
+The destination reference carrier/authority MUST remain usable through the commit check. This slice does not permit an RHS to consume or disable that destination carrier and then commit through a snapshotted stale dereference destination.
 
-This is a duplicate-value safe dereference only. The first slice defines no source safe-reference dereference Move, Drop, Assign, InteriorAssign, structural field-relative reference access, or reborrow. The separately owned raw ownership move is not a safe-reference dereference operation.
+No Shared-reference replacement or plain-Exclusive replacement source form exists.
+
+## Explicit complete-referent reborrow
+
+This slice represents only complete-referent explicit reborrows:
+
+```text
+&*r
+&mut *r
+```
+
+`&*r` requests a fresh Shared child of exact `SharedRef(T)` and is represented only when `SharedRef(T)` itself is valid. The parent may be Shared or replacement-capable, but it must retain Shared reference-relative authority over the complete referent.
+
+`&mut *r` requests a fresh replacement-capable child of exact `ExclusiveReplaceRef(T)`. The parent must itself be replacement-capable and retain full replacement-capable exclusive authority over the complete referent.
+
+Successful reborrow:
+
+1. creates one fresh child authority targeting the same complete structural referent domain;
+2. records the existing authority as parent;
+3. creates one child carrier without moving/copying the parent carrier;
+4. produces fresh reborrow provenance; and
+5. applies delegated authority until the child branch ends.
+
+Permission never strengthens. A Shared parent cannot produce `&mut *r`.
+
+A replacement-capable child suspends overlapping parent reference-relative access. A Shared child leaves the parent with only Shared reference-relative capability for the overlap. Parent capability is restored only after the child branch ends.
+
+Stored child locals are permitted only as immutable reference locals. This slice defines no subregion/field child, plain Exclusive child, implicit call-site reborrow, or reference field.
 
 ## Implicit lexical lifetime validity
 
-This slice introduces no source lifetime identifier, lifetime parameter, explicit outlives clause, lifetime type-identity dimension, or lifetime annotation syntax.
+This slice introduces no source lifetime identifier, lifetime parameter, explicit outlives clause, lifetime type-identity dimension, lifetime annotation syntax, or non-lexical shortening.
 
-Reference validity instead follows the source target/authority relation, bounded lexical carrier extents, and the advertised-origin restriction for the one Shared-reference result form.
+Reference validity follows target extent, authority/carrier lifecycle, lexical carrier extents, explicit child derivation, and the advertised Shared result-origin restriction.
 
 ### Reference locals
 
-A Shared-reference ordinary local is immutable in this slice.
+Every safe-reference ordinary local is immutable. Its initializer is evaluated before the local enters scope.
 
-Its initializer is evaluated before the local enters scope under `local-bindings.md` and `function-execution.md`. Therefore a direct target selected by `&x` is already active before the new reference binding begins.
+A local may initialize from root formation, ordinary transport of an existing reference, explicit reborrow, or a valid Shared contract-bearing direct-call result as applicable to its exact type.
 
-A reference local may also initialize from ordinary duplication of an already active Shared-reference parameter/local binding or from a contract-bearing direct-call result. Transfer into the new local preserves the producer's exact target, authority, and source-validation provenance.
+Reverse lexical cleanup and activation cleanup guarantee that a non-escaping local reference ends before an earlier same-scope or ancestor local target extent. Replacement-capable child locals likewise end before their parent/target extent under the represented lexical rules.
 
-For ordinary non-escaping use, the accepted lexical-scope/declaration/cleanup rules guarantee the new local cannot outlive the target/source relation from which it was created:
+A Shared-reference local may be returned only when its exact provenance satisfies the enclosing callable's advertised Shared result-origin contract. A replacement-capable reference is never result-admissible.
 
-- a local declared later in the same continuing lexical scope is cleaned before an earlier local;
-- a local in a descendant lexical scope is cleaned before its ancestor scope ends; and
-- ordinary locals are cleaned before parameter binding ownership ends at activation termination.
+### Parameters
 
-A Shared-reference local may also be used as a return producer only when its retained provenance satisfies the enclosing callable's advertised result-origin contract below. In that case the returned duplicate carrier may outlive the local binding itself, but its target cannot be callee-local: the required `ParameterOrigin(i)` proves that the target/authority arrived through the designated parameter from a still-live suspended ancestor activation. A local initialized from fresh `&local` retains `RootOrigin(local)` and therefore cannot escape by return.
+A Shared-reference parameter receives one valid Shared carrier targeting storage in a still-live suspended ancestor activation. It remains governed by its exact authority and may be explicitly reborrowed where allowed.
 
-Reference locals cannot be rebound, stored in record fields, or nested inside another reference. A stored Shared authority remains active until cleanup or transfer/return lifecycle removes its last carrier. This slice does **not** infer an earlier authority end merely because a reference binding is no longer textually used. Non-lexical authority shortening is deliberately absent.
+A replacement-capable parameter receives one moved replacement-capable carrier plus one external referent structural root that begins fully available. The target extent remains live while the caller activation is suspended.
 
-### Temporary root borrow transferred to a call
+Parameter reference bindings are immutable as bindings. Their permission class governs referent operations independently of parameter binding mutability.
 
-A root `&x` produced directly as a direct-call argument creates one transient reference carrier during argument evaluation.
+## Direct-call transfer and call-entry authority
 
-That produced carrier remains live while the direct-call relation holds the successful argument value and is transferred into the corresponding callee parameter if call admission succeeds.
+Safe-reference parameters remain ordinary owned parameter values. There is no borrowed-call pass mode and no implicit reborrow at a call boundary.
 
-The target belongs to the still-live caller activation. Caller suspension does not end that binding extent.
+Arguments are evaluated left-to-right and successful produced values are held by `function-execution.md`. After all argument production succeeds and before callee entry, every held safe-reference argument must satisfy both:
 
-- on normal callee return without preserving that argument as a contract-bearing result, callee cleanup ends its remaining parameter/local carriers before the caller resumes;
-- on normal return from a callee whose advertised result origin selects that argument, one result carrier naming the same target and authority survives callee activation cleanup and returns to the caller; the call boundary creates no new root authority;
-- on defined fault, no result carrier is produced and source activation cleanup proceeds from the faulting callee outward, ending reference carriers before an applicable target binding extent may end;
-- on divergence, the caller remains suspended, so its target storage/binding extent and every outstanding Shared authority/carrier remain live and no result carrier is synthesized; and
-- nested or recursive calls repeat the same relation.
+1. its complete target/referent structural root is fully available; and
+2. its authority retains the complete capability promised by its exact source reference type.
 
-A caller may transfer the returned carrier into a later immutable Shared-reference local. Because the target binding `x` was already active before the call and before that receiving local begins, ordinary reverse lexical cleanup ends the result local before the earlier same-scope or ancestor target extent can end.
+A held `SharedRef(T)` therefore requires full Shared capability. A held `ExclusiveReplaceRef(T)` requires full replacement-capable exclusive capability. A parent with an active child that reduces or suspends the required capability cannot satisfy call entry.
 
-No named lifetime is needed to express this bounded call/result relation.
+Ordinary use of an existing Shared binding duplicates a carrier. Ordinary use of an existing replacement-capable binding moves its carrier. A caller that wants to retain a replacement-capable parent across a nested call must pass an explicit child `&mut *parent`; a Shared child is used when only Shared permission is required.
 
-### Shared-reference parameters
+At successful call entry, every replacement-capable parameter establishes its external referent structural root fully available. The callee may move its complete referent and later restore it through replacement.
 
-A Shared-reference parameter receives one valid carrier targeting storage in a still-live suspended ancestor activation.
+On normal callee continuation, every transferred replacement-capable external referent MUST be fully available before activation cleanup. On defined fault there is no normal restoration obligation; ordinary fault cleanup applies to carriers/locals. On divergence no synthetic restoration or cleanup occurs and the caller remains suspended.
 
-That external target extent is valid for the complete callee activation under the direct-call relation. Parameter bindings are immutable. Any local Shared-reference duplicate established from the parameter has an extent contained within the same activation and is cleaned before the parameter ends unless a separate duplicate is preserved as the function's valid result carrier.
+Nested and recursive calls repeat the same relation.
 
-Within independent body validation, parameter slot `i` begins with `ParameterOrigin(i)` even when another slot may dynamically alias it in some call. This is the source-level distinction consumed by the result-origin contract.
+## Normal-completion restoration law
 
-The first-slice safe-reference operation set cannot move, drop, assign, or interior-mutate the external referent through the Shared reference. The independent raw-pointer source slice also cannot receive a `RawPtr` through a parameter and excludes raw pointers from Shared referents. Therefore every normally returning source-valid callee leaves that external referent fully owned/live, satisfying the lower Core normal-return referent requirement by construction.
+For every incoming `ExclusiveReplaceRef(T)` parameter, every explicit normal Return and every normal no-result fallthrough MUST, after result-value effects and before activation cleanup, leave that parameter's external referent structural root fully available.
+
+Failure is source-invalid normal completion. No implicit edge repair, replacement, reset, or cleanup operation is inserted to satisfy this law.
+
+Defined fault and divergence have no normal restoration obligation.
 
 ## Shared-reference result-origin validity
 
+Only `SharedRef(T)` has a represented reference result form.
+
 Let a source function have result type `SharedRef(T)` and the one advertised Shared-reference result-origin parameter slot `i` established by `callables.md`.
 
-After the incoming argument has transferred into parameter slot `i`, that parameter value establishes the activation's advertised dynamic result origin: its exact source borrow target and exact source Shared-authority identity. Independent source validation simultaneously establishes `ParameterOrigin(i)` as the required result provenance for that function body.
+Every source-valid normal result-bearing Return MUST produce one `SharedRef(T)` value satisfying both:
 
-Every source-valid normal result-bearing Return from that function MUST produce one `SharedRef(T)` value satisfying both requirements:
+1. source-validation provenance is exactly the body-local `ParameterOrigin(i)` established for the incoming value in slot `i`; and
+2. its carrier names the exact same dynamic target and exact same Shared-authority identity established by that incoming value.
 
-1. its source-validation provenance is exactly `ParameterOrigin(i)`; and
-2. its carrier names the exact same dynamic target and exact same Shared-authority identity established by the incoming value for slot `i`.
+Identity-preserving transport may use ordinary Shared duplication, immutable locals, nested identity-preserving calls, or recursion.
 
-The provenance requirement is essential even though the dynamic identity requirement also holds. A different parameter slot `j` remains invalid as the advertised origin even if one particular caller passes values for `i` and `j` that happen to name the same target and authority.
+Fresh root formation and every fresh reborrow create a new authority identity and therefore cannot satisfy an existing Shared result origin merely because they reach the same target or parent authority. Another parameter slot likewise cannot satisfy slot `i` merely because one dynamic caller aliases them.
 
-Identity-preserving transport that can satisfy the contract includes:
+A caller-created Shared child may round-trip through a callee with an exact identity-preserving Shared result contract when the callee preserves that exact incoming child authority. The callee does not reclassify that child as a newly created callee authority; caller-side provenance after return is exactly the argument provenance supplied to the advertised slot.
 
-- ordinary Shared-reference duplication of the designated parameter;
-- storage in and later duplication from one or more immutable Shared-reference locals retaining `ParameterOrigin(i)`;
-- a nested contract-bearing direct call whose advertised-origin argument has `ParameterOrigin(i)` and whose result therefore returns that same caller-side provenance; and
-- direct or mutual recursion using the same callable summaries without body expansion.
+Replacement-capable results, derived/subregion result contracts, multiple origins, and reference-containing aggregate results are invalid.
 
-The following do not satisfy the first contract:
+## Control-flow consequences
 
-- fresh `&local`, because it creates a fresh authority and `RootOrigin(local)`;
-- another parameter slot, because it begins with a distinct `ParameterOrigin(j)` even if dynamically aliased;
-- a nested call whose selected caller-side origin provenance differs from `ParameterOrigin(i)`; and
-- any future reborrow/derived authority, static/global origin, Exclusive/ExclusiveReplace reference, aggregate reference result, raw pointer, or multiple-origin relation outside this slice.
+Reference authority parent/child state is tracked sequentially by source validation according to carrier ownership and lexical cleanup. This slice does not introduce a generic authority-graph join or fixed point because child escape/rebinding/reference fields/results are excluded and persistent child state is determined by ordinary owned-carrier lifetime.
 
-Return-producer evaluation and activation cleanup ordering are owned by `function-execution.md`. This owner supplies the exact reference identity/provenance validity consumed by that ordering.
+External referent structural roots are definite structural ownership state. `control-flow.md` consumes them alongside binding structural state:
 
-## Direct-call transfer
+- when two conditional outcomes both continue normally, each external referent root must have exactly equal structural ownership state on both outcomes;
+- when exactly one outcome continues normally, that outcome's exact external referent state continues;
+- for `while`, let `H` be the complete enclosing state before condition validation and `C` the state after successful condition validation; a normal backedge and `continue` must restore the applicable external referent state exactly to `H`, `break` must carry the exact `C` state required by the loop-exit target, and the false/post-loop state is `C`;
+- no implicit repair/reset occurs at an edge.
 
-Shared-reference parameters remain ordinary source parameter slots under `callables.md`. There is no source borrowed-parameter pass mode.
-
-Argument count/order, exact type matching, left-to-right argument evaluation, held successful argument values, activation creation, parameter initialization, normal result handling, fault propagation, and divergence remain owned by `function-execution.md`.
-
-Reference-specific consequences are:
-
-- ordinary use of an existing Shared-reference binding duplicates the source reference and creates a produced carrier while retaining the caller binding carrier and preserving caller-side provenance;
-- direct `&x` creates a new root Shared authority/carrier with `RootOrigin(x)` and produces that carrier;
-- the successfully produced carrier is transferred into the parameter binding without creating another root authority;
-- inside the callee, each Shared-reference parameter slot receives its own body-validation `ParameterOrigin(i)` regardless of caller-side provenance, while the caller-side provenance of the admitted argument remains the callable-summary fact used to describe any result;
-- source reference parameter types refine only to Core parameter-transfer-safe Shared reference types; and
-- when the target has a Shared-reference result-origin contract selecting slot `j`, every normal result preserves exactly the target/authority of the argument supplied to `j` and exposes caller-side provenance exactly equal to that argument value's provenance.
-
-The normal call boundary creates no root authority, reborrow, semantic reference Copy, or alternate result provenance. The result carrier is produced by valid callee execution and preserved through return cleanup under `function-execution.md`.
-
-On defined fault there is no Shared-reference result value or caller-side result provenance. On divergence the caller remains suspended and no synthetic result is produced.
-
-No source reborrow is implied at an argument or result boundary. Raw-pointer values remain excluded from call transfer under the separate raw-pointer/callable admission boundary.
+The normal-completion restoration law remains an additional terminal requirement after represented control-flow composition.
 
 ## Source-to-Core refinement
 
-A faithful lowering of this represented source slice MUST preserve these semantic facts:
+A faithful lowering MUST preserve these semantic facts:
 
-- source `SharedRef(T)` maps to the canonical Core safe-reference type whose referent is the faithful Core lowering of `T` and whose permission is `Shared`;
-- root source `&x` maps to Core Shared root-reference formation from the direct Core storage representing binding `x`;
-- source duplication of a Shared reference maps to ordinary Core `Copy` of the stored Shared-reference value and therefore to the existing Core carrier-duplication consequence;
-- source `*r` maps to Core reference-relative `Copy` of the complete referent region;
-- a source Shared-reference parameter maps to one ordinary Core parameter slot of the corresponding Core Shared-reference type;
-- a source function with a valid Shared-reference result maps that result to the same scalar Core Shared-reference type and maps its advertised source result-origin parameter slot exactly to the Core function's Shared-reference result-origin slot; and
-- source reference local/parameter cleanup plus preservation of a valid result carrier maps to ordinary Core carrier-aware cleanup/result transfer under the accepted Core reference and direct-call relations.
+- `SharedRef(T)` maps to the canonical Core safe-reference type with permission `Shared` and exact lowered referent `T`;
+- `ExclusiveReplaceRef(T)` maps to the canonical Core safe-reference type with permission `ExclusiveReplace` and exact lowered referent `T`;
+- root `&x` maps to Core Shared root-reference formation from the direct Core storage for `x`;
+- root `&mut x` maps to Core `ExclusiveReplace` root-reference formation only for the source-valid mutable ordinary local target;
+- Shared source duplication maps to ordinary Core Copy of the Shared reference value;
+- replacement-capable reference transport maps to ordinary Core Move/owned transfer and never to Copy;
+- source `*r` through Shared or duplicable replacement-capable referents maps to Core reference-relative Copy of the complete referent;
+- source `*r` through a non-duplicable replacement-capable referent maps to Core reference-relative Move of the complete referent;
+- source `*r = value` maps to Core reference-relative ordinary Assign through `ExclusiveReplace`, preserving source-first evaluation and the source destination-carrier validity boundary;
+- `&*r` maps to Core Shared complete-referent reborrow and `&mut *r` maps to Core ExclusiveReplace complete-referent reborrow;
+- safe-reference parameters map to ordinary Core parameter slots of the corresponding exact safe-reference type;
+- each replacement-capable parameter maps to the Core external-referent validation/postcondition relation;
+- a valid Shared-reference result maps its advertised source result-origin parameter slot exactly to the Core function's Shared-reference result-origin slot; and
+- lexical/activation cleanup maps to ordinary Core carrier-aware cleanup.
 
-Source origin provenance is validation/refinement evidence. It need not become a runtime object or Core value field, but a frontend/lowerer MUST retain enough accepted source-semantic information to validate Return provenance and emit the exact callable result-origin slot without reconstructing either from Core body behavior.
+Source origin provenance and external referent structural state are validation/refinement evidence. They need not become source-observable runtime objects, but a frontend/lowerer MUST retain enough accepted semantic information to validate exact result identity, call entry, control flow, and normal restoration without reconstructing those rules from host-language behavior or lower implementation convenience.
 
-This mapping creates no new Core semantics and MUST remain inside the current Core parameter-transfer boundary plus the accepted bounded identity-preserving Shared-reference result contract.
-
-The following facts remain source authority and MUST NOT be reconstructed from lower representation:
+The following remain source authority and MUST NOT be reconstructed from lower representation:
 
 - source binding identity and lookup;
-- borrowable-binding-root eligibility;
-- source referent duplicability and Shared/raw-pointer-free admission;
-- contextual restriction to parameters, immutable locals, and the one contract-bearing Shared-reference result form;
-- source-validation origin provenance and advertised source result-origin selection;
-- lexical source lifetime validity;
-- source assignment prohibition while Shared authority is active; and
+- source referent admission/contextual restrictions;
+- mutable-local-only `&mut x` root eligibility;
+- source safe-authority compatibility for direct operations;
+- reference-origin provenance and advertised Shared result-origin selection;
+- lexical lifetime validity;
+- external referent structural ownership state; and
 - source type/accessibility validity.
-
-A frontend/lowerer may choose HIR/Core identifiers and other implementation structures freely only when they preserve these source facts. Core `StorageRegion`, reference-authority identifiers, local numbering, path liveness, raw-pointer representation, or machine behavior do not retroactively define source semantics.
 
 ## Raw-pointer and unsafe interaction
 
-Raw-pointer values, raw address formation, raw ownership move/replacement, lexical unsafe admission, pointer-origin provenance, and their source-to-Core refinement are owned independently by `raw-pointers-unsafe.md`.
+Raw-pointer values, raw address formation, raw ownership move/replacement, lexical unsafe admission, pointer-origin provenance, and their source-to-Core refinement are owned by `raw-pointers-unsafe.md`.
 
-Their relationship to this Shared-reference owner is intentionally narrow:
+Their safe-reference interaction is exactly:
 
-- a raw pointer is not a safe reference and carries no Shared authority;
-- `RawPtr(T)` is not an admissible Shared referent in this slice;
-- raw address formation does not itself conflict with an active Shared authority because it does not access the pointee value;
-- raw ownership move and raw replacement require exclusive raw-target compatibility and are source-invalid while an active Shared authority targets the same root; and
-- unsafe admission never weakens or ends a Shared authority.
+- a raw pointer is not a safe reference and carries no safe authority;
+- safe-reference and raw-pointer types are excluded from each other's represented referent/pointee structural domains as specified by their owners;
+- raw address formation requires the canonical Shared compatibility requirement and therefore rejects an active overlapping replacement-capable exclusive safe authority while remaining compatible with Shared authority;
+- raw ownership move and raw replacement require the canonical Exclusive compatibility requirement and therefore reject every active overlapping safe authority;
+- lexical `unsafe` never weakens, ends, or bypasses safe authority; and
+- no reference-to-raw or raw-to-reference conversion is defined.
 
-This document therefore grants no reference-to-raw conversion, raw-to-reference conversion, pointer arithmetic/cast/null relation, or alternate escape path for a Shared reference.
-
-## Explicit first-slice exclusions
+## Explicit exclusions
 
 This revision does not define:
 
-- source `Exclusive` or `ExclusiveReplace` reference types;
-- `&mut` or another mutable/exclusive source reference spelling;
-- source reborrow or child reference authority;
-- Shared references to non-duplicable or raw-pointer-containing referents;
-- reference-containing nominal record fields/aggregates;
-- recursive nominal types through reference fields;
+- a source form for plain Core `Exclusive`;
+- safe-reference record fields or reference-containing aggregates;
 - mutable/rebindable reference locals;
-- nested Shared reference referents;
-- field/path borrow targets;
+- nested reference referents;
+- field/subregion root formation or reborrow;
 - reference-relative field access;
-- safe-reference Move, Drop, Assign, or InteriorAssign;
-- reference-containing aggregate function results, multiple or explicit source result-origin choices, derived/subregion reference results, static/global reference origins, or Exclusive/ExclusiveReplace reference results;
-- lifetime names, parameters, explicit outlives constraints, or non-lexical shortening;
-- closures/captures, generics/traits/coherence, const/static storage, async/tasks, or package behavior.
+- explicit safe-reference Drop or InteriorAssign source forms;
+- replacement-capable function results;
+- derived/subregion or multiple-origin Shared result contracts;
+- named lifetimes, lifetime parameters, explicit outlives constraints, or non-lexical shortening;
+- implicit call-site reborrow or a borrowed-call pass mode;
+- pointer/reference conversions;
+- unsafe callable contracts;
+- closures/captures, generics/traits/coherence, const/static storage, async/tasks, ABI/layout/FFI/linkage, or package behavior.
 
-The bounded one-origin identity-preserving Shared-reference result relation above is the only reference-result form represented by this revision. The independently represented raw-pointer/unsafe slice does not widen that result relation. The absence of the excluded reference relations does not infer them from Core, raw-pointer semantics, or another language. Each requires its own accepted source owner or explicit extension of this owner.
+The bounded exact-identity Shared-reference result relation and complete-referent replacement-capable reference/reborrow relation above are the only represented safe-reference forms. The absence of broader relations does not permit them to be inferred from Core, host-language behavior, another language, parser convenience, or test expectations.
