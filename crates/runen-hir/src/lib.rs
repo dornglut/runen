@@ -643,7 +643,9 @@ pub enum DiagnosticKind {
         referent: Type,
         permission: ReferencePermission,
     },
-    InvalidRawPointerPointee { pointee: Type },
+    InvalidRawPointerPointee {
+        pointee: Type,
+    },
     DuplicateParameter,
     LocalShadowing,
     ExpectedValueBinding,
@@ -661,20 +663,50 @@ pub enum DiagnosticKind {
     BorrowedAssignmentTarget,
     ImmutableAssignmentTarget,
     ExpectedFunction,
-    ArgumentCount { expected: usize, found: usize },
-    TypeMismatch { expected: Type, found: Type },
-    IntegerNegationRequiresInteger { required: Type },
-    IntegerComplementRequiresInteger { required: Type },
-    AdditionRequiresIntegerOrFloating { required: Type },
-    NumericContractSelectionRequiresGovernedFloatingOperation { required: Type },
-    SubtractionRequiresIntegerOrFloating { required: Type },
-    MultiplicationRequiresIntegerOrFloating { required: Type },
-    DivisionRequiresFloating { required: Type },
-    IntegerXorRequiresInteger { required: Type },
-    IntegerOrRequiresInteger { required: Type },
-    IntegerLiteralRequiresInteger { required: Type },
-    IntegerLiteralOutOfRange { required: Type },
-    FloatingLiteralRequiresFloating { required: Type },
+    ArgumentCount {
+        expected: usize,
+        found: usize,
+    },
+    TypeMismatch {
+        expected: Type,
+        found: Type,
+    },
+    IntegerNegationRequiresInteger {
+        required: Type,
+    },
+    IntegerComplementRequiresInteger {
+        required: Type,
+    },
+    AdditionRequiresIntegerOrFloating {
+        required: Type,
+    },
+    NumericContractSelectionRequiresGovernedFloatingOperation {
+        required: Type,
+    },
+    SubtractionRequiresIntegerOrFloating {
+        required: Type,
+    },
+    MultiplicationRequiresIntegerOrFloating {
+        required: Type,
+    },
+    DivisionRequiresFloating {
+        required: Type,
+    },
+    IntegerXorRequiresInteger {
+        required: Type,
+    },
+    IntegerOrRequiresInteger {
+        required: Type,
+    },
+    IntegerLiteralRequiresInteger {
+        required: Type,
+    },
+    IntegerLiteralOutOfRange {
+        required: Type,
+    },
+    FloatingLiteralRequiresFloating {
+        required: Type,
+    },
     DuplicateRecordInitializer,
     UnknownRecordField,
     MissingRecordInitializer,
