@@ -130,14 +130,15 @@ pub enum SyntaxKind {
     NumericContractSelectedValue,
     Slash,
     Amp,
-    SharedBorrowValue,
-    SharedDereferenceValue,
+    SafeReferenceValue,
+    ReferenceDereferenceValue,
     KwRaw,
     KwUnsafe,
     RawAddressOfValue,
     RawMoveValue,
     RawAssignStatement,
     UnsafeBlockStatement,
+    ReferenceAssignStatement,
 }
 
 impl SyntaxKind {
@@ -286,14 +287,15 @@ impl Language for RunenLanguage {
             105 => SyntaxKind::NumericContractSelectedValue,
             106 => SyntaxKind::Slash,
             107 => SyntaxKind::Amp,
-            108 => SyntaxKind::SharedBorrowValue,
-            109 => SyntaxKind::SharedDereferenceValue,
+            108 => SyntaxKind::SafeReferenceValue,
+            109 => SyntaxKind::ReferenceDereferenceValue,
             110 => SyntaxKind::KwRaw,
             111 => SyntaxKind::KwUnsafe,
             112 => SyntaxKind::RawAddressOfValue,
             113 => SyntaxKind::RawMoveValue,
             114 => SyntaxKind::RawAssignStatement,
             115 => SyntaxKind::UnsafeBlockStatement,
+            116 => SyntaxKind::ReferenceAssignStatement,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
