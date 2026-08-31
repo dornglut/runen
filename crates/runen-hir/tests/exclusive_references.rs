@@ -327,7 +327,9 @@ fn fresh_reborrow_cannot_substitute_for_the_exact_shared_result_origin() {
              return child;\
          }",
     )
-    .expect_err("fresh child authority is not the callable's exact advertised Shared result origin");
+    .expect_err(
+        "fresh child authority is not the callable's exact advertised Shared result origin",
+    );
     assert!(has_diagnostic(&errors, |kind| kind
         == DiagnosticKind::SharedReferenceResultOriginMismatch));
 }
