@@ -266,6 +266,7 @@ impl Parser<'_> {
                 Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
                 Some(SyntaxKind::KwRaw) => self.parse_raw_assign_statement(),
                 Some(SyntaxKind::KwUnsafe) => self.parse_unsafe_block_statement(),
+                Some(SyntaxKind::Star) => self.parse_reference_assign_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
@@ -342,6 +343,7 @@ impl Parser<'_> {
                 Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
                 Some(SyntaxKind::KwRaw) => self.parse_raw_assign_statement(),
                 Some(SyntaxKind::KwUnsafe) => self.parse_unsafe_block_statement(),
+                Some(SyntaxKind::Star) => self.parse_reference_assign_statement(),
                 Some(SyntaxKind::Ident) => self.parse_identifier_statement(),
                 Some(SyntaxKind::LBrace) => self.parse_block_statement(),
                 Some(_) => {
@@ -662,6 +664,17 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
+    fn parse_reference_assign_statement(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::ReferenceAssignStatement.into());
+        self.expect(SyntaxKind::Star, ExpectedSyntax::Statement);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        self.parse_value();
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
     fn parse_raw_assign_statement(&mut self) {
         self.builder
             .start_node(SyntaxKind::RawAssignStatement.into());
@@ -723,10 +736,14 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) {
         self.builder.start_node(SyntaxKind::TypeRef.into());
-        if !self.eat(SyntaxKind::KwRaw) {
-            self.eat(SyntaxKind::Amp);
+        if self.eat(SyntaxKind::KwRaw) {
+            self.parse_reference_referent_type();
+        } else {
+            if self.eat(SyntaxKind::Amp) {
+                self.eat(SyntaxKind::KwMut);
+            }
+            self.parse_reference_referent_type();
         }
-        self.parse_reference_referent_type();
         self.builder.finish_node();
     }
 
@@ -827,10 +844,10 @@ impl Parser<'_> {
     fn parse_value_in(&mut self, context: ValueContext) {
         match self.current() {
             Some(SyntaxKind::Amp) if matches!(context, ValueContext::Ordinary) => {
-                self.parse_shared_borrow_value();
+                self.parse_safe_reference_value();
             }
             Some(SyntaxKind::Star) if matches!(context, ValueContext::Ordinary) => {
-                self.parse_shared_dereference_value();
+                self.parse_reference_dereference_value();
             }
             Some(SyntaxKind::KwRaw) if matches!(context, ValueContext::Ordinary) => {
                 self.parse_raw_value();
@@ -1001,17 +1018,19 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_shared_borrow_value(&mut self) {
+    fn parse_safe_reference_value(&mut self) {
         self.builder
-            .start_node(SyntaxKind::SharedBorrowValue.into());
+            .start_node(SyntaxKind::SafeReferenceValue.into());
         self.expect(SyntaxKind::Amp, ExpectedSyntax::Value);
+        self.eat(SyntaxKind::KwMut);
+        self.eat(SyntaxKind::Star);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.builder.finish_node();
     }
 
-    fn parse_shared_dereference_value(&mut self) {
+    fn parse_reference_dereference_value(&mut self) {
         self.builder
-            .start_node(SyntaxKind::SharedDereferenceValue.into());
+            .start_node(SyntaxKind::ReferenceDereferenceValue.into());
         self.expect(SyntaxKind::Star, ExpectedSyntax::Value);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.builder.finish_node();
