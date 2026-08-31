@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the first represented source-language raw-pointer and unsafe-admission relation: raw-pointer type/value semantics, exact binding-root pointer-origin provenance, lexical pointer validity, bounded raw address formation, one unsafe ownership-moving raw access, one unsafe source-first raw replacement, lexical unsafe admission, automatic discharge of the represented unsafe preconditions, and source-to-Core refinement for this bounded slice.
 
-It consumes represented source type identity and owned-value duplicability from [Source type foundation](types.md); binding identity, lexical scope, lookup, assignment mutability, binding lifecycle, ordinary value use, and ordinary assignment from [Source function-local bindings](local-bindings.md); structural ownership state, path availability, consumption, remaining-ownership frontier, and root reset from [Source structural ownership](structural-ownership.md); Shared reference authority and carrier state from [Source Shared references](references.md); callable admission from [Source callable signatures](callables.md); execution, cleanup, return, defined fault, and divergence from [Source function execution](function-execution.md); represented control-flow joins and loop backedges from [Source control flow](control-flow.md); and represented spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
+It consumes represented source type identity and owned-value duplicability from [Source type foundation](types.md); binding identity, lexical scope, lookup, assignment mutability, binding lifecycle, ordinary value use, and ordinary assignment from [Source function-local bindings](local-bindings.md); structural ownership state, path availability, consumption, remaining-ownership frontier, and root reset from [Source structural ownership](structural-ownership.md); safe-reference authority/carrier state and the canonical Shared/Exclusive direct compatibility relation from [Source safe references](references.md); callable admission from [Source callable signatures](callables.md); execution, cleanup, return, defined fault, and divergence from [Source function execution](function-execution.md); represented control-flow joins and loop backedges from [Source control flow](control-flow.md); and represented spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
 
 The lower refinement target is the accepted raw-pointer, unsafe-operation, storage/lifecycle, alias-compatibility, and direct-call relation in [Core pointers and provenance](../core/pointers.md), [Core unsafe semantics](../core/unsafe.md), [Core value and storage semantics](../core/value-storage.md), [Core borrowing](../core/borrowing.md), and [Core functions and direct calls](../core/functions.md).
 
@@ -19,7 +19,7 @@ A source type is **first-slice raw-pointee-admissible** exactly when it is eithe
 - one represented intrinsic scalar source type from `types.md`; or
 - one represented nominal record source type from `types.md`.
 
-`RawPtr(T)` and `SharedRef(T)` are not first-slice raw-pointee-admissible. The raw-pointer constructor is therefore nonrecursive in this slice and does not create a raw-pointer-to-reference relation.
+`RawPtr(T)`, `SharedRef(T)`, and `ExclusiveReplaceRef(T)` are not first-slice raw-pointee-admissible. The raw-pointer constructor is therefore nonrecursive in this slice and does not create a raw-pointer-to-reference relation.
 
 Two raw-pointer source types `RawPtr(A)` and `RawPtr(B)` are equal exactly when `A` and `B` are equal under the source type-equality relation from `types.md`.
 
@@ -38,7 +38,7 @@ Such a local may be immutable or mutable under the ordinary assignment-mutabilit
 - a function parameter type;
 - a function result type;
 - a nominal record field type;
-- a Shared-reference referent;
+- a safe-reference referent;
 - a raw-pointer pointee; or
 - a pattern-introduced binding type, because first-slice record fields cannot contain raw pointers.
 
@@ -46,7 +46,7 @@ These are bounded source admission rules. They do not redefine Core raw-pointer 
 
 ## Raw-pointer value and pointer-origin provenance
 
-Every represented source raw-pointer value denotes one existing complete source binding root in the current function activation. The pointer does not carry source Shared-reference authority, does not create a source loan, and does not keep any Shared authority active.
+Every represented source raw-pointer value denotes one existing complete source binding root in the current function activation. The pointer carries no source safe-reference authority, creates no source safe-reference authority, and does not keep any safe-reference authority active.
 
 Source validation additionally tracks one non-observable **pointer-origin provenance** for every raw-pointer value flow:
 
@@ -93,22 +93,25 @@ Formation is source-valid only when:
 
 1. `x` resolves through the existing function-local lookup relation;
 2. `x` is an active parameter or ordinary local binding;
-3. its declared type `T` is first-slice raw-pointee-admissible; and
-4. the surrounding receiving position requires exact source type `RawPtr(T)`.
+3. its declared type `T` is first-slice raw-pointee-admissible;
+4. the surrounding receiving position requires exact source type `RawPtr(T)`; and
+5. the canonical **Shared requirement** from `references.md` succeeds for the complete target root.
 
-Formation does **not** require the complete target root to be fully available under structural ownership. It may select a fully available, partially available, or unavailable binding root while that binding's lexical/storage extent remains active.
+Formation does **not** require the complete target root to be fully available under structural ownership. It may select a fully available, partially available, or unavailable binding root while that binding's lexical/storage extent remains active, provided the independently required Shared safe-authority compatibility relation succeeds.
 
 Successful formation:
 
 - produces one owned raw-pointer value with `PointerOrigin(x)`;
 - leaves the target structural ownership state unchanged;
-- creates no Shared reference authority, reference carrier, loan, or borrow interval;
+- creates no safe-reference authority, reference carrier, loan, or borrow interval;
 - does not read, duplicate, consume, move, mutate, initialize, destroy, replace, or otherwise access the target value; and
 - is not itself an unsafe-admission-required source operation.
 
+The Shared requirement means raw address formation remains compatible with overlapping Shared safe authority but is rejected while overlapping replacement-capable exclusive safe authority is active. A Shared child of a live root replacement-capable authority does not legalize unrelated raw address formation from the original target because direct/root compatibility still sees the active root authority branch under `references.md`.
+
 The first slice admits only the complete empty structural path of a binding root. It does not admit field paths, producer transients, dereference results, call results, arbitrary values, pattern paths independently of their binding root, static/global storage, or another general source place as an address-formation target.
 
-A faithful lowering maps successful raw address formation to Core `AddressOf` of the complete lowered local place. The source target need not be structurally available because Core `AddressOf` likewise selects continuing storage independently of stored-value liveness.
+A faithful lowering maps successful raw address formation to Core `AddressOf` of the complete lowered local place. The source target need not be structurally available because Core `AddressOf` likewise selects continuing storage independently of stored-value liveness. Source safe-authority compatibility has already been discharged before lowering.
 
 ## Unsafe raw ownership move
 
@@ -120,7 +123,7 @@ A raw ownership move is source-valid only when all of the following hold:
 2. the raw-pointer operand resolves to one active binding of exact type `RawPtr(T)`;
 3. its stored pointer-origin provenance is `PointerOrigin(x)` for one still-active target binding `x`;
 4. the complete structural root of `x` is fully available immediately before the move;
-5. no active first-slice source Shared authority targets `x`; and
+5. the canonical **Exclusive requirement** from `references.md` succeeds for the complete target root; and
 6. the surrounding receiving position requires exact source type `T`.
 
 Successful raw ownership move:
@@ -132,9 +135,9 @@ Successful raw ownership move:
 
 The operation is ownership-moving even when `T` is source-duplicable. Raw access does not silently select ordinary duplicate semantics.
 
-The complete-availability requirement discharges the represented Core target-liveness precondition. The absence of a source Shared authority targeting the root discharges the represented Core exclusive raw-target alias requirement for the currently represented source authority set. Therefore a source-valid raw ownership move refines directly to Core `RawMove` without transferring an unproven unsafe obligation to a caller.
+The complete-availability requirement discharges the represented Core target-liveness precondition. The canonical Exclusive requirement rejects every overlapping active source safe authority and discharges the represented Core exclusive raw-target alias requirement for the currently represented source authority set. Therefore a source-valid raw ownership move refines directly to Core `RawMove` without transferring an unproven unsafe obligation to a caller.
 
-A partially available or unavailable target fails source validation for raw ownership move. It is not admitted as source-level undefined behavior merely because the operation appears inside an unsafe block.
+A partially available or unavailable target, or a target with any overlapping active safe authority, fails source validation for raw ownership move. It is not admitted as source-level undefined behavior merely because the operation appears inside an unsafe block.
 
 The current Core `RawRead` operation is not exposed as a source value operation by this slice. It discards its semantic read result and therefore does not provide a useful owned source value. A future non-consuming owned raw load/copy requires a separate accepted source/Core relation.
 
@@ -151,7 +154,7 @@ A represented raw replacement proceeds as follows:
 3. require `x` to remain an active lexically valid target under this document;
 4. validate and evaluate the complete source producer according to its canonical owner;
 5. if source evaluation faults or diverges, perform no raw target destruction, replacement, structural reset, or pointer retargeting;
-6. after successful source evaluation, require that no active first-slice source Shared authority targets `x`;
+6. after successful source evaluation, require the canonical **Exclusive requirement** from `references.md` to succeed for the complete target root `x`;
 7. select the then-current remaining ownership frontier of the complete target root through `structural-ownership.md`;
 8. end that remaining target ownership in the canonical frontier order through `function-execution.md`; and
 9. install the already produced exact-`T` source value as the new complete target value, establishing the existing fresh empty consumed-path state for that root.
@@ -162,7 +165,9 @@ Ordinary assignment mutability of target binding `x` is not a raw-replacement pr
 
 Pointer-binding mutability is independently relevant only when ordinary assignment retargets the stored raw-pointer value. Raw replacement does not change the pointer value or origin.
 
-The post-source Shared-authority check discharges the currently represented Core exclusive raw-target alias requirement. The source-first ordering, remaining-value destruction, and complete-root reset refine to Core `RawAssign` and its consumed value/storage replacement lifecycle.
+The post-source canonical Exclusive requirement rejects every overlapping active source safe authority and discharges the currently represented Core exclusive raw-target alias requirement. The source-first ordering, remaining-value destruction, and complete-root reset refine to Core `RawAssign` and its consumed value/storage replacement lifecycle.
+
+Unlike safe-reference replacement, raw replacement intentionally snapshots the raw pointer's exact target origin before RHS evaluation. A raw pointer carries no source safe authority, so this snapshot does not authorize commit through a consumed safe-reference destination carrier. The post-source Exclusive requirement remains mandatory at the actual target commit point.
 
 ## Unsafe admission
 
@@ -170,13 +175,13 @@ The first source unsafe boundary is one lexical **unsafe-admission block**. It i
 
 Raw ownership move and raw replacement require an active unsafe-admission region. Raw address formation, raw-pointer duplication, raw-pointer local initialization, and ordinary raw-pointer assignment do not.
 
-Nested unsafe-admission blocks are semantically idempotent with respect to unsafe admission. Entering or leaving such a block does not itself change structural ownership state, pointer origin, Shared authority, callable identity, function safety classification, or runtime state.
+Nested unsafe-admission blocks are semantically idempotent with respect to unsafe admission. Entering or leaving such a block does not itself change structural ownership state, pointer origin, safe-reference authority, callable identity, function safety classification, or runtime state.
 
-Unsafe admission is **not** a trust boundary. It does not waive, assume, assert, defer, or transfer an unsafe precondition.
+Unsafe admission is **not** a trust boundary. It does not waive, assume, assert, defer, or transfer an unsafe precondition and does not weaken the canonical source safe-authority compatibility relation.
 
 All represented source functions remain safe callable entities under `callables.md`. This slice defines no unsafe function type, unsafe callable declaration, unsafe call, unsafe parameter/result contract, hidden caller precondition, body-derived safety effect, user-written proof contract, or caller obligation.
 
-Accordingly, every represented Core undefined-behavior precondition consumed by one admitted source raw operation MUST be discharged by source validation from the exact facts defined by the applicable canonical source owners. For this slice those facts are limited to exact pointer origin, target lexical validity, target structural ownership state, and active source Shared-authority state.
+Accordingly, every represented Core undefined-behavior precondition consumed by one admitted source raw operation MUST be discharged by source validation from the exact facts defined by the applicable canonical source owners. For this slice those facts are limited to exact pointer origin, target lexical validity, target structural ownership state, and canonical source safe-authority compatibility.
 
 If an unsafe raw operation's represented Core preconditions cannot be discharged, the source program is invalid. Failure is not a defined `Fault`, permitted undefined behavior, implementation-defined behavior, or an obligation silently inherited by a safe caller.
 
@@ -196,7 +201,7 @@ The loop body may temporarily retarget a mutable raw-pointer local when ordinary
 
 These rules add no union, intersection, origin set, maybe-origin state, widening, normalization, fixed-point inference, dynamic tag, or non-lexical lifetime relation.
 
-Structural ownership and pointer-origin equality are distinct required states. A normal control-flow edge is admitted only when every independently applicable state requirement from its canonical owner succeeds.
+Structural ownership, safe-reference authority/external-referent state, and pointer-origin equality are distinct required states. A normal control-flow edge is admitted only when every independently applicable state requirement from its canonical owner succeeds.
 
 ## Cleanup, fault, divergence, and target lifecycle
 
@@ -225,15 +230,15 @@ For this first slice:
 - raw-pointer cleanup requires no pointer-specific Core operation beyond ordinary value/storage cleanup; and
 - pointer-origin provenance is retained by source validation/lowering only as needed to select and justify the correct Core target effects; it does not require a second runtime pointer-origin object.
 
-The source-to-Core refinement MUST preserve the target binding's source structural-ownership effects. A lowerer MUST NOT use Core liveness after the fact to decide whether source RawMove was valid or to reconstruct the source remaining-ownership frontier for RawAssign.
+The source-to-Core refinement MUST preserve the target binding's source structural-ownership effects and the canonical safe-authority compatibility already discharged for raw operations. A lowerer MUST NOT use Core liveness or alias state after the fact to decide whether source RawMove/raw address/RawAssign was valid or to reconstruct the source remaining-ownership frontier for RawAssign.
 
-Likewise, Core pointer targets/provenance, storage-instance identities, numeric verifier identifiers, static Core places, or runtime pointer representations MUST NOT become source-observable facts merely because the lower implementation retains them.
+Likewise, Core pointer targets/provenance, storage-instance identities, numeric verifier identifiers, static Core places, Core reference-authority state, or runtime pointer/reference representations MUST NOT become source-observable facts merely because the lower implementation retains them.
 
 No physical address, pointer representation, layout, relocation, stability, pinning, ABI, or target policy is required by this refinement.
 
 ## Determinism and verification
 
-For one fixed source-valid program and fixed ordinary source inputs, pointer-origin production/transport, target selection, structural state transitions of successful raw move/replacement, and unsafe-admission validity are deterministic from the canonical source facts consumed above.
+For one fixed source-valid program and fixed ordinary source inputs, pointer-origin production/transport, target selection, structural state transitions of successful raw move/replacement, safe-authority compatibility, and unsafe-admission validity are deterministic from the canonical source facts consumed above.
 
 An implementation MAY retain additional non-observable provenance or Core verification metadata, but such metadata MUST NOT widen source validity, create pointer equality, distinguish two source pointer values with the same defined source facts, or add observable behavior.
 
@@ -243,8 +248,8 @@ This revision deliberately does **not** define:
 
 - raw-pointer parameters, results, or other cross-activation pointer transfer;
 - raw-pointer-containing record fields or aggregates;
-- pointer-to-pointer or pointer-to-Shared-reference types;
-- Shared references to raw-pointer values;
+- pointer-to-pointer or pointer-to-safe-reference types;
+- safe references to raw-pointer values;
 - null pointers, integer/fabricated pointers, or pointer constants;
 - source exposure of Core `RawRead`;
 - a non-consuming owned raw load/copy;
@@ -254,6 +259,6 @@ This revision deliberately does **not** define:
 - physical addresses, layout, alignment, endian rules, representation validity, relocation, address stability, or pinning;
 - heap allocation, deallocation, global/static storage, or allocation APIs;
 - unsafe functions, unsafe calls, unsafe callable/effect signatures, caller proof obligations, or user-written proof contracts;
-- source Exclusive/ExclusiveReplace references, reborrow, mutable-reference syntax, derived/multiple reference-result origins, lifetime names, or non-lexical lifetimes;
+- plain-Exclusive source references, field/subregion reference forms, reference-containing aggregates, replacement-capable results, derived/multiple reference-result origins, lifetime names, or non-lexical lifetimes;
 - atomics, concurrency, memory ordering, data races, ABI, FFI, or linkage; or
 - a general undefined-behavior taxonomy beyond the represented Core raw-operation preconditions consumed by this slice.
