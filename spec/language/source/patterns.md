@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for recursive irrefutable named-field record patterns with bounded node-local rest/omission: unqualified same-module and qualified cross-module nominal pattern-head selection, recursive field/rest structure, binding-leaf order and production, scrutinee-category selection, direct binding-root ownership consequences, and producer-backed pattern-scrutinee transient ownership/cleanup.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup and qualified cross-module lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, record-construction completion, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration completion from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup and qualified cross-module lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), the canonical direct safe-authority compatibility relation from [Source safe references](references.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, record-construction completion, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration completion from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The represented concrete pattern, rest-marker, and scrutinee spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define refutable patterns, `match`, alternatives, guards, shorthand or wildcard bindings, tuple/array/enum patterns, destructuring assignment, references or borrow binding modes, arbitrary general expressions, a general source place/lvalue abstraction, field accessibility, nested module paths beyond the represented alias/member pair, or an implementation representation.
+This document does not define refutable patterns, `match`, alternatives, guards, shorthand or wildcard bindings, tuple/array/enum patterns, destructuring assignment, reference/borrow binding modes, safe-reference formation/reborrow, arbitrary general expressions, a general source place/lvalue abstraction, field accessibility, nested module paths beyond the represented alias/member pair, or an implementation representation.
 
 ## Represented record-destructuring declaration
 
@@ -72,7 +72,7 @@ Every represented **record-pattern node** has:
   - one nested record-pattern node; and
 - zero or one node-local rest marker that, when present, omits every declared field identity not selected by an explicit field in that node.
 
-A nested record-pattern node itself introduces no binding. Binding leaves are the only pattern elements that produce function-local bindings. The rest marker introduces no binding, structural path, value, type, or runtime operation.
+A nested record-pattern node itself introduces no binding. Binding leaves are the only pattern elements that produce function-local bindings. The rest marker introduces no binding, structural path, value, type, safe-authority access, or runtime operation.
 
 The complete tree is irrefutable because every pattern node requires exact nominal type equality and no represented node performs a runtime shape test. A node without rest is exhaustive exactly as before. A node with rest statically accepts its exact nominal record while selecting only its explicit fields and omitting the remainder. Successful pattern production has no mismatch outcome.
 
@@ -107,7 +107,7 @@ A **binding target** contributes one binding leaf whose source type is exactly t
 
 A **nested record-pattern target** is valid only when the selected field's source type is exactly the nested node's nominal record type. The nested node then recursively satisfies this same field/rest relation independently; a rest marker in one node does not omit fields of another node.
 
-An omitted field is not a selected pattern field. It contributes no target, binding leaf, structural path, field accessibility requirement, ownership production, or source-order item merely because it exists in the nominal record.
+An omitted field is not a selected pattern field. It contributes no target, binding leaf, structural path, field accessibility requirement, safe-authority compatibility requirement, ownership production, or source-order item merely because it exists in the nominal record.
 
 Unknown or duplicate explicit fields reject the complete declaration. Missing fields reject a node only when that node has no rest marker. Concrete-syntax violations such as duplicate or non-final rest are rejected before this semantic relation is selected.
 
@@ -138,7 +138,7 @@ The path is formed by appending each resolved explicit field identity traversed 
 
 An explicit field target is either a binding leaf or a nested record pattern, never both. Because no declared field may be explicitly selected twice, distinct binding-leaf paths in one valid pattern tree are pairwise structurally disjoint. Omitted fields and rest markers contribute no binding-leaf path.
 
-Nested record-pattern nodes are static pattern structure, not independently produced values. Their intermediate paths are not automatically duplicated or consumed merely because pattern traversal enters them. A rest marker likewise creates no owned-value operation.
+Nested record-pattern nodes are static pattern structure, not independently produced values. Their intermediate paths are not automatically duplicated or consumed merely because pattern traversal enters them. A rest marker likewise creates no owned-value or safe-authority access operation.
 
 ## Binding-leaf source order
 
@@ -171,7 +171,9 @@ Before the declaration enters its ownership-production relation, validation esta
 6. pairwise uniqueness of all binding leaf lexical keys across the entire tree; and
 7. absence of an overlapping function-local shadow conflict for every binding leaf key against the pre-declaration lexical environment.
 
-Omitted fields need no field-accessibility validation and produce no binding fact. A rejected recursive structure establishes no pattern binding and applies no pattern-owned ownership transition.
+For a direct binding-root scrutinee, the additional availability and safe-authority compatibility prevalidation below is also completed against one shared pre-pattern state before any pattern-owned transition.
+
+Omitted fields need no field-accessibility or safe-authority validation and produce no binding fact. A rejected recursive structure establishes no pattern binding and applies no pattern-owned ownership transition.
 
 For a producer-backed declaration, a structurally invalid pattern does not validate/evaluate the producer merely to discover a later pattern error. Once the pattern is valid, its top nominal record type is the exact required type supplied to producer validation before producer execution begins.
 
@@ -230,7 +232,7 @@ The producer is resolved/evaluated in the lexical environment that exists before
 A successful complete producer yields one fully owned **pattern scrutinee transient** of the selected top record type. This transient:
 
 - has no lexical key or source binding identity;
-- is not source-addressable;
+- is not source-addressable or a safe-reference target in this slice;
 - does not participate in function-local lookup;
 - is not an ordinary local or parameter; and
 - exists only until this declaration completes.
@@ -245,32 +247,39 @@ Boolean/integer literals are not producer-backed record scrutinee forms in this 
 
 For a direct binding-root declaration, every **explicit binding-leaf structural path** MUST be fully available under `structural-ownership.md` in one shared pre-pattern ownership state of the selected root binding.
 
-All binding-leaf paths are checked against that same pre-pattern state before the first pattern-owned transition. Omitted fields and rest markers create no path-availability precondition.
+Every leaf additionally consumes the canonical direct safe-authority compatibility relation from `references.md` in that same pre-pattern authority state:
 
-Because valid binding-leaf paths are pairwise structurally disjoint, later source-ordered consumption of one valid leaf cannot invalidate another prevalidated leaf.
+- a leaf whose exact type is duplicable requires the **Shared requirement** for its complete path; and
+- a leaf whose exact type is non-duplicable requires the **Exclusive requirement** for its complete path.
 
-A nested record-pattern node does not independently require its complete intermediate path to be fully available merely so static pattern recursion may enter it. Ownership-producing binding leaves are the paths that require full availability.
+All binding-leaf availability and safe-authority requirements are checked against the same pre-pattern state before the first pattern-owned transition. Omitted fields and rest markers create no path-availability or authority-compatibility precondition.
 
-Consequently, a nested zero-field or rest-only record pattern contributes no binding leaf, performs no ownership operation, and adds no whole-path availability precondition merely because the record structure is named. This is the recursive analogue of the accepted top-level zero-field/rest-only direct-root no-op.
+Because valid binding-leaf paths are pairwise structurally disjoint, later source-ordered consumption of one valid leaf cannot invalidate another prevalidated leaf. Safe-authority compatibility is likewise prevalidated per leaf against the same incoming active-authority set; the pattern itself creates no safe authority.
 
-If any binding-leaf path is unavailable or partially available in the pre-pattern state, the complete declaration is source-invalid and applies no pattern-owned transition.
+A root safe authority overlaps every descendant binding-leaf path. Therefore a live replacement-capable root authority blocks direct pattern production from the original target according to the applicable Shared/Exclusive requirement even when a Shared child has reduced the parent's retained reference-relative authority.
+
+A nested record-pattern node does not independently require its complete intermediate path to be fully available or satisfy a direct safe-authority requirement merely so static pattern recursion may enter it. Ownership-producing binding leaves are the paths that require both checks.
+
+Consequently, a nested zero-field or rest-only record pattern contributes no binding leaf, performs no ownership/access operation, and adds no whole-path availability or safe-authority precondition merely because the record structure is named. This is the recursive analogue of the accepted top-level zero-field/rest-only direct-root no-op.
+
+If any binding-leaf path is unavailable/partial or fails its applicable safe-authority requirement in the pre-pattern state, the complete declaration is source-invalid and applies no pattern-owned transition.
 
 ## Direct binding-root leaf ownership
 
-After complete recursive structure and direct-root leaf availability have validated, process binding leaves strictly in retained depth-first source order.
+After complete recursive structure and direct-root leaf availability/authority prevalidation have succeeded, process binding leaves strictly in retained depth-first source order.
 
 For each leaf path `p` of exact type `T`:
 
-- if `T` is duplicable under `types.md`, produce one owned duplicate of the complete value at `p` and leave the root structural ownership state unchanged;
-- if `T` is non-duplicable, transfer exactly the complete owned value at `p` and apply the canonical successful-consumption transition from `structural-ownership.md` to the root binding.
+- if `T` is duplicable under `types.md`, its prevalidated Shared requirement permits one owned duplicate of the complete value at `p`, leaving the root structural ownership state unchanged;
+- if `T` is non-duplicable, its prevalidated Exclusive requirement permits transfer of exactly the complete owned value at `p` and the canonical successful-consumption transition from `structural-ownership.md` to the root binding.
 
 No ancestor of `p` is independently duplicated or consumed by this operation. Structurally disjoint paths remain governed by their own structural state.
 
-A field omitted by rest receives no pattern-owned duplicate or consume transition. Its ownership remains exactly whatever the direct root's pre-pattern structural state already establishes, subject only to independent selected leaf consumption on structurally related paths. Rest does not synthesize whole-root or ancestor consumption.
+A field omitted by rest receives no pattern-owned duplicate or consume transition and no direct safe-authority access. Its ownership remains exactly whatever the direct root's pre-pattern structural state already establishes, subject only to independent selected leaf consumption on structurally related paths. Rest does not synthesize whole-root or ancestor consumption.
 
 Exhaustive no-rest patterns retain the existing consequence that separately consuming every ownership-producing leaf may leave an empty remaining root frontier without synthesizing consumption of the empty root path.
 
-A rest-only direct-root pattern has no binding leaf and performs no ownership transition. A direct-root pattern has no transient cleanup phase. Later use, assignment, and cleanup of the root binding consume its resulting structural ownership state through the existing owners.
+A rest-only direct-root pattern has no binding leaf and performs no ownership or authority-requiring access transition. A direct-root pattern has no transient cleanup phase. Later use, assignment, and cleanup of the root binding consume its resulting structural ownership state through the existing owners.
 
 ## Producer-backed transient leaf ownership
 
@@ -280,6 +289,8 @@ For each leaf path `p` of exact type `T`:
 
 - if `T` is duplicable, produce one owned duplicate of the complete value at `p` and leave the transient structural state unchanged;
 - if `T` is non-duplicable, transfer exactly the complete owned value at `p` and consume `p` in the transient structural state through `structural-ownership.md`.
+
+The pattern transient is not a safe-reference target in this slice, so these transient-local leaf operations introduce no additional direct-root safe-authority compatibility check. Any authority effects caused while evaluating the producer have already been validated by that producer's canonical owner.
 
 Pattern leaf production itself is finite, non-faulting, and non-diverging after successful complete producer completion.
 
@@ -315,13 +326,13 @@ let Empty {} = root;
 let Empty { .. } = root;
 ```
 
-are both valid when head/root category and exact type requirements hold. Qualified zero-field foreign records may analogously use either spelling when qualified head lookup and exact root typing hold. Either form has no binding leaf, introduces no binding, performs no ownership operation, and imposes no whole-root availability requirement. Neither is implicit discard or whole-root use.
+are both valid when head/root category and exact type requirements hold. Qualified zero-field foreign records may analogously use either spelling when qualified head lookup and exact root typing hold. Either form has no binding leaf, introduces no binding, performs no ownership/access operation, and imposes no whole-root availability or safe-authority requirement. Neither is implicit discard or whole-root use.
 
 For a producer-backed top-level zero-field pattern, successful complete producer evaluation yields one complete owned empty-record pattern transient. With no leaf consumption, its remaining frontier is the complete root and that source ownership ends at declaration completion whether or not the node spelled rest.
 
-For a nested zero-field or rest-only pattern, recursion likewise may contribute no leaf and no ownership operation. If it lies inside a producer transient, that zero-field or omitted subvalue remains part of the canonical remaining frontier unless some selected ancestor path was transferred by another accepted operation.
+For a nested zero-field or rest-only pattern, recursion likewise may contribute no leaf and no ownership/access operation. If it lies inside a producer transient, that zero-field or omitted subvalue remains part of the canonical remaining frontier unless some selected ancestor path was transferred by another accepted operation.
 
-A non-duplicable binding leaf whose type is a zero-field or recursively zero-leaf record remains a real source consumption. The ownership transition is retained even if faithful Core refinement has no scalar liveness/destruction event.
+A non-duplicable binding leaf whose type is a zero-field or recursively zero-leaf record remains a real source consumption and requires the same direct-root Exclusive compatibility when sourced from a binding root. The ownership transition is retained even if faithful Core refinement has no scalar liveness/destruction event.
 
 Pattern validity and ownership are never defined by lower scalar-leaf existence.
 
@@ -335,7 +346,7 @@ If complete producer evaluation yields a defined fault before the pattern transi
 - no pattern-introduced binding enters scope;
 - producer-internal transient cleanup follows the producer's existing owner;
 - for a producer-backed field-value scrutinee, no pattern transient exists during receiver fault propagation, and any field-receiver transient that exists after receiver success is completed entirely inside that field-value producer before a result could reach this pattern;
-- ownership/structural transitions already completed by producer evaluation remain effective; and
+- ownership/structural/reference-authority transitions already completed by producer evaluation remain effective; and
 - the same defined fault continues under `function-execution.md`.
 
 If complete producer evaluation diverges, no pattern leaf production, pattern binding establishment, or pattern-transient cleanup occurs merely because execution remains suspended. Producer-owned transients remain governed by the producer's divergence relation. A producer-backed field-value scrutinee may diverge only while its retained receiver producer is still evaluating; after receiver success its field-selection and field-receiver cleanup tail is non-diverging under the current source model.
@@ -344,14 +355,14 @@ Rest and omission add no producer evaluation step, fault reason, divergence poin
 
 A qualified construction used as the scrutinee follows its ordinary construction fault/divergence relation after complete pattern and producer source validation. Qualified versus unqualified spelling of the already resolved pattern head does not add a fault, divergence, or cleanup path.
 
-For source validation implementations, producer-backed validation must preserve this atomic source-validity boundary: failure after tentative consuming producer validation must not leave rejected-source ownership state committed. A nested producer-backed field-value use independently preserves its own transaction boundary under `field-access.md`; pattern validity does not merge those transactions into one ownership domain.
+For source validation implementations, producer-backed validation must preserve this atomic source-validity boundary: failure after tentative consuming producer validation must not leave rejected-source ownership or authority state committed. A nested producer-backed field-value use independently preserves its own transaction boundary under `field-access.md`; pattern validity does not merge those transactions into one ownership domain.
 
 ## Declaration completion
 
 For a valid direct-root pattern declaration:
 
 1. complete recursive pattern field/rest structure and binding-leaf validation;
-2. validate all explicit leaf paths against one pre-pattern direct-root structural state;
+2. validate all explicit leaf paths and applicable Shared/Exclusive direct safe-authority requirements against one pre-pattern state;
 3. produce every binding-leaf value in depth-first explicit-field source order; and
 4. establish all new bindings together.
 
@@ -370,7 +381,7 @@ Only after the applicable sequence completes may the next body statement begin.
 
 ## HIR and lowering refinement boundary
 
-This specification does not prescribe Rust data structures, but a faithful typed HIR must retain enough source-selected facts that lowering does not repeat source semantics.
+This specification does not prescribe implementation data structures, but a faithful typed HIR must retain enough source-selected facts that lowering does not repeat source semantics.
 
 At minimum retain:
 
@@ -384,6 +395,8 @@ At minimum retain:
 - each leaf's source-selected duplicate-or-consume consequence; and
 - for producer-backed scrutinees, the final source-selected pattern-transient remaining cleanup frontier paths in canonical order.
 
+For direct-root patterns, source validation MUST discharge each leaf's applicable Shared/Exclusive compatibility requirement before lowering. Lower representation MUST NOT reconstruct source direct-access legality from Core alias state.
+
 The concrete rest marker and the set of omitted field identities need not survive in typed HIR after complete source validation. Their semantic consequences are already discharged into the accepted explicit leaf set, direct-root ownership result, and producer cleanup frontier. Retaining the marker or omitted identities for diagnostics/tooling does not create a lower semantic requirement.
 
 Pattern-head qualification is discharged by source validation. Nested pattern heads are static validation structure; after every nested exact nominal type relation is proven, their resolved identities are already represented by the retained top record identity, full leaf paths, and retained leaf types. A faithful HIR therefore need not retain qualified versus unqualified head spelling or an additional nested-head identity solely for this feature.
@@ -396,7 +409,7 @@ No Core semantic change is required by this pattern relation. Existing structura
 
 Direct-root lowering can remain direct from the mapped source binding with no whole-record pattern temporary and emits projected source operations only for retained explicit binding leaves. Producer-backed lowering can reuse the existing complete producer result temporary as the pattern transient refinement; it does not need a source-visible synthetic binding. When the complete producer is a producer-backed field-value use, its receiver temporary and source-selected receiver cleanup finish first, and only its preserved selected result transfers into the separate pattern-scrutinee temporary/state. Producer-backed lowering then refines the already retained remaining cleanup frontier, including any omitted paths, through existing destruction.
 
-Lowering MUST NOT reconstruct pattern-head lookup/accessibility, whether a source node used rest, omitted field identities, no-rest exhaustiveness, binding-leaf order, source duplicability, path availability, consumed paths, field-receiver frontier membership, or pattern-transient remaining-frontier membership from Core liveness/copyability. Zero-leaf source cleanup may refine to no Core `Drop` where the lower destruction domain is empty.
+Lowering MUST NOT reconstruct pattern-head lookup/accessibility, whether a source node used rest, omitted field identities, no-rest exhaustiveness, binding-leaf order, source duplicability, path availability, consumed paths, direct safe-authority compatibility, field-receiver frontier membership, or pattern-transient remaining-frontier membership from Core liveness/copyability/alias state. Zero-leaf source cleanup may refine to no Core `Drop` where the lower destruction domain is empty.
 
 ## Future compatibility boundary
 
@@ -408,10 +421,10 @@ Later features must extend rather than reinterpret the direct-root and producer-
 
 ## Source/Core separation
 
-Pattern ownership is source semantics over nominal record/field identities, structural paths, source type duplicability, binding identity, source order, node-local omission, and pattern-transient ownership.
+Pattern ownership is source semantics over nominal record/field identities, structural paths, source type duplicability, binding identity, source order, node-local omission, direct safe-authority compatibility, and pattern-transient ownership.
 
 A field-receiver transient used internally by a producer-backed field-value scrutinee is owned by the field-value operation, not by pattern semantics. Only the completed selected record result crosses into the pattern ownership relation.
 
-Core projections, path liveness, scalar copyability, destruction domains, compiler local numbering, physical offsets, backend storage, construction-target qualification, pattern-head qualification, and the erased concrete rest marker are not source pattern authority.
+Core projections, path liveness, scalar copyability, lower alias state, destruction domains, compiler local numbering, physical offsets, backend storage, construction-target qualification, pattern-head qualification, and the erased concrete rest marker are not source pattern authority.
 
 A faithful implementation may map retained resolved paths to lower projections only after source validation has selected every source-semantic fact above.

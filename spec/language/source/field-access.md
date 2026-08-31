@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for bounded dot field-path selection, direct record-field accessibility, binding-root and producer-backed field receiver categories, final-path duplicate-or-consume value production, producer-receiver transient ownership and remaining-frontier selection, and production of one owned field value.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module identity plus module binding accessibility and qualified/unqualified module lookup from [Source names and modules](names-modules.md), nominal record/field identity, field source types, source type equality, and owned-value duplicability from [Source type foundation](types.md), function signatures and result presence from [Source callables](callables.md), structural source paths and path availability/consumption/frontiers from [Source structural ownership](structural-ownership.md), and function-local binding lookup/lifecycle from [Source function-local bindings](local-bindings.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module identity plus module binding accessibility and qualified/unqualified module lookup from [Source names and modules](names-modules.md), nominal record/field identity, field source types, source type equality, and owned-value duplicability from [Source type foundation](types.md), function signatures and result presence from [Source callables](callables.md), structural source paths and path availability/consumption/frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/lifecycle from [Source function-local bindings](local-bindings.md), and the canonical direct safe-authority compatibility relation from [Source safe references](references.md). It does not redefine those owners.
 
 The represented `.` spelling, binding-root/producer-receiver grammar, record-field `export` modifier, direct-call form, record-construction form, and receiving positions are owned by [Source concrete syntax](concrete-syntax.md). Evaluation of a producer receiver, dynamic field-receiver transient lifetime, transient cleanup sequencing, and transfer of a successfully produced field result into a local, assignment RHS, direct-call argument, return result, record-construction initializer, conditional, or producer-backed record-pattern scrutinee are owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct field-accessibility relation defined here at every record-pattern field it selects, including fields of qualified foreign pattern heads, and may receive a completed field-value result as a producer-backed scrutinee; pattern structure, head lookup, no-rest exhaustiveness or rest-authorized omission, binding introduction, and pattern ownership consequences remain owned there.
 
-This document does not define structural ownership mathematics, a general member/postfix system, place/lvalue grammar, field assignment, partial-field reinitialization, reference/borrow operation, general pattern semantics, physical layout, ABI/linkage visibility, or implementation representation.
+This document does not define structural ownership mathematics, safe-reference authority/reborrow semantics, a general member/postfix system, place/lvalue grammar, field assignment, partial-field reinitialization, general pattern semantics, physical layout, ABI/linkage visibility, or implementation representation.
 
 ## Represented operation
 
@@ -36,7 +36,7 @@ A field-value use is one owned-value producer. It is not a source place, lvalue,
 
 The producer-receiver category is deliberately not an arbitrary source value/expression receiver. This revision does not admit a literal, bare binding value, another generic expression form, parenthesized value, method result, reference, place, or arbitrary postfix expression as a receiver. Nested composition occurs only through already represented direct-call arguments, record-construction initializers, and the static selector chain of this operation.
 
-After static receiver/type/field-path selection, the final selected type's owned-value duplicability selects whether production duplicates that subvalue or consumes/transfers it. Binding-root receivers additionally require the selected path to be fully available in the selected binding. Producer receivers instead begin dynamic field selection from one fresh, fully owned receiver transient after successful producer completion.
+After static receiver/type/field-path selection, the final selected type's owned-value duplicability selects whether production duplicates that subvalue or consumes/transfers it. Binding-root receivers additionally require the selected path to be fully available in the selected binding and the corresponding canonical direct safe-authority compatibility requirement to hold. Producer receivers instead begin dynamic field selection from one fresh, fully owned receiver transient after successful producer completion and consume no local-root safe-authority compatibility relation merely because that transient exists.
 
 ## Binding-root receiver selection
 
@@ -46,7 +46,7 @@ The selected entity MUST be one active parameter or ordinary local binding. Look
 
 Only when no active parameter/local binding resolves the root key does the existing same-module fallback occur. If that fallback selects a module declaration, the selected entity is the wrong category and the operation is source-invalid. Imported modules are not searched implicitly and source-unit module aliases do not participate in this unqualified root lookup.
 
-The complete root value need not be fully available merely to perform static field-path selection. A partially available root may still contain fully available disjoint descendants. Final-path availability is checked only after the complete path is resolved.
+The complete root value need not be fully available merely to perform static field-path selection. A partially available root may still contain fully available disjoint descendants. Final-path availability and safe-authority compatibility are checked only after the complete path is resolved and its duplicate-or-consume consequence is known.
 
 The binding-root category creates no receiver transient. Its duplicate/consume consequence applies directly to the selected binding's canonical structural ownership state as defined below.
 
@@ -67,7 +67,7 @@ The producer receiver does not introduce a source-visible temporary binding, inf
 
 ## Transactional producer-receiver source validation
 
-Source validation of a producer-backed field-value use is one composite transaction with respect to function-local structural ownership state.
+Source validation of a producer-backed field-value use is one composite transaction with respect to function-local structural ownership state and any independently tracked safe-reference state modified by nested producers.
 
 Before committing ownership consequences caused by receiver arguments, receiver construction initializers, or their nested producers, source validation MUST establish the operation's static receiver/selector/result facts:
 
@@ -79,11 +79,11 @@ Before committing ownership consequences caused by receiver arguments, receiver 
 6. require that final type to equal the surrounding receiving position's required source type when one exists; and
 7. select the final field's duplicate-or-consume consequence from its accepted owned-value duplicability.
 
-The receiver producer is then source-validated using its existing producer rules against its own exact receiver type and the pre-operation function-local environment. Only when the complete producer-backed field-value use is source-valid are ownership consequences from that receiver validation committed to the enclosing source-validation environment.
+The receiver producer is then source-validated using its existing producer rules against its own exact receiver type and the pre-operation function-local environment. Only when the complete producer-backed field-value use is source-valid are ownership and reference-authority consequences from that receiver validation committed to the enclosing source-validation environment.
 
-For a qualified record-construction receiver, this means the outer field-value path/result facts are established before the construction validates and commits any initializer producer ownership; the construction in turn establishes its own target, initializer identity/accessibility/exhaustiveness, and result-type facts before its initializer producer ownership may commit. These nested validation transactions preserve the same pre-operation ownership state on rejection.
+For a qualified record-construction receiver, this means the outer field-value path/result facts are established before the construction validates and commits any initializer producer ownership; the construction in turn establishes its own target, initializer identity/accessibility/exhaustiveness, and result-type facts before its initializer producer ownership may commit. These nested validation transactions preserve the same pre-operation state on rejection.
 
-A rejected receiver target, no-result call, non-record selector step, inaccessible/unknown field, final required-type mismatch, invalid receiver argument/initializer, or other invalid receiver producer MUST NOT leave speculative receiver-producer ownership committed into later source validation.
+A rejected receiver target, no-result call, non-record selector step, inaccessible/unknown field, final required-type mismatch, invalid receiver argument/initializer, or other invalid receiver producer MUST NOT leave speculative receiver-producer ownership or safe-reference consequences committed into later source validation.
 
 This transaction boundary belongs only to this composite producer. It does not redefine the validation transaction of a direct call, record construction, or another producer when used in another receiving position.
 
@@ -106,7 +106,7 @@ If the current record has no field with the requested lexical key, the operation
 
 Field declaration order is not lookup priority. Field identity remains scoped by the containing nominal record declaration under `types.md`.
 
-For a binding-root receiver, static selection through a partially available intermediate record path is permitted. Selection itself neither observes nor recreates the complete intermediate value. The operation becomes source-valid only if its final path is fully available.
+For a binding-root receiver, static selection through a partially available intermediate record path is permitted. Selection itself neither observes nor recreates the complete intermediate value. The operation becomes source-valid only if its final path is fully available and its selected direct safe-authority requirement succeeds.
 
 For a producer receiver, static path selection occurs before dynamic receiver evaluation. Successful receiver production later establishes complete structural ownership of the transient root before the selected path's duplicate-or-consume consequence is applied.
 
@@ -158,23 +158,30 @@ Record construction consumes this same direct accessibility relation for explici
 
 This field accessibility has no ABI, linkage, layout, serialization, reflection, runtime publication, or confidentiality meaning. This revision defines no package, friend, protected, getter/setter, method, associated-item, constructor-visibility, or re-export accessibility mechanism.
 
-## Binding-root final-path availability
+## Binding-root final-path validity
 
 For a binding-root receiver, let `p` be the complete non-empty structural source path selected from the root binding and let `Tf` be the source type of its final field.
 
 The path `p` MUST be **fully available** under `structural-ownership.md` immediately before field-value production.
 
-Consequently, an equal or ancestor consumed path, or any consumed descendant that makes `p` partial, rejects the operation. A consumed path structurally disjoint from `p` does not prevent use of `p`. A partially available root or intermediate record may therefore still be traversed to an untouched fully available descendant.
+The operation additionally consumes the canonical direct safe-authority compatibility relation from `references.md` at the selected path:
 
-Failure of this requirement is source-invalidity. It is not a defined runtime moved-state fault.
+- when `Tf` is duplicable and production is non-consuming, the **Shared requirement** MUST succeed; and
+- when `Tf` is non-duplicable and production consumes/transfers the selected path, the **Exclusive requirement** MUST succeed.
 
-This document consumes the availability relation; it does not redefine its equations or consumed-path state.
+Compatibility is tested against active safe authorities whose target overlaps `p`. An authority rooted at the complete binding root overlaps every descendant field path. In particular, a live root replacement-capable authority continues to block direct field production from the original binding even when a Shared child has reduced that parent's retained reference-relative capability to Shared.
 
-A producer receiver has no pre-existing binding-root availability state to consult. Its successful receiver transient begins complete, so the statically selected path is initially fully available by construction.
+Consequently, an equal or ancestor consumed path, or any consumed descendant that makes `p` partial, rejects the operation. A consumed path structurally disjoint from `p` does not prevent use of `p`. Separately, a safe authority constrains the operation exactly when its target overlaps `p` under the canonical compatibility relation.
+
+Failure of either structural availability or safe-authority compatibility is source-invalidity. It is not a defined runtime moved-state or alias fault.
+
+This document consumes both relations; it does not redefine their equations, authority lifecycle, or consumed-path state.
+
+A producer receiver has no pre-existing binding-root availability or direct safe-authority state to consult. Its successful receiver transient begins complete and is not a source safe-reference target in this slice, so the statically selected path is initially fully available and no additional local-root authority check is introduced.
 
 ## Binding-root duplicable final fields
 
-For a binding-root receiver, when the final selected type `Tf` is duplicable under `types.md`, successful field-value use:
+For a binding-root receiver, when the final selected type `Tf` is duplicable under `types.md` and the Shared compatibility requirement above succeeds, successful field-value use:
 
 1. produces one new owned source value of exactly type `Tf` through the accepted duplicability capability;
 2. does not consume, move, replace, or mutate the selected subvalue; and
@@ -182,11 +189,11 @@ For a binding-root receiver, when the final selected type `Tf` is duplicable und
 
 Intermediate field types need not be duplicable. Their complete values are not independently produced merely because static selection passes through them.
 
-This preserves the accepted non-consuming behavior for every source-valid duplicable final field.
+This preserves the accepted non-consuming behavior for every source-valid duplicable final field without bypassing active exclusive safe authority.
 
 ## Binding-root non-duplicable final fields
 
-For a binding-root receiver, when `Tf` is non-duplicable, successful field-value use:
+For a binding-root receiver, when `Tf` is non-duplicable and the Exclusive compatibility requirement above succeeds, successful field-value use:
 
 1. produces the complete owned source value at final path `p`, of exactly type `Tf`;
 2. transfers/consumes that selected subvalue exactly once through `structural-ownership.md`; and
@@ -202,7 +209,7 @@ The transient:
 
 - has exactly the statically selected receiver record type;
 - begins with the complete structural ownership state under `structural-ownership.md`;
-- is not a parameter/local binding, source place, addressable object, or new lookup identity; and
+- is not a parameter/local binding, safe-reference target, source place, addressable object, or new lookup identity; and
 - exists only for this field-value operation until the selected result has been preserved and the transient's remaining source ownership has ended.
 
 Let `p` be the complete selected non-empty field path and `Tf` its final type.
@@ -232,17 +239,17 @@ Consequences:
 
 The field-receiver transient introduces no second structural ownership algebra. Its state and frontier are ordinary applications of `structural-ownership.md` to a transient root rather than a lexical binding.
 
-## Availability and mutability consequences
+## Availability, authority, and mutability consequences
 
-Field-value use does not define a second binding availability domain.
+Field-value use does not define a second binding availability or safe-authority domain.
 
-For a binding-root receiver, assignment mutability of the root binding is irrelevant to whether an owned field subvalue may be consumed. An immutable binding may become partially available or unavailable through permitted ownership transfer. Immutability restricts assignment/reinitialization, not ownership consumption.
+For a binding-root receiver, assignment mutability of the root binding is irrelevant to whether an owned field subvalue may be duplicated or consumed. An immutable binding may become partially available or unavailable through a permitted ownership transfer. Immutability restricts assignment/reinitialization, not ownership consumption. Independently, `references.md` may block the direct field operation while overlapping safe authority remains active.
 
-A mutable partially available binding may later be replaced as a complete binding under `local-bindings.md` and the source-first assignment ordering in `function-execution.md`.
+A mutable partially available binding may later be replaced as a complete binding only when `local-bindings.md` and the canonical Exclusive safe-authority requirement permit that assignment, using the source-first ordering in `function-execution.md`.
 
-For a producer receiver, duplicate/consume affects the receiver transient rather than creating or mutating a lexical binding. Ownership transitions caused while evaluating the receiver producer remain ordinary transitions of whatever existing bindings that producer uses.
+For a producer receiver, duplicate/consume affects the receiver transient rather than creating or mutating a lexical binding. Ownership and reference-authority transitions caused while evaluating the receiver producer remain ordinary transitions of whatever existing bindings/references that producer uses.
 
-This operation itself performs no assignment or reinitialization.
+This operation itself performs no assignment, reinitialization, reference formation, or reborrow.
 
 ## Evaluation boundary
 
@@ -254,7 +261,7 @@ For a producer receiver, dynamic receiver evaluation is owned by `function-execu
 
 After receiver producer success, establishment of the complete field-receiver transient, static-path selected-field production, canonical remaining-frontier cleanup, and completion of the field-value producer add no new defined-fault or divergence outcome under the current source model.
 
-The exact runtime ordering and transfer points are owned by `function-execution.md`; this document owns the receiver/transient/path/ownership facts that ordering consumes.
+The exact runtime ordering and transfer points are owned by `function-execution.md`; this document owns the receiver/transient/path/ownership/compatibility facts that ordering consumes.
 
 ## Required-type composition
 
@@ -268,7 +275,7 @@ The operation introduces no inference, structural compatibility, subtyping, conv
 
 The represented result may compose with ordinary local initialization, whole-binding assignment RHS evaluation, direct-call arguments, result-bearing return, record-construction field initializers, represented conditional evaluation when its exact final type is `Bool`, and a producer-backed record-pattern scrutinee whose top pattern head selects exactly the same nominal record type.
 
-Those receiving operations retain their existing ordering, transfer, replacement, cleanup, fault, divergence, and conditional/pattern authority under `function-execution.md`, `control-flow.md`, and `patterns.md`.
+Those receiving operations retain their existing ordering, transfer, replacement, cleanup, fault, divergence, reference-authority, and conditional/pattern authority under `function-execution.md`, `references.md`, `control-flow.md`, and `patterns.md`.
 
 When a producer-backed field result becomes a record-pattern scrutinee, the field-receiver transient completes first: its selected record result is preserved, its remaining frontier is cleaned, and the resulting owned record is then transferred into the distinct pattern scrutinee transient. The two transient states are sequential and MUST NOT be merged.
 
@@ -276,7 +283,7 @@ If receiver evaluation or a binding-root non-duplicable field producer consumes 
 
 ## Operation-specific selector boundary
 
-The field path defined here exists only to identify the source subvalue produced by `FieldValueUse` and apply the canonical structural ownership requirement to it.
+The field path defined here exists only to identify the source subvalue produced by `FieldValueUse`, apply the canonical structural ownership requirement to it, and select the applicable direct safe-authority compatibility class for a binding-root operation.
 
 It does not establish:
 
@@ -284,13 +291,14 @@ It does not establish:
 - field assignment or partial-field reinitialization;
 - an independently mutable field binding;
 - a source reference or borrow;
+- field-relative safe-reference access or reborrow;
 - address-taking, pointer provenance, or physical offsets;
 - arbitrary value/expression receivers beyond the explicitly represented direct-call and record-construction producer receivers;
 - general postfix chaining, grouping, or an expression precedence system;
 - method, associated-item, extension, trait, or overload lookup; or
 - record-pattern binding semantics.
 
-`patterns.md` independently consumes nominal field identities, direct accessibility, and structural ownership for its own accepted operation. Reusing a completed field-value result as one producer-backed pattern scrutinee does not turn a record pattern into dot field access or this operation into a general member system.
+`patterns.md` independently consumes nominal field identities, direct accessibility, structural ownership, and the canonical direct safe-authority compatibility relation for its own accepted operation. Reusing a completed field-value result as one producer-backed pattern scrutinee does not turn a record pattern into dot field access or this operation into a general member system.
 
 ## Concrete and implementation boundary
 
@@ -298,13 +306,13 @@ It does not establish:
 
 A faithful implementation MUST retain each resolved record field's source-selected direct accessibility in declaration metadata so source validation can apply this relation to field-value selection, record-construction initializer admission, and recursive record-pattern field admission without consulting Core or backend visibility. Successful field-value-use HIR need not duplicate a per-use accessibility flag once the exact nominal path has been resolved and admitted. Likewise, successful record-construction or pattern HIR need not retain target/head qualification once the resolved nominal record and admitted field identities are known.
 
-A faithful implementation MUST retain enough source-selected information to refine the accepted operation without re-running source ownership semantics. At minimum the retained field-value information must distinguish binding-root from producer-backed receiver, retain a validated producer for a producer receiver, retain the exact receiver type, complete resolved field path, final result type, duplicate-or-consume consequence, and for a producer receiver the canonical remaining-frontier cleanup paths, together with the source location of the complete field-value operation.
+A faithful implementation MUST retain enough source-selected information to refine the accepted operation without re-running source ownership or safe-authority semantics. At minimum the retained field-value information must distinguish binding-root from producer-backed receiver, retain a validated producer for a producer receiver, retain the exact receiver type, complete resolved field path, final result type, duplicate-or-consume consequence, and for a producer receiver the canonical remaining-frontier cleanup paths, together with the source location of the complete field-value operation. For a binding-root operation, source validation must already have discharged the applicable Shared/Exclusive direct compatibility requirement.
 
-Implementation storage/recursion may use indirection. That representation does not create a source general expression tree, place, lvalue, synthetic binding, or hidden receiver identity.
+Implementation storage/recursion may use indirection. That representation does not create a source general expression tree, place, lvalue, synthetic binding, hidden receiver identity, or lower authority rule.
 
-Existing Core structural projections, `Copy`/`Move`, call continuations, partial initialization, and `Drop` are suitable refinement targets only after source validation has selected the receiver category, path, accessibility, ownership consequence, and producer-receiver cleanup frontier.
+Existing Core structural projections, `Copy`/`Move`, call continuations, partial initialization, and `Drop` are suitable refinement targets only after source validation has selected the receiver category, path, accessibility, ownership consequence, safe-authority compatibility, and producer-receiver cleanup frontier.
 
-Source field accessibility is fully discharged before Core lowering. Core types, fields, and projections need no source-module or visibility metadata, and Core validation MUST NOT reconstruct source accessibility.
+Source field accessibility and safe-authority compatibility are fully discharged before Core lowering. Core types, fields, and projections need no source-module visibility metadata, and Core validation MUST NOT reconstruct source accessibility or infer source direct-access legality from lower alias state.
 
 For a producer receiver, faithful lowering may materialize the existing receiver producer result in Core storage, project the retained path, preserve the selected result through `Copy` or `Move`, and then lower only the HIR-retained/source-selected remaining frontier. Core liveness/path state MUST NOT be inspected to choose source duplicate/consume or cleanup.
 
@@ -314,4 +322,4 @@ Cleanup ordering and transfer into the surrounding consumer are sequenced by `fu
 
 ## Further boundaries
 
-This revision does not define field assignment or partial-field reinitialization; arbitrary value/expression receivers beyond the bounded direct-call/record-construction receiver set; a general postfix/member or expression grammar; package/friend/protected field accessibility; re-exports; qualified field names or nested module paths beyond the represented alias/member pair; methods/associated items or constructor methods; references/borrowing/lifetimes; additional refutable/shorthand patterns; positive record duplicability-selection syntax; general operators/conversions; floating literal formation; loops/backedges or new control-flow joins; custom destructors; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.
+This revision does not define field assignment or partial-field reinitialization; arbitrary value/expression receivers beyond the bounded direct-call/record-construction receiver set; a general postfix/member or expression grammar; package/friend/protected field accessibility; re-exports; qualified field names or nested module paths beyond the represented alias/member pair; methods/associated items or constructor methods; safe-reference formation/reborrow/lifetimes beyond consuming the canonical direct compatibility relation; additional refutable/shorthand patterns; positive record duplicability-selection syntax; general operators/conversions; floating literal formation; loops/backedges or new control-flow joins; custom destructors; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.
