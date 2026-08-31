@@ -30,22 +30,25 @@ fn lexes_standalone_ampersand_without_splitting_boolean_conjunction() {
 }
 
 #[test]
-fn parses_bounded_shared_reference_types_and_values() {
+fn parses_bounded_safe_reference_types_values_reborrows_and_replacement() {
     let source = r#"
 import dep;
-fn refs(x: I64, r: &I64, foreign: &dep::Ticket) -> I64 {
-    let a: &I64 = &x;
-    let b: I64 = *r;
-    let c: I64 = (*r);
-    let d: I64 = *r * x;
-    return d;
+fn refs(x: I64, r: &I64, mr: &mut I64, foreign: &dep::Ticket) -> I64 {
+    let root_shared: &I64 = &x;
+    let child_shared: &I64 = &*r;
+    let child_replace: &mut I64 = &mut *mr;
+    let root_replace: &mut I64 = &mut x;
+    let copied: I64 = *r;
+    *mr = copied;
+    return *r * x;
 }
 "#;
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count_kind(&parsed, SyntaxKind::SharedBorrowValue), 1);
-    assert_eq!(count_kind(&parsed, SyntaxKind::SharedDereferenceValue), 3);
+    assert_eq!(count_kind(&parsed, SyntaxKind::SafeReferenceValue), 4);
+    assert_eq!(count_kind(&parsed, SyntaxKind::ReferenceDereferenceValue), 2);
+    assert_eq!(count_kind(&parsed, SyntaxKind::ReferenceAssignStatement), 1);
     assert_eq!(count_kind(&parsed, SyntaxKind::MulValue), 1);
 }
 
@@ -59,7 +62,7 @@ fn prefix_dereference_does_not_reinterpret_binary_multiplication() {
     );
     assert_eq!(count_kind(&multiplication, SyntaxKind::MulValue), 1);
     assert_eq!(
-        count_kind(&multiplication, SyntaxKind::SharedDereferenceValue),
+        count_kind(&multiplication, SyntaxKind::ReferenceDereferenceValue),
         0
     );
 
@@ -72,7 +75,7 @@ fn prefix_dereference_does_not_reinterpret_binary_multiplication() {
     assert_eq!(
         count_kind(
             &dereference_then_multiply,
-            SyntaxKind::SharedDereferenceValue
+            SyntaxKind::ReferenceDereferenceValue
         ),
         1
     );
@@ -88,9 +91,11 @@ fn rejects_unrepresented_reference_syntax() {
         "fn f(r: &&I64) {}",
         "fn f(r: &I64) { let x: I64 = **r; }",
         "fn f(r: &I64) { let x: I64 = *(r); }",
-        "fn f(x: I64) { let r: &mut I64 = &x; }",
+        "fn f(r: &mut I64) { let x: &mut I64 = &mut **r; }",
         "fn f(x: I64) { let r: &I64 = &x.value; }",
         "import dep; fn f(x: I64) { let r: &I64 = &dep::x; }",
+        "fn f(r: &mut I64) { let child: &mut I64 = &mut *r.value; }",
+        "fn f(r: &mut I64) { **r = 1; }",
         "fn f(r: &Bool) { if *r {} }",
         "fn f(x: Bool) { if &x {} }",
         "fn f(r: &Bool) { while (*r) {} }",
