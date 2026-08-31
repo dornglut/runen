@@ -125,6 +125,23 @@ fn replacement_root_requires_complete_mutable_ordinary_local_not_parameter_or_im
 }
 
 #[test]
+fn replacement_reference_binding_use_moves_the_carrier() {
+    let hir = compile("fn f(r: &mut I64) { let moved: &mut I64 = r; }")
+        .expect("replacement-capable reference carriers move between immutable reference locals");
+    let f = function(&hir, "f");
+    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+        panic!("expected moved replacement-reference local");
+    };
+    assert!(matches!(
+        initializer.kind,
+        ValueKind::BindingUse {
+            binding,
+            ownership: OwnedUse::Consume,
+        } if binding == f.parameters[0].binding
+    ));
+}
+
+#[test]
 fn nonduplicable_external_referent_must_be_restored_after_move() {
     let hir = compile(
         "record Ticket { value: I64 }\
@@ -217,6 +234,48 @@ fn complete_reborrow_preserves_permission_without_strengthening() {
 }
 
 #[test]
+fn direct_temporary_and_explicit_child_calls_end_their_child_authority_on_normal_return() {
+    compile(
+        "fn sink(r: &mut I64) { *r = 7; }\
+         fn root(seed: I64) {\
+             let mut x: I64 = seed;\
+             sink(&mut x);\
+             let observed: I64 = x;\
+         }\
+         fn child(r: &mut I64) {\
+             sink(&mut *r);\
+             *r = 9;\
+         }",
+    )
+    .expect("temporary replacement roots and explicit replacement children end after normal calls");
+}
+
+#[test]
+fn nested_callee_may_move_and_restore_a_nonduplicable_child_referent() {
+    compile(
+        "record Ticket { value: I64 }\
+         fn sink(r: &mut Ticket) {\
+             let ticket: Ticket = *r;\
+             *r = ticket;\
+         }\
+         fn outer(r: &mut Ticket) { sink(&mut *r); }",
+    )
+    .expect("callee may Move and restore a replacement child before normal return");
+}
+
+#[test]
+fn defined_fault_has_no_synthetic_external_referent_restoration_obligation() {
+    compile(
+        "record Ticket { value: I64 }\
+         fn f(r: &mut Ticket) {\
+             let ticket: Ticket = *r;\
+             fault;\
+         }",
+    )
+    .expect("defined fault may leave an incoming replacement referent consumed");
+}
+
+#[test]
 fn live_root_replacement_authority_blocks_direct_target_replacement_even_with_shared_child() {
     let errors = compile(
         "fn f(seed: I64, replacement: I64) {\
@@ -258,6 +317,68 @@ fn reference_replacement_rechecks_destination_after_rhs_effects() {
     .expect_err("RHS may not consume the destination carrier and then commit to a stale target");
     assert!(has_diagnostic(&errors, |kind| kind
         == DiagnosticKind::ReferenceReplacementUnavailable));
+}
+
+#[test]
+fn fresh_reborrow_cannot_substitute_for_the_exact_shared_result_origin() {
+    let errors = compile(
+        "fn f(origin: &I64, r: &mut I64) -> &I64 {\
+             let child: &I64 = &*r;\
+             return child;\
+         }",
+    )
+    .expect_err("fresh child authority is not the callable's exact advertised Shared result origin");
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::SharedReferenceResultOriginMismatch));
+}
+
+#[test]
+fn raw_move_and_replacement_conflict_with_live_replacement_authority() {
+    for source in [
+        "fn f(seed: I64) {\
+             let mut x: I64 = seed;\
+             let p: raw I64 = raw &x;\
+             let r: &mut I64 = &mut x;\
+             unsafe { let moved: I64 = raw move p; }\
+         }",
+        "fn f(seed: I64) {\
+             let mut x: I64 = seed;\
+             let p: raw I64 = raw &x;\
+             let r: &mut I64 = &mut x;\
+             unsafe { raw assign p = 3; }\
+         }",
+    ] {
+        let errors = compile(source)
+            .expect_err("raw ownership operations require no active safe authority on the target");
+        assert!(
+            has_diagnostic(&errors, |kind| kind
+                == DiagnosticKind::RawTargetSafeAuthorityConflict),
+            "missing raw/safe-authority conflict: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn exact_control_flow_rejects_unequal_external_referent_state() {
+    let conditional = compile(
+        "record Ticket { value: I64 }\
+         fn f(flag: Bool, r: &mut Ticket) {\
+             if flag { let ticket: Ticket = *r; } else {}\
+         }",
+    )
+    .expect_err("two normal conditional outcomes require equal external referent state");
+    assert!(has_diagnostic(&conditional, |kind| kind
+        == DiagnosticKind::ConditionalReferenceStateMismatch));
+
+    let loop_backedge = compile(
+        "record Ticket { value: I64 }\
+         fn f(flag: Bool, r: &mut Ticket) {\
+             while flag { let ticket: Ticket = *r; }\
+         }",
+    )
+    .expect_err("normal loop backedge must restore exact external referent state");
+    assert!(has_diagnostic(&loop_backedge, |kind| kind
+        == DiagnosticKind::LoopReferenceStateMismatch));
 }
 
 #[test]
