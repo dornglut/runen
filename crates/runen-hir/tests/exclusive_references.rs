@@ -270,5 +270,7 @@ fn caller_created_shared_child_can_round_trip_through_exact_identity_result() {
              let copied: I64 = *returned;\
          }",
     )
-    .expect("caller-created Shared child identity may round-trip through an exact identity function");
+    .expect(
+        "caller-created Shared child identity may round-trip through an exact identity function",
+    );
 }
