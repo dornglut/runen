@@ -47,7 +47,10 @@ fn refs(x: I64, r: &I64, mr: &mut I64, foreign: &dep::Ticket) -> I64 {
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count_kind(&parsed, SyntaxKind::SafeReferenceValue), 4);
-    assert_eq!(count_kind(&parsed, SyntaxKind::ReferenceDereferenceValue), 2);
+    assert_eq!(
+        count_kind(&parsed, SyntaxKind::ReferenceDereferenceValue),
+        2
+    );
     assert_eq!(count_kind(&parsed, SyntaxKind::ReferenceAssignStatement), 1);
     assert_eq!(count_kind(&parsed, SyntaxKind::MulValue), 1);
 }
