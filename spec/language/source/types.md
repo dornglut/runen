@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented intrinsic scalar source type identities, represented source type equality, nominal record declaration/type identity, record field structure, direct record-containment rule, and represented owned-value duplicability classification. The first represented Shared-reference type constructor is owned canonically by [Source Shared references](references.md), and the first represented raw-pointer type constructor is owned canonically by [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); this type foundation integrates those constructors into source type equality, duplicability, and contextual record-shape boundaries without redefining reference authority/lifetime or raw-pointer provenance/unsafe semantics.
+This document owns the represented intrinsic scalar source type identities, represented source type equality, nominal record declaration/type identity, record field structure, direct record-containment rule, and represented owned-value duplicability classification. Safe-reference type constructors are owned canonically by [Source safe references](references.md), and the first represented raw-pointer type constructor is owned canonically by [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); this type foundation integrates those constructors into source type equality, duplicability, and contextual record-shape boundaries without redefining reference authority/lifetime or raw-pointer provenance/unsafe semantics.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md), first-slice Shared-reference type/referent admission from [Source Shared references](references.md), and first-slice raw-pointer type/pointee/contextual admission from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md), safe-reference type/referent admission from [Source safe references](references.md), and first-slice raw-pointer type/pointee/contextual admission from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
 
-The represented concrete intrinsic, Shared-reference, raw-pointer, and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Structural source paths, structural ownership state, availability, and remaining frontiers are owned by [Source structural ownership](structural-ownership.md). Function-local binding identity, mutability, lifecycle, lookup, ordinary whole-binding owned use, assignment, and first-slice reference/raw-pointer local integration are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities/value domains defined here. [Source field-value access](field-access.md) consumes nominal record/field identity, field source types, source type equality, and owned-value duplicability and separately owns direct record-field accessibility. [Source patterns](patterns.md) consumes nominal record/field identity, exact source type equality, structural field order, and duplicability for recursive record-pattern validation, including bounded node-local omission, and binding-leaf production. This document does not define literal materialization, reference formation/access/lifetimes, raw-pointer formation/access/provenance/unsafe admission, structural ownership state, field-access execution/accessibility, pattern lookup/ownership, conversions, general member lookup, or an implementation representation.
+The represented concrete intrinsic, safe-reference, raw-pointer, and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md). Structural source paths, structural ownership state, availability, and remaining frontiers are owned by [Source structural ownership](structural-ownership.md). Function-local binding identity, mutability, lifecycle, lookup, ordinary whole-binding owned use, assignment, and safe-reference/raw-pointer local integration are owned by [Source function-local bindings](local-bindings.md). [Source literal semantics](literals.md) consumes the scalar identities/value domains defined here. [Source field-value access](field-access.md) consumes nominal record/field identity, field source types, source type equality, and owned-value duplicability and separately owns direct record-field accessibility. [Source patterns](patterns.md) consumes nominal record/field identity, exact source type equality, structural field order, and duplicability for recursive record-pattern validation, including bounded node-local omission, and binding-leaf production. This document does not define literal materialization, reference formation/access/lifetimes, raw-pointer formation/access/provenance/unsafe admission, structural ownership state, field-access execution/accessibility, pattern lookup/ownership, conversions, general member lookup, or an implementation representation.
 
 ## Intrinsic scalar source types
 
@@ -40,23 +40,26 @@ A floating source type identity does not itself select `standard`, `reproducible
 
 A realization lacking direct native support for one represented intrinsic type MUST preserve every applicable accepted semantic contract through an otherwise legal realization, including emulation or applicable environment admission/rejection where required. Lack of hardware support is not permission to change the source type's value domain or make source validity target-defined.
 
-## Shared reference source types
+## Safe-reference source types
 
-The represented source type set additionally contains the bounded Shared-reference type constructor `SharedRef(T)` owned by `references.md`.
+The represented source type set additionally contains the bounded safe-reference constructors owned by `references.md`:
 
-A `SharedRef(T)` exists in this revision only when `T` satisfies the first-slice Shared-referent-admission relation from `references.md`: `T` is a represented source value type, is source-duplicable, and contains no Shared-reference or raw-pointer type in its structural source value shape.
+- `SharedRef(T)`, concretely `&T`; and
+- `ExclusiveReplaceRef(T)`, concretely `&mut T`.
 
-The concrete spelling `&T` maps to this constructor through `concrete-syntax.md`.
+`SharedRef(T)` exists only when `T` satisfies the Shared-referent-admission relation from `references.md`: `T` is represented, source-duplicable, and its structural source value shape contains neither safe references nor raw pointers.
 
-A Shared-reference referent edge is semantic indirection, not nominal-record direct containment. It therefore does not contribute a direct-containment edge under the record graph defined below.
+`ExclusiveReplaceRef(T)` exists only when `T` satisfies the replacement-reference-referent-admission relation from `references.md`: `T` is one represented intrinsic scalar or nominal record type, and its structural source value shape contains neither safe references nor raw pointers. The referent may be duplicable or non-duplicable.
 
-This type foundation does not define reference targets, authorities, carriers, borrowing, dereference, lifetime validity, or source-to-Core reference refinement. Those relations are owned only by `references.md`.
+A safe-reference referent edge is semantic indirection, not nominal-record direct containment. It therefore does not contribute a direct-containment edge under the record graph defined below.
+
+This type foundation does not define reference targets, authorities, carriers, borrowing, reborrow, dereference, replacement, lifetime validity, external referent ownership, or source-to-Core reference refinement. Those relations are owned only by `references.md`.
 
 ## Raw-pointer source types
 
 The represented source type set additionally contains the bounded raw-pointer type constructor `RawPtr(T)` owned by `raw-pointers-unsafe.md`.
 
-A `RawPtr(T)` exists in this revision only when `T` satisfies that owner's first-slice raw-pointee-admission relation: `T` is exactly one represented intrinsic scalar or nominal record source type. Raw-pointer and Shared-reference types are not admitted as raw pointees in this slice.
+A `RawPtr(T)` exists in this revision only when `T` satisfies that owner's first-slice raw-pointee-admission relation: `T` is exactly one represented intrinsic scalar or nominal record source type. Raw-pointer and safe-reference types are not admitted as raw pointees in this slice.
 
 The concrete `raw T` spelling maps to this constructor through `concrete-syntax.md`.
 
@@ -75,9 +78,9 @@ This revision does not define intrinsic source type identities for:
 - character, string, or byte-sequence types;
 - slices, arrays, tuples, enums, unions, function types, or other unrepresented composite/indirection forms.
 
-Safe references and raw pointers are no longer wholly absent: the bounded Shared-only `SharedRef(T)` constructor is represented under `references.md`, and the bounded activation-local `RawPtr(T)` constructor is represented under `raw-pointers-unsafe.md`. This revision still defines no Exclusive/ExclusiveReplace source-reference type, mutable-reference form, nested Shared-reference referent, pointer-to-pointer/reference form, reference/raw-pointer-containing record field, or corresponding aggregate indirection form.
+Safe references and raw pointers are represented only through the bounded constructors above. This revision still defines no plain-`Exclusive` source-reference type, nested safe-reference referent, pointer-to-pointer/reference form, safe-reference/raw-pointer-containing record field, or corresponding aggregate indirection form.
 
-The absence of other source type forms does not narrow parameterized semantic relations already defined by applicable non-source owners. A later source revision may add a type identity when an accepted consumer requires it.
+The absence of other source type forms does not narrow parameterized semantic relations already defined by applicable non-source owners. A later source revision may add a type identity only when an accepted consumer requires it.
 
 ## Represented source type equality
 
@@ -85,13 +88,15 @@ For the represented source type set:
 
 - two intrinsic scalar source types are equal exactly when they are the same intrinsic identity;
 - two nominal record source types are equal exactly when they originate from the same record declaration identity;
-- two Shared reference source types `SharedRef(A)` and `SharedRef(B)` are equal exactly when `A` and `B` are equal under this same source type-equality relation;
+- two `SharedRef(A)` / `SharedRef(B)` types are equal exactly when `A` and `B` are equal under this same source type-equality relation;
+- two `ExclusiveReplaceRef(A)` / `ExclusiveReplaceRef(B)` types are equal exactly when `A` and `B` are equal under this same source type-equality relation;
+- `SharedRef(T)` and `ExclusiveReplaceRef(T)` are never equal because permission class is an exact reference type-identity dimension;
 - two raw-pointer source types `RawPtr(A)` and `RawPtr(B)` are equal exactly when `A` and `B` are equal under this same source type-equality relation; and
 - values from different represented type categories are never equal merely because lower representation or structure is similar.
 
 Two distinct record declarations do not define the same source type merely because their fields have equal keys/types/order.
 
-Lifetime, dynamic reference target/authority identity, raw-pointer target/origin provenance, and lower Core type identity are not source type-equality dimensions for `SharedRef(T)` or `RawPtr(T)` in this slice.
+Lifetime, dynamic reference target/authority identity, raw-pointer target/origin provenance, and lower Core type identity are not source type-equality dimensions. Safe-reference permission class and referent type are semantic type-identity dimensions.
 
 This relation does not define subtyping, coercion, conversion, layout compatibility, ABI compatibility, trait conformance, or representation equivalence.
 
@@ -130,7 +135,7 @@ For this revision, a **record-field-admissible source type** is exactly either:
 - one intrinsic scalar source type defined here; or
 - one nominal record source type whose record binding is legally resolvable for the declaring source unit under same-module or qualified cross-module lookup from `names-modules.md`.
 
-`SharedRef(T)` and `RawPtr(T)` are represented source value types but are deliberately **not** record-field-admissible in these first indirection slices. Consequently a nominal record cannot yet store a Shared reference or raw-pointer value, and record construction/pattern/field-value owners require no reference-carrier or pointer-provenance aggregate semantics.
+`SharedRef(T)`, `ExclusiveReplaceRef(T)`, and `RawPtr(T)` are represented source value types but are deliberately not record-field-admissible in these indirection slices. Consequently a nominal record cannot yet store a safe reference or raw-pointer value, and record construction/pattern/field-value owners require no reference-carrier or pointer-provenance aggregate semantics.
 
 The ordered field sequence is semantic structural order for the source record value shape. It MAY be consumed where another accepted owner needs structural order. It does not define physical field order, byte offsets, padding, alignment, ABI layout, stable representation, or address arithmetic.
 
@@ -144,9 +149,9 @@ For represented record types, define a **direct-containment edge** `A -> B` exac
 
 The finite graph consisting of represented record types and all such edges MUST be acyclic.
 
-This requirement still applies because first-slice record fields remain restricted to intrinsic scalars or direct nominal-record containment. The existence of `SharedRef(T)` and `RawPtr(T)` as separate source value types does not alter that graph while indirection-containing record fields remain forbidden.
+This requirement still applies because represented record fields remain restricted to intrinsic scalars or direct nominal-record containment. The existence of safe-reference and raw-pointer value types does not alter that graph while indirection-containing record fields remain forbidden.
 
-A Shared-reference referent edge and a raw-pointer pointee edge are semantic indirection and are not direct-containment edges. This fact does not itself authorize an indirection-containing record field or recursive nominal type in this revision.
+A safe-reference referent edge and a raw-pointer pointee edge are semantic indirection and are not direct-containment edges. This fact does not itself authorize an indirection-containing record field or recursive nominal type in this revision.
 
 The rule does not prohibit a later recursive nominal type when every cycle passes through an accepted indirection type whose canonical source semantics establish the field-admission and lifetime/provenance relation. That later owner must define the applicable well-formedness relation explicitly.
 
@@ -162,9 +167,11 @@ The represented intrinsic scalar source types are duplicable: `Bool`, every repr
 
 For floating values, duplication preserves the semantic floating value under applicable floating contracts. It does not define floating comparison equality and adds no NaN representation, payload, sign, or canonicalization guarantees beyond existing authority.
 
-Every represented `SharedRef(T)` is duplicable under the reference-carrier consequence owned by `references.md`. Duplicating one Shared reference preserves its target/authority identity and adds one source carrier; it does not duplicate the referent value or create a new root Shared authority.
+Every represented `SharedRef(T)` is duplicable under the reference-carrier consequence owned by `references.md`. Duplicating one Shared reference preserves its target/authority identity and adds one source carrier; it does not duplicate the referent value or create a new root/child authority.
 
-Every represented `RawPtr(T)` is duplicable under the pointer-value/provenance consequence owned by `raw-pointers-unsafe.md`. Duplicating one raw pointer preserves its pointer value and exact pointer-origin provenance; it does not duplicate, borrow, move, or otherwise access the pointee value and creates no Shared authority.
+Every represented `ExclusiveReplaceRef(T)` is non-duplicable. Its ownership may be transferred by ordinary Move semantics, preserving the same carrier/authority identity; no source duplication capability exists for that reference value.
+
+Every represented `RawPtr(T)` is duplicable under the pointer-value/provenance consequence owned by `raw-pointers-unsafe.md`. Duplicating one raw pointer preserves its pointer value and exact pointer-origin provenance; it does not duplicate, borrow, move, or otherwise access the pointee value and creates no safe-reference authority.
 
 Each nominal record declaration has one source-semantic **duplicable selection**. A record may select duplicability only when every field source type is duplicable. A record that does not select duplicability is non-duplicable even if every field type is duplicable.
 
@@ -188,7 +195,7 @@ The nominal selection is a conservative source ownership-policy choice. Structur
 
 Ordinary whole-binding use uses this capability through `local-bindings.md`. Binding-rooted field-value use uses it through `field-access.md` for the final selected field path. Recursive record patterns use it through `patterns.md` independently for every binding leaf: a duplicable leaf produces a non-consuming duplicate from its complete structural path, while a non-duplicable leaf transfers/consumes exactly that complete path. Structural path availability and resulting ancestor/disjoint consequences are owned by `structural-ownership.md`, not by the duplicability classification.
 
-First-slice Shared references and raw pointers are not record fields, so nominal-record duplicability does not yet recurse through an indirection-containing aggregate.
+Safe references and raw pointers are not record fields, so nominal-record duplicability does not recurse through an indirection-containing aggregate in this slice.
 
 This section does not define other expression contexts, field assignment or partial reinitialization, parameter passing, result transfer, calls, pattern syntax, or any explicit cloning/copy-construction operation.
 
@@ -196,7 +203,7 @@ Duplicability is source semantics independent of any future `Copy`-like trait sp
 
 No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial structural ownership rather than silently changing either property.
 
-This capability reflects the conceptual distinction between ownership transfer and non-consuming duplication already present in Core semantics, but Core copyability representation is not source-language authority. A lower representation may be structurally copyable even when a source record made no positive duplicable selection; that lower fact MUST NOT grant source duplicability. Shared-reference duplicability likewise comes from `references.md`, and raw-pointer duplicability from `raw-pointers-unsafe.md`, not from inspecting lower Core copyability. This revision defines no independent source-to-MIR lowering rule or Core semantic change.
+This capability reflects the conceptual distinction between ownership transfer and non-consuming duplication already present in Core semantics, but Core copyability representation is not source-language authority. A lower representation may be structurally copyable even when a source record made no positive duplicable selection; that lower fact MUST NOT grant source duplicability. Safe-reference duplicability/non-duplicability likewise comes from `references.md`, and raw-pointer duplicability from `raw-pointers-unsafe.md`, not from inspecting lower Core copyability. This revision defines no independent source-to-MIR lowering rule or Core semantic change.
 
 ## Literal and conversion boundary
 
@@ -210,7 +217,7 @@ Those omissions do not prohibit a later accepted operation from defining an expl
 
 ## Callable and declaration boundary
 
-This document defines represented source type identity and the nominal record-type declaration/binding. Source function entities/callable signatures and contextual admission of Shared-reference parameter/result types are owned by [Source callables](callables.md). Raw-pointer contextual exclusion from callable parameters/results is owned by `raw-pointers-unsafe.md` and consumed by `callables.md`. Shared-reference value/lifetime semantics remain owned by `references.md`, and raw-pointer provenance/unsafe semantics remain owned by `raw-pointers-unsafe.md`.
+This document defines represented source type identity and the nominal record-type declaration/binding. Source function entities/callable signatures and contextual admission of safe-reference parameter/result types are owned by [Source callables](callables.md). Raw-pointer contextual exclusion from callable parameters/results is owned by `raw-pointers-unsafe.md` and consumed by `callables.md`. Safe-reference value/lifetime semantics remain owned by `references.md`, and raw-pointer provenance/unsafe semantics remain owned by `raw-pointers-unsafe.md`.
 
 This document does not define constants, statics, variables, type aliases, opaque types, traits, or another module-level declaration category beyond records.
 
@@ -218,24 +225,24 @@ Those declarations require independently owned source semantics rather than infe
 
 ## Structural ownership, bindings, field access, patterns, references, and raw pointers
 
-`structural-ownership.md` is the sole source owner for structural source paths, structural ownership state, path availability/consumption requirements, and recursive remaining frontiers. Those facts are not type properties.
+`structural-ownership.md` is the sole source owner for structural source paths, structural ownership state, path availability/consumption requirements, external-referent structural roots when established by `references.md`, and recursive remaining frontiers. Those facts are not type properties.
 
-`local-bindings.md` owns binding identity, assignment mutability, lexical lookup/scope, binding lifecycle around structural ownership, ordinary whole-binding duplicate-or-consume use, assignment legality/reset, and first-slice Shared-reference/raw-pointer local integration.
+`local-bindings.md` owns binding identity, assignment mutability, lexical lookup/scope, binding lifecycle around structural ownership, ordinary whole-binding duplicate-or-consume use, assignment legality/reset, and safe-reference/raw-pointer local integration.
 
-`field-access.md` owns binding-rooted and bounded producer-backed field selection, direct field accessibility, final-path availability requirement, producer-receiver transient ownership, and duplicate-or-consume field-value production.
+`field-access.md` owns binding-rooted and bounded producer-backed field selection, direct field accessibility, final-path availability requirement, producer-receiver transient ownership, duplicate-or-consume field-value production, and consumption of the direct safe-authority compatibility requirement from `references.md`.
 
-`patterns.md` owns recursive record-pattern selection with bounded node-local omission, binding-leaf introduction/order, direct-root leaf production, and producer-transient leaf ownership/cleanup selection.
+`patterns.md` owns recursive record-pattern selection with bounded node-local omission, binding-leaf introduction/order, direct-root leaf production, producer-transient leaf ownership/cleanup selection, and consumption of the direct safe-authority compatibility requirement from `references.md`.
 
-`references.md` owns Shared reference targets, authority/carriers, borrowing, dereference/copy, lifetime validity, target-assignment exclusion, call consequences, and source-to-Core reference refinement.
+`references.md` owns safe-reference targets, authority/carriers, root formation, reborrow, complete-referent dereference/replacement, lifetime validity, direct-operation compatibility, external-referent ownership, call consequences, result identity, and source-to-Core reference refinement.
 
 `raw-pointers-unsafe.md` owns raw-pointer target/origin provenance, lexical pointer validity, raw address formation, raw ownership move/replacement, unsafe admission, represented unsafe-precondition discharge, and source-to-Core raw refinement.
 
-This type owner supplies intrinsic/nominal type identities plus integration of the canonically owned Shared-reference/raw-pointer constructors into represented type equality and duplicability, nominal record/field identity, field types, source type equality, structural field order, and owned-value duplicability only.
+This type owner supplies intrinsic/nominal type identities plus integration of canonically owned safe-reference/raw-pointer constructors into represented type equality and duplicability, nominal record/field identity, field types, source type equality, structural field order, and owned-value duplicability only.
 
 The represented type identity, record shape, and duplicability classification do not by themselves determine:
 
 - structural path availability or ownership state;
-- Shared reference authority or lifetime;
+- safe-reference authority, child delegation, or lifetime;
 - raw-pointer target/origin validity or unsafe admission;
 - direct record-field accessibility;
 - field assignment/partial-field reinitialization;
@@ -248,8 +255,8 @@ Proving-kernel copyability, path state, scalar liveness, reference-authority ide
 
 ## Further boundaries
 
-The concrete intrinsic/record/Shared-reference/raw-pointer forms do not themselves define literal semantics, additional refutable/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, unsafe callable contracts, mutable/exclusive source references, named lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
+The concrete intrinsic/record/safe-reference/raw-pointer forms do not themselves define literal semantics, additional refutable/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, unsafe callable contracts, plain-Exclusive source references, named lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
 
-Represented boolean, decimal integer, and decimal floating literal semantics are owned by `literals.md`; Shared reference semantics by `references.md`; raw-pointer and unsafe-admission semantics by `raw-pointers-unsafe.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; and recursive record destructuring with bounded node-local omission by `patterns.md`.
+Represented boolean, decimal integer, and decimal floating literal semantics are owned by `literals.md`; safe-reference semantics by `references.md`; raw-pointer and unsafe-admission semantics by `raw-pointers-unsafe.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; and recursive record destructuring with bounded node-local omission by `patterns.md`.
 
 Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities/relations defined here.
