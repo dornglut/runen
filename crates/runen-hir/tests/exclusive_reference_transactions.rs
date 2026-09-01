@@ -32,7 +32,11 @@ fn failed_record_construction_rolls_back_an_earlier_local_move() {
     )
     .expect_err("the later field type mismatch must reject the constructor");
 
-    assert!(errors.iter().any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
     assert!(
         !has_diagnostic(&errors, DiagnosticKind::UnavailableBinding),
         "failed complete producer must not commit the earlier Ticket move: {errors:?}"
@@ -50,7 +54,11 @@ fn failed_record_construction_rolls_back_external_referent_move() {
     )
     .expect_err("the later field type mismatch must reject the constructor");
 
-    assert!(errors.iter().any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(
+        errors
+            .iter()
+            .any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
     assert!(
         !has_diagnostic(&errors, DiagnosticKind::ReferenceRestorationRequired),
         "failed complete producer must not leak the earlier external-referent Move: {errors:?}"
