@@ -21,6 +21,32 @@ fn direct_call_holds_multiple_shared_carriers_of_the_same_authority() {
 }
 
 #[test]
+fn boolean_conjunction_compares_complete_reference_state_and_ignores_ended_children() {
+    compile(
+        "fn read(r: &I64) -> Bool { return true; }\
+         fn valid(flag: Bool, r: &mut I64) -> Bool {\
+             return flag && read(&*r);\
+         }",
+    )
+    .expect("RHS temporary child authority ends before conjunction state comparison");
+
+    let errors = compile(
+        "fn consume(r: &mut I64) -> Bool { return true; }\
+         fn invalid(flag: Bool, r: &mut I64) -> Bool {\
+             return flag && consume(r);\
+         }",
+    )
+    .expect_err("RHS carrier move must disagree with the short-circuited left-false state");
+    assert!(
+        has_diagnostic(
+            &errors,
+            DiagnosticKind::BooleanConjunctionOwnershipMismatch
+        ),
+        "missing complete conjunction-state mismatch: {errors:?}"
+    );
+}
+
+#[test]
 fn failed_record_construction_rolls_back_an_earlier_local_move() {
     let errors = compile(
         "record Ticket { value: I64 }\
