@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, FunctionId,
-    LocalDecl, LocalId, NumericContract, Operand, Place, Program, ScalarType, Statement,
-    Terminator, TypeDef, TypeTable, Value, validate_program,
+    LocalDecl, LocalId, NumericContract, Operand, Place, Program, SafeReferenceResultContract,
+    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_numeric_oracle::{
     BinaryFormat, NumericOracleError, RoundedBinaryValue, Sign, SumReductionResult,
@@ -45,7 +45,7 @@ fn execute_float_add_with_contract(
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(ty),
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: Body {
                 locals: vec![LocalDecl::new("result", ty, false)],
                 loans: Vec::new(),
@@ -332,7 +332,7 @@ fn produced_nan_survives_copy_move_and_later_float_add() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(f32_ty),
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: Body {
                 locals: vec![
                     LocalDecl::new("first", f32_ty, false),
@@ -397,7 +397,7 @@ fn nan_class_round_trips_through_call_argument_and_result() {
         name: "entry".into(),
         parameters: Vec::new(),
         result: Some(f32_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: Body {
             locals: vec![
                 LocalDecl::new("nan", f32_ty, false),
@@ -435,7 +435,7 @@ fn nan_class_round_trips_through_call_argument_and_result() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(f32_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: Body {
             locals: vec![LocalDecl::new("value", f32_ty, false)],
             loans: Vec::new(),
@@ -481,7 +481,7 @@ fn struct_transport_preserves_nan_class_without_member_identity() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(pair_ty),
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: Body {
                 locals: vec![
                     LocalDecl::new("nan", f32_ty, false),
@@ -545,7 +545,7 @@ fn operand_effects_precede_exactly_one_float_add_write() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: Some(f32_ty),
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: Body {
                 locals: vec![
                     LocalDecl::new("left", f32_ty, false),
