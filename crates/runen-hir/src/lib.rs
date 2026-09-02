@@ -139,6 +139,14 @@ pub enum ReferencePermission {
     ExclusiveReplace,
 }
 
+/// Bounded source-semantic contract for a scalar Shared-reference result.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SafeReferenceResultContract {
+    None,
+    SharedIdentity { origin: usize },
+    SharedDirectChild { origin: usize },
+}
+
 /// Exact non-pointer pointee identity admitted by the first raw-pointer HIR slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RawPointerPointee {
@@ -573,7 +581,7 @@ pub struct Function {
     pub accessibility: Accessibility,
     pub parameters: Vec<Parameter>,
     pub result: Option<Type>,
-    pub shared_reference_result_origin: Option<usize>,
+    pub safe_reference_result_contract: SafeReferenceResultContract,
     pub body: Body,
     pub location: SourceLocation,
 }
