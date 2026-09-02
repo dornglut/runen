@@ -428,19 +428,19 @@ A successful result-bearing direct call validates from the callee's advertised c
 
 For `SharedIdentity(i)`, caller-side result authority/provenance is exactly the authority/provenance carried by the successful argument supplied to slot `i`, preserving existing identity behavior.
 
-For `SharedDirectChild(i)`, let caller authority `A` and target `R` be carried by the successful held `ExclusiveReplaceRef(T)` argument supplied to slot `i`. On the normal caller continuation, before that transferred/held parent carrier is released, source validation summarizes one fresh Shared authority `C` with:
+For `SharedDirectChild(i)`, let caller authority `A` and target `R` be carried by the successful held `ExclusiveReplaceRef(T)` argument supplied to slot `i`. Independent validation of the successful call first accounts for the one callee-preserved Shared child authority `C` and direct edge `A -> C` before applying ordinary end-of-call carrier consequences. `C` has:
 
 - target exactly `R`;
 - parent exactly `A`;
-- one result carrier;
+- one surviving result carrier;
 - fresh derived-child provenance; and
 - no replacement capability.
 
-Only after `C` is established does ordinary argument/activation cleanup release the transferred parent carrier. `A` therefore remains active carrierlessly while `C` or any descendant of `C` remains active. Every pre-existing ancestor of `A` remains unchanged. When the final descendant branch ends, ordinary authority lifecycle recursively ends any eligible carrierless ancestors.
+Ordinary callee activation cleanup then releases the transferred parent carrier and every other non-surviving callee-owned carrier before control resumes in the caller. The normal caller continuation therefore exposes the already-preserved result child `C`; it does not create `C` after cleanup. `A` remains active carrierlessly while `C` or any descendant of `C` remains active. Every pre-existing ancestor of `A` remains unchanged. When the final descendant branch ends, ordinary authority lifecycle recursively ends any eligible carrierless ancestors.
 
 This caller-side validation summary denotes the one callee-created child authority required by valid execution. It does not add another runtime reborrow, duplicate the result carrier, detach/re-root the child, or recreate a parent carrier.
 
-Passing an already-derived child through `SharedIdentity` preserves it unchanged. Applying another direct-child derivation to a replacement-capable child creates a child of that replacement authority; such a result is a grandchild relative to any outer contract naming the earlier ancestor and therefore cannot satisfy that outer direct-child contract.
+Passing an already-derived Shared child through `SharedIdentity` preserves it unchanged. If a replacement-capable child authority `B` of an earlier authority `A` is instead supplied as the origin of another `SharedDirectChild` call, the resulting Shared child has direct parent `B`; it is therefore a grandchild relative to `A` and cannot satisfy an outer direct-child contract naming `A`.
 
 On defined fault, no safe-reference result authority/carrier/provenance is produced. On divergence, no safe-reference result authority/carrier/provenance, cleanup, restoration, or normal continuation state is synthesized.
 
