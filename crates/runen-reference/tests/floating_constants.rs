@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, FunctionId,
-    LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
-    Terminator, TypeDef, TypeTable, Value, validate_program,
+    LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType,
+    Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{
     Machine, ObservedBinaryFloatValue, ObservedValue, TerminalStatus, VerificationEventKind,
