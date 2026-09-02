@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, ReferenceAccess, ReferencePermission, SafeReferenceResultContract, ScalarType,
+    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
+    Place, Program, ReferenceAccess, ReferencePermission, SafeReferenceResultContract, ScalarType,
     Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{
