@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::interprocedural::{Body, Function, Program, Terminator};
+use crate::interprocedural::{
+    Body, Function, Program, SafeReferenceResultContract, Terminator,
+};
 use crate::{
     BasicBlockId, BorrowKind, FunctionId, LoanDecl, LoanId, LocalId, Operand, Place, PlaceAccess,
     Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement, TypeId, TypeKind,
@@ -45,12 +47,17 @@ pub enum MirValidationErrorKind {
     DuplicateReferenceType(TypeId),
     ParameterTransferUnsafe(TypeId),
     ResultTransferUnsafe(TypeId),
-    MissingSharedReferenceResultOrigin,
-    UnexpectedSharedReferenceResultOrigin,
-    InvalidSharedReferenceResultOriginSlot(usize),
-    SharedReferenceResultRequiresShared(TypeId),
-    SharedReferenceResultOriginRequiresShared(TypeId),
-    SharedReferenceResultOriginTypeMismatch {
+    MissingSafeReferenceResultContract,
+    UnexpectedSafeReferenceResultContract,
+    InvalidSafeReferenceResultContractSlot(usize),
+    SafeReferenceResultContractRequiresSharedResult(TypeId),
+    SharedIdentityOriginPermissionMismatch(TypeId),
+    SharedIdentityOriginTypeMismatch {
+        expected: TypeId,
+        found: TypeId,
+    },
+    SharedDirectChildOriginPermissionMismatch(TypeId),
+    SharedDirectChildOriginReferentMismatch {
         expected: TypeId,
         found: TypeId,
     },
@@ -75,7 +82,8 @@ pub enum MirValidationErrorKind {
     ReferenceTargetNotLive,
     ReferenceAuthorityNotActive,
     ReferenceAuthorityIncomplete,
-    SharedReferenceResultOriginMismatch,
+    SharedIdentityResultMismatch,
+    SharedDirectChildResultMismatch,
     ReferenceFormationConflictsWithLoan {
         place: Place,
         loan: LoanId,
@@ -327,13 +335,14 @@ fn validate_result_contract(
     function_id: FunctionId,
     function: &Function,
 ) -> Result<(), MirValidationError> {
+    let contract = function.safe_reference_result_contract;
     let Some(result) = function.result else {
-        return if function.shared_reference_result_origin.is_none() {
+        return if matches!(contract, SafeReferenceResultContract::None) {
             Ok(())
         } else {
             Err(function_error(
                 function_id,
-                MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
+                MirValidationErrorKind::UnexpectedSafeReferenceResultContract,
             ))
         };
     };
@@ -343,40 +352,48 @@ fn validate_result_contract(
         .ok_or_else(|| function_error(function_id, MirValidationErrorKind::UnknownType(result)))?;
 
     if types.is_result_transfer_safe(result) {
-        return if function.shared_reference_result_origin.is_none() {
+        return if matches!(contract, SafeReferenceResultContract::None) {
             Ok(())
         } else {
             Err(function_error(
                 function_id,
-                MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
+                MirValidationErrorKind::UnexpectedSafeReferenceResultContract,
             ))
         };
     }
 
-    let TypeKind::Scalar(ScalarType::Reference { permission, .. }) = &definition.kind else {
+    let TypeKind::Scalar(ScalarType::Reference {
+        referent: result_referent,
+        permission: result_permission,
+    }) = &definition.kind
+    else {
         return Err(function_error(
             function_id,
             MirValidationErrorKind::ResultTransferUnsafe(result),
         ));
     };
 
-    if *permission != ReferencePermission::Shared {
+    if *result_permission != ReferencePermission::Shared {
         return Err(function_error(
             function_id,
-            MirValidationErrorKind::SharedReferenceResultRequiresShared(result),
+            MirValidationErrorKind::SafeReferenceResultContractRequiresSharedResult(result),
         ));
     }
 
-    let Some(origin_slot) = function.shared_reference_result_origin else {
-        return Err(function_error(
-            function_id,
-            MirValidationErrorKind::MissingSharedReferenceResultOrigin,
-        ));
+    let origin_slot = match contract {
+        SafeReferenceResultContract::None => {
+            return Err(function_error(
+                function_id,
+                MirValidationErrorKind::MissingSafeReferenceResultContract,
+            ));
+        }
+        SafeReferenceResultContract::SharedIdentity { origin }
+        | SafeReferenceResultContract::SharedDirectChild { origin } => origin,
     };
     let Some(parameter) = function.parameters.get(origin_slot) else {
         return Err(function_error(
             function_id,
-            MirValidationErrorKind::InvalidSharedReferenceResultOriginSlot(origin_slot),
+            MirValidationErrorKind::InvalidSafeReferenceResultContractSlot(origin_slot),
         ));
     };
     let found = function
@@ -384,22 +401,54 @@ fn validate_result_contract(
         .local(*parameter)
         .expect("parameter validation establishes the designated origin local")
         .ty;
-    if let Some((_, permission)) = types.reference(found)
-        && permission != ReferencePermission::Shared
-    {
-        return Err(function_error(
-            function_id,
-            MirValidationErrorKind::SharedReferenceResultOriginRequiresShared(found),
-        ));
-    }
-    if found != result {
-        return Err(function_error(
-            function_id,
-            MirValidationErrorKind::SharedReferenceResultOriginTypeMismatch {
-                expected: result,
-                found,
-            },
-        ));
+
+    match contract {
+        SafeReferenceResultContract::None => unreachable!("handled before origin validation"),
+        SafeReferenceResultContract::SharedIdentity { .. } => {
+            if let Some((_, permission)) = types.reference(found)
+                && permission != ReferencePermission::Shared
+            {
+                return Err(function_error(
+                    function_id,
+                    MirValidationErrorKind::SharedIdentityOriginPermissionMismatch(found),
+                ));
+            }
+            if found != result {
+                return Err(function_error(
+                    function_id,
+                    MirValidationErrorKind::SharedIdentityOriginTypeMismatch {
+                        expected: result,
+                        found,
+                    },
+                ));
+            }
+        }
+        SafeReferenceResultContract::SharedDirectChild { .. } => {
+            let Some((found_referent, found_permission)) = types.reference(found) else {
+                return Err(function_error(
+                    function_id,
+                    MirValidationErrorKind::SharedDirectChildOriginPermissionMismatch(found),
+                ));
+            };
+            if !matches!(
+                found_permission,
+                ReferencePermission::Exclusive | ReferencePermission::ExclusiveReplace
+            ) {
+                return Err(function_error(
+                    function_id,
+                    MirValidationErrorKind::SharedDirectChildOriginPermissionMismatch(found),
+                ));
+            }
+            if found_referent != *result_referent {
+                return Err(function_error(
+                    function_id,
+                    MirValidationErrorKind::SharedDirectChildOriginReferentMismatch {
+                        expected: *result_referent,
+                        found: found_referent,
+                    },
+                ));
+            }
+        }
     }
     Ok(())
 }
@@ -1345,12 +1394,12 @@ fn validate_path_state(
             .local(*parameter)
             .expect("declaration validation establishes parameter local")
             .ty;
-        let value = parameter_validation_value(
-            types,
-            ty,
-            &mut state,
-            function.shared_reference_result_origin == Some(slot),
-        );
+        let is_result_origin = match function.safe_reference_result_contract {
+            SafeReferenceResultContract::None => false,
+            SafeReferenceResultContract::SharedIdentity { origin }
+            | SafeReferenceResultContract::SharedDirectChild { origin } => origin == slot,
+        };
+        let value = parameter_validation_value(types, ty, &mut state, is_result_origin);
         write_validation_value(
             types,
             ty,
@@ -1430,8 +1479,12 @@ fn validate_path_state(
                 } else {
                     None
                 };
-                if function.shared_reference_result_origin.is_some() {
-                    require_shared_reference_result_origin(
+                if !matches!(
+                    function.safe_reference_result_contract,
+                    SafeReferenceResultContract::None
+                ) {
+                    require_safe_reference_result_contract(
+                        function.safe_reference_result_contract,
                         result
                             .as_ref()
                             .expect("static validation establishes a contract-bearing result"),
@@ -1494,13 +1547,23 @@ fn validate_path_state(
                     restore_transferred_referents(types, *ty, value, &mut state);
                 }
 
-                let returned_result = callee
-                    .shared_reference_result_origin
-                    .map(|slot| held[slot].1.clone());
-                if let Some(origin_slot) = callee.shared_reference_result_origin {
-                    destroy_transient_values_except(types, &held, origin_slot, &mut state);
-                } else {
-                    destroy_transient_values(types, &held, &mut state);
+                let returned_result = match callee.safe_reference_result_contract {
+                    SafeReferenceResultContract::None => None,
+                    SafeReferenceResultContract::SharedIdentity { origin } => {
+                        Some(held[origin].1.clone())
+                    }
+                    SafeReferenceResultContract::SharedDirectChild { origin } => Some(
+                        summarize_shared_direct_child_result(&held[origin].1, &mut state),
+                    ),
+                };
+                match callee.safe_reference_result_contract {
+                    SafeReferenceResultContract::SharedIdentity { origin } => {
+                        destroy_transient_values_except(types, &held, origin, &mut state);
+                    }
+                    SafeReferenceResultContract::None
+                    | SafeReferenceResultContract::SharedDirectChild { .. } => {
+                        destroy_transient_values(types, &held, &mut state);
+                    }
                 }
 
                 if let Some(destination) = destination {
@@ -2953,7 +3016,8 @@ fn authority_retains_full_advertised_permission(
     !reference_delegated_child(authorities, authority, &active.target, requirement)
 }
 
-fn require_shared_reference_result_origin(
+fn require_safe_reference_result_contract(
+    contract: SafeReferenceResultContract,
     value: &ValidationValue,
     state: &ValidationState,
     point: &MirPoint,
@@ -2966,17 +3030,20 @@ fn require_shared_reference_result_origin(
         .get(authority.0 as usize)
         .and_then(Option::as_ref)
     else {
-        return Err(point_error(
-            point,
-            MirValidationErrorKind::SharedReferenceResultOriginMismatch,
-        ));
+        let kind = match contract {
+            SafeReferenceResultContract::SharedIdentity { .. } => {
+                MirValidationErrorKind::SharedIdentityResultMismatch
+            }
+            SafeReferenceResultContract::SharedDirectChild { .. } => {
+                MirValidationErrorKind::SharedDirectChildResultMismatch
+            }
+            SafeReferenceResultContract::None => {
+                unreachable!("ordinary results do not use a safe-reference result predicate")
+            }
+        };
+        return Err(point_error(point, kind));
     };
-    if !active.is_result_origin {
-        return Err(point_error(
-            point,
-            MirValidationErrorKind::SharedReferenceResultOriginMismatch,
-        ));
-    }
+
     if !authority_retains_full_advertised_permission(
         &state.reference_authorities,
         *authority,
@@ -2987,7 +3054,73 @@ fn require_shared_reference_result_origin(
             MirValidationErrorKind::ReferenceAuthorityIncomplete,
         ));
     }
+
+    match contract {
+        SafeReferenceResultContract::None => {
+            unreachable!("ordinary results do not use a safe-reference result predicate")
+        }
+        SafeReferenceResultContract::SharedIdentity { .. } => {
+            if !active.is_result_origin {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::SharedIdentityResultMismatch,
+                ));
+            }
+        }
+        SafeReferenceResultContract::SharedDirectChild { .. } => {
+            let Some(parent_id) = active.parent else {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::SharedDirectChildResultMismatch,
+                ));
+            };
+            let Some(parent) = state
+                .reference_authorities
+                .get(parent_id.0 as usize)
+                .and_then(Option::as_ref)
+            else {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::SharedDirectChildResultMismatch,
+                ));
+            };
+            if !parent.is_result_origin || active.target != parent.target {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::SharedDirectChildResultMismatch,
+                ));
+            }
+        }
+    }
     Ok(())
+}
+
+fn summarize_shared_direct_child_result(
+    origin: &ValidationValue,
+    state: &mut ValidationState,
+) -> ValidationValue {
+    let ValidationValue::Scalar(ValidationScalar::Reference(parent)) = origin else {
+        unreachable!("direct-child declaration establishes a scalar reference origin")
+    };
+    let active = state.reference_authorities[parent.0 as usize]
+        .as_ref()
+        .expect("admissible held direct-child origin names an active authority");
+    debug_assert!(matches!(
+        active.permission,
+        ReferencePermission::Exclusive | ReferencePermission::ExclusiveReplace
+    ));
+    let target = active.target.clone();
+    let child = allocate_reference_authority(
+        &mut state.reference_authorities,
+        ActiveReferenceAuthority {
+            target,
+            permission: ReferencePermission::Shared,
+            parent: Some(*parent),
+            carriers: 1,
+            is_result_origin: false,
+        },
+    );
+    ValidationValue::Scalar(ValidationScalar::Reference(child))
 }
 
 fn require_call_value_admissible(
