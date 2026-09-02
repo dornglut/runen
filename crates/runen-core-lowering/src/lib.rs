@@ -71,7 +71,7 @@ struct TypeMap {
 
 impl TypeMap {
     fn new(compilation: &hir::TypedCompilation) -> Result<Self, LoweringError> {
-        let reference_types = collect_used_shared_reference_types(compilation);
+        let reference_types = collect_used_safe_reference_types(compilation);
         let raw_pointer_types = collect_used_raw_pointer_types(compilation);
         let maximum_types = compilation
             .records
@@ -97,8 +97,8 @@ impl TypeMap {
         for record in &compilation.records {
             map.lower_record(compilation, record.id, &mut visiting)?;
         }
-        for referent in reference_types {
-            map.lower_shared_reference(referent)?;
+        for (referent, permission) in reference_types {
+            map.lower_safe_reference(referent, permission)?;
         }
         for pointee in raw_pointer_types {
             map.lower_raw_pointer(pointee)?;
@@ -134,9 +134,9 @@ impl TypeMap {
                         "represented intrinsic type is not mapped",
                     ))?,
                 hir::Type::Record(record) => self.lower_record(compilation, record, visiting)?,
-                hir::Type::SharedReference(_) => {
+                hir::Type::SafeReference { .. } => {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "HIR record field contains a Shared-reference type",
+                        "HIR record field contains a safe-reference type",
                     ));
                 }
                 hir::Type::RawPointer(_) => {
@@ -156,11 +156,15 @@ impl TypeMap {
         Ok(mapped)
     }
 
-    fn lower_shared_reference(
+    fn lower_safe_reference(
         &mut self,
         referent: hir::ReferenceReferent,
+        permission: hir::ReferencePermission,
     ) -> Result<core::TypeId, LoweringError> {
-        let ty = hir::Type::SharedReference(referent);
+        let ty = hir::Type::SafeReference {
+            referent,
+            permission,
+        };
         if let Some(mapped) = self.mapped.get(&ty) {
             return Ok(*mapped);
         }
@@ -170,18 +174,22 @@ impl TypeMap {
             .types
             .get(referent_ty)
             .ok_or(LoweringError::InvalidHirInvariant(
-                "Shared-reference referent is absent from the Core type table",
+                "safe-reference referent is absent from the Core type table",
             ))?
             .name
             .clone();
+        let name = match permission {
+            hir::ReferencePermission::Shared => format!("&{referent_name}"),
+            hir::ReferencePermission::ExclusiveReplace => format!("&mut {referent_name}"),
+        };
         let mapped = self.types.push(core::TypeDef::reference(
-            format!("&{referent_name}"),
+            name,
             referent_ty,
-            core::ReferencePermission::Shared,
+            lower_reference_permission(permission),
         ));
         if self.mapped.insert(ty, mapped).is_some() {
             return Err(LoweringError::InvalidHirInvariant(
-                "duplicate HIR Shared-reference type mapping",
+                "duplicate HIR safe-reference type mapping",
             ));
         }
         Ok(mapped)
@@ -345,50 +353,66 @@ impl TypeMap {
     }
 }
 
-fn collect_used_shared_reference_types(
+fn collect_used_safe_reference_types(
     compilation: &hir::TypedCompilation,
-) -> BTreeSet<hir::ReferenceReferent> {
-    let mut referents = BTreeSet::new();
+) -> BTreeSet<(hir::ReferenceReferent, hir::ReferencePermission)> {
+    let mut references = BTreeSet::new();
     for function in &compilation.functions {
         for parameter in &function.parameters {
-            if let hir::Type::SharedReference(referent) = parameter.ty {
-                referents.insert(referent);
+            if let hir::Type::SafeReference {
+                referent,
+                permission,
+            } = parameter.ty
+            {
+                references.insert((referent, permission));
             }
         }
-        collect_statement_shared_reference_types(&function.body.statements, &mut referents);
+        if let Some(hir::Type::SafeReference {
+            referent,
+            permission,
+        }) = function.result
+        {
+            references.insert((referent, permission));
+        }
+        collect_statement_safe_reference_types(&function.body.statements, &mut references);
     }
-    referents
+    references
 }
 
-fn collect_statement_shared_reference_types(
+fn collect_statement_safe_reference_types(
     statements: &[hir::Statement],
-    referents: &mut BTreeSet<hir::ReferenceReferent>,
+    references: &mut BTreeSet<(hir::ReferenceReferent, hir::ReferencePermission)>,
 ) {
     for statement in statements {
         match statement {
             hir::Statement::Local { ty, .. } => {
-                if let hir::Type::SharedReference(referent) = ty {
-                    referents.insert(*referent);
+                if let hir::Type::SafeReference {
+                    referent,
+                    permission,
+                } = ty
+                {
+                    references.insert((*referent, *permission));
                 }
             }
             hir::Statement::Block(block) => {
-                collect_statement_shared_reference_types(&block.statements, referents);
+                collect_statement_safe_reference_types(&block.statements, references);
             }
             hir::Statement::If {
                 then_block,
                 else_block,
                 ..
             } => {
-                collect_statement_shared_reference_types(&then_block.statements, referents);
+                collect_statement_safe_reference_types(&then_block.statements, references);
                 if let Some(else_block) = else_block {
-                    collect_statement_shared_reference_types(&else_block.statements, referents);
+                    collect_statement_safe_reference_types(&else_block.statements, references);
                 }
             }
             hir::Statement::While { body, .. } => {
-                collect_statement_shared_reference_types(&body.statements, referents);
+                collect_statement_safe_reference_types(&body.statements, references);
             }
             hir::Statement::RecordDestructure { .. }
             | hir::Statement::Assignment { .. }
+            | hir::Statement::ReferenceAssign { .. }
             | hir::Statement::RawAssign { .. }
             | hir::Statement::Call { .. }
             | hir::Statement::Fault { .. }
@@ -437,6 +461,7 @@ fn collect_statement_raw_pointer_types(
             }
             hir::Statement::RecordDestructure { .. }
             | hir::Statement::Assignment { .. }
+            | hir::Statement::ReferenceAssign { .. }
             | hir::Statement::RawAssign { .. }
             | hir::Statement::Call { .. }
             | hir::Statement::Fault { .. }
@@ -593,6 +618,7 @@ impl<'a> FunctionLowerer<'a> {
                     self.register_source_locals(&body.statements)?;
                 }
                 hir::Statement::Assignment { .. }
+                | hir::Statement::ReferenceAssign { .. }
                 | hir::Statement::RawAssign { .. }
                 | hir::Statement::Call { .. }
                 | hir::Statement::Fault { .. }
@@ -697,6 +723,11 @@ impl<'a> FunctionLowerer<'a> {
                         src: core::Operand::Move(core::Place::local(value).into()),
                     });
                 }
+                hir::Statement::ReferenceAssign {
+                    reference, value, ..
+                } => {
+                    self.lower_reference_assign(*reference, value)?;
+                }
                 hir::Statement::RawAssign { pointer, value, .. } => {
                     self.lower_raw_assign(*pointer, value)?;
                 }
@@ -752,6 +783,7 @@ impl<'a> FunctionLowerer<'a> {
             | hir::Statement::Local { .. }
             | hir::Statement::RecordDestructure { .. }
             | hir::Statement::Assignment { .. }
+            | hir::Statement::ReferenceAssign { .. }
             | hir::Statement::RawAssign { .. }
             | hir::Statement::Call { .. } => true,
         }
@@ -823,6 +855,37 @@ impl<'a> FunctionLowerer<'a> {
                 });
             }
         }
+        Ok(())
+    }
+
+    fn lower_reference_assign(
+        &mut self,
+        reference: hir::BindingId,
+        value: &hir::Value,
+    ) -> Result<(), LoweringError> {
+        let reference_local = self.binding(reference)?;
+        let reference_ty = self.local_type(reference_local)?;
+        let Some((referent_ty, permission)) = self.types.types.reference(reference_ty) else {
+            return Err(LoweringError::InvalidHirInvariant(
+                "reference assignment destination is not a safe-reference binding",
+            ));
+        };
+        if permission != core::ReferencePermission::ExclusiveReplace {
+            return Err(LoweringError::InvalidHirInvariant(
+                "reference assignment destination is not replacement-capable",
+            ));
+        }
+
+        let value_local = self.lower_value(value)?;
+        if self.local_type(value_local)? != referent_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "reference assignment RHS type does not match reference referent",
+            ));
+        }
+        self.push_statement(core::Statement::ReferenceAssign {
+            dst: core::ReferenceAccess::new(core::Place::local(reference_local)),
+            src: core::Operand::Move(core::Place::local(value_local).into()),
+        });
         Ok(())
     }
 
@@ -1943,17 +2006,26 @@ impl<'a> FunctionLowerer<'a> {
                 self.current = join_target.0 as usize;
                 Ok(result)
             }
-            hir::ValueKind::SharedBorrowRoot { target } => {
-                let hir::Type::SharedReference(referent) = value.ty else {
+            hir::ValueKind::ReferenceRoot { target, permission } => {
+                let hir::Type::SafeReference {
+                    referent,
+                    permission: value_permission,
+                } = value.ty
+                else {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "Shared-borrow HIR value does not have a Shared-reference type",
+                        "reference-root HIR value does not have a safe-reference type",
                     ));
                 };
+                if *permission != value_permission {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "reference-root permission does not match its safe-reference type",
+                    ));
+                }
                 let target_local = self.binding(*target)?;
                 let referent_ty = self.types.get(referent.ty())?;
                 if self.local_type(target_local)? != referent_ty {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "Shared-borrow target type does not match its reference referent",
+                        "reference-root target type does not match its reference referent",
                     ));
                 }
 
@@ -1961,47 +2033,128 @@ impl<'a> FunctionLowerer<'a> {
                 self.push_statement(core::Statement::Init {
                     dst: core::Place::local(temporary),
                     src: core::Operand::ReferenceRoot {
-                        permission: core::ReferencePermission::Shared,
+                        permission: lower_reference_permission(*permission),
                         place: core::Place::local(target_local),
                     },
                 });
                 Ok(temporary)
             }
-            hir::ValueKind::SharedDereferenceCopy { reference } => {
-                let referent = match value.ty {
-                    hir::Type::Intrinsic(intrinsic) => hir::ReferenceReferent::Intrinsic(intrinsic),
-                    hir::Type::Record(record) => hir::ReferenceReferent::Record(record),
-                    hir::Type::SharedReference(_) => {
-                        return Err(LoweringError::InvalidHirInvariant(
-                            "Shared-dereference HIR value has a nested-reference result type",
-                        ));
-                    }
-                    hir::Type::RawPointer(_) => {
-                        return Err(LoweringError::InvalidHirInvariant(
-                            "Shared-dereference HIR value has a raw-pointer result type",
-                        ));
-                    }
-                };
-                if !self.compilation.type_is_duplicable(value.ty) {
+            hir::ValueKind::ReferenceReborrow {
+                reference,
+                permission,
+            } => {
+                let hir::Type::SafeReference {
+                    referent,
+                    permission: value_permission,
+                } = value.ty
+                else {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "Shared-dereference HIR referent is not source-duplicable",
+                        "reference-reborrow HIR value does not have a safe-reference type",
+                    ));
+                };
+                if *permission != value_permission {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "reference-reborrow permission does not match its safe-reference type",
                     ));
                 }
 
                 let source = self.binding(*reference)?;
-                let expected_reference_ty = self.types.get(hir::Type::SharedReference(referent))?;
-                if self.local_type(source)? != expected_reference_ty {
+                let source_ty = self.local_type(source)?;
+                let Some((parent_referent, parent_permission)) =
+                    self.types.types.reference(source_ty)
+                else {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "Shared-dereference binding type does not match its result referent",
+                        "reference-reborrow source is not a safe-reference binding",
+                    ));
+                };
+                let referent_ty = self.types.get(referent.ty())?;
+                if parent_referent != referent_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "reference-reborrow parent referent does not match child referent",
+                    ));
+                }
+                let requested = lower_reference_permission(*permission);
+                if !parent_permission.permits(requested) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "reference-reborrow permission exceeds parent permission",
                     ));
                 }
 
                 let temporary = self.push_temporary(value.ty)?;
                 self.push_statement(core::Statement::Init {
                     dst: core::Place::local(temporary),
-                    src: core::Operand::ReferenceCopy(core::ReferenceAccess::new(
-                        core::Place::local(source),
-                    )),
+                    src: core::Operand::ReferenceReborrow {
+                        permission: requested,
+                        src: core::ReferenceAccess::new(core::Place::local(source)),
+                    },
+                });
+                Ok(temporary)
+            }
+            hir::ValueKind::ReferenceDereference {
+                reference,
+                ownership,
+            } => {
+                let referent = match value.ty {
+                    hir::Type::Intrinsic(intrinsic) => hir::ReferenceReferent::Intrinsic(intrinsic),
+                    hir::Type::Record(record) => hir::ReferenceReferent::Record(record),
+                    hir::Type::SafeReference { .. } => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "reference-dereference HIR value has a nested-reference result type",
+                        ));
+                    }
+                    hir::Type::RawPointer(_) => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "reference-dereference HIR value has a raw-pointer result type",
+                        ));
+                    }
+                };
+
+                let source = self.binding(*reference)?;
+                let source_ty = self.local_type(source)?;
+                let Some((source_referent, source_permission)) =
+                    self.types.types.reference(source_ty)
+                else {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "reference-dereference source is not a safe-reference binding",
+                    ));
+                };
+                let referent_ty = self.types.get(referent.ty())?;
+                if source_referent != referent_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "reference-dereference binding type does not match its result referent",
+                    ));
+                }
+
+                let duplicable = self.compilation.type_is_duplicable(value.ty);
+                let access = core::ReferenceAccess::new(core::Place::local(source));
+                let operand = match ownership {
+                    hir::OwnedUse::Duplicate => {
+                        if !duplicable {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "reference-dereference duplication has a non-duplicable referent",
+                            ));
+                        }
+                        core::Operand::ReferenceCopy(access)
+                    }
+                    hir::OwnedUse::Consume => {
+                        if duplicable {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "reference-dereference move has a duplicable referent",
+                            ));
+                        }
+                        if source_permission != core::ReferencePermission::ExclusiveReplace {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "reference-dereference move is not replacement-capable",
+                            ));
+                        }
+                        core::Operand::ReferenceMove(access)
+                    }
+                };
+
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: operand,
                 });
                 Ok(temporary)
             }
@@ -2044,12 +2197,21 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(temporary)
             }
             hir::ValueKind::BindingUse { binding, ownership } => {
-                if matches!(value.ty, hir::Type::SharedReference(_))
-                    && *ownership != hir::OwnedUse::Duplicate
-                {
-                    return Err(LoweringError::InvalidHirInvariant(
-                        "Shared-reference binding use is not a source duplication",
-                    ));
+                if let hir::Type::SafeReference { permission, .. } = value.ty {
+                    match (permission, *ownership) {
+                        (hir::ReferencePermission::Shared, hir::OwnedUse::Duplicate)
+                        | (hir::ReferencePermission::ExclusiveReplace, hir::OwnedUse::Consume) => {}
+                        (hir::ReferencePermission::Shared, _) => {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "Shared-reference binding use is not a source duplication",
+                            ));
+                        }
+                        (hir::ReferencePermission::ExclusiveReplace, _) => {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "replacement-reference binding use is not a source move",
+                            ));
+                        }
+                    }
                 }
                 if matches!(value.ty, hir::Type::RawPointer(_))
                     && *ownership != hir::OwnedUse::Duplicate
@@ -2423,6 +2585,13 @@ fn lower_numeric_contract(contract: hir::NumericContract) -> core::NumericContra
         hir::NumericContract::Standard => core::NumericContract::Standard,
         hir::NumericContract::Reproducible => core::NumericContract::Reproducible,
         hir::NumericContract::Fast => core::NumericContract::Fast,
+    }
+}
+
+fn lower_reference_permission(permission: hir::ReferencePermission) -> core::ReferencePermission {
+    match permission {
+        hir::ReferencePermission::Shared => core::ReferencePermission::Shared,
+        hir::ReferencePermission::ExclusiveReplace => core::ReferencePermission::ExclusiveReplace,
     }
 }
 

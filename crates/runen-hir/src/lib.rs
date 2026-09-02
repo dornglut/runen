@@ -114,7 +114,7 @@ pub enum IntrinsicType {
     F64,
 }
 
-/// Exact non-reference referent identity admitted by the first Shared-reference HIR slice.
+/// Exact non-reference referent identity admitted by the bounded safe-reference HIR slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ReferenceReferent {
     Intrinsic(IntrinsicType),
@@ -130,6 +130,13 @@ impl ReferenceReferent {
             Self::Record(record) => Type::Record(record),
         }
     }
+}
+
+/// Source safe-reference permission represented by this bounded HIR slice.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum ReferencePermission {
+    Shared,
+    ExclusiveReplace,
 }
 
 /// Exact non-pointer pointee identity admitted by the first raw-pointer HIR slice.
@@ -155,7 +162,10 @@ impl RawPointerPointee {
 pub enum Type {
     Intrinsic(IntrinsicType),
     Record(RecordId),
-    SharedReference(ReferenceReferent),
+    SafeReference {
+        referent: ReferenceReferent,
+        permission: ReferencePermission,
+    },
     RawPointer(RawPointerPointee),
 }
 
@@ -248,7 +258,15 @@ pub struct Record {
 
 pub(crate) fn type_is_duplicable_in_records(ty: Type, records: &[Record]) -> bool {
     match ty {
-        Type::Intrinsic(_) | Type::SharedReference(_) | Type::RawPointer(_) => true,
+        Type::Intrinsic(_) | Type::RawPointer(_) => true,
+        Type::SafeReference {
+            permission: ReferencePermission::Shared,
+            ..
+        } => true,
+        Type::SafeReference {
+            permission: ReferencePermission::ExclusiveReplace,
+            ..
+        } => false,
         Type::Record(record) => records[record.0].duplicability == Duplicability::Duplicable,
     }
 }
@@ -411,11 +429,17 @@ pub enum ValueKind {
         left: Box<Value>,
         right: Box<Value>,
     },
-    SharedBorrowRoot {
+    ReferenceRoot {
         target: BindingId,
+        permission: ReferencePermission,
     },
-    SharedDereferenceCopy {
+    ReferenceReborrow {
         reference: BindingId,
+        permission: ReferencePermission,
+    },
+    ReferenceDereference {
+        reference: BindingId,
+        ownership: OwnedUse,
     },
     RawAddressRoot {
         target: BindingId,
@@ -482,6 +506,11 @@ pub enum Statement {
     },
     Assignment {
         target: BindingId,
+        value: Value,
+        location: SourceLocation,
+    },
+    ReferenceAssign {
+        reference: BindingId,
         value: Value,
         location: SourceLocation,
     },
@@ -601,43 +630,83 @@ pub enum DiagnosticKind {
     DuplicateRecordField,
     RecordContainmentCycle,
     InvalidRecordDuplicabilitySelection,
-    SharedReferenceField,
+    SafeReferenceField,
     RawPointerField,
     RawPointerParameter,
     RawPointerResult,
+    ReplacementReferenceResult,
     MissingSharedReferenceResultOrigin,
     AmbiguousSharedReferenceResultOrigin,
     SharedReferenceResultOriginMismatch,
-    MutableSharedReferenceLocal,
-    InvalidSharedReferenceReferent { referent: Type },
-    InvalidRawPointerPointee { pointee: Type },
+    MutableSafeReferenceLocal,
+    InvalidSafeReferenceReferent {
+        referent: Type,
+        permission: ReferencePermission,
+    },
+    InvalidRawPointerPointee {
+        pointee: Type,
+    },
     DuplicateParameter,
     LocalShadowing,
     ExpectedValueBinding,
     UnavailableBinding,
-    ExpectedSharedReference,
+    ExpectedSafeReference,
     ExpectedRawPointer,
+    InvalidReplacementReferenceTarget,
+    ReferencePermissionUnavailable,
+    ReferenceRestorationRequired,
+    ReferenceReplacementUnavailable,
     RawPointerTargetExtentMismatch,
     UnsafeOperationOutsideUnsafeBlock,
     RawMoveTargetUnavailable,
-    RawTargetSharedAuthorityConflict,
+    RawTargetSafeAuthorityConflict,
     BorrowedAssignmentTarget,
     ImmutableAssignmentTarget,
     ExpectedFunction,
-    ArgumentCount { expected: usize, found: usize },
-    TypeMismatch { expected: Type, found: Type },
-    IntegerNegationRequiresInteger { required: Type },
-    IntegerComplementRequiresInteger { required: Type },
-    AdditionRequiresIntegerOrFloating { required: Type },
-    NumericContractSelectionRequiresGovernedFloatingOperation { required: Type },
-    SubtractionRequiresIntegerOrFloating { required: Type },
-    MultiplicationRequiresIntegerOrFloating { required: Type },
-    DivisionRequiresFloating { required: Type },
-    IntegerXorRequiresInteger { required: Type },
-    IntegerOrRequiresInteger { required: Type },
-    IntegerLiteralRequiresInteger { required: Type },
-    IntegerLiteralOutOfRange { required: Type },
-    FloatingLiteralRequiresFloating { required: Type },
+    ArgumentCount {
+        expected: usize,
+        found: usize,
+    },
+    TypeMismatch {
+        expected: Type,
+        found: Type,
+    },
+    IntegerNegationRequiresInteger {
+        required: Type,
+    },
+    IntegerComplementRequiresInteger {
+        required: Type,
+    },
+    AdditionRequiresIntegerOrFloating {
+        required: Type,
+    },
+    NumericContractSelectionRequiresGovernedFloatingOperation {
+        required: Type,
+    },
+    SubtractionRequiresIntegerOrFloating {
+        required: Type,
+    },
+    MultiplicationRequiresIntegerOrFloating {
+        required: Type,
+    },
+    DivisionRequiresFloating {
+        required: Type,
+    },
+    IntegerXorRequiresInteger {
+        required: Type,
+    },
+    IntegerOrRequiresInteger {
+        required: Type,
+    },
+    IntegerLiteralRequiresInteger {
+        required: Type,
+    },
+    IntegerLiteralOutOfRange {
+        required: Type,
+    },
+    FloatingLiteralRequiresFloating {
+        required: Type,
+    },
     DuplicateRecordInitializer,
     UnknownRecordField,
     MissingRecordInitializer,
@@ -652,14 +721,18 @@ pub enum DiagnosticKind {
     BooleanConjunctionOwnershipMismatch,
     ConditionalOwnershipMismatch,
     ConditionalPointerOriginMismatch,
+    ConditionalReferenceStateMismatch,
     LoopOwnershipMismatch,
     LoopPointerOriginMismatch,
+    LoopReferenceStateMismatch,
     BreakOutsideLoop,
     ContinueOutsideLoop,
     BreakOwnershipMismatch,
     ContinueOwnershipMismatch,
     BreakPointerOriginMismatch,
     ContinuePointerOriginMismatch,
+    BreakReferenceStateMismatch,
+    ContinueReferenceStateMismatch,
     UnreachableStatement,
     MissingResultReturn,
     ExpectedResultValue,

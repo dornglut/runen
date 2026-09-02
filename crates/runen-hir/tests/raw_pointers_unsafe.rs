@@ -155,7 +155,7 @@ fn raw_move_requires_unsafe_full_target_availability_and_no_shared_authority() {
     .expect_err("stored Shared authority must block RawMove");
     assert!(has_diagnostic(
         &stored_shared,
-        DiagnosticKind::RawTargetSharedAuthorityConflict
+        DiagnosticKind::RawTargetSafeAuthorityConflict
     ));
 }
 
@@ -177,7 +177,7 @@ fn raw_move_sees_earlier_held_shared_call_argument_transients() {
         let errors = compile(source)
             .expect_err("earlier held Shared call argument must block later RawMove to its target");
         assert!(
-            has_diagnostic(&errors, DiagnosticKind::RawTargetSharedAuthorityConflict),
+            has_diagnostic(&errors, DiagnosticKind::RawTargetSafeAuthorityConflict),
             "missing held-transient Shared conflict: {errors:?}"
         );
     }
@@ -239,7 +239,7 @@ fn raw_assign_replaces_partial_target_and_rejects_live_stored_shared_authority()
     .expect_err("stored Shared carrier remaining after RHS must block RawAssign");
     assert!(has_diagnostic(
         &errors,
-        DiagnosticKind::RawTargetSharedAuthorityConflict
+        DiagnosticKind::RawTargetSafeAuthorityConflict
     ));
 }
 

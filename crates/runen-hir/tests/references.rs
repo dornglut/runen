@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, ReferenceReferent, SourceUnit, Statement,
-    Type, TypedCompilation, ValueKind, build_typed_hir,
+    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, ReferencePermission, ReferenceReferent,
+    SourceUnit, Statement, Type, TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -28,12 +28,19 @@ fn has_diagnostic(
     errors.iter().any(|error| predicate(error.kind))
 }
 
+fn shared_reference(referent: ReferenceReferent) -> Type {
+    Type::SafeReference {
+        referent,
+        permission: ReferencePermission::Shared,
+    }
+}
+
 #[test]
 fn retains_exact_shared_reference_identity_and_duplicates_reference_bindings() {
     let hir = compile("fn f(x: I64, r: &I64) { let s: &I64 = r; }")
         .expect("Shared-reference parameter and immutable local must validate");
     let f = function(&hir, "f");
-    let reference_ty = Type::SharedReference(ReferenceReferent::Intrinsic(IntrinsicType::I64));
+    let reference_ty = shared_reference(ReferenceReferent::Intrinsic(IntrinsicType::I64));
 
     assert_eq!(f.parameters[1].ty, reference_ty);
     assert!(hir.type_is_duplicable(reference_ty));
@@ -71,11 +78,14 @@ fn root_borrow_and_dereference_retain_exact_binding_identities() {
     };
     assert!(matches!(
         borrow.kind,
-        ValueKind::SharedBorrowRoot { target } if target == f.parameters[0].binding
+        ValueKind::ReferenceRoot {
+            target,
+            permission: ReferencePermission::Shared,
+        } if target == f.parameters[0].binding
     ));
     assert_eq!(
         borrow.ty,
-        Type::SharedReference(ReferenceReferent::Intrinsic(IntrinsicType::I64))
+        shared_reference(ReferenceReferent::Intrinsic(IntrinsicType::I64))
     );
 
     let Statement::Local { initializer, .. } = &f.body.statements[1] else {
@@ -84,7 +94,10 @@ fn root_borrow_and_dereference_retain_exact_binding_identities() {
     assert_eq!(initializer.ty, Type::Intrinsic(IntrinsicType::I64));
     assert!(matches!(
         initializer.kind,
-        ValueKind::SharedDereferenceCopy { reference } if reference == *reference_binding
+        ValueKind::ReferenceDereference {
+            reference,
+            ownership: OwnedUse::Duplicate,
+        } if reference == *reference_binding
     ));
 }
 
@@ -101,13 +114,16 @@ fn accepts_intrinsic_and_selected_record_referents_but_rejects_nonduplicable_rec
     )
     .expect("intrinsic and selected-record Shared referents must validate");
     let point = hir.records[0].id;
-    assert!(hir.type_is_duplicable(Type::SharedReference(ReferenceReferent::Record(point))));
+    assert!(hir.type_is_duplicable(shared_reference(ReferenceReferent::Record(point))));
 
     let errors = compile("record Ticket { value: I64 } fn f(r: &Ticket) {}")
         .expect_err("non-duplicable nominal referent must be rejected");
     assert!(has_diagnostic(&errors, |kind| matches!(
         kind,
-        DiagnosticKind::InvalidSharedReferenceReferent { .. }
+        DiagnosticKind::InvalidSafeReferenceReferent {
+            permission: ReferencePermission::Shared,
+            ..
+        }
     )));
 }
 
@@ -125,12 +141,12 @@ fn shared_reference_result_requires_unique_exact_parameter_origin() {
 
     let field = compile("record Holder { value: &I64 }")
         .expect_err("Shared-reference record field remains outside the source slice");
-    assert!(has_diagnostic(&field, |kind| kind == DiagnosticKind::SharedReferenceField));
+    assert!(has_diagnostic(&field, |kind| kind == DiagnosticKind::SafeReferenceField));
 
     let mutable = compile("fn f(x: I64) { let mut r: &I64 = &x; }")
         .expect_err("Shared-reference ordinary local must remain immutable");
     assert!(has_diagnostic(&mutable, |kind| kind
-        == DiagnosticKind::MutableSharedReferenceLocal));
+        == DiagnosticKind::MutableSafeReferenceLocal));
 }
 
 #[test]
@@ -280,9 +296,9 @@ fn borrow_and_dereference_require_exact_lookup_and_types() {
     )));
 
     let non_reference = compile("fn f(x: I64) { let y: I64 = *x; }")
-        .expect_err("dereference requires a Shared-reference binding");
+        .expect_err("dereference requires a safe-reference binding");
     assert!(has_diagnostic(&non_reference, |kind| kind
-        == DiagnosticKind::ExpectedSharedReference));
+        == DiagnosticKind::ExpectedSafeReference));
 
     let dereference_mismatch = compile("fn f(r: &I64) { let y: I32 = *r; }")
         .expect_err("dereference producer has the exact referent type");
@@ -360,12 +376,12 @@ fn external_reference_parameters_duplicate_and_dereference_without_local_target_
         .expect("result-bearing function returns dereferenced value");
     assert!(matches!(
         returned.kind,
-        ValueKind::SharedDereferenceCopy { reference } if reference == *local_reference
+        ValueKind::ReferenceDereference {
+            reference,
+            ownership: OwnedUse::Duplicate,
+        } if reference == *local_reference
     ));
-    assert!(!matches!(
-        initializer.kind,
-        ValueKind::SharedBorrowRoot { .. }
-    ));
+    assert!(!matches!(initializer.kind, ValueKind::ReferenceRoot { .. }));
 }
 
 #[test]

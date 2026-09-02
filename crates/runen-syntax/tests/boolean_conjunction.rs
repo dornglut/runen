@@ -58,7 +58,7 @@ fn conjunction_lexing_keeps_longest_match_with_standalone_ampersand() {
             .any(|window| window == [SyntaxKind::AmpAmp, SyntaxKind::Amp])
     );
     assert!(triple.errors().is_empty(), "{:?}", triple.errors());
-    assert_eq!(count(&triple, SyntaxKind::SharedBorrowValue), 1);
+    assert_eq!(count(&triple, SyntaxKind::SafeReferenceValue), 1);
 
     let spaced = parse("fn f(a: Bool, b: Bool) { let value: Bool = a & & b; }");
     assert_eq!(

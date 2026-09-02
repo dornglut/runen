@@ -11,8 +11,8 @@ use crate::{
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
     LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
     Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
-    RecordPatternTransientCleanup, ReferenceReferent, Return, SourceLocation, SourceUnit,
-    Statement, Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent, Return, SourceLocation,
+    SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -77,20 +77,238 @@ struct StructuralOwnershipState {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ReferenceOrigin {
-    Local(BindingId),
-    Parameter(usize),
+enum BindingSource {
+    Parameter,
+    Local,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct ReferenceAuthorityId(usize);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum ReferenceTarget {
+    Local(BindingId),
+    External(usize),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ReferenceAuthorityState {
+    target: ReferenceTarget,
+    permission: ReferencePermission,
+    parent: Option<ReferenceAuthorityId>,
+    carriers: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 struct BindingState {
     id: BindingId,
     ty: Type,
     mutability: AssignmentMutability,
+    source: BindingSource,
     ownership: StructuralOwnershipState,
-    reference_origin: Option<ReferenceOrigin>,
+    reference_authority: Option<ReferenceAuthorityId>,
     pointer_origin: Option<BindingId>,
     raw_pointer_target_domain: Option<BTreeSet<BindingId>>,
+}
+
+#[derive(Debug, Clone, Default)]
+struct SemanticState {
+    bindings: BTreeMap<String, BindingState>,
+    external_referents: BTreeMap<usize, StructuralOwnershipState>,
+    reference_authorities: BTreeMap<ReferenceAuthorityId, ReferenceAuthorityState>,
+    next_reference_authority: usize,
+}
+
+impl SemanticState {
+    fn create_reference_authority(
+        &mut self,
+        target: ReferenceTarget,
+        permission: ReferencePermission,
+        parent: Option<ReferenceAuthorityId>,
+    ) -> ReferenceAuthorityId {
+        let authority = ReferenceAuthorityId(self.next_reference_authority);
+        self.next_reference_authority += 1;
+        let previous = self.reference_authorities.insert(
+            authority,
+            ReferenceAuthorityState {
+                target,
+                permission,
+                parent,
+                carriers: 1,
+            },
+        );
+        debug_assert!(previous.is_none());
+        authority
+    }
+
+    fn add_reference_carrier(&mut self, authority: ReferenceAuthorityId) {
+        self.reference_authorities
+            .get_mut(&authority)
+            .expect("live reference carrier names one live authority")
+            .carriers += 1;
+    }
+
+    fn release_reference_carrier(&mut self, authority: ReferenceAuthorityId) {
+        let state = self
+            .reference_authorities
+            .get_mut(&authority)
+            .expect("released reference carrier names one live authority");
+        debug_assert!(state.carriers > 0);
+        state.carriers -= 1;
+        self.end_carrierless_authority_branch(authority);
+    }
+
+    fn end_carrierless_authority_branch(&mut self, mut authority: ReferenceAuthorityId) {
+        loop {
+            let should_end = self
+                .reference_authorities
+                .get(&authority)
+                .is_some_and(|state| {
+                    state.carriers == 0
+                        && !self
+                            .reference_authorities
+                            .values()
+                            .any(|candidate| candidate.parent == Some(authority))
+                });
+            if !should_end {
+                return;
+            }
+            let parent = self
+                .reference_authorities
+                .remove(&authority)
+                .expect("carrierless authority remains present until branch termination")
+                .parent;
+            let Some(parent) = parent else {
+                return;
+            };
+            authority = parent;
+        }
+    }
+
+    fn reference_target(&self, authority: ReferenceAuthorityId) -> ReferenceTarget {
+        self.reference_authorities
+            .get(&authority)
+            .expect("live authority is present")
+            .target
+    }
+
+    fn reference_capability(&self, authority: ReferenceAuthorityId) -> Option<ReferencePermission> {
+        let state = self
+            .reference_authorities
+            .get(&authority)
+            .expect("live authority is present");
+        let mut has_shared_child = false;
+        for child in self
+            .reference_authorities
+            .values()
+            .filter(|candidate| candidate.parent == Some(authority))
+        {
+            match child.permission {
+                ReferencePermission::ExclusiveReplace => return None,
+                ReferencePermission::Shared => has_shared_child = true,
+            }
+        }
+        if has_shared_child {
+            Some(ReferencePermission::Shared)
+        } else {
+            Some(state.permission)
+        }
+    }
+
+    fn authority_satisfies(
+        &self,
+        authority: ReferenceAuthorityId,
+        required: ReferencePermission,
+    ) -> bool {
+        matches!(
+            (self.reference_capability(authority), required),
+            (Some(ReferencePermission::ExclusiveReplace), _)
+                | (
+                    Some(ReferencePermission::Shared),
+                    ReferencePermission::Shared
+                )
+        )
+    }
+
+    fn target_is_fully_available(&self, target: ReferenceTarget) -> bool {
+        match target {
+            ReferenceTarget::Local(binding) => binding_state_by_id(&self.bindings, binding)
+                .is_some_and(|state| {
+                    state.ownership.path_availability(&[]) == PathAvailability::FullyAvailable
+                }),
+            ReferenceTarget::External(slot) => {
+                self.external_referents.get(&slot).is_none_or(|state| {
+                    state.path_availability(&[]) == PathAvailability::FullyAvailable
+                })
+            }
+        }
+    }
+
+    fn consume_reference_target(&mut self, target: ReferenceTarget) {
+        match target {
+            ReferenceTarget::Local(binding) => binding_state_by_id_mut(&mut self.bindings, binding)
+                .expect("reference target names active local binding")
+                .ownership
+                .consume_path(&[]),
+            ReferenceTarget::External(slot) => self
+                .external_referents
+                .get_mut(&slot)
+                .expect("consuming reference target has external structural root")
+                .consume_path(&[]),
+        }
+    }
+
+    fn restore_reference_target(&mut self, target: ReferenceTarget) {
+        match target {
+            ReferenceTarget::Local(binding) => {
+                binding_state_by_id_mut(&mut self.bindings, binding)
+                    .expect("reference target names active local binding")
+                    .ownership = StructuralOwnershipState::default();
+            }
+            ReferenceTarget::External(slot) => {
+                *self
+                    .external_referents
+                    .get_mut(&slot)
+                    .expect("replacement target has external structural root") =
+                    StructuralOwnershipState::default();
+            }
+        }
+    }
+
+    fn target_satisfies_shared_requirement(&self, target: ReferenceTarget) -> bool {
+        self.reference_authorities.values().all(|authority| {
+            authority.target != target || authority.permission == ReferencePermission::Shared
+        })
+    }
+
+    fn target_satisfies_exclusive_requirement(&self, target: ReferenceTarget) -> bool {
+        self.reference_authorities
+            .values()
+            .all(|authority| authority.target != target)
+    }
+
+    fn release_binding_reference_carrier(&mut self, binding: BindingId) {
+        let authority = binding_state_by_id(&self.bindings, binding)
+            .and_then(|state| state.reference_authority);
+        if let Some(authority) = authority {
+            self.release_reference_carrier(authority);
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ProducedValue {
+    value: Value,
+    reference_authority: Option<ReferenceAuthorityId>,
+}
+
+impl ProducedValue {
+    fn ordinary(value: Value) -> Self {
+        Self {
+            value,
+            reference_authority: None,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,7 +376,6 @@ struct ControlValidationContext {
 #[derive(Debug, Clone, Default)]
 struct ValueValidationContext {
     unsafe_active: bool,
-    held_shared_targets: BTreeSet<BindingId>,
 }
 
 #[derive(Debug)]
@@ -169,8 +386,8 @@ struct ScopeFrame {
 #[derive(Debug)]
 struct LoopTarget {
     body_scope: usize,
-    head: BTreeMap<String, BindingState>,
-    continuation: BTreeMap<String, BindingState>,
+    head: SemanticState,
+    continuation: SemanticState,
 }
 
 pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Diagnostic>> {
@@ -500,9 +717,9 @@ fn resolve_records(
                 });
             }
             let type_node = direct_child(&field_node, SyntaxKind::TypeRef);
-            if type_ref_is_shared_reference(&type_node) {
+            if type_ref_reference_permission(&type_node).is_some() {
                 diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::SharedReferenceField,
+                    kind: DiagnosticKind::SafeReferenceField,
                     location: location(record.unit, &type_node),
                 });
                 continue;
@@ -622,7 +839,7 @@ fn resolve_function_headers(
                     });
                     continue;
                 }
-                if !validate_shared_reference_referent(
+                if !validate_safe_reference_referent(
                     ty,
                     records,
                     location(function.unit, &type_node),
@@ -671,7 +888,20 @@ fn resolve_function_headers(
                     });
                     return None;
                 }
-                if !validate_shared_reference_referent(
+                if matches!(
+                    ty,
+                    Type::SafeReference {
+                        permission: ReferencePermission::ExclusiveReplace,
+                        ..
+                    }
+                ) {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::ReplacementReferenceResult,
+                        location: location(function.unit, &type_node),
+                    });
+                    return None;
+                }
+                if !validate_safe_reference_referent(
                     ty,
                     records,
                     location(function.unit, &type_node),
@@ -687,7 +917,13 @@ fn resolve_function_headers(
                     &type_node,
                     diagnostics,
                 );
-                if matches!(ty, Type::SharedReference(_)) {
+                if matches!(
+                    ty,
+                    Type::SafeReference {
+                        permission: ReferencePermission::Shared,
+                        ..
+                    }
+                ) {
                     let mut matching = parameters
                         .iter()
                         .enumerate()
@@ -736,10 +972,16 @@ fn validate_exported_signature_type(
     }
     let record = match ty {
         Type::Record(record)
-        | Type::SharedReference(ReferenceReferent::Record(record))
+        | Type::SafeReference {
+            referent: ReferenceReferent::Record(record),
+            ..
+        }
         | Type::RawPointer(RawPointerPointee::Record(record)) => record,
         Type::Intrinsic(_)
-        | Type::SharedReference(ReferenceReferent::Intrinsic(_))
+        | Type::SafeReference {
+            referent: ReferenceReferent::Intrinsic(_),
+            ..
+        }
         | Type::RawPointer(RawPointerPointee::Intrinsic(_)) => return,
     };
     if records[record.0].accessibility == Accessibility::ModulePrivate {
@@ -750,21 +992,58 @@ fn validate_exported_signature_type(
     }
 }
 
-fn validate_shared_reference_referent(
+fn type_contains_reference_or_pointer(ty: Type, records: &[Record]) -> bool {
+    type_contains_reference_or_pointer_inner(ty, records, &mut BTreeSet::new())
+}
+
+fn type_contains_reference_or_pointer_inner(
+    ty: Type,
+    records: &[Record],
+    visiting: &mut BTreeSet<RecordId>,
+) -> bool {
+    match ty {
+        Type::Intrinsic(_) => false,
+        Type::Record(record) => {
+            if !visiting.insert(record) {
+                return false;
+            }
+            let contains = records[record.0]
+                .fields
+                .iter()
+                .any(|field| type_contains_reference_or_pointer_inner(field.ty, records, visiting));
+            visiting.remove(&record);
+            contains
+        }
+        Type::SafeReference { .. } | Type::RawPointer(_) => true,
+    }
+}
+
+fn validate_safe_reference_referent(
     ty: Type,
     records: &[Record],
     type_location: SourceLocation,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> bool {
-    let Type::SharedReference(referent) = ty else {
+    let Type::SafeReference {
+        referent,
+        permission,
+    } = ty
+    else {
         return true;
     };
     let referent = referent.ty();
-    if type_is_duplicable_in_records(referent, records) {
+    let valid_shape = !type_contains_reference_or_pointer(referent, records);
+    let valid = valid_shape
+        && (permission == ReferencePermission::ExclusiveReplace
+            || type_is_duplicable_in_records(referent, records));
+    if valid {
         true
     } else {
         diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::InvalidSharedReferenceReferent { referent },
+            kind: DiagnosticKind::InvalidSafeReferenceReferent {
+                referent,
+                permission,
+            },
             location: type_location,
         });
         false
@@ -778,7 +1057,7 @@ fn raw_pointer_pointee_type_is_valid(ty: Type, records: &[Record]) -> bool {
             .fields
             .iter()
             .all(|field| raw_pointer_pointee_type_is_valid(field.ty, records)),
-        Type::SharedReference(_) | Type::RawPointer(_) => false,
+        Type::SafeReference { .. } | Type::RawPointer(_) => false,
     }
 }
 
@@ -803,10 +1082,21 @@ fn validate_raw_pointer_pointee(
     }
 }
 
-fn type_ref_is_shared_reference(node: &SyntaxNode) -> bool {
-    node.children_with_tokens()
+fn type_ref_reference_permission(node: &SyntaxNode) -> Option<ReferencePermission> {
+    let mut has_amp = false;
+    let mut has_mut = false;
+    for token in node
+        .children_with_tokens()
         .filter_map(|element| element.into_token())
-        .any(|token| token.kind() == SyntaxKind::Amp)
+    {
+        has_amp |= token.kind() == SyntaxKind::Amp;
+        has_mut |= token.kind() == SyntaxKind::KwMut;
+    }
+    has_amp.then_some(if has_mut {
+        ReferencePermission::ExclusiveReplace
+    } else {
+        ReferencePermission::Shared
+    })
 }
 
 fn type_ref_is_raw_pointer(node: &SyntaxNode) -> bool {
@@ -823,9 +1113,9 @@ fn resolve_type(
     imports: &[UnitImports],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
-    let shared = type_ref_is_shared_reference(node);
+    let reference_permission = type_ref_reference_permission(node);
     let raw = type_ref_is_raw_pointer(node);
-    debug_assert!(!(shared && raw));
+    debug_assert!(!(reference_permission.is_some() && raw));
     let ordinary = if let Some(qualified) = node
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
@@ -846,7 +1136,10 @@ fn resolve_type(
             .filter_map(|element| element.into_token())
             .find(|token| {
                 !token.kind().is_trivia()
-                    && !matches!(token.kind(), SyntaxKind::Amp | SyntaxKind::KwRaw)
+                    && !matches!(
+                        token.kind(),
+                        SyntaxKind::Amp | SyntaxKind::KwMut | SyntaxKind::KwRaw
+                    )
             })
             .expect("syntax-clean type reference contains one referent token");
         let intrinsic = match token.kind() {
@@ -898,20 +1191,23 @@ fn resolve_type(
         }
     };
 
-    if shared {
+    if let Some(permission) = reference_permission {
         let referent = match ordinary {
             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
             Type::Record(record) => ReferenceReferent::Record(record),
-            Type::SharedReference(_) | Type::RawPointer(_) => {
+            Type::SafeReference { .. } | Type::RawPointer(_) => {
                 unreachable!("source reference type syntax is non-recursive")
             }
         };
-        Some(Type::SharedReference(referent))
+        Some(Type::SafeReference {
+            referent,
+            permission,
+        })
     } else if raw {
         let pointee = match ordinary {
             Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
             Type::Record(record) => RawPointerPointee::Record(record),
-            Type::SharedReference(_) | Type::RawPointer(_) => {
+            Type::SafeReference { .. } | Type::RawPointer(_) => {
                 unreachable!("source raw-pointer type syntax is non-recursive")
             }
         };
@@ -1053,7 +1349,7 @@ fn record_duplicability_is_valid(
     let duplicable = records[id.0].fields.iter().all(|field| match field.ty {
         Type::Intrinsic(_) => true,
         Type::Record(target) => record_duplicability_is_valid(target, records, resolved),
-        Type::SharedReference(_) | Type::RawPointer(_) => false,
+        Type::SafeReference { .. } | Type::RawPointer(_) => false,
     });
     resolved[id.0] = Some(duplicable);
     duplicable
@@ -1068,17 +1364,32 @@ fn validate_body(
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Body {
-    let mut bindings = BTreeMap::<String, BindingState>::new();
+    let mut state = SemanticState::default();
     for (slot, parameter) in header.parameters.iter().enumerate() {
-        bindings.insert(
+        let reference_authority = match parameter.ty {
+            Type::SafeReference { permission, .. } => {
+                if permission == ReferencePermission::ExclusiveReplace {
+                    state
+                        .external_referents
+                        .insert(slot, StructuralOwnershipState::default());
+                }
+                Some(state.create_reference_authority(
+                    ReferenceTarget::External(slot),
+                    permission,
+                    None,
+                ))
+            }
+            _ => None,
+        };
+        state.bindings.insert(
             parameter.name.clone(),
             BindingState {
                 id: parameter.binding,
                 ty: parameter.ty,
                 mutability: AssignmentMutability::Immutable,
+                source: BindingSource::Parameter,
                 ownership: StructuralOwnershipState::default(),
-                reference_origin: matches!(parameter.ty, Type::SharedReference(_))
-                    .then_some(ReferenceOrigin::Parameter(slot)),
+                reference_authority,
                 pointer_origin: None,
                 raw_pointer_target_domain: None,
             },
@@ -1112,7 +1423,7 @@ fn validate_body(
                 &node,
                 &context,
                 &value_context,
-                &mut bindings,
+                &mut state,
                 diagnostics,
             ));
             has_normal_continuation = false;
@@ -1124,7 +1435,7 @@ fn validate_body(
             &node,
             &context,
             &value_context,
-            &mut bindings,
+            &mut state,
             &mut control,
             next_binding,
             diagnostics,
@@ -1139,6 +1450,8 @@ fn validate_body(
             kind: DiagnosticKind::MissingResultReturn,
             location: header.location,
         });
+    } else if header.result.is_none() && has_normal_continuation {
+        validate_external_referent_restoration(header, &state, header.location, diagnostics);
     }
 
     debug_assert!(control.scopes.is_empty());
@@ -1153,14 +1466,14 @@ fn validate_body(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_body_statement(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1171,7 +1484,7 @@ fn validate_body_statement(
             node,
             context,
             value_context,
-            bindings,
+            state,
             next_binding,
             diagnostics,
         ),
@@ -1180,34 +1493,37 @@ fn validate_body_statement(
             node,
             context,
             value_context,
-            bindings,
+            state,
             next_binding,
             diagnostics,
         ),
         SyntaxKind::AssignmentStatement => {
-            validate_assignment(header, node, context, value_context, bindings, diagnostics)
+            validate_assignment(header, node, context, value_context, state, diagnostics)
+        }
+        SyntaxKind::ReferenceAssignStatement => {
+            validate_reference_assign(header, node, context, value_context, state, diagnostics)
         }
         SyntaxKind::RawAssignStatement => {
-            validate_raw_assign(header, node, context, value_context, bindings, diagnostics)
+            validate_raw_assign(header, node, context, value_context, state, diagnostics)
         }
         SyntaxKind::CallStatement => {
-            validate_call_statement(header, node, context, value_context, bindings, diagnostics)
+            validate_call_statement(header, node, context, value_context, state, diagnostics)
         }
         SyntaxKind::FaultStatement => Some(Statement::Fault {
             location: location(header.unit, node),
         }),
         SyntaxKind::BreakStatement => {
-            validate_loop_transfer(header, node, context, bindings, control, true, diagnostics)
+            validate_loop_transfer(header, node, context, state, control, true, diagnostics)
         }
         SyntaxKind::ContinueStatement => {
-            validate_loop_transfer(header, node, context, bindings, control, false, diagnostics)
+            validate_loop_transfer(header, node, context, state, control, false, diagnostics)
         }
         SyntaxKind::BlockStatement => Some(validate_block(
             header,
             node,
             context,
             value_context,
-            bindings,
+            state,
             control,
             next_binding,
             diagnostics,
@@ -1221,7 +1537,7 @@ fn validate_body_statement(
                 &block,
                 context,
                 &unsafe_context,
-                bindings,
+                state,
                 control,
                 next_binding,
                 diagnostics,
@@ -1232,7 +1548,7 @@ fn validate_body_statement(
             node,
             context,
             value_context,
-            bindings,
+            state,
             control,
             next_binding,
             diagnostics,
@@ -1242,7 +1558,7 @@ fn validate_body_statement(
             node,
             context,
             value_context,
-            bindings,
+            state,
             control,
             next_binding,
             diagnostics,
@@ -1269,6 +1585,7 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
         | Statement::Local { .. }
         | Statement::RecordDestructure { .. }
         | Statement::Assignment { .. }
+        | Statement::ReferenceAssign { .. }
         | Statement::RawAssign { .. }
         | Statement::Call { .. } => true,
     }
@@ -1276,14 +1593,14 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_block(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1310,7 +1627,7 @@ fn validate_block(
                 &child,
                 context,
                 value_context,
-                bindings,
+                state,
                 diagnostics,
             ));
             has_normal_continuation = false;
@@ -1322,7 +1639,7 @@ fn validate_block(
             &child,
             context,
             value_context,
-            bindings,
+            state,
             control,
             next_binding,
             diagnostics,
@@ -1347,6 +1664,7 @@ fn validate_block(
                         .extend(bindings.iter().map(|binding| binding.binding));
                 }
                 Statement::Assignment { .. }
+                | Statement::ReferenceAssign { .. }
                 | Statement::RawAssign { .. }
                 | Statement::Call { .. }
                 | Statement::Fault { .. }
@@ -1368,10 +1686,13 @@ fn validate_block(
     let mut normal_cleanup = Vec::new();
     if has_normal_continuation {
         for binding in scope.direct_bindings.iter().rev() {
-            let state = binding_state_by_id(bindings, *binding)
+            let binding_state = binding_state_by_id(&state.bindings, *binding)
                 .expect("validated direct child binding remains active through block end");
-            for fields in remaining_ownership_frontier(state.ty, &state.ownership, context.records)
-            {
+            for fields in remaining_ownership_frontier(
+                binding_state.ty,
+                &binding_state.ownership,
+                context.records,
+            ) {
                 normal_cleanup.push(CleanupPath {
                     binding: *binding,
                     fields,
@@ -1381,11 +1702,14 @@ fn validate_block(
     }
 
     for binding in scope.direct_bindings {
-        let name = bindings
+        state.release_binding_reference_carrier(binding);
+        let name = state
+            .bindings
             .iter()
-            .find_map(|(name, state)| (state.id == binding).then(|| name.clone()))
+            .find_map(|(name, binding_state)| (binding_state.id == binding).then(|| name.clone()))
             .expect("validated direct child binding is active at block end");
-        let removed = bindings
+        let removed = state
+            .bindings
             .remove(&name)
             .expect("validated direct child binding is removed at block end");
         debug_assert_eq!(removed.id, binding);
@@ -1402,19 +1726,19 @@ fn validate_block(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_if(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
-    let mut post_condition = bindings.clone();
+    let mut post_condition = state.clone();
     let condition_node = value_child(node);
     let condition = validate_value(
         header,
@@ -1424,7 +1748,8 @@ fn validate_if(
         value_context,
         &mut post_condition,
         diagnostics,
-    )?;
+    )?
+    .value;
 
     let mut blocks = node
         .children()
@@ -1435,14 +1760,14 @@ fn validate_if(
     let else_node = blocks.next();
     debug_assert!(blocks.next().is_none());
 
-    let mut then_bindings = post_condition.clone();
+    let mut then_state = post_condition.clone();
     let then_diagnostics = diagnostics.len();
     let then_statement = validate_block(
         header,
         &then_node,
         context,
         value_context,
-        &mut then_bindings,
+        &mut then_state,
         control,
         next_binding,
         diagnostics,
@@ -1452,7 +1777,7 @@ fn validate_if(
         unreachable!("block validation returns one block statement");
     };
 
-    let mut else_bindings = post_condition.clone();
+    let mut else_state = post_condition.clone();
     let (else_block, else_valid) = if let Some(else_node) = else_node {
         let else_diagnostics = diagnostics.len();
         let else_statement = validate_block(
@@ -1460,7 +1785,7 @@ fn validate_if(
             &else_node,
             context,
             value_context,
-            &mut else_bindings,
+            &mut else_state,
             control,
             next_binding,
             diagnostics,
@@ -1485,32 +1810,9 @@ fn validate_if(
 
     match (then_normal, else_normal) {
         (true, true) => {
-            let ownership_equal = post_condition.values().all(|enclosing| {
-                let then_state = then_bindings
-                    .values()
-                    .find(|state| state.id == enclosing.id)
-                    .expect("then outcome retains every enclosing binding identity");
-                let else_state = else_bindings
-                    .values()
-                    .find(|state| state.id == enclosing.id)
-                    .expect("false outcome retains every enclosing binding identity");
-                debug_assert_eq!(then_state.ty, enclosing.ty);
-                debug_assert_eq!(else_state.ty, enclosing.ty);
-                debug_assert_eq!(then_state.mutability, enclosing.mutability);
-                debug_assert_eq!(else_state.mutability, enclosing.mutability);
-                debug_assert_eq!(then_state.reference_origin, enclosing.reference_origin);
-                debug_assert_eq!(else_state.reference_origin, enclosing.reference_origin);
-                debug_assert_eq!(
-                    then_state.raw_pointer_target_domain,
-                    enclosing.raw_pointer_target_domain
-                );
-                debug_assert_eq!(
-                    else_state.raw_pointer_target_domain,
-                    enclosing.raw_pointer_target_domain
-                );
-                then_state.ownership == else_state.ownership
-            });
-            let pointer_equal = pointer_origins_match_target(&then_bindings, &else_bindings);
+            let ownership_equal = binding_ownership_matches_target(&then_state, &else_state);
+            let pointer_equal = pointer_origins_match_target(&then_state, &else_state);
+            let reference_equal = reference_state_matches_target(&then_state, &else_state);
 
             if !ownership_equal {
                 diagnostics.push(Diagnostic {
@@ -1524,13 +1826,19 @@ fn validate_if(
                     location: location(header.unit, node),
                 });
             }
-            if !ownership_equal || !pointer_equal {
+            if !reference_equal {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ConditionalReferenceStateMismatch,
+                    location: location(header.unit, node),
+                });
+            }
+            if !ownership_equal || !pointer_equal || !reference_equal {
                 return None;
             }
-            *bindings = then_bindings;
+            *state = then_state;
         }
-        (true, false) => *bindings = then_bindings,
-        (false, true) => *bindings = else_bindings,
+        (true, false) => *state = then_state,
+        (false, true) => *state = else_state,
         (false, false) => {}
     }
 
@@ -1544,19 +1852,19 @@ fn validate_if(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_while(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     control: &mut ControlValidationContext,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
-    let loop_head = bindings.clone();
+    let loop_head = state.clone();
     let mut post_condition = loop_head.clone();
     let condition_node = value_child(node);
     let condition = validate_value(
@@ -1567,13 +1875,14 @@ fn validate_while(
         value_context,
         &mut post_condition,
         diagnostics,
-    )?;
+    )?
+    .value;
 
     let body_node = node
         .children()
         .find(|child| child.kind() == SyntaxKind::BlockStatement)
         .expect("syntax-clean while contains one body block");
-    let mut body_bindings = post_condition.clone();
+    let mut body_state = post_condition.clone();
     let body_scope = control.scopes.len();
     control.loops.push(LoopTarget {
         body_scope,
@@ -1586,7 +1895,7 @@ fn validate_while(
         &body_node,
         context,
         value_context,
-        &mut body_bindings,
+        &mut body_state,
         control,
         next_binding,
         diagnostics,
@@ -1606,21 +1915,9 @@ fn validate_while(
     }
 
     if body.has_normal_continuation {
-        let ownership_equal = loop_head.values().all(|head| {
-            let body_state = body_bindings
-                .values()
-                .find(|state| state.id == head.id)
-                .expect("normal while body retains every loop-head binding identity");
-            debug_assert_eq!(body_state.ty, head.ty);
-            debug_assert_eq!(body_state.mutability, head.mutability);
-            debug_assert_eq!(body_state.reference_origin, head.reference_origin);
-            debug_assert_eq!(
-                body_state.raw_pointer_target_domain,
-                head.raw_pointer_target_domain
-            );
-            body_state.ownership == head.ownership
-        });
-        let pointer_equal = pointer_origins_match_target(&body_bindings, &loop_head);
+        let ownership_equal = binding_ownership_matches_target(&body_state, &loop_head);
+        let pointer_equal = pointer_origins_match_target(&body_state, &loop_head);
+        let reference_equal = reference_state_matches_target(&body_state, &loop_head);
 
         if !ownership_equal {
             diagnostics.push(Diagnostic {
@@ -1634,12 +1931,18 @@ fn validate_while(
                 location: location(header.unit, node),
             });
         }
-        if !ownership_equal || !pointer_equal {
+        if !reference_equal {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::LoopReferenceStateMismatch,
+                location: location(header.unit, node),
+            });
+        }
+        if !ownership_equal || !pointer_equal || !reference_equal {
             return None;
         }
     }
 
-    *bindings = post_condition;
+    *state = post_condition;
     Some(Statement::While {
         condition,
         body,
@@ -1651,7 +1954,7 @@ fn validate_loop_transfer(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
-    bindings: &BTreeMap<String, BindingState>,
+    state: &SemanticState,
     control: &ControlValidationContext,
     is_break: bool,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1674,8 +1977,11 @@ fn validate_loop_transfer(
     } else {
         &target.head
     };
-    let ownership_equal = ownership_matches_target(bindings, required);
-    let pointer_equal = pointer_origins_match_target(bindings, required);
+    let mut transferred = state.clone();
+    release_transfer_reference_carriers(&mut transferred, control, target.body_scope);
+    let ownership_equal = binding_ownership_matches_target(&transferred, required);
+    let pointer_equal = pointer_origins_match_target(&transferred, required);
+    let reference_equal = reference_state_matches_target(&transferred, required);
     if !ownership_equal {
         diagnostics.push(Diagnostic {
             kind: if is_break {
@@ -1696,11 +2002,21 @@ fn validate_loop_transfer(
             location: transfer_location,
         });
     }
-    if !ownership_equal || !pointer_equal {
+    if !reference_equal {
+        diagnostics.push(Diagnostic {
+            kind: if is_break {
+                DiagnosticKind::BreakReferenceStateMismatch
+            } else {
+                DiagnosticKind::ContinueReferenceStateMismatch
+            },
+            location: transfer_location,
+        });
+    }
+    if !ownership_equal || !pointer_equal || !reference_equal {
         return None;
     }
 
-    let cleanup = transfer_cleanup(bindings, context.records, control, target.body_scope);
+    let cleanup = transfer_cleanup(&state.bindings, context.records, control, target.body_scope);
     Some(if is_break {
         Statement::Break {
             cleanup,
@@ -1714,35 +2030,51 @@ fn validate_loop_transfer(
     })
 }
 
-fn ownership_matches_target(
-    bindings: &BTreeMap<String, BindingState>,
-    required: &BTreeMap<String, BindingState>,
-) -> bool {
-    required.values().all(|expected| {
-        binding_state_by_id(bindings, expected.id).is_some_and(|actual| {
-            debug_assert_eq!(actual.reference_origin, expected.reference_origin);
+fn release_transfer_reference_carriers(
+    state: &mut SemanticState,
+    control: &ControlValidationContext,
+    body_scope: usize,
+) {
+    debug_assert!(body_scope < control.scopes.len());
+    let bindings = control.scopes[body_scope..]
+        .iter()
+        .rev()
+        .flat_map(|scope| scope.direct_bindings.iter().rev().copied())
+        .collect::<Vec<_>>();
+    for binding in bindings {
+        state.release_binding_reference_carrier(binding);
+    }
+}
+
+fn binding_ownership_matches_target(actual: &SemanticState, required: &SemanticState) -> bool {
+    required.bindings.values().all(|expected| {
+        binding_state_by_id(&actual.bindings, expected.id)
+            .is_some_and(|candidate| candidate.ownership == expected.ownership)
+    })
+}
+
+fn pointer_origins_match_target(actual: &SemanticState, required: &SemanticState) -> bool {
+    required.bindings.values().all(|expected| {
+        binding_state_by_id(&actual.bindings, expected.id).is_some_and(|candidate| {
+            debug_assert_eq!(candidate.ty, expected.ty);
             debug_assert_eq!(
-                actual.raw_pointer_target_domain,
+                candidate.raw_pointer_target_domain,
                 expected.raw_pointer_target_domain
             );
-            actual.ownership == expected.ownership
+            candidate.pointer_origin == expected.pointer_origin
         })
     })
 }
 
-fn pointer_origins_match_target(
-    bindings: &BTreeMap<String, BindingState>,
-    required: &BTreeMap<String, BindingState>,
-) -> bool {
-    required.values().all(|expected| {
-        binding_state_by_id(bindings, expected.id).is_some_and(|actual| {
-            debug_assert_eq!(actual.ty, expected.ty);
-            debug_assert_eq!(
-                actual.raw_pointer_target_domain,
-                expected.raw_pointer_target_domain
-            );
-            actual.pointer_origin == expected.pointer_origin
-        })
+fn reference_state_matches_target(actual: &SemanticState, required: &SemanticState) -> bool {
+    if actual.external_referents != required.external_referents
+        || actual.reference_authorities != required.reference_authorities
+    {
+        return false;
+    }
+    required.bindings.values().all(|expected| {
+        binding_state_by_id(&actual.bindings, expected.id)
+            .is_some_and(|candidate| candidate.reference_authority == expected.reference_authority)
     })
 }
 
@@ -1822,10 +2154,11 @@ fn validate_local(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
+    let mut candidate = state.clone();
     let name_token = direct_token(node, SyntaxKind::Ident);
     let name = key(&name_token);
     let mutability = if node
@@ -1848,15 +2181,15 @@ fn validate_local(
         diagnostics,
     )
     .and_then(|ty| {
-        if matches!(ty, Type::SharedReference(_)) {
+        if matches!(ty, Type::SafeReference { .. }) {
             if mutability.is_mutable() {
                 diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::MutableSharedReferenceLocal,
+                    kind: DiagnosticKind::MutableSafeReferenceLocal,
                     location: location(header.unit, &type_node),
                 });
                 return None;
             }
-            if !validate_shared_reference_referent(
+            if !validate_safe_reference_referent(
                 ty,
                 context.records,
                 location(header.unit, &type_node),
@@ -1878,7 +2211,8 @@ fn validate_local(
     let raw_pointer_target_domain = declared
         .is_some_and(|ty| matches!(ty, Type::RawPointer(_)))
         .then(|| {
-            bindings
+            candidate
+                .bindings
                 .values()
                 .map(|binding| binding.id)
                 .collect::<BTreeSet<_>>()
@@ -1891,12 +2225,12 @@ fn validate_local(
             required,
             context,
             value_context,
-            bindings,
+            &mut candidate,
             diagnostics,
         )
     });
 
-    let shadows = bindings.contains_key(&name);
+    let shadows = candidate.bindings.contains_key(&name);
     if shadows {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::LocalShadowing,
@@ -1914,74 +2248,48 @@ fn validate_local(
         return None;
     }
 
-    let reference_origin = reference_origin_for_value(&initializer, bindings, context);
-    debug_assert_eq!(
-        reference_origin.is_some(),
-        matches!(ty, Type::SharedReference(_))
-    );
-    let pointer_origin = pointer_origin_for_value(&initializer, bindings);
+    let pointer_origin = pointer_origin_for_value(&initializer.value, &candidate.bindings);
     debug_assert_eq!(pointer_origin.is_some(), matches!(ty, Type::RawPointer(_)));
     if let (Some(origin), Some(domain)) = (pointer_origin, raw_pointer_target_domain.as_ref())
         && !domain.contains(&origin)
     {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::RawPointerTargetExtentMismatch,
-            location: initializer.location,
+            location: initializer.value.location,
         });
         return None;
     }
 
+    let reference_authority = initializer.reference_authority;
+    debug_assert_eq!(
+        reference_authority.is_some(),
+        matches!(ty, Type::SafeReference { .. })
+    );
     let binding = BindingId(*next_binding);
     *next_binding += 1;
-    bindings.insert(
+    candidate.bindings.insert(
         name.clone(),
         BindingState {
             id: binding,
             ty,
             mutability,
+            source: BindingSource::Local,
             ownership: StructuralOwnershipState::default(),
-            reference_origin,
+            reference_authority,
             pointer_origin,
             raw_pointer_target_domain,
         },
     );
-    Some(Statement::Local {
+    let statement = Statement::Local {
         binding,
         name,
         ty,
         mutability,
-        initializer,
+        initializer: initializer.value,
         location: local_location,
-    })
-}
-
-fn reference_origin_for_value(
-    value: &Value,
-    bindings: &BTreeMap<String, BindingState>,
-    context: &BodyResolutionContext<'_>,
-) -> Option<ReferenceOrigin> {
-    match &value.kind {
-        ValueKind::SharedBorrowRoot { target } => Some(ReferenceOrigin::Local(*target)),
-        ValueKind::BindingUse { binding, .. } if matches!(value.ty, Type::SharedReference(_)) => {
-            binding_state_by_id(bindings, *binding)
-                .expect("validated reference binding remains active")
-                .reference_origin
-        }
-        ValueKind::DirectCall {
-            function,
-            arguments,
-        } if matches!(value.ty, Type::SharedReference(_)) => {
-            let target = &context.headers[function.0];
-            let slot = target
-                .shared_reference_result_origin
-                .expect("validated Shared-reference call result retains an origin slot");
-            let argument = arguments
-                .get(slot)
-                .expect("validated call retains the advertised origin argument");
-            reference_origin_for_value(argument, bindings, context)
-        }
-        _ => None,
-    }
+    };
+    *state = candidate;
+    Some(statement)
 }
 
 fn pointer_origin_for_value(
@@ -1997,17 +2305,6 @@ fn pointer_origin_for_value(
         }
         _ => None,
     }
-}
-
-fn active_shared_authority_targets(
-    bindings: &BTreeMap<String, BindingState>,
-    value_context: &ValueValidationContext,
-    target: BindingId,
-) -> bool {
-    value_context.held_shared_targets.contains(&target)
-        || bindings
-            .values()
-            .any(|binding| binding.reference_origin == Some(ReferenceOrigin::Local(target)))
 }
 
 #[derive(Debug, Clone)]
@@ -2237,7 +2534,7 @@ fn validate_record_destructure(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
@@ -2252,7 +2549,7 @@ fn validate_record_destructure(
         .is_none()
         .then(|| direct_token(node, SyntaxKind::Ident));
 
-    let mut validation = PatternValidation::new(bindings);
+    let mut validation = PatternValidation::new(&state.bindings);
     let mut path = Vec::new();
     let record = validate_record_pattern_node(
         header,
@@ -2273,7 +2570,7 @@ fn validate_record_destructure(
         (root_name, root_location)
     });
     let root_state = if let Some((root_name, root_location)) = &direct_root {
-        match bindings.get(root_name).cloned() {
+        match state.bindings.get(root_name).cloned() {
             Some(binding) => Some(binding),
             None => {
                 let entity = context
@@ -2317,6 +2614,22 @@ fn validate_record_destructure(
                     validation.valid = false;
                 }
             }
+            let consumes = validation
+                .bindings
+                .iter()
+                .any(|leaf| !context.type_is_duplicable(leaf.ty));
+            let compatible = if consumes {
+                state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(root_state.id))
+            } else {
+                state.target_satisfies_shared_requirement(ReferenceTarget::Local(root_state.id))
+            };
+            if !compatible {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReferencePermissionUnavailable,
+                    location: *root_location,
+                });
+                validation.valid = false;
+            }
         }
     }
 
@@ -2334,17 +2647,16 @@ fn validate_record_destructure(
     } else {
         let producer_node =
             producer_node.expect("syntax-clean producer-backed pattern has producer");
-        let mut producer_bindings = bindings.clone();
         let value = validate_value(
             header,
             &producer_node,
             Type::Record(record),
             context,
             value_context,
-            &mut producer_bindings,
+            state,
             diagnostics,
-        )?;
-        *bindings = producer_bindings;
+        )?
+        .value;
 
         let mut transient = StructuralOwnershipState::default();
         for leaf in &validation.bindings {
@@ -2365,7 +2677,8 @@ fn validate_record_destructure(
             OwnedUse::Duplicate
         } else {
             if let Some((root_name, _)) = &direct_root {
-                bindings
+                state
+                    .bindings
                     .get_mut(root_name)
                     .expect("validated pattern root remains in active binding scope")
                     .ownership
@@ -2388,16 +2701,17 @@ fn validate_record_destructure(
                 id: binding,
                 ty: resolved.ty,
                 mutability: AssignmentMutability::Immutable,
+                source: BindingSource::Local,
                 ownership: StructuralOwnershipState::default(),
-                reference_origin: None,
+                reference_authority: None,
                 pointer_origin: None,
                 raw_pointer_target_domain: None,
             },
         ));
     }
 
-    for (name, state) in new_states {
-        let previous = bindings.insert(name, state);
+    for (name, binding_state) in new_states {
+        let previous = state.bindings.insert(name, binding_state);
         debug_assert!(previous.is_none());
     }
 
@@ -2414,7 +2728,7 @@ fn validate_assignment(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let target_token = direct_token(node, SyntaxKind::Ident);
@@ -2424,7 +2738,7 @@ fn validate_assignment(
         range: target_token.text_range(),
     };
 
-    let (target, target_ty, target_domain) = match bindings.get(&name) {
+    let (target, target_ty, target_domain) = match state.bindings.get(&name) {
         Some(binding) => {
             if !binding.mutability.is_mutable() {
                 diagnostics.push(Diagnostic {
@@ -2463,11 +2777,11 @@ fn validate_assignment(
         target_ty,
         context,
         value_context,
-        bindings,
+        state,
         diagnostics,
     )?;
 
-    if active_shared_authority_targets(bindings, value_context, target) {
+    if !state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(target)) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::BorrowedAssignmentTarget,
             location: target_location,
@@ -2476,7 +2790,7 @@ fn validate_assignment(
     }
 
     let incoming_pointer_origin = if matches!(target_ty, Type::RawPointer(_)) {
-        let origin = pointer_origin_for_value(&value, bindings)
+        let origin = pointer_origin_for_value(&value.value, &state.bindings)
             .expect("validated raw-pointer value retains exact source origin");
         let domain = target_domain
             .as_ref()
@@ -2484,7 +2798,7 @@ fn validate_assignment(
         if !domain.contains(&origin) {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::RawPointerTargetExtentMismatch,
-                location: value.location,
+                location: value.value.location,
             });
             return None;
         }
@@ -2493,7 +2807,8 @@ fn validate_assignment(
         None
     };
 
-    let target_state = bindings
+    let target_state = state
+        .bindings
         .get_mut(&name)
         .expect("resolved assignment target remains in the active binding scope");
     target_state.ownership = StructuralOwnershipState::default();
@@ -2503,8 +2818,107 @@ fn validate_assignment(
 
     Some(Statement::Assignment {
         target,
-        value,
+        value: value.value,
         location: location(header.unit, node),
+    })
+}
+
+fn validate_reference_assign(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let statement_location = location(header.unit, node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let reference_location = SourceLocation {
+        unit: header.unit,
+        range: token.text_range(),
+    };
+    let (binding, referent, original_authority) = match state.bindings.get(&name) {
+        Some(binding) => {
+            if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReferenceReplacementUnavailable,
+                    location: reference_location,
+                });
+                return None;
+            }
+            let Type::SafeReference {
+                referent,
+                permission: ReferencePermission::ExclusiveReplace,
+            } = binding.ty
+            else {
+                diagnostics.push(Diagnostic {
+                    kind: if matches!(binding.ty, Type::SafeReference { .. }) {
+                        DiagnosticKind::ReferenceReplacementUnavailable
+                    } else {
+                        DiagnosticKind::ExpectedSafeReference
+                    },
+                    location: reference_location,
+                });
+                return None;
+            };
+            (
+                binding.id,
+                referent,
+                binding
+                    .reference_authority
+                    .expect("live replacement reference binding has authority"),
+            )
+        }
+        None => {
+            let entity = context
+                .modules
+                .get(&header.module)
+                .and_then(|module| module.namespace.get(&name));
+            diagnostics.push(Diagnostic {
+                kind: if entity.is_some() {
+                    DiagnosticKind::ExpectedValueBinding
+                } else {
+                    DiagnosticKind::UnresolvedName
+                },
+                location: reference_location,
+            });
+            return None;
+        }
+    };
+    let target = state.reference_target(original_authority);
+
+    let value_node = value_child(node);
+    let value = validate_value(
+        header,
+        &value_node,
+        referent.ty(),
+        context,
+        value_context,
+        state,
+        diagnostics,
+    )?;
+
+    let destination_usable = state.bindings.get(&name).is_some_and(|candidate| {
+        candidate.id == binding
+            && candidate.ownership.path_availability(&[]) == PathAvailability::FullyAvailable
+            && candidate.reference_authority == Some(original_authority)
+    });
+    if !destination_usable
+        || !state.authority_satisfies(original_authority, ReferencePermission::ExclusiveReplace)
+    {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ReferenceReplacementUnavailable,
+            location: statement_location,
+        });
+        return None;
+    }
+
+    state.restore_reference_target(target);
+    Some(Statement::ReferenceAssign {
+        reference: binding,
+        value: value.value,
+        location: statement_location,
     })
 }
 
@@ -2513,7 +2927,7 @@ fn validate_raw_assign(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let statement_location = location(header.unit, node);
@@ -2538,7 +2952,7 @@ fn validate_raw_assign(
         unit: header.unit,
         range: pointer_token.text_range(),
     };
-    let (pointer, pointee, target) = match bindings.get(&pointer_name) {
+    let (pointer, pointee, target) = match state.bindings.get(&pointer_name) {
         Some(binding) => {
             if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
                 diagnostics.push(Diagnostic {
@@ -2586,25 +3000,25 @@ fn validate_raw_assign(
         pointee.ty(),
         context,
         value_context,
-        bindings,
+        state,
         diagnostics,
     )?;
 
-    if active_shared_authority_targets(bindings, value_context, target) {
+    if !state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(target)) {
         diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::RawTargetSharedAuthorityConflict,
+            kind: DiagnosticKind::RawTargetSafeAuthorityConflict,
             location: statement_location,
         });
         return None;
     }
 
-    binding_state_by_id_mut(bindings, target)
+    binding_state_by_id_mut(&mut state.bindings, target)
         .expect("validated raw-pointer origin names an active target binding")
         .ownership = StructuralOwnershipState::default();
 
     Some(Statement::RawAssign {
         pointer,
-        value,
+        value: value.value,
         location: statement_location,
     })
 }
@@ -2614,22 +3028,30 @@ fn validate_call_statement(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
+    let mut candidate = state.clone();
     let call = direct_child(node, SyntaxKind::DirectCall);
-    let (function, arguments, result) =
-        validate_call(header, &call, context, value_context, bindings, diagnostics)?;
-    if result.is_some() {
+    let validated = validate_call(
+        header,
+        &call,
+        context,
+        value_context,
+        &mut candidate,
+        diagnostics,
+    )?;
+    if validated.result.is_some() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ResultCallUsedAsStatement,
             location: location(header.unit, &call),
         });
         return None;
     }
+    *state = candidate;
     Some(Statement::Call {
-        function,
-        arguments,
+        function: validated.function,
+        arguments: validated.arguments,
         location: location(header.unit, node),
     })
 }
@@ -2639,10 +3061,10 @@ fn validate_terminal_return(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Return {
-    let returned = validate_return(header, node, context, value_context, bindings, diagnostics);
+    let returned = validate_return(header, node, context, value_context, state, diagnostics);
     if header.result.is_some() && returned.value.is_none() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ExpectedResultValue,
@@ -2657,19 +3079,19 @@ fn validate_return(
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Return {
     let return_location = location(header.unit, node);
     let value_node = node.children().find(|child| is_value_node(child.kind()));
-    let value = match (header.result, value_node) {
+    let produced = match (header.result, value_node) {
         (Some(required), Some(value_node)) => validate_value(
             header,
             &value_node,
             required,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
         ),
         (None, Some(_)) => {
@@ -2682,19 +3104,53 @@ fn validate_return(
         (_, None) => None,
     };
 
-    if let (Some(origin), Some(value)) = (header.shared_reference_result_origin, value.as_ref())
-        && reference_origin_for_value(value, bindings, context)
-            != Some(ReferenceOrigin::Parameter(origin))
+    if let (Some(origin), Some(produced)) =
+        (header.shared_reference_result_origin, produced.as_ref())
     {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::SharedReferenceResultOriginMismatch,
-            location: value.location,
-        });
+        let expected = state
+            .bindings
+            .values()
+            .find(|binding| binding.id == header.parameters[origin].binding)
+            .and_then(|binding| binding.reference_authority);
+        if produced.reference_authority != expected {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::SharedReferenceResultOriginMismatch,
+                location: produced.value.location,
+            });
+        }
     }
 
+    validate_external_referent_restoration(header, state, return_location, diagnostics);
+
     Return {
-        value,
+        value: produced.map(|produced| produced.value),
         location: return_location,
+    }
+}
+
+fn validate_external_referent_restoration(
+    header: &FunctionHeader,
+    state: &SemanticState,
+    location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for (slot, parameter) in header.parameters.iter().enumerate() {
+        if matches!(
+            parameter.ty,
+            Type::SafeReference {
+                permission: ReferencePermission::ExclusiveReplace,
+                ..
+            }
+        ) && state
+            .external_referents
+            .get(&slot)
+            .is_some_and(|root| root.path_availability(&[]) != PathAvailability::FullyAvailable)
+        {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ReferenceRestorationRequired,
+                location,
+            });
+        }
     }
 }
 
@@ -2704,9 +3160,32 @@ fn validate_value(
     required: Type,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
+    let mut candidate = state.clone();
+    let value = validate_value_inner(
+        header,
+        node,
+        required,
+        context,
+        value_context,
+        &mut candidate,
+        diagnostics,
+    )?;
+    *state = candidate;
+    Some(value)
+}
+
+fn validate_value_inner(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
     match node.kind() {
         SyntaxKind::GroupedValue => {
@@ -2717,18 +3196,18 @@ fn validate_value(
                 required,
                 context,
                 value_context,
-                bindings,
+                state,
                 diagnostics,
             )
         }
-        SyntaxKind::SharedBorrowValue => {
-            validate_shared_borrow(header, node, required, context, bindings, diagnostics)
+        SyntaxKind::SafeReferenceValue => {
+            validate_safe_reference_value(header, node, required, context, state, diagnostics)
         }
-        SyntaxKind::SharedDereferenceValue => {
-            validate_shared_dereference(header, node, required, context, bindings, diagnostics)
+        SyntaxKind::ReferenceDereferenceValue => {
+            validate_reference_dereference(header, node, required, context, state, diagnostics)
         }
         SyntaxKind::RawAddressOfValue => {
-            validate_raw_address(header, node, required, context, bindings, diagnostics)
+            validate_raw_address(header, node, required, context, state, diagnostics)
         }
         SyntaxKind::RawMoveValue => validate_raw_move(
             header,
@@ -2736,7 +3215,7 @@ fn validate_value(
             required,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
         ),
         SyntaxKind::NumericContractSelectedValue => validate_numeric_contract_selected_value(
@@ -2745,7 +3224,7 @@ fn validate_value(
             required,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
         ),
         SyntaxKind::IntegerNegValue => {
@@ -2770,24 +3249,23 @@ fn validate_value(
             }
 
             let operand_node = value_child(node);
-            let mut operand_bindings = bindings.clone();
             let operand = validate_value(
                 header,
                 &operand_node,
                 required,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
-            *bindings = operand_bindings;
-            Some(Value {
+            )?
+            .value;
+            Some(ProducedValue::ordinary(Value {
                 ty: required,
                 kind: ValueKind::IntegerNeg {
                     operand: Box::new(operand),
                 },
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::IntegerComplementValue => {
             if !matches!(
@@ -2811,24 +3289,23 @@ fn validate_value(
             }
 
             let operand_node = value_child(node);
-            let mut operand_bindings = bindings.clone();
             let operand = validate_value(
                 header,
                 &operand_node,
                 required,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
-            *bindings = operand_bindings;
-            Some(Value {
+            )?
+            .value;
+            Some(ProducedValue::ordinary(Value {
                 ty: required,
                 kind: ValueKind::IntegerComplement {
                     operand: Box::new(operand),
                 },
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::AddValue => match required {
             Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64) => {
@@ -2839,7 +3316,7 @@ fn validate_value(
                     NumericContract::Standard,
                     context,
                     value_context,
-                    bindings,
+                    state,
                     diagnostics,
                 )
             }
@@ -2861,35 +3338,34 @@ fn validate_value(
                     .next()
                     .expect("syntax-clean addition contains a right operand");
                 debug_assert!(operands.next().is_none());
-
-                let mut operand_bindings = bindings.clone();
                 let left = validate_value(
                     header,
                     &left_node,
                     required,
                     context,
                     value_context,
-                    &mut operand_bindings,
+                    state,
                     diagnostics,
-                )?;
+                )?
+                .value;
                 let right = validate_value(
                     header,
                     &right_node,
                     required,
                     context,
                     value_context,
-                    &mut operand_bindings,
+                    state,
                     diagnostics,
-                )?;
-                *bindings = operand_bindings;
-                Some(Value {
+                )?
+                .value;
+                Some(ProducedValue::ordinary(Value {
                     ty: required,
                     kind: ValueKind::IntegerAdd {
                         left: Box::new(left),
                         right: Box::new(right),
                     },
                     location: value_location,
-                })
+                }))
             }
             _ => {
                 diagnostics.push(Diagnostic {
@@ -2908,7 +3384,7 @@ fn validate_value(
                     NumericContract::Standard,
                     context,
                     value_context,
-                    bindings,
+                    state,
                     diagnostics,
                 )
             }
@@ -2930,35 +3406,34 @@ fn validate_value(
                     .next()
                     .expect("syntax-clean subtraction contains a right operand");
                 debug_assert!(operands.next().is_none());
-
-                let mut operand_bindings = bindings.clone();
                 let left = validate_value(
                     header,
                     &left_node,
                     required,
                     context,
                     value_context,
-                    &mut operand_bindings,
+                    state,
                     diagnostics,
-                )?;
+                )?
+                .value;
                 let right = validate_value(
                     header,
                     &right_node,
                     required,
                     context,
                     value_context,
-                    &mut operand_bindings,
+                    state,
                     diagnostics,
-                )?;
-                *bindings = operand_bindings;
-                Some(Value {
+                )?
+                .value;
+                Some(ProducedValue::ordinary(Value {
                     ty: required,
                     kind: ValueKind::IntegerSub {
                         left: Box::new(left),
                         right: Box::new(right),
                     },
                     location: value_location,
-                })
+                }))
             }
             _ => {
                 diagnostics.push(Diagnostic {
@@ -2986,7 +3461,7 @@ fn validate_value(
                     NumericContract::Standard,
                     context,
                     value_context,
-                    bindings,
+                    state,
                     diagnostics,
                 ),
                 (SyntaxKind::Slash, _) => {
@@ -3006,7 +3481,7 @@ fn validate_value(
                     NumericContract::Standard,
                     context,
                     value_context,
-                    bindings,
+                    state,
                     diagnostics,
                 ),
                 (
@@ -3030,35 +3505,34 @@ fn validate_value(
                         .next()
                         .expect("syntax-clean integer multiplication contains a right operand");
                     debug_assert!(operands.next().is_none());
-
-                    let mut operand_bindings = bindings.clone();
                     let left = validate_value(
                         header,
                         &left_node,
                         required,
                         context,
                         value_context,
-                        &mut operand_bindings,
+                        state,
                         diagnostics,
-                    )?;
+                    )?
+                    .value;
                     let right = validate_value(
                         header,
                         &right_node,
                         required,
                         context,
                         value_context,
-                        &mut operand_bindings,
+                        state,
                         diagnostics,
-                    )?;
-                    *bindings = operand_bindings;
-                    Some(Value {
+                    )?
+                    .value;
+                    Some(ProducedValue::ordinary(Value {
                         ty: required,
                         kind: ValueKind::IntegerMul {
                             left: Box::new(left),
                             right: Box::new(right),
                         },
                         location: value_location,
-                    })
+                    }))
                 }
                 (SyntaxKind::Star, _) => {
                     diagnostics.push(Diagnostic {
@@ -3090,7 +3564,6 @@ fn validate_value(
                 });
                 return None;
             }
-
             let mut operands = node.children().filter(|child| is_value_node(child.kind()));
             let left_node = operands
                 .next()
@@ -3099,35 +3572,34 @@ fn validate_value(
                 .next()
                 .expect("syntax-clean integer XOR contains a right operand");
             debug_assert!(operands.next().is_none());
-
-            let mut operand_bindings = bindings.clone();
             let left = validate_value(
                 header,
                 &left_node,
                 required,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
+            )?
+            .value;
             let right = validate_value(
                 header,
                 &right_node,
                 required,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
-            *bindings = operand_bindings;
-            Some(Value {
+            )?
+            .value;
+            Some(ProducedValue::ordinary(Value {
                 ty: required,
                 kind: ValueKind::IntegerXor {
                     left: Box::new(left),
                     right: Box::new(right),
                 },
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::IntegerOrValue => {
             if !matches!(
@@ -3149,7 +3621,6 @@ fn validate_value(
                 });
                 return None;
             }
-
             let mut operands = node.children().filter(|child| is_value_node(child.kind()));
             let left_node = operands
                 .next()
@@ -3158,35 +3629,34 @@ fn validate_value(
                 .next()
                 .expect("syntax-clean integer OR contains a right operand");
             debug_assert!(operands.next().is_none());
-
-            let mut operand_bindings = bindings.clone();
             let left = validate_value(
                 header,
                 &left_node,
                 required,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
+            )?
+            .value;
             let right = validate_value(
                 header,
                 &right_node,
                 required,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
-            *bindings = operand_bindings;
-            Some(Value {
+            )?
+            .value;
+            Some(ProducedValue::ordinary(Value {
                 ty: required,
                 kind: ValueKind::IntegerOr {
                     left: Box::new(left),
                     right: Box::new(right),
                 },
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::BooleanAndValue => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
@@ -3200,7 +3670,6 @@ fn validate_value(
                 });
                 return None;
             }
-
             let mut operands = node.children().filter(|child| is_value_node(child.kind()));
             let left_node = operands
                 .next()
@@ -3210,43 +3679,30 @@ fn validate_value(
                 .expect("syntax-clean Boolean conjunction contains a right operand");
             debug_assert!(operands.next().is_none());
 
-            let mut left_bindings = bindings.clone();
+            let mut left_state = state.clone();
             let left = validate_value(
                 header,
                 &left_node,
                 found,
                 context,
                 value_context,
-                &mut left_bindings,
+                &mut left_state,
                 diagnostics,
-            )?;
-            let mut right_bindings = left_bindings.clone();
+            )?
+            .value;
+            let mut right_state = left_state.clone();
             let right = validate_value(
                 header,
                 &right_node,
                 found,
                 context,
                 value_context,
-                &mut right_bindings,
+                &mut right_state,
                 diagnostics,
-            )?;
+            )?
+            .value;
 
-            let equal = left_bindings.values().all(|left_state| {
-                let right_state = right_bindings
-                    .values()
-                    .find(|state| state.id == left_state.id)
-                    .expect("conjunction RHS outcome retains every enclosing binding identity");
-                debug_assert_eq!(right_state.ty, left_state.ty);
-                debug_assert_eq!(right_state.mutability, left_state.mutability);
-                debug_assert_eq!(right_state.reference_origin, left_state.reference_origin);
-                debug_assert_eq!(right_state.pointer_origin, left_state.pointer_origin);
-                debug_assert_eq!(
-                    right_state.raw_pointer_target_domain,
-                    left_state.raw_pointer_target_domain
-                );
-                right_state.ownership == left_state.ownership
-            });
-            if !equal {
+            if !complete_semantic_state_matches(&right_state, &left_state) {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::BooleanConjunctionOwnershipMismatch,
                     location: value_location,
@@ -3254,15 +3710,15 @@ fn validate_value(
                 return None;
             }
 
-            *bindings = left_bindings;
-            Some(Value {
+            *state = left_state;
+            Some(ProducedValue::ordinary(Value {
                 ty: found,
                 kind: ValueKind::BooleanAnd {
                     left: Box::new(left),
                     right: Box::new(right),
                 },
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::BooleanEqualityValue => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
@@ -3276,7 +3732,6 @@ fn validate_value(
                 });
                 return None;
             }
-
             let operator = node
                 .children_with_tokens()
                 .filter_map(|element| element.into_token())
@@ -3295,28 +3750,27 @@ fn validate_value(
                 .next()
                 .expect("syntax-clean Boolean equality contains a right operand");
             debug_assert!(operands.next().is_none());
-
-            let mut operand_bindings = bindings.clone();
             let left = validate_value(
                 header,
                 &left_node,
                 found,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
+            )?
+            .value;
             let right = validate_value(
                 header,
                 &right_node,
                 found,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
-            *bindings = operand_bindings;
-            Some(Value {
+            )?
+            .value;
+            Some(ProducedValue::ordinary(Value {
                 ty: found,
                 kind: ValueKind::BooleanEquality {
                     relation,
@@ -3324,7 +3778,7 @@ fn validate_value(
                     right: Box::new(right),
                 },
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::BooleanNotValue => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
@@ -3338,26 +3792,24 @@ fn validate_value(
                 });
                 return None;
             }
-
             let operand_node = value_child(node);
-            let mut operand_bindings = bindings.clone();
             let operand = validate_value(
                 header,
                 &operand_node,
                 found,
                 context,
                 value_context,
-                &mut operand_bindings,
+                state,
                 diagnostics,
-            )?;
-            *bindings = operand_bindings;
-            Some(Value {
+            )?
+            .value;
+            Some(ProducedValue::ordinary(Value {
                 ty: found,
                 kind: ValueKind::BooleanNot {
                     operand: Box::new(operand),
                 },
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::BooleanLiteral => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
@@ -3376,87 +3828,36 @@ fn validate_value(
                 .filter_map(|element| element.into_token())
                 .find(|token| matches!(token.kind(), SyntaxKind::KwTrue | SyntaxKind::KwFalse))
                 .expect("syntax-clean boolean literal contains one boolean token");
-            Some(Value {
+            Some(ProducedValue::ordinary(Value {
                 ty: found,
                 kind: ValueKind::Literal(LiteralValue::Bool(token.kind() == SyntaxKind::KwTrue)),
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::DecimalIntegerLiteral => {
             let literal = materialize_integer_literal(node, required, value_location, diagnostics)?;
-            Some(Value {
+            Some(ProducedValue::ordinary(Value {
                 ty: required,
                 kind: ValueKind::Literal(literal),
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::DecimalFloatingLiteral => {
             let literal =
                 materialize_floating_literal(node, required, value_location, diagnostics)?;
-            Some(Value {
+            Some(ProducedValue::ordinary(Value {
                 ty: required,
                 kind: ValueKind::Literal(literal),
                 location: value_location,
-            })
+            }))
         }
         SyntaxKind::IdentifierUse => {
-            let token = direct_token(node, SyntaxKind::Ident);
-            let name = key(&token);
-            if let Some(binding) = bindings.get_mut(&name) {
-                if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
-                    diagnostics.push(Diagnostic {
-                        kind: DiagnosticKind::UnavailableBinding,
-                        location: value_location,
-                    });
-                    return None;
-                }
-                if binding.ty != required {
-                    diagnostics.push(Diagnostic {
-                        kind: DiagnosticKind::TypeMismatch {
-                            expected: required,
-                            found: binding.ty,
-                        },
-                        location: value_location,
-                    });
-                    return None;
-                }
-                let ownership = if context.type_is_duplicable(binding.ty) {
-                    OwnedUse::Duplicate
-                } else {
-                    binding.ownership.consume_path(&[]);
-                    OwnedUse::Consume
-                };
-                return Some(Value {
-                    ty: binding.ty,
-                    kind: ValueKind::BindingUse {
-                        binding: binding.id,
-                        ownership,
-                    },
-                    location: value_location,
-                });
-            }
-
-            let entity = context
-                .modules
-                .get(&header.module)
-                .and_then(|module| module.namespace.get(&name));
-            diagnostics.push(Diagnostic {
-                kind: if entity.is_some() {
-                    DiagnosticKind::ExpectedValueBinding
-                } else {
-                    DiagnosticKind::UnresolvedName
-                },
-                location: SourceLocation {
-                    unit: header.unit,
-                    range: token.text_range(),
-                },
-            });
-            None
+            validate_identifier_use(header, node, required, context, state, diagnostics)
         }
         SyntaxKind::DirectCall => {
-            let (function, arguments, result) =
-                validate_call(header, node, context, value_context, bindings, diagnostics)?;
-            let Some(ty) = result else {
+            let validated =
+                validate_call(header, node, context, value_context, state, diagnostics)?;
+            let Some(ty) = validated.result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
                     location: value_location,
@@ -3473,13 +3874,16 @@ fn validate_value(
                 });
                 return None;
             }
-            Some(Value {
-                ty,
-                kind: ValueKind::DirectCall {
-                    function,
-                    arguments,
+            Some(ProducedValue {
+                value: Value {
+                    ty,
+                    kind: ValueKind::DirectCall {
+                        function: validated.function,
+                        arguments: validated.arguments,
+                    },
+                    location: value_location,
                 },
-                location: value_location,
+                reference_authority: validated.result_reference_authority,
             })
         }
         SyntaxKind::RecordConstruction => validate_record_construction(
@@ -3488,7 +3892,7 @@ fn validate_value(
             required,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
         ),
         SyntaxKind::FieldValueUse => validate_field_value_use(
@@ -3497,11 +3901,440 @@ fn validate_value(
             required,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
         ),
         _ => unreachable!("syntax-clean value has represented value kind"),
     }
+}
+
+fn complete_semantic_state_matches(actual: &SemanticState, required: &SemanticState) -> bool {
+    binding_ownership_matches_target(actual, required)
+        && pointer_origins_match_target(actual, required)
+        && reference_state_matches_target(actual, required)
+}
+
+fn validate_identifier_use(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let value_location = location(header.unit, node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let Some(binding) = state.bindings.get(&name).cloned() else {
+        let entity = context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name));
+        diagnostics.push(Diagnostic {
+            kind: if entity.is_some() {
+                DiagnosticKind::ExpectedValueBinding
+            } else {
+                DiagnosticKind::UnresolvedName
+            },
+            location: SourceLocation {
+                unit: header.unit,
+                range: token.text_range(),
+            },
+        });
+        return None;
+    };
+    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableBinding,
+            location: value_location,
+        });
+        return None;
+    }
+    if binding.ty != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found: binding.ty,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    let duplicable = context.type_is_duplicable(binding.ty);
+    let target = ReferenceTarget::Local(binding.id);
+    let compatible = if duplicable {
+        state.target_satisfies_shared_requirement(target)
+    } else {
+        state.target_satisfies_exclusive_requirement(target)
+    };
+    if !compatible {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ReferencePermissionUnavailable,
+            location: value_location,
+        });
+        return None;
+    }
+
+    let ownership = if duplicable {
+        OwnedUse::Duplicate
+    } else {
+        state
+            .bindings
+            .get_mut(&name)
+            .expect("resolved value binding remains active")
+            .ownership
+            .consume_path(&[]);
+        OwnedUse::Consume
+    };
+
+    let reference_authority = if matches!(binding.ty, Type::SafeReference { .. }) {
+        let authority = binding
+            .reference_authority
+            .expect("live safe-reference binding retains authority");
+        if duplicable {
+            state.add_reference_carrier(authority);
+        } else {
+            state
+                .bindings
+                .get_mut(&name)
+                .expect("resolved replacement-reference binding remains active")
+                .reference_authority = None;
+        }
+        Some(authority)
+    } else {
+        None
+    };
+
+    Some(ProducedValue {
+        value: Value {
+            ty: binding.ty,
+            kind: ValueKind::BindingUse {
+                binding: binding.id,
+                ownership,
+            },
+            location: value_location,
+        },
+        reference_authority,
+    })
+}
+
+fn requested_reference_permission(node: &SyntaxNode) -> ReferencePermission {
+    if node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::KwMut)
+    {
+        ReferencePermission::ExclusiveReplace
+    } else {
+        ReferencePermission::Shared
+    }
+}
+
+fn validate_safe_reference_value(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let reborrow = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::Star);
+    if reborrow {
+        validate_reference_reborrow(header, node, required, context, state, diagnostics)
+    } else {
+        validate_reference_root(header, node, required, context, state, diagnostics)
+    }
+}
+
+fn validate_reference_root(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let value_location = location(header.unit, node);
+    let permission = requested_reference_permission(node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let Some(binding) = state.bindings.get(&name).cloned() else {
+        let entity = context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name));
+        diagnostics.push(Diagnostic {
+            kind: if entity.is_some() {
+                DiagnosticKind::ExpectedValueBinding
+            } else {
+                DiagnosticKind::UnresolvedName
+            },
+            location: value_location,
+        });
+        return None;
+    };
+
+    let referent = match binding.ty {
+        Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
+        Type::Record(record) => ReferenceReferent::Record(record),
+        Type::SafeReference { .. } | Type::RawPointer(_) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidSafeReferenceReferent {
+                    referent: binding.ty,
+                    permission,
+                },
+                location: value_location,
+            });
+            return None;
+        }
+    };
+    let found = Type::SafeReference {
+        referent,
+        permission,
+    };
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+    if !validate_safe_reference_referent(found, context.records, value_location, diagnostics) {
+        return None;
+    }
+
+    let target = ReferenceTarget::Local(binding.id);
+    match permission {
+        ReferencePermission::Shared => {
+            if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnavailableBinding,
+                    location: value_location,
+                });
+                return None;
+            }
+            if !state.target_satisfies_shared_requirement(target) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReferencePermissionUnavailable,
+                    location: value_location,
+                });
+                return None;
+            }
+        }
+        ReferencePermission::ExclusiveReplace => {
+            if binding.source != BindingSource::Local
+                || !binding.mutability.is_mutable()
+                || binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable
+                || !state.target_satisfies_exclusive_requirement(target)
+            {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::InvalidReplacementReferenceTarget,
+                    location: value_location,
+                });
+                return None;
+            }
+        }
+    }
+
+    let authority = state.create_reference_authority(target, permission, None);
+    Some(ProducedValue {
+        value: Value {
+            ty: found,
+            kind: ValueKind::ReferenceRoot {
+                target: binding.id,
+                permission,
+            },
+            location: value_location,
+        },
+        reference_authority: Some(authority),
+    })
+}
+
+fn validate_reference_reborrow(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let value_location = location(header.unit, node);
+    let permission = requested_reference_permission(node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let Some(binding) = state.bindings.get(&name).cloned() else {
+        let entity = context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name));
+        diagnostics.push(Diagnostic {
+            kind: if entity.is_some() {
+                DiagnosticKind::ExpectedValueBinding
+            } else {
+                DiagnosticKind::UnresolvedName
+            },
+            location: value_location,
+        });
+        return None;
+    };
+    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableBinding,
+            location: value_location,
+        });
+        return None;
+    }
+    let Type::SafeReference { referent, .. } = binding.ty else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ExpectedSafeReference,
+            location: value_location,
+        });
+        return None;
+    };
+    let found = Type::SafeReference {
+        referent,
+        permission,
+    };
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+    if !validate_safe_reference_referent(found, context.records, value_location, diagnostics) {
+        return None;
+    }
+    let parent = binding
+        .reference_authority
+        .expect("live safe-reference binding retains authority");
+    let target = state.reference_target(parent);
+    if !state.target_is_fully_available(target) || !state.authority_satisfies(parent, permission) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ReferencePermissionUnavailable,
+            location: value_location,
+        });
+        return None;
+    }
+    let authority = state.create_reference_authority(target, permission, Some(parent));
+    Some(ProducedValue {
+        value: Value {
+            ty: found,
+            kind: ValueKind::ReferenceReborrow {
+                reference: binding.id,
+                permission,
+            },
+            location: value_location,
+        },
+        reference_authority: Some(authority),
+    })
+}
+
+fn validate_reference_dereference(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    required: Type,
+    context: &BodyResolutionContext<'_>,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let value_location = location(header.unit, node);
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let Some(binding) = state.bindings.get(&name).cloned() else {
+        let entity = context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name));
+        diagnostics.push(Diagnostic {
+            kind: if entity.is_some() {
+                DiagnosticKind::ExpectedValueBinding
+            } else {
+                DiagnosticKind::UnresolvedName
+            },
+            location: value_location,
+        });
+        return None;
+    };
+    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableBinding,
+            location: value_location,
+        });
+        return None;
+    }
+    let Type::SafeReference {
+        referent,
+        permission,
+    } = binding.ty
+    else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ExpectedSafeReference,
+            location: value_location,
+        });
+        return None;
+    };
+    let found = referent.ty();
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+    let authority = binding
+        .reference_authority
+        .expect("live safe-reference binding retains authority");
+    let target = state.reference_target(authority);
+    if !state.target_is_fully_available(target) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::UnavailableBinding,
+            location: value_location,
+        });
+        return None;
+    }
+    let ownership =
+        if permission == ReferencePermission::Shared || context.type_is_duplicable(found) {
+            if !state.authority_satisfies(authority, ReferencePermission::Shared) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReferencePermissionUnavailable,
+                    location: value_location,
+                });
+                return None;
+            }
+            OwnedUse::Duplicate
+        } else {
+            if !state.authority_satisfies(authority, ReferencePermission::ExclusiveReplace) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReferencePermissionUnavailable,
+                    location: value_location,
+                });
+                return None;
+            }
+            state.consume_reference_target(target);
+            OwnedUse::Consume
+        };
+    Some(ProducedValue::ordinary(Value {
+        ty: found,
+        kind: ValueKind::ReferenceDereference {
+            reference: binding.id,
+            ownership,
+        },
+        location: value_location,
+    }))
 }
 
 fn validate_raw_address(
@@ -3509,13 +4342,13 @@ fn validate_raw_address(
     node: &SyntaxNode,
     required: Type,
     context: &BodyResolutionContext<'_>,
-    bindings: &BTreeMap<String, BindingState>,
+    state: &SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
     let token = direct_token(node, SyntaxKind::Ident);
     let name = key(&token);
-    let Some(binding) = bindings.get(&name) else {
+    let Some(binding) = state.bindings.get(&name) else {
         let entity = context
             .modules
             .get(&header.module)
@@ -3537,7 +4370,7 @@ fn validate_raw_address(
     let pointee = match binding.ty {
         Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
         Type::Record(record) => RawPointerPointee::Record(record),
-        Type::SharedReference(_) | Type::RawPointer(_) => {
+        Type::SafeReference { .. } | Type::RawPointer(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidRawPointerPointee {
                     pointee: binding.ty,
@@ -3558,12 +4391,19 @@ fn validate_raw_address(
         });
         return None;
     }
+    if !state.target_satisfies_shared_requirement(ReferenceTarget::Local(binding.id)) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::RawTargetSafeAuthorityConflict,
+            location: value_location,
+        });
+        return None;
+    }
 
-    Some(Value {
+    Some(ProducedValue::ordinary(Value {
         ty: found,
         kind: ValueKind::RawAddressRoot { target: binding.id },
         location: value_location,
-    })
+    }))
 }
 
 fn validate_raw_move(
@@ -3572,9 +4412,9 @@ fn validate_raw_move(
     required: Type,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
     if !value_context.unsafe_active {
         diagnostics.push(Diagnostic {
@@ -3597,7 +4437,7 @@ fn validate_raw_move(
         unit: header.unit,
         range: pointer_token.text_range(),
     };
-    let (pointer, pointee, target) = match bindings.get(&pointer_name) {
+    let (pointer, pointee, target) = match state.bindings.get(&pointer_name) {
         Some(binding) => {
             if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
                 diagnostics.push(Diagnostic {
@@ -3638,7 +4478,7 @@ fn validate_raw_move(
         }
     };
 
-    let target_state = binding_state_by_id(bindings, target)
+    let target_state = binding_state_by_id(&state.bindings, target)
         .expect("validated raw-pointer origin names an active target binding");
     if target_state.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
         diagnostics.push(Diagnostic {
@@ -3647,9 +4487,9 @@ fn validate_raw_move(
         });
         return None;
     }
-    if active_shared_authority_targets(bindings, value_context, target) {
+    if !state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(target)) {
         diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::RawTargetSharedAuthorityConflict,
+            kind: DiagnosticKind::RawTargetSafeAuthorityConflict,
             location: value_location,
         });
         return None;
@@ -3667,155 +4507,16 @@ fn validate_raw_move(
         return None;
     }
 
-    binding_state_by_id_mut(bindings, target)
+    binding_state_by_id_mut(&mut state.bindings, target)
         .expect("validated raw-pointer origin names an active target binding")
         .ownership
         .consume_path(&[]);
 
-    Some(Value {
+    Some(ProducedValue::ordinary(Value {
         ty: found,
         kind: ValueKind::RawMove { pointer },
         location: value_location,
-    })
-}
-
-fn validate_shared_borrow(
-    header: &FunctionHeader,
-    node: &SyntaxNode,
-    required: Type,
-    context: &BodyResolutionContext<'_>,
-    bindings: &BTreeMap<String, BindingState>,
-    diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
-    let value_location = location(header.unit, node);
-    let token = direct_token(node, SyntaxKind::Ident);
-    let name = key(&token);
-    let Some(binding) = bindings.get(&name) else {
-        let entity = context
-            .modules
-            .get(&header.module)
-            .and_then(|module| module.namespace.get(&name));
-        diagnostics.push(Diagnostic {
-            kind: if entity.is_some() {
-                DiagnosticKind::ExpectedValueBinding
-            } else {
-                DiagnosticKind::UnresolvedName
-            },
-            location: SourceLocation {
-                unit: header.unit,
-                range: token.text_range(),
-            },
-        });
-        return None;
-    };
-
-    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::UnavailableBinding,
-            location: value_location,
-        });
-        return None;
-    }
-
-    let referent = match binding.ty {
-        Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
-        Type::Record(record) if context.type_is_duplicable(Type::Record(record)) => {
-            ReferenceReferent::Record(record)
-        }
-        Type::Record(_) | Type::SharedReference(_) | Type::RawPointer(_) => {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::InvalidSharedReferenceReferent {
-                    referent: binding.ty,
-                },
-                location: value_location,
-            });
-            return None;
-        }
-    };
-    let found = Type::SharedReference(referent);
-    if found != required {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected: required,
-                found,
-            },
-            location: value_location,
-        });
-        return None;
-    }
-
-    Some(Value {
-        ty: found,
-        kind: ValueKind::SharedBorrowRoot { target: binding.id },
-        location: value_location,
-    })
-}
-
-fn validate_shared_dereference(
-    header: &FunctionHeader,
-    node: &SyntaxNode,
-    required: Type,
-    context: &BodyResolutionContext<'_>,
-    bindings: &BTreeMap<String, BindingState>,
-    diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
-    let value_location = location(header.unit, node);
-    let token = direct_token(node, SyntaxKind::Ident);
-    let name = key(&token);
-    let Some(binding) = bindings.get(&name) else {
-        let entity = context
-            .modules
-            .get(&header.module)
-            .and_then(|module| module.namespace.get(&name));
-        diagnostics.push(Diagnostic {
-            kind: if entity.is_some() {
-                DiagnosticKind::ExpectedValueBinding
-            } else {
-                DiagnosticKind::UnresolvedName
-            },
-            location: SourceLocation {
-                unit: header.unit,
-                range: token.text_range(),
-            },
-        });
-        return None;
-    };
-
-    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::UnavailableBinding,
-            location: value_location,
-        });
-        return None;
-    }
-
-    let Type::SharedReference(referent) = binding.ty else {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::ExpectedSharedReference,
-            location: value_location,
-        });
-        return None;
-    };
-    debug_assert!(binding.reference_origin.is_some());
-    let found = referent.ty();
-    if found != required {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected: required,
-                found,
-            },
-            location: value_location,
-        });
-        return None;
-    }
-
-    Some(Value {
-        ty: found,
-        kind: ValueKind::SharedDereferenceCopy {
-            reference: binding.id,
-        },
-        location: value_location,
-    })
+    }))
 }
 
 fn validate_numeric_contract_selected_value(
@@ -3824,9 +4525,9 @@ fn validate_numeric_contract_selected_value(
     required: Type,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     let selection_location = location(header.unit, node);
     let mut root = value_child(node);
     while root.kind() == SyntaxKind::GroupedValue {
@@ -3862,7 +4563,7 @@ fn validate_numeric_contract_selected_value(
                     NumericContract::Fast,
                     context,
                     value_context,
-                    bindings,
+                    state,
                     diagnostics,
                 ),
                 SyntaxKind::Slash => validate_float_div(
@@ -3872,7 +4573,7 @@ fn validate_numeric_contract_selected_value(
                     NumericContract::Fast,
                     context,
                     value_context,
-                    bindings,
+                    state,
                     diagnostics,
                 ),
                 _ => unreachable!("multiplicative operator has accepted token kind"),
@@ -3885,7 +4586,7 @@ fn validate_numeric_contract_selected_value(
             NumericContract::Fast,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
         ),
         SyntaxKind::SubValue => validate_float_sub(
@@ -3895,7 +4596,7 @@ fn validate_numeric_contract_selected_value(
             NumericContract::Fast,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
         ),
         _ => {
@@ -3912,7 +4613,7 @@ fn validate_numeric_contract_selected_value(
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_float_add(
     header: &FunctionHeader,
@@ -3921,15 +4622,10 @@ fn validate_float_add(
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     debug_assert_eq!(node.kind(), SyntaxKind::AddValue);
-    debug_assert!(matches!(
-        required,
-        Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64)
-    ));
-
     let mut operands = node.children().filter(|child| is_value_node(child.kind()));
     let left_node = operands
         .next()
@@ -3938,29 +4634,27 @@ fn validate_float_add(
         .next()
         .expect("syntax-clean floating addition contains a right operand");
     debug_assert!(operands.next().is_none());
-
-    let mut operand_bindings = bindings.clone();
     let left = validate_value(
         header,
         &left_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
+    )?
+    .value;
     let right = validate_value(
         header,
         &right_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
-    *bindings = operand_bindings;
-
-    Some(Value {
+    )?
+    .value;
+    Some(ProducedValue::ordinary(Value {
         ty: required,
         kind: ValueKind::FloatAdd {
             contract,
@@ -3968,12 +4662,12 @@ fn validate_float_add(
             right: Box::new(right),
         },
         location: location(header.unit, node),
-    })
+    }))
 }
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_float_sub(
     header: &FunctionHeader,
@@ -3982,15 +4676,10 @@ fn validate_float_sub(
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     debug_assert_eq!(node.kind(), SyntaxKind::SubValue);
-    debug_assert!(matches!(
-        required,
-        Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64)
-    ));
-
     let mut operands = node.children().filter(|child| is_value_node(child.kind()));
     let left_node = operands
         .next()
@@ -3999,29 +4688,27 @@ fn validate_float_sub(
         .next()
         .expect("syntax-clean floating subtraction contains a right operand");
     debug_assert!(operands.next().is_none());
-
-    let mut operand_bindings = bindings.clone();
     let left = validate_value(
         header,
         &left_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
+    )?
+    .value;
     let right = validate_value(
         header,
         &right_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
-    *bindings = operand_bindings;
-
-    Some(Value {
+    )?
+    .value;
+    Some(ProducedValue::ordinary(Value {
         ty: required,
         kind: ValueKind::FloatSub {
             contract,
@@ -4029,12 +4716,12 @@ fn validate_float_sub(
             right: Box::new(right),
         },
         location: location(header.unit, node),
-    })
+    }))
 }
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_float_mul(
     header: &FunctionHeader,
@@ -4043,15 +4730,10 @@ fn validate_float_mul(
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     debug_assert_eq!(node.kind(), SyntaxKind::MulValue);
-    debug_assert!(matches!(
-        required,
-        Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64)
-    ));
-
     let mut operands = node.children().filter(|child| is_value_node(child.kind()));
     let left_node = operands
         .next()
@@ -4060,29 +4742,27 @@ fn validate_float_mul(
         .next()
         .expect("syntax-clean floating multiplication contains a right operand");
     debug_assert!(operands.next().is_none());
-
-    let mut operand_bindings = bindings.clone();
     let left = validate_value(
         header,
         &left_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
+    )?
+    .value;
     let right = validate_value(
         header,
         &right_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
-    *bindings = operand_bindings;
-
-    Some(Value {
+    )?
+    .value;
+    Some(ProducedValue::ordinary(Value {
         ty: required,
         kind: ValueKind::FloatMul {
             contract,
@@ -4090,12 +4770,12 @@ fn validate_float_mul(
             right: Box::new(right),
         },
         location: location(header.unit, node),
-    })
+    }))
 }
 
 #[expect(
     clippy::too_many_arguments,
-    reason = "source validation threads independent resolution and value-proof state explicitly"
+    reason = "source validation threads independent resolution and semantic state explicitly"
 )]
 fn validate_float_div(
     header: &FunctionHeader,
@@ -4104,15 +4784,10 @@ fn validate_float_div(
     contract: NumericContract,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     debug_assert_eq!(node.kind(), SyntaxKind::MulValue);
-    debug_assert!(matches!(
-        required,
-        Type::Intrinsic(IntrinsicType::F16 | IntrinsicType::F32 | IntrinsicType::F64)
-    ));
-
     let mut operands = node.children().filter(|child| is_value_node(child.kind()));
     let left_node = operands
         .next()
@@ -4121,29 +4796,27 @@ fn validate_float_div(
         .next()
         .expect("syntax-clean floating division contains a right operand");
     debug_assert!(operands.next().is_none());
-
-    let mut operand_bindings = bindings.clone();
     let left = validate_value(
         header,
         &left_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
+    )?
+    .value;
     let right = validate_value(
         header,
         &right_node,
         required,
         context,
         value_context,
-        &mut operand_bindings,
+        state,
         diagnostics,
-    )?;
-    *bindings = operand_bindings;
-
-    Some(Value {
+    )?
+    .value;
+    Some(ProducedValue::ordinary(Value {
         ty: required,
         kind: ValueKind::FloatDiv {
             contract,
@@ -4151,7 +4824,7 @@ fn validate_float_div(
             right: Box::new(right),
         },
         location: location(header.unit, node),
-    })
+    }))
 }
 
 fn validate_field_value_use(
@@ -4160,9 +4833,9 @@ fn validate_field_value_use(
     required: Type,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
     let producer_node = node.children().find(|child| {
         matches!(
@@ -4180,8 +4853,13 @@ fn validate_field_value_use(
         debug_assert!(!identifiers.is_empty());
         let receiver_ty = match producer_node.kind() {
             SyntaxKind::DirectCall => {
-                let function =
-                    resolve_call_target(header, &producer_node, context, bindings, diagnostics)?;
+                let function = resolve_call_target(
+                    header,
+                    &producer_node,
+                    context,
+                    &state.bindings,
+                    diagnostics,
+                )?;
                 let Some(result) = context.headers[function.0].result else {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::NoResultCallUsedAsValue,
@@ -4218,17 +4896,16 @@ fn validate_field_value_use(
             OwnedUse::Consume
         };
 
-        let mut producer_bindings = bindings.clone();
         let producer = validate_value(
             header,
             &producer_node,
             receiver_ty,
             context,
             value_context,
-            &mut producer_bindings,
+            state,
             diagnostics,
-        )?;
-        *bindings = producer_bindings;
+        )?
+        .value;
 
         let mut transient = StructuralOwnershipState::default();
         if ownership == OwnedUse::Consume {
@@ -4238,7 +4915,7 @@ fn validate_field_value_use(
             paths: remaining_ownership_frontier(receiver_ty, &transient, context.records),
         };
 
-        return Some(Value {
+        return Some(ProducedValue::ordinary(Value {
             ty: final_ty,
             kind: ValueKind::FieldValueUse {
                 receiver: FieldValueReceiver::Producer {
@@ -4249,7 +4926,7 @@ fn validate_field_value_use(
                 ownership,
             },
             location: value_location,
-        });
+        }));
     }
 
     let (root_token, selectors) = identifiers
@@ -4262,7 +4939,7 @@ fn validate_field_value_use(
         unit: header.unit,
         range: root_token.text_range(),
     };
-    let (binding_id, binding_ty) = match bindings.get(&root_name) {
+    let (binding_id, binding_ty) = match state.bindings.get(&root_name) {
         Some(binding) => (binding.id, binding.ty),
         None => {
             let entity = context
@@ -4283,7 +4960,8 @@ fn validate_field_value_use(
 
     let (fields, final_ty) =
         resolve_field_path(header, selectors, binding_ty, context, diagnostics)?;
-    let binding = bindings
+    let binding = state
+        .bindings
         .get(&root_name)
         .expect("resolved field-value root remains in active binding scope");
     if binding.ownership.path_availability(&fields) != PathAvailability::FullyAvailable {
@@ -4314,15 +4992,30 @@ fn validate_field_value_use(
     let ownership = if context.type_is_duplicable(final_ty) {
         OwnedUse::Duplicate
     } else {
-        bindings
+        OwnedUse::Consume
+    };
+    let compatible = if ownership == OwnedUse::Duplicate {
+        state.target_satisfies_shared_requirement(ReferenceTarget::Local(binding_id))
+    } else {
+        state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(binding_id))
+    };
+    if !compatible {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ReferencePermissionUnavailable,
+            location: value_location,
+        });
+        return None;
+    }
+    if ownership == OwnedUse::Consume {
+        state
+            .bindings
             .get_mut(&root_name)
             .expect("resolved field-value root remains in active binding scope")
             .ownership
             .consume_path(&fields);
-        OwnedUse::Consume
-    };
+    }
 
-    Some(Value {
+    Some(ProducedValue::ordinary(Value {
         ty: final_ty,
         kind: ValueKind::FieldValueUse {
             receiver: FieldValueReceiver::Binding {
@@ -4333,7 +5026,7 @@ fn validate_field_value_use(
             ownership,
         },
         location: value_location,
-    })
+    }))
 }
 
 fn record_field_is_accessible(module: ModuleId, record: &Record, field: usize) -> bool {
@@ -4458,9 +5151,9 @@ fn validate_record_construction(
     required: Type,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<Value> {
+) -> Option<ProducedValue> {
     let construction_location = location(header.unit, node);
     let record = resolve_record_construction_target(header, node, context, diagnostics)?;
     let record_ty = Type::Record(record);
@@ -4540,17 +5233,18 @@ fn validate_record_construction(
             record_decl.fields[field].ty,
             context,
             value_context,
-            bindings,
+            state,
             diagnostics,
-        )?;
+        )?
+        .value;
         fields.push(RecordFieldValue { field, value });
     }
 
-    Some(Value {
+    Some(ProducedValue::ordinary(Value {
         ty: record_ty,
         kind: ValueKind::RecordConstruction { record, fields },
         location: construction_location,
-    })
+    }))
 }
 
 fn materialize_integer_literal(
@@ -5051,15 +5745,43 @@ fn resolve_call_target(
     }
 }
 
+struct ValidatedCall {
+    function: FunctionId,
+    arguments: Vec<Value>,
+    result: Option<Type>,
+    result_reference_authority: Option<ReferenceAuthorityId>,
+}
+
 fn validate_call(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     value_context: &ValueValidationContext,
-    bindings: &mut BTreeMap<String, BindingState>,
+    state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<(FunctionId, Vec<Value>, Option<Type>)> {
-    let function = resolve_call_target(header, node, context, bindings, diagnostics)?;
+) -> Option<ValidatedCall> {
+    let mut candidate = state.clone();
+    let result = validate_call_inner(
+        header,
+        node,
+        context,
+        value_context,
+        &mut candidate,
+        diagnostics,
+    )?;
+    *state = candidate;
+    Some(result)
+}
+
+fn validate_call_inner(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ValidatedCall> {
+    let function = resolve_call_target(header, node, context, &state.bindings, diagnostics)?;
     let target = &context.headers[function.0];
     let argument_list = direct_child(node, SyntaxKind::ArgumentList);
     let argument_nodes = argument_list
@@ -5079,27 +5801,55 @@ fn validate_call(
     }
 
     let mut arguments = Vec::with_capacity(argument_nodes.len());
-    let mut argument_context = value_context.clone();
+    let mut authorities = Vec::with_capacity(argument_nodes.len());
     for (argument_node, parameter) in argument_nodes.into_iter().zip(&target.parameters) {
         let argument = validate_value(
             header,
             &argument_node,
             parameter.ty,
             context,
-            &argument_context,
-            bindings,
+            value_context,
+            state,
             diagnostics,
         )?;
-        if matches!(argument.ty, Type::SharedReference(_))
-            && let Some(ReferenceOrigin::Local(target)) =
-                reference_origin_for_value(&argument, bindings, context)
-        {
-            argument_context.held_shared_targets.insert(target);
-        }
-        arguments.push(argument);
+        authorities.push(argument.reference_authority);
+        arguments.push(argument.value);
     }
 
-    Some((function, arguments, target.result))
+    for (parameter, authority) in target.parameters.iter().zip(&authorities) {
+        let Type::SafeReference { permission, .. } = parameter.ty else {
+            debug_assert!(authority.is_none());
+            continue;
+        };
+        let authority = authority.expect("validated safe-reference argument has one carrier");
+        let target = state.reference_target(authority);
+        if !state.target_is_fully_available(target)
+            || !state.authority_satisfies(authority, permission)
+        {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ReferencePermissionUnavailable,
+                location: location(header.unit, node),
+            });
+            return None;
+        }
+    }
+
+    let result_reference_authority = target.shared_reference_result_origin.map(|slot| {
+        authorities[slot].expect("Shared result origin slot has safe-reference argument authority")
+    });
+    if let Some(authority) = result_reference_authority {
+        state.add_reference_carrier(authority);
+    }
+    for authority in authorities.into_iter().flatten() {
+        state.release_reference_carrier(authority);
+    }
+
+    Some(ValidatedCall {
+        function,
+        arguments,
+        result: target.result,
+        result_reference_authority,
+    })
 }
 
 fn declaration_accessibility(node: &SyntaxNode) -> Accessibility {
@@ -5137,8 +5887,8 @@ fn is_value_node(kind: SyntaxKind) -> bool {
     matches!(
         kind,
         SyntaxKind::GroupedValue
-            | SyntaxKind::SharedBorrowValue
-            | SyntaxKind::SharedDereferenceValue
+            | SyntaxKind::SafeReferenceValue
+            | SyntaxKind::ReferenceDereferenceValue
             | SyntaxKind::RawAddressOfValue
             | SyntaxKind::RawMoveValue
             | SyntaxKind::NumericContractSelectedValue

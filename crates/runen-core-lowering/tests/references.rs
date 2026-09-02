@@ -6,8 +6,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    IntrinsicType, ModuleId, OwnedUse, ReferenceReferent, SourceUnit, Statement as HirStatement,
-    Type, ValueKind, build_typed_hir,
+    IntrinsicType, ModuleId, OwnedUse, ReferencePermission as HirReferencePermission,
+    ReferenceReferent, SourceUnit, Statement as HirStatement, Type, ValueKind, build_typed_hir,
 };
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
@@ -24,7 +24,7 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted Shared-reference HIR must lower to validated Core")
+    lower(&hir(source)).expect("accepted safe-reference HIR must lower to validated Core")
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -45,9 +45,7 @@ fn local_named(function: &runen_core_ir::Function, name: &str) -> LocalId {
     LocalId(u32::try_from(index).expect("test local index fits u32"))
 }
 
-fn shared_reference_types(
-    program: &runen_core_ir::Program,
-) -> Vec<(TypeId, TypeId, ReferencePermission)> {
+fn reference_types(program: &runen_core_ir::Program) -> Vec<(TypeId, TypeId, ReferencePermission)> {
     (0..program.types.len())
         .filter_map(|index| {
             let id = TypeId(u32::try_from(index).expect("test type index fits u32"));
@@ -63,6 +61,13 @@ fn shared_reference_types(
         .collect()
 }
 
+fn safe_reference(referent: ReferenceReferent, permission: HirReferencePermission) -> Type {
+    Type::SafeReference {
+        referent,
+        permission,
+    }
+}
+
 fn execute_source(source: &str, entry_name: &str) -> runen_reference::ExecutionReport {
     let lowered = lower_source(source);
     let entry_index = lowered
@@ -75,13 +80,13 @@ fn execute_source(source: &str, entry_name: &str) -> runen_reference::ExecutionR
     Machine::new(lowered, entry)
         .expect("test entry has no parameters")
         .execute()
-        .expect("safe lowered Shared-reference execution is defined")
+        .expect("safe lowered reference execution is defined")
 }
 
 #[test]
 fn maps_only_used_shared_reference_types_once_per_hir_type() {
     let no_references = lower_source("fn f(x: I64) { let y: I64 = x; }");
-    assert!(shared_reference_types(no_references.as_program()).is_empty());
+    assert!(reference_types(no_references.as_program()).is_empty());
 
     let lowered = lower_source(
         "record copy Point { x: I64 }\
@@ -92,7 +97,7 @@ fn maps_only_used_shared_reference_types_once_per_hir_type() {
     );
     let program = lowered.as_program();
     let f = function(program, "f");
-    let references = shared_reference_types(program);
+    let references = reference_types(program);
     assert_eq!(references.len(), 2);
     assert!(
         references
@@ -124,6 +129,63 @@ fn maps_only_used_shared_reference_types_once_per_hir_type() {
 }
 
 #[test]
+fn maps_replacement_reference_type_and_carrier_move_to_core_exclusive_replace() {
+    let lowered = lower_source("fn f(r: &mut I64) { let moved: &mut I64 = r; }");
+    let program = lowered.as_program();
+    let f = function(program, "f");
+    let r = f.parameters[0];
+    let moved = local_named(f, "moved");
+    let references = reference_types(program);
+
+    assert_eq!(references.len(), 1);
+    let (reference_ty, referent_ty, permission) = references[0];
+    assert_eq!(permission, ReferencePermission::ExclusiveReplace);
+    assert_eq!(f.body.locals[r.0 as usize].ty, reference_ty);
+    assert_eq!(f.body.locals[moved.0 as usize].ty, reference_ty);
+    assert_ne!(referent_ty, reference_ty);
+
+    let statements = f
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect::<Vec<_>>();
+    let carrier_temporary = statements
+        .iter()
+        .find_map(|statement| {
+            let CoreStatement::Init {
+                dst,
+                src: Operand::Move(PlaceAccess::Direct(source)),
+            } = statement
+            else {
+                return None;
+            };
+            (dst.projections.is_empty() && source.local == r && source.projections.is_empty())
+                .then_some(dst.local)
+        })
+        .expect("replacement carrier is moved from the source binding into one value temporary");
+    assert_ne!(carrier_temporary, moved);
+    assert_eq!(f.body.locals[carrier_temporary.0 as usize].ty, reference_ty);
+    assert!(statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            dst,
+            src: Operand::Move(PlaceAccess::Direct(source)),
+        } if dst.local == moved
+            && dst.projections.is_empty()
+            && source.local == carrier_temporary
+            && source.projections.is_empty()
+    )));
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::Copy(PlaceAccess::Direct(source)),
+            ..
+        } if source.local == r && source.projections.is_empty()
+    )));
+}
+
+#[test]
 fn lowers_root_borrow_reference_duplication_and_dereference_to_exact_core_operations() {
     let lowered = lower_source(
         "fn f(x: I64, r: &I64) {\
@@ -140,7 +202,7 @@ fn lowers_root_borrow_reference_duplication_and_dereference_to_exact_core_operat
     let formed = local_named(f, "formed");
     let copied = local_named(f, "copied");
 
-    let references = shared_reference_types(program);
+    let references = reference_types(program);
     assert_eq!(references.len(), 1);
     let (reference_ty, referent_ty, permission) = references[0];
     assert_eq!(permission, ReferencePermission::Shared);
@@ -196,6 +258,78 @@ fn lowers_root_borrow_reference_duplication_and_dereference_to_exact_core_operat
 }
 
 #[test]
+fn lowers_replacement_root_reborrow_move_and_assign_to_exact_core_operations() {
+    let lowered = lower_source(
+        "record Ticket { value: I64 }\
+         fn f(seed: Ticket) {\
+             let mut x: Ticket = seed;\
+             let root: &mut Ticket = &mut x;\
+             {\
+                 let child: &mut Ticket = &mut *root;\
+                 let moved: Ticket = *child;\
+                 *child = moved;\
+             }\
+         }",
+    );
+    let program = lowered.as_program();
+    let f = function(program, "f");
+    let x = local_named(f, "x");
+    let root = local_named(f, "root");
+    let child = local_named(f, "child");
+    let statements = f
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect::<Vec<_>>();
+
+    assert!(statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::ReferenceRoot { permission, place },
+            ..
+        } if *permission == ReferencePermission::ExclusiveReplace
+            && place.local == x
+            && place.projections.is_empty()
+    )));
+    assert!(statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::ReferenceReborrow { permission, src },
+            ..
+        } if *permission == ReferencePermission::ExclusiveReplace
+            && src.projections.is_empty()
+            && matches!(
+                &src.reference,
+                PlaceAccess::Direct(place)
+                    if place.local == root && place.projections.is_empty()
+            )
+    )));
+    assert!(statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::ReferenceMove(access),
+            ..
+        } if access.projections.is_empty()
+            && matches!(
+                &access.reference,
+                PlaceAccess::Direct(place)
+                    if place.local == child && place.projections.is_empty()
+            )
+    )));
+    assert!(statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::ReferenceAssign { dst, .. }
+            if dst.projections.is_empty()
+                && matches!(
+                    &dst.reference,
+                    PlaceAccess::Direct(place)
+                        if place.local == child && place.projections.is_empty()
+                )
+    )));
+}
+
+#[test]
 fn nested_block_reference_local_is_discovered_mapped_cleaned_and_executable() {
     let report = execute_source(
         "fn entry() -> I64 {\
@@ -237,6 +371,25 @@ fn nested_shared_reference_calls_resolve_suspended_ancestor_storage() {
 }
 
 #[test]
+fn replacement_parameter_move_restore_and_direct_temporary_execute() {
+    let report = execute_source(
+        "record Ticket { value: I64 }\
+         fn replace(r: &mut Ticket) {\
+             let old: Ticket = *r;\
+             *r = Ticket { value: 73 };\
+         }\
+         fn entry() -> I64 {\
+             let mut ticket: Ticket = Ticket { value: 11 };\
+             replace(&mut ticket);\
+             return ticket.value;\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(73)));
+}
+
+#[test]
 fn defined_fault_cleans_transferred_and_duplicated_reference_carriers() {
     let report = execute_source(
         "fn fail(r: &I64) { let s: &I64 = r; let value: I64 = *s; fault; }\
@@ -259,7 +412,7 @@ fn shared_reference_result_lowers_exact_type_and_origin_slot() {
 
     assert_eq!(id.shared_reference_result_origin, Some(1));
     assert_eq!(result, id.body.locals[id.parameters[1].0 as usize].ty);
-    assert_eq!(shared_reference_types(program).len(), 1);
+    assert_eq!(reference_types(program).len(), 1);
 }
 
 #[test]
@@ -278,6 +431,25 @@ fn shared_reference_result_round_trip_and_existing_carrier_coexist() {
     );
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(ObservedValue::I64(94)));
+}
+
+#[test]
+fn caller_created_shared_child_round_trips_through_identity_result() {
+    let report = execute_source(
+        "fn id(r: &I64) -> &I64 { return r; }\
+         fn entry() -> I64 {\
+             let mut x: I64 = 47;\
+             let parent: &mut I64 = &mut x;\
+             {\
+                 let child: &I64 = &*parent;\
+                 let returned: &I64 = id(child);\
+                 return *returned;\
+             }\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(47)));
 }
 
 #[test]
@@ -347,18 +519,20 @@ fn contract_bearing_shared_reference_result_fault_has_no_program_result() {
 #[test]
 fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
     let mut field_reference = hir("record Holder { value: I64 } fn f(holder: Holder) {}");
-    field_reference.records[0].fields[0].ty =
-        Type::SharedReference(ReferenceReferent::Intrinsic(IntrinsicType::I64));
+    field_reference.records[0].fields[0].ty = safe_reference(
+        ReferenceReferent::Intrinsic(IntrinsicType::I64),
+        HirReferencePermission::Shared,
+    );
     assert_eq!(
         lower(&field_reference),
         Err(LoweringError::InvalidHirInvariant(
-            "HIR record field contains a Shared-reference type"
+            "HIR record field contains a safe-reference type"
         ))
     );
 
-    let mut consuming_reference = hir("fn f(r: &I64) { let s: &I64 = r; }");
+    let mut consuming_shared = hir("fn f(r: &I64) { let s: &I64 = r; }");
     let HirStatement::Local { initializer, .. } =
-        &mut consuming_reference.functions[0].body.statements[0]
+        &mut consuming_shared.functions[0].body.statements[0]
     else {
         panic!("expected reference local");
     };
@@ -367,9 +541,26 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
     };
     *ownership = OwnedUse::Consume;
     assert_eq!(
-        lower(&consuming_reference),
+        lower(&consuming_shared),
         Err(LoweringError::InvalidHirInvariant(
             "Shared-reference binding use is not a source duplication"
+        ))
+    );
+
+    let mut duplicating_replacement = hir("fn f(r: &mut I64) { let moved: &mut I64 = r; }");
+    let HirStatement::Local { initializer, .. } =
+        &mut duplicating_replacement.functions[0].body.statements[0]
+    else {
+        panic!("expected replacement-reference local");
+    };
+    let ValueKind::BindingUse { ownership, .. } = &mut initializer.kind else {
+        panic!("expected replacement-reference binding use");
+    };
+    *ownership = OwnedUse::Duplicate;
+    assert_eq!(
+        lower(&duplicating_replacement),
+        Err(LoweringError::InvalidHirInvariant(
+            "replacement-reference binding use is not a source move"
         ))
     );
 }
