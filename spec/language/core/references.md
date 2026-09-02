@@ -306,7 +306,7 @@ Because [Core value and storage semantics](value-storage.md) ends each local sto
 
 The requirement also permits a callee reference parameter to target storage belonging to a still-live suspended caller or another still-live ancestor activation. Suspension does not end those storage extents.
 
-A reference to a callee-local storage region cannot escape into a normally resumed caller through the bounded result contract owned by [Core functions and direct calls](functions.md): an admitted safe-reference result preserves the exact target and reference-authority identity of its designated incoming Shared-reference parameter origin, whose target belongs to still-live external storage rather than a callee local. Ordinary result forms remain reference-free, and storage reachable through a transferred safe-reference parameter still contains no safe-reference leaf. Passing a callee-local reference further into a nested call does not extend the callee-local target beyond its owning activation unless that owning activation itself remains live; every nested activation must terminate before the owning activation can return normally, unless it diverges or faults instead.
+A reference to a callee-local storage region cannot escape into a normally resumed caller through the bounded result contracts owned by [Core functions and direct calls](functions.md). An identity-preserving Shared result keeps the exact target and authority of its designated incoming Shared parameter origin. A derived complete-child Shared result has an exact target equal to its designated incoming `Exclusive` or `ExclusiveReplace` parameter target and an authority directly descended from that incoming external authority. In both cases the result target belongs to still-live external storage rather than a callee local. Ordinary result forms remain reference-free, and storage reachable through a transferred safe-reference parameter still contains no safe-reference leaf. Passing a callee-local reference further into a nested call does not extend the callee-local target beyond its owning activation unless that owning activation itself remains live; every nested activation must terminate before the owning activation can return normally, unless it diverges or faults instead.
 
 Violation of the storage-extent validity requirement is a Core language-validation failure. It is not a defined `Fault`, not undefined behavior selected by a dereference, and not a runtime recovery case.
 
@@ -354,7 +354,9 @@ When `functions.md` admits a safe-reference result, the preserved result value o
 - the preserved carrier is outside the terminating activation's local cleanup set and therefore is not removed when other callee-local carriers are destroyed; and
 - the referenced authority remains active after callee cleanup whenever that preserved carrier or an active descendant keeps it live under the existing carrier/child lifecycle.
 
-If the preserved authority is itself a child authority created in an earlier still-live activation, its parent/ancestor delegation consequences remain exactly those already defined by the carrier/child relation. Result transfer does not detach, re-root, widen, narrow, or otherwise rewrite that authority branch.
+If the preserved authority is a child authority, including one admitted by `functions.md` as a callee-created direct complete-referent Shared child, its parent/ancestor delegation consequences remain exactly those already defined by the carrier/child relation. Result transfer does not detach, re-root, reparent, widen, narrow, restore, or otherwise rewrite that authority branch.
+
+For the admitted complete direct-child result, cleanup may remove the final carrier of the designated `Exclusive` or `ExclusiveReplace` parent authority while the preserved Shared child survives. The parent then remains active carrierlessly because it has an active child. Any earlier ancestors remain in the unchanged chain, and direct/root conflict checks continue to observe the surviving exclusive ancestor authority under [Core borrowing](borrowing.md). When the child branch finally ends, childless carrierless ancestors end transitively under the ordinary carrier rule above. These are existing lifecycle and conflict consequences, not a second callable policy or a result-boundary authority transformation.
 
 These are reference transport and lifetime consequences only. Which result values are permitted to survive, which input origin they must match, and which result shapes or permission classes are admitted remain owned by `functions.md`.
 
@@ -418,9 +420,9 @@ This revision deliberately does not define:
 - named or inferred source lifetimes;
 - source places/lvalues;
 - safe-reference result admissibility or callable result-origin selection beyond the transport consequences consumed from `functions.md`;
-- safe-reference-containing aggregate results, derived/subregion result authorities, authority detachment/re-rooting, or Exclusive/ExclusiveReplace result transfer;
+- safe-reference-containing aggregate results, Shared-origin complete-referent derived results, structural subregion/projection results, arbitrary-descendant result relations, authority detachment/re-rooting/reparenting, or Exclusive/ExclusiveReplace result transfer;
 - cross-activation transfer through safe references whose referent structural values contain safe-reference or raw-pointer leaves;
-- callable borrowed-effect summaries beyond the bounded fully-Live entry/normal-return contract owned by `functions.md`;
+- callable borrowed-effect summaries beyond the bounded fully-Live entry/normal-return contract and bounded scalar Shared result contracts owned by `functions.md`;
 - raw-pointer transfer across calls;
 - raw-pointer formation through reference access;
 - pointer/reference casts, arithmetic, null, or numeric addresses;
