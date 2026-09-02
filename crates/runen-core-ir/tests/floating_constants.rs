@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, LocalDecl,
-    LocalId, MirValidationErrorKind, Operand, Place, Program, ScalarType, Statement, Terminator,
-    TypeDef, TypeId, TypeTable, Value, validate_program,
+    LocalId, MirValidationErrorKind, Operand, Place, Program, SafeReferenceResultContract,
+    ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 
 fn program_initializing(scalar: ScalarType, value: Value) -> Program {
@@ -13,7 +13,7 @@ fn program_initializing(scalar: ScalarType, value: Value) -> Program {
             name: "entry".into(),
             parameters: Vec::new(),
             result: None,
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: Body {
                 locals: vec![LocalDecl::new("value", ty, false)],
                 loans: Vec::new(),
@@ -214,7 +214,7 @@ fn structural_constants_recursively_preserve_mixed_floating_formats() {
             name: "entry".into(),
             parameters: Vec::new(),
             result: None,
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: Body {
                 locals: vec![LocalDecl::new("pair", pair_ty, false)],
                 loans: Vec::new(),
