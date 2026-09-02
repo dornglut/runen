@@ -428,16 +428,26 @@ fn shared_direct_child_result_maps_exactly_and_survives_parent_carrier_release()
              return *returned;\
          }";
     let lowered = lower_source(source);
-    let child = function(lowered.as_program(), "child");
+    let program = lowered.as_program();
+    let child = function(program, "child");
+    let result_ty = child.result.expect("Shared direct-child result type is retained");
+    let parameter_ty = child.body.locals[child.parameters[0].0 as usize].ty;
+    let (result_referent, result_permission) = program
+        .types
+        .reference(result_ty)
+        .expect("Shared direct-child result lowers to a Core reference type");
+    let (parameter_referent, parameter_permission) = program
+        .types
+        .reference(parameter_ty)
+        .expect("direct-child origin parameter lowers to a Core reference type");
 
     assert_eq!(
         child.safe_reference_result_contract,
         SafeReferenceResultContract::SharedDirectChild { origin: 0 }
     );
-    assert_eq!(
-        child.result,
-        Some(child.body.locals[child.parameters[0].0 as usize].ty)
-    );
+    assert_eq!(result_permission, ReferencePermission::Shared);
+    assert_eq!(parameter_permission, ReferencePermission::ExclusiveReplace);
+    assert_eq!(result_referent, parameter_referent);
 
     let report = execute_source(source, "entry");
     assert_eq!(report.terminal, TerminalStatus::Returned);
