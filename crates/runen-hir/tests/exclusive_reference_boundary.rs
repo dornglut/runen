@@ -86,3 +86,46 @@ fn raw_address_coexists_with_shared_authority_but_not_replacement_authority() {
         "missing raw-address/replacement-authority conflict: {errors:?}"
     );
 }
+
+#[test]
+fn shared_child_restricts_parent_to_shared_relative_capability() {
+    compile(
+        "fn f(r: &mut I64) {\
+             let child: &I64 = &*r;\
+             let copied_from_parent: I64 = *r;\
+             let copied_from_child: I64 = *child;\
+         }",
+    )
+    .expect("a Shared child leaves its replacement parent with Shared relative capability");
+}
+
+#[test]
+fn replacement_child_suspends_parent_reference_access() {
+    let errors = compile(
+        "fn f(r: &mut I64) {\
+             let child: &mut I64 = &mut *r;\
+             let copied_from_parent: I64 = *r;\
+         }",
+    )
+    .expect_err("a live replacement child suspends parent reference-relative access");
+
+    assert!(
+        has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+        "missing suspended-parent authority diagnostic: {errors:?}"
+    );
+}
+
+#[test]
+fn conditional_rejects_unequal_live_reference_authority_state() {
+    let errors = compile(
+        "fn f(flag: Bool, r: &mut I64) {\
+             if flag { let moved: &mut I64 = r; } else {}\
+         }",
+    )
+    .expect_err("two normal conditional outcomes require equal live reference authority state");
+
+    assert!(
+        has_diagnostic(&errors, DiagnosticKind::ConditionalReferenceStateMismatch),
+        "missing conditional reference-state mismatch: {errors:?}"
+    );
+}
