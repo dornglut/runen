@@ -160,17 +160,12 @@ fn maps_replacement_reference_type_and_carrier_move_to_core_exclusive_replace() 
             else {
                 return None;
             };
-            (dst.projections.is_empty()
-                && source.local == r
-                && source.projections.is_empty())
-            .then_some(dst.local)
+            (dst.projections.is_empty() && source.local == r && source.projections.is_empty())
+                .then_some(dst.local)
         })
         .expect("replacement carrier is moved from the source binding into one value temporary");
     assert_ne!(carrier_temporary, moved);
-    assert_eq!(
-        f.body.locals[carrier_temporary.0 as usize].ty,
-        reference_ty
-    );
+    assert_eq!(f.body.locals[carrier_temporary.0 as usize].ty, reference_ty);
     assert!(statements.iter().any(|statement| matches!(
         statement,
         CoreStatement::Init {
