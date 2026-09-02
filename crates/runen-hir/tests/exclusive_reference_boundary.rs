@@ -29,6 +29,23 @@ fn replacement_root_rejects_overlapping_shared_authority() {
 }
 
 #[test]
+fn shared_root_rejects_overlapping_replacement_authority() {
+    let errors = compile(
+        "fn f(seed: I64) {\
+             let mut x: I64 = seed;\
+             let replacement: &mut I64 = &mut x;\
+             let shared: &I64 = &x;\
+         }",
+    )
+    .expect_err("Shared root requires no overlapping exclusive safe authority");
+
+    assert!(
+        has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+        "missing Shared-root/exclusive-authority rejection: {errors:?}"
+    );
+}
+
+#[test]
 fn replacement_reference_carrier_cannot_be_used_twice() {
     let errors = compile(
         "fn f(r: &mut I64) {\
@@ -42,6 +59,19 @@ fn replacement_reference_carrier_cannot_be_used_twice() {
         has_diagnostic(&errors, DiagnosticKind::UnavailableBinding),
         "second carrier use must observe the first Move: {errors:?}"
     );
+}
+
+#[test]
+fn moved_replacement_carrier_cleanup_ends_its_authority_branch() {
+    compile(
+        "fn f(seed: I64) {\
+             let mut x: I64 = seed;\
+             let root: &mut I64 = &mut x;\
+             { let moved: &mut I64 = root; }\
+             x = 7;\
+         }",
+    )
+    .expect("cleanup of the moved carrier must end its carrierless authority branch");
 }
 
 #[test]
@@ -59,6 +89,82 @@ fn explicit_return_requires_incoming_replacement_referent_restored() {
         has_diagnostic(&errors, DiagnosticKind::ReferenceRestorationRequired),
         "explicit Return must apply restoration after result effects: {errors:?}"
     );
+}
+
+#[test]
+fn direct_binding_access_uses_the_canonical_safe_authority_requirements() {
+    for source in [
+        "fn duplicate(seed: I64) {\
+             let mut x: I64 = seed;\
+             let r: &mut I64 = &mut x;\
+             let copied: I64 = x;\
+         }",
+        "record Ticket {}\
+         fn consume(seed: Ticket) {\
+             let mut x: Ticket = seed;\
+             let r: &mut Ticket = &mut x;\
+             let moved: Ticket = x;\
+         }",
+    ] {
+        let errors = compile(source)
+            .expect_err("direct binding access may not bypass a live replacement authority");
+        assert!(
+            has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+            "missing direct binding/reference conflict: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn direct_field_access_uses_the_canonical_safe_authority_requirements() {
+    for source in [
+        "record copy Pair { value: I64 }\
+         fn duplicate(seed: Pair) {\
+             let mut root: Pair = seed;\
+             let r: &mut Pair = &mut root;\
+             let value: I64 = root.value;\
+         }",
+        "record Token {}\
+         record Box { token: Token }\
+         fn consume(seed: Box) {\
+             let mut root: Box = seed;\
+             let r: &mut Box = &mut root;\
+             let token: Token = root.token;\
+         }",
+    ] {
+        let errors = compile(source)
+            .expect_err("direct field production may not bypass a live replacement authority");
+        assert!(
+            has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+            "missing direct field/reference conflict: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn direct_pattern_production_uses_the_canonical_safe_authority_requirements() {
+    for source in [
+        "record copy Pair { left: I64, right: I64 }\
+         fn duplicate(seed: Pair) {\
+             let mut root: Pair = seed;\
+             let r: &mut Pair = &mut root;\
+             let Pair { left: a, right: b } = root;\
+         }",
+        "record Token {}\
+         record Box { token: Token, count: I64 }\
+         fn consume(seed: Box) {\
+             let mut root: Box = seed;\
+             let r: &mut Box = &mut root;\
+             let Box { token: moved, count: copied } = root;\
+         }",
+    ] {
+        let errors = compile(source)
+            .expect_err("direct pattern production may not bypass a live replacement authority");
+        assert!(
+            has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+            "missing direct pattern/reference conflict: {errors:?}"
+        );
+    }
 }
 
 #[test]
@@ -116,6 +222,39 @@ fn replacement_child_suspends_parent_reference_access() {
 }
 
 #[test]
+fn scoped_child_cleanup_restores_parent_for_break_and_continue_transfers() {
+    compile(
+        "fn break_case(flag: Bool, r: &mut I64) {\
+             while flag {\
+                 let child: &mut I64 = &mut *r;\
+                 break;\
+             }\
+             *r = 7;\
+         }\
+         fn continue_case(flag: Bool, r: &mut I64) {\
+             while flag {\
+                 let child: &mut I64 = &mut *r;\
+                 continue;\
+             }\
+         }",
+    )
+    .expect("loop transfer cleanup must end scoped child carriers before exact-state comparison");
+}
+
+#[test]
+fn ended_branch_and_loop_authorities_do_not_create_false_state_mismatches() {
+    compile(
+        "fn f(flag: Bool, seed: I64) {\
+             let mut x: I64 = seed;\
+             if flag { { let temporary: &mut I64 = &mut x; } } else {}\
+             while flag { { let temporary: &mut I64 = &mut x; } }\
+             x = 9;\
+         }",
+    )
+    .expect("dead authority identities and allocation counters are not normalized live state");
+}
+
+#[test]
 fn conditional_rejects_unequal_live_reference_authority_state() {
     let errors = compile(
         "fn f(flag: Bool, r: &mut I64) {\
@@ -128,6 +267,29 @@ fn conditional_rejects_unequal_live_reference_authority_state() {
         has_diagnostic(&errors, DiagnosticKind::ConditionalReferenceStateMismatch),
         "missing conditional reference-state mismatch: {errors:?}"
     );
+}
+
+#[test]
+fn divergence_needs_no_synthetic_restoration_before_a_potentially_diverging_call() {
+    compile(
+        "record Ticket { value: I64 }\
+         fn diverge() { diverge(); }\
+         fn f(r: &mut Ticket) {\
+             let ticket: Ticket = *r;\
+             diverge();\
+             *r = ticket;\
+         }",
+    )
+    .expect("the possible normal path restores after the call; divergence needs no pre-call repair");
+}
+
+#[test]
+fn replacement_rhs_may_move_the_referent_when_the_destination_carrier_survives() {
+    compile(
+        "record Ticket { value: I64 }\
+         fn f(r: &mut Ticket) { *r = *r; }",
+    )
+    .expect("source-first replacement may Move the referent before committing through live r");
 }
 
 #[test]
