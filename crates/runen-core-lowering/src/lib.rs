@@ -673,9 +673,14 @@ impl<'a> FunctionLowerer<'a> {
             })
             .collect::<Result<Vec<_>, LoweringError>>()?;
 
-        let safe_reference_result_contract = match self.function.shared_reference_result_origin {
-            Some(origin) => core::SafeReferenceResultContract::SharedIdentity { origin },
-            None => core::SafeReferenceResultContract::None,
+        let safe_reference_result_contract = match self.function.safe_reference_result_contract {
+            hir::SafeReferenceResultContract::None => core::SafeReferenceResultContract::None,
+            hir::SafeReferenceResultContract::SharedIdentity { origin } => {
+                core::SafeReferenceResultContract::SharedIdentity { origin }
+            }
+            hir::SafeReferenceResultContract::SharedDirectChild { origin } => {
+                core::SafeReferenceResultContract::SharedDirectChild { origin }
+            }
         };
 
         Ok(core::Function {
@@ -2460,12 +2465,12 @@ impl<'a> FunctionLowerer<'a> {
     fn push_core_temporary(&mut self, ty: core::TypeId) -> Result<core::LocalId, LoweringError> {
         let id = self.next_local_id()?;
         let name = format!("$tmp{}", self.next_temp);
-        self.next_temp =
-            self.next_temp
-                .checked_add(1)
-                .ok_or(LoweringError::RepresentationLimit(
-                    "compiler temporary identity",
-                ))?;
+        self.next_temp = self
+            .next_temp
+            .checked_add(1)
+            .ok_or(LoweringError::RepresentationLimit(
+                "compiler temporary identity",
+            ))?;
         self.locals.push(core::LocalDecl::new(name, ty, false));
         Ok(id)
     }
