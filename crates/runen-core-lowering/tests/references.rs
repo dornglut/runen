@@ -144,22 +144,50 @@ fn maps_replacement_reference_type_and_carrier_move_to_core_exclusive_replace() 
     assert_eq!(f.body.locals[moved.0 as usize].ty, reference_ty);
     assert_ne!(referent_ty, reference_ty);
 
-    assert!(
-        f.body
-            .blocks
-            .iter()
-            .flat_map(|block| &block.statements)
-            .any(|statement| matches!(
-                statement,
-                CoreStatement::Init {
-                    dst,
-                    src: Operand::Move(PlaceAccess::Direct(source)),
-                } if dst.local == moved
-                    && dst.projections.is_empty()
-                    && source.local == r
-                    && source.projections.is_empty()
-            ))
+    let statements = f
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect::<Vec<_>>();
+    let carrier_temporary = statements
+        .iter()
+        .find_map(|statement| {
+            let CoreStatement::Init {
+                dst,
+                src: Operand::Move(PlaceAccess::Direct(source)),
+            } = statement
+            else {
+                return None;
+            };
+            (dst.projections.is_empty()
+                && source.local == r
+                && source.projections.is_empty())
+            .then_some(dst.local)
+        })
+        .expect("replacement carrier is moved from the source binding into one value temporary");
+    assert_ne!(carrier_temporary, moved);
+    assert_eq!(
+        f.body.locals[carrier_temporary.0 as usize].ty,
+        reference_ty
     );
+    assert!(statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            dst,
+            src: Operand::Move(PlaceAccess::Direct(source)),
+        } if dst.local == moved
+            && dst.projections.is_empty()
+            && source.local == carrier_temporary
+            && source.projections.is_empty()
+    )));
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::Copy(PlaceAccess::Direct(source)),
+            ..
+        } if source.local == r && source.projections.is_empty()
+    )));
 }
 
 #[test]
