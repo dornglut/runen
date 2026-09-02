@@ -92,6 +92,7 @@ fn prefix_dereference_does_not_reinterpret_binary_multiplication() {
 fn rejects_unrepresented_reference_syntax() {
     for source in [
         "fn f(r: &&I64) {}",
+        "fn f(r: &raw I64) {}",
         "fn f(r: &I64) { let x: I64 = **r; }",
         "fn f(r: &I64) { let x: I64 = *(r); }",
         "fn f(r: &mut I64) { let x: &mut I64 = &mut **r; }",
