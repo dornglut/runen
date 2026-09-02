@@ -673,11 +673,16 @@ impl<'a> FunctionLowerer<'a> {
             })
             .collect::<Result<Vec<_>, LoweringError>>()?;
 
+        let safe_reference_result_contract = match self.function.shared_reference_result_origin {
+            Some(origin) => core::SafeReferenceResultContract::SharedIdentity { origin },
+            None => core::SafeReferenceResultContract::None,
+        };
+
         Ok(core::Function {
             name: self.function.name.clone(),
             parameters: self.parameter_locals,
             result,
-            shared_reference_result_origin: self.function.shared_reference_result_origin,
+            safe_reference_result_contract,
             body: core::Body {
                 locals: self.locals,
                 loans: Vec::new(),
