@@ -192,13 +192,6 @@ impl SemanticState {
             .target
     }
 
-    fn reference_permission(&self, authority: ReferenceAuthorityId) -> ReferencePermission {
-        self.reference_authorities
-            .get(&authority)
-            .expect("live authority is present")
-            .permission
-    }
-
     fn reference_capability(&self, authority: ReferenceAuthorityId) -> Option<ReferencePermission> {
         let state = self
             .reference_authorities
@@ -227,11 +220,14 @@ impl SemanticState {
         authority: ReferenceAuthorityId,
         required: ReferencePermission,
     ) -> bool {
-        match (self.reference_capability(authority), required) {
-            (Some(ReferencePermission::ExclusiveReplace), _) => true,
-            (Some(ReferencePermission::Shared), ReferencePermission::Shared) => true,
-            _ => false,
-        }
+        matches!(
+            (self.reference_capability(authority), required),
+            (Some(ReferencePermission::ExclusiveReplace), _)
+                | (
+                    Some(ReferencePermission::Shared),
+                    ReferencePermission::Shared
+                )
+        )
     }
 
     fn target_is_fully_available(&self, target: ReferenceTarget) -> bool {
