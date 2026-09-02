@@ -1,6 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeTable,
+    Value, validate_program,
 };
 use runen_reference::{
     ExecutionReport, Machine, ObservedValue, TerminalStatus, VerificationEventKind,
@@ -17,7 +18,7 @@ fn execute_integer_mul(scalar: ScalarType, left: Value, right: Value) -> Executi
         name: "main".into(),
         parameters: Vec::new(),
         result: Some(ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: Body {
             locals: vec![
                 LocalDecl::new("left", ty, false),

@@ -1,6 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
-    Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
+    TypeTable, Value, validate_program,
 };
 use runen_reference::{
     Machine, ObservedValue, TerminalStatus, UndefinedBehaviorKind, VerificationEvent,
@@ -39,7 +40,7 @@ fn result_is_preserved_across_callee_cleanup_and_caller_resumes_after_cleanup() 
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("argument", tracked, false),
@@ -71,7 +72,7 @@ fn result_is_preserved_across_callee_cleanup_and_caller_resumes_after_cleanup() 
         name: "callee".into(),
         parameters: vec![LocalId(0)],
         result: Some(tracked),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("parameter", tracked, false),
@@ -158,7 +159,7 @@ fn reused_vacant_result_destination_is_initialized_without_replacement_destructi
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("result", tracked, false)],
             vec![
@@ -195,7 +196,7 @@ fn reused_vacant_result_destination_is_initialized_without_replacement_destructi
         name: "produce".into(),
         parameters: Vec::new(),
         result: Some(tracked),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -264,7 +265,7 @@ fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
             name: name.into(),
             parameters: Vec::new(),
             result: None,
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: body(
                 vec![LocalDecl::new("owned", tracked, false)],
                 vec![
@@ -292,7 +293,7 @@ fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
         name: "inner".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("owned", tracked, false)],
             vec![BasicBlock::new(
@@ -336,7 +337,7 @@ fn faulting_result_call_does_not_write_destination_or_follow_normal_continuation
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("result", tracked, false)],
             vec![
@@ -362,7 +363,7 @@ fn faulting_result_call_does_not_write_destination_or_follow_normal_continuation
         name: "faulting_result".into(),
         parameters: Vec::new(),
         result: Some(tracked),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -415,7 +416,7 @@ fn repeated_no_result_calls_get_fresh_activation_and_storage_and_resume_normally
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
@@ -445,7 +446,7 @@ fn repeated_no_result_calls_get_fresh_activation_and_storage_and_resume_normally
         name: "callee".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("value", i64_ty, false),
@@ -513,7 +514,7 @@ fn intra_activation_raw_pointer_ub_remains_an_ub_boundary() {
         name: "entry".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("value", i64_ty, false),
@@ -572,7 +573,7 @@ fn execute_constant_branch(condition: bool) -> runen_reference::ExecutionReport 
         name: "branch_result".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
@@ -626,7 +627,7 @@ fn execute_stored_bool_branch(copy: bool) -> runen_reference::ExecutionReport {
         name: "stored_condition".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("condition", bool_ty, false)],
             vec![
@@ -705,7 +706,7 @@ fn runtime_branch_condition_ub_reaches_neither_successor() {
         name: "ub_condition".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("condition", bool_ty, false),

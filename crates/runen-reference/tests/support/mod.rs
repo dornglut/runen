@@ -1,4 +1,6 @@
-use runen_core_ir::{Body, Function, FunctionId, Program, TypeTable, validate_program};
+use runen_core_ir::{
+    Body, Function, FunctionId, Program, SafeReferenceResultContract, TypeTable, validate_program,
+};
 use runen_reference::{ActivationId, Machine, VerificationEvent, VerificationEventKind};
 
 pub fn one_function_program(types: TypeTable, body: Body) -> Program {
@@ -8,7 +10,7 @@ pub fn one_function_program(types: TypeTable, body: Body) -> Program {
             name: "fixture".into(),
             parameters: Vec::new(),
             result: None,
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body,
         }],
     }

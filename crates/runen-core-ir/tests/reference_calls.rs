@@ -1,7 +1,8 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId,
     MirValidationErrorKind, Operand, Place, Program, ReferenceAccess, ReferencePermission,
-    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
+    validate_program,
 };
 
 fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -27,7 +28,7 @@ fn shared_reference_parameter_reads_suspended_caller_storage() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -69,7 +70,7 @@ fn shared_reference_parameter_reads_suspended_caller_storage() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -102,7 +103,7 @@ fn exclusive_replace_parameter_may_move_then_restore_before_return() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -144,7 +145,7 @@ fn exclusive_replace_parameter_may_move_then_restore_before_return() {
         name: "round_trip".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("reference", reference_ty, false),
@@ -187,7 +188,7 @@ fn reference_result_type_remains_outside_the_transfer_boundary() {
         name: "invalid_reference_result".into(),
         parameters: Vec::new(),
         result: Some(shared_i64),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -230,7 +231,7 @@ fn reference_parameter_referent_may_not_contain_raw_or_nested_reference_leaves()
             name: "invalid_reference_parameter".into(),
             parameters: vec![LocalId(0)],
             result: None,
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: body(
                 vec![LocalDecl::new("parameter", invalid_parameter_type, false)],
                 vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -258,7 +259,7 @@ fn call_result_destination_is_admitted_before_argument_effects() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![
@@ -282,7 +283,7 @@ fn call_result_destination_is_admitted_before_argument_effects() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![BasicBlock::new(
@@ -319,7 +320,7 @@ fn call_arguments_are_left_to_right_before_final_reference_admission() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -358,7 +359,7 @@ fn call_arguments_are_left_to_right_before_final_reference_admission() {
         name: "consume_then_borrow".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("value", i64_ty, false),
@@ -398,7 +399,7 @@ fn call_retains_all_arguments_before_checking_full_reference_authority() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -442,7 +443,7 @@ fn call_retains_all_arguments_before_checking_full_reference_authority() {
         name: "borrow_both".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("child", shared_i64, false),
@@ -477,7 +478,7 @@ fn reference_parameter_return_requires_live_external_referent_but_fault_does_not
         name: "invalid_return".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("reference", replace_i64, false),
@@ -503,7 +504,7 @@ fn reference_parameter_return_requires_live_external_referent_but_fault_does_not
         name: "fault".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("reference", replace_i64, false),
@@ -548,7 +549,7 @@ fn temporary_child_borrowed_call_restores_parent_authority() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -605,7 +606,7 @@ fn temporary_child_borrowed_call_restores_parent_authority() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -647,7 +648,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -704,7 +705,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
         name: "middle".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![
@@ -725,7 +726,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
         name: "inner".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -754,7 +755,7 @@ fn expect_function_error(types: TypeTable, function: Function, expected: MirVali
 }
 
 #[test]
-fn shared_reference_result_contract_declaration_matrix_is_exact() {
+fn shared_identity_result_contract_declaration_matrix_is_exact() {
     let mut types = TypeTable::new();
     let i32_ty = types.push(TypeDef::scalar("I32", ScalarType::I32));
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
@@ -784,13 +785,15 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "origin_without_result".into(),
             parameters: Vec::new(),
             result: None,
-            shared_reference_result_origin: Some(0),
+            safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity {
+                origin: 0,
+            },
             body: body(
                 Vec::new(),
                 vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
             ),
         },
-        MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
+        MirValidationErrorKind::UnexpectedSafeReferenceResultContract,
     );
 
     expect_function_error(
@@ -799,13 +802,15 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "origin_on_ordinary_result".into(),
             parameters: Vec::new(),
             result: Some(i64_ty),
-            shared_reference_result_origin: Some(0),
+            safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity {
+                origin: 0,
+            },
             body: body(
                 Vec::new(),
                 vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
             ),
         },
-        MirValidationErrorKind::UnexpectedSharedReferenceResultOrigin,
+        MirValidationErrorKind::UnexpectedSafeReferenceResultContract,
     );
 
     expect_function_error(
@@ -814,7 +819,7 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "missing_origin".into(),
             parameters: vec![LocalId(0)],
             result: Some(shared_i64),
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: body(
                 vec![LocalDecl::new("reference", shared_i64, false)],
                 vec![BasicBlock::new(
@@ -823,7 +828,7 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
                 )],
             ),
         },
-        MirValidationErrorKind::MissingSharedReferenceResultOrigin,
+        MirValidationErrorKind::MissingSafeReferenceResultContract,
     );
 
     expect_function_error(
@@ -832,7 +837,9 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "invalid_origin_slot".into(),
             parameters: vec![LocalId(0)],
             result: Some(shared_i64),
-            shared_reference_result_origin: Some(1),
+            safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity {
+                origin: 1,
+            },
             body: body(
                 vec![LocalDecl::new("reference", shared_i64, false)],
                 vec![BasicBlock::new(
@@ -841,7 +848,7 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
                 )],
             ),
         },
-        MirValidationErrorKind::InvalidSharedReferenceResultOriginSlot(1),
+        MirValidationErrorKind::InvalidSafeReferenceResultContractSlot(1),
     );
 
     expect_function_error(
@@ -850,7 +857,9 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "exclusive_result".into(),
             parameters: vec![LocalId(0)],
             result: Some(exclusive_i64),
-            shared_reference_result_origin: Some(0),
+            safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity {
+                origin: 0,
+            },
             body: body(
                 vec![LocalDecl::new("reference", exclusive_i64, false)],
                 vec![BasicBlock::new(
@@ -859,7 +868,7 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
                 )],
             ),
         },
-        MirValidationErrorKind::SharedReferenceResultRequiresShared(exclusive_i64),
+        MirValidationErrorKind::SafeReferenceResultContractRequiresSharedResult(exclusive_i64),
     );
 
     expect_function_error(
@@ -868,7 +877,9 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "exclusive_origin".into(),
             parameters: vec![LocalId(0)],
             result: Some(shared_i64),
-            shared_reference_result_origin: Some(0),
+            safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity {
+                origin: 0,
+            },
             body: body(
                 vec![LocalDecl::new("reference", exclusive_i64, false)],
                 vec![BasicBlock::new(
@@ -877,7 +888,7 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
                 )],
             ),
         },
-        MirValidationErrorKind::SharedReferenceResultOriginRequiresShared(exclusive_i64),
+        MirValidationErrorKind::SharedIdentityOriginPermissionMismatch(exclusive_i64),
     );
 
     expect_function_error(
@@ -886,7 +897,9 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "origin_type_mismatch".into(),
             parameters: vec![LocalId(0)],
             result: Some(shared_i64),
-            shared_reference_result_origin: Some(0),
+            safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity {
+                origin: 0,
+            },
             body: body(
                 vec![LocalDecl::new("reference", shared_i32, false)],
                 vec![BasicBlock::new(
@@ -895,7 +908,7 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
                 )],
             ),
         },
-        MirValidationErrorKind::SharedReferenceResultOriginTypeMismatch {
+        MirValidationErrorKind::SharedIdentityOriginTypeMismatch {
             expected: shared_i64,
             found: shared_i32,
         },
@@ -907,7 +920,9 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
             name: "aggregate_reference_result".into(),
             parameters: vec![LocalId(0)],
             result: Some(aggregate_i64),
-            shared_reference_result_origin: Some(0),
+            safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity {
+                origin: 0,
+            },
             body: body(
                 vec![LocalDecl::new("reference", shared_i64, false)],
                 vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -918,7 +933,7 @@ fn shared_reference_result_contract_declaration_matrix_is_exact() {
 }
 
 #[test]
-fn shared_reference_result_preserves_origin_through_move_copy_and_storage() {
+fn shared_identity_result_preserves_origin_through_move_copy_and_storage() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let shared_i64 = types.push(TypeDef::reference(
@@ -931,7 +946,7 @@ fn shared_reference_result_preserves_origin_through_move_copy_and_storage() {
         name: "by_move".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -944,7 +959,7 @@ fn shared_reference_result_preserves_origin_through_move_copy_and_storage() {
         name: "by_copy".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -957,7 +972,7 @@ fn shared_reference_result_preserves_origin_through_move_copy_and_storage() {
         name: "through_storage".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("reference", shared_i64, false),
@@ -981,7 +996,7 @@ fn shared_reference_result_preserves_origin_through_move_copy_and_storage() {
 }
 
 #[test]
-fn shared_reference_result_forwards_through_nested_and_recursive_contract_calls() {
+fn shared_identity_result_forwards_through_nested_and_recursive_contract_calls() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let shared_i64 = types.push(TypeDef::reference(
@@ -994,7 +1009,7 @@ fn shared_reference_result_forwards_through_nested_and_recursive_contract_calls(
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -1007,7 +1022,7 @@ fn shared_reference_result_forwards_through_nested_and_recursive_contract_calls(
         name: "forward".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("reference", shared_i64, false),
@@ -1034,7 +1049,7 @@ fn shared_reference_result_forwards_through_nested_and_recursive_contract_calls(
         name: "recursive".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("reference", shared_i64, false),
@@ -1084,7 +1099,7 @@ fn caller_created_shared_child_result_keeps_parent_delegated_until_result_drop()
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -1150,7 +1165,7 @@ fn caller_created_shared_child_result_keeps_parent_delegated_until_result_drop()
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -1168,7 +1183,7 @@ fn caller_created_shared_child_result_keeps_parent_delegated_until_result_drop()
 }
 
 #[test]
-fn shared_reference_result_rejects_fresh_reborrow_other_and_reused_authorities() {
+fn shared_identity_result_rejects_fresh_reborrow_other_and_reused_authorities() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let shared_i64 = types.push(TypeDef::reference(
@@ -1181,7 +1196,7 @@ fn shared_reference_result_rejects_fresh_reborrow_other_and_reused_authorities()
         name: "fresh_root".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("origin", shared_i64, false),
@@ -1209,14 +1224,14 @@ fn shared_reference_result_rejects_fresh_reborrow_other_and_reused_authorities()
     expect_function_error(
         types.clone(),
         fresh_root,
-        MirValidationErrorKind::SharedReferenceResultOriginMismatch,
+        MirValidationErrorKind::SharedIdentityResultMismatch,
     );
 
     let reborrow = Function {
         name: "reborrow".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("origin", shared_i64, false),
@@ -1237,14 +1252,14 @@ fn shared_reference_result_rejects_fresh_reborrow_other_and_reused_authorities()
     expect_function_error(
         types.clone(),
         reborrow,
-        MirValidationErrorKind::SharedReferenceResultOriginMismatch,
+        MirValidationErrorKind::SharedIdentityResultMismatch,
     );
 
     let other_parameter = Function {
         name: "other_parameter".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("origin", shared_i64, false),
@@ -1259,14 +1274,14 @@ fn shared_reference_result_rejects_fresh_reborrow_other_and_reused_authorities()
     expect_function_error(
         types.clone(),
         other_parameter,
-        MirValidationErrorKind::SharedReferenceResultOriginMismatch,
+        MirValidationErrorKind::SharedIdentityResultMismatch,
     );
 
     let reused_slot = Function {
         name: "reused_slot".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("origin", shared_i64, false),
@@ -1297,12 +1312,12 @@ fn shared_reference_result_rejects_fresh_reborrow_other_and_reused_authorities()
     expect_function_error(
         types,
         reused_slot,
-        MirValidationErrorKind::SharedReferenceResultOriginMismatch,
+        MirValidationErrorKind::SharedIdentityResultMismatch,
     );
 }
 
 #[test]
-fn shared_reference_result_preserves_external_referent_fully_live_return_postcondition() {
+fn shared_identity_result_preserves_external_referent_fully_live_return_postcondition() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let shared_i64 = types.push(TypeDef::reference(
@@ -1320,7 +1335,7 @@ fn shared_reference_result_preserves_external_referent_fully_live_return_postcon
         name: "incomplete_external_referent".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("origin", shared_i64, false),
@@ -1345,7 +1360,7 @@ fn shared_reference_result_preserves_external_referent_fully_live_return_postcon
 }
 
 #[test]
-fn shared_reference_result_destination_is_admitted_before_argument_effects() {
+fn shared_identity_result_destination_is_admitted_before_argument_effects() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let shared_i64 = types.push(TypeDef::reference(
@@ -1359,7 +1374,7 @@ fn shared_reference_result_destination_is_admitted_before_argument_effects() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -1395,7 +1410,7 @@ fn shared_reference_result_destination_is_admitted_before_argument_effects() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(

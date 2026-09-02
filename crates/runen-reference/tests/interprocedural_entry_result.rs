@@ -1,6 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, ScalarType, Terminator, TypeDef, TypeTable, Value, validate_program,
+    Program, SafeReferenceResultContract, ScalarType, Terminator, TypeDef, TypeTable, Value,
+    validate_program,
 };
 use runen_reference::{Machine, ObservedValue, TerminalStatus, VerificationEventKind};
 
@@ -12,7 +13,7 @@ fn outer_result_bearing_entry_preserves_result_across_entry_cleanup() {
         name: "entry".into(),
         parameters: Vec::new(),
         result: Some(tracked),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: Body {
             locals: vec![
                 LocalDecl::new("result", tracked, false),

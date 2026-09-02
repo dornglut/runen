@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, ReferenceAccess, ReferencePermission, ScalarType, Statement, Terminator, TypeDef,
-    TypeTable, Value, validate_program,
+    Program, ReferenceAccess, ReferencePermission, SafeReferenceResultContract, ScalarType,
+    Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{
     Machine, ObservedValue, TerminalStatus, VerificationEventKind, VerificationWriteKind,
@@ -31,7 +31,7 @@ fn transferred_shared_reference_reads_suspended_caller_storage() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -70,7 +70,7 @@ fn transferred_shared_reference_reads_suspended_caller_storage() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -111,7 +111,7 @@ fn exclusive_replace_parameter_moves_and_restores_suspended_caller_target() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -150,7 +150,7 @@ fn exclusive_replace_parameter_moves_and_restores_suspended_caller_target() {
         name: "round_trip".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("reference", reference_ty, false),
@@ -208,7 +208,7 @@ fn temporary_child_borrowed_call_restores_parent_at_runtime() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -268,7 +268,7 @@ fn temporary_child_borrowed_call_restores_parent_at_runtime() {
         name: "read".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -316,7 +316,7 @@ fn nested_borrowed_call_resolves_original_target_across_three_frames() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -376,7 +376,7 @@ fn nested_borrowed_call_resolves_original_target_across_three_frames() {
         name: "middle".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![
@@ -397,7 +397,7 @@ fn nested_borrowed_call_resolves_original_target_across_three_frames() {
         name: "inner".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -438,7 +438,7 @@ fn call_fault_cleanup_destroys_callee_carrier_before_caller_storage_ends() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -474,7 +474,7 @@ fn call_fault_cleanup_destroys_callee_carrier_before_caller_storage_ends() {
         name: "fault".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -515,7 +515,7 @@ fn shared_reference_result_round_trip_remains_dereferenceable_in_caller() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -562,7 +562,7 @@ fn shared_reference_result_round_trip_remains_dereferenceable_in_caller() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -603,7 +603,7 @@ fn shared_copy_return_cleanup_preserves_returned_carrier() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -650,7 +650,7 @@ fn shared_copy_return_cleanup_preserves_returned_carrier() {
         name: "copy_identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -701,7 +701,7 @@ fn returned_shared_child_keeps_parent_delegated_until_result_destruction() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, true),
@@ -768,7 +768,7 @@ fn returned_shared_child_keeps_parent_delegated_until_result_destruction() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -809,7 +809,7 @@ fn nested_shared_reference_result_forwarding_preserves_original_target() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -856,7 +856,7 @@ fn nested_shared_reference_result_forwarding_preserves_original_target() {
         name: "middle".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![
                 LocalDecl::new("reference", shared_i64, false),
@@ -883,7 +883,7 @@ fn nested_shared_reference_result_forwarding_preserves_original_target() {
         name: "inner".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(
@@ -924,7 +924,7 @@ fn contract_bearing_fault_initializes_no_result_destination() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("target", i64_ty, false),
@@ -961,7 +961,7 @@ fn contract_bearing_fault_initializes_no_result_destination() {
         name: "fault".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        shared_reference_result_origin: Some(0),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
         body: body(
             vec![LocalDecl::new("reference", shared_i64, false)],
             vec![BasicBlock::new(

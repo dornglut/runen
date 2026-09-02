@@ -67,14 +67,25 @@ impl Body {
     }
 }
 
+/// Bounded callable contract for a scalar Shared-reference result.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SafeReferenceResultContract {
+    /// No special safe-reference result contract.
+    None,
+    /// Preserve the exact Shared authority and target transferred through `origin`.
+    SharedIdentity { origin: usize },
+    /// Return a direct complete-referent Shared child of the exclusive authority
+    /// transferred through `origin`.
+    SharedDirectChild { origin: usize },
+}
+
 /// One represented Core function entity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Function {
     pub name: String,
     pub parameters: Vec<LocalId>,
     pub result: Option<TypeId>,
-    /// Parameter-slot origin for the bounded scalar Shared-reference result contract.
-    pub shared_reference_result_origin: Option<usize>,
+    pub safe_reference_result_contract: SafeReferenceResultContract,
     pub body: Body,
 }
 

@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use runen_core_ir::{
-    FunctionId, LocalId, Operand, PlaceAccess, ReferencePermission, ScalarType,
-    Statement as CoreStatement, TypeId, TypeKind, ValidatedProgram,
+    FunctionId, LocalId, Operand, PlaceAccess, ReferencePermission, SafeReferenceResultContract,
+    ScalarType, Statement as CoreStatement, TypeId, TypeKind, ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
@@ -410,7 +410,10 @@ fn shared_reference_result_lowers_exact_type_and_origin_slot() {
     let id = function(program, "id");
     let result = id.result.expect("Shared-reference result type is retained");
 
-    assert_eq!(id.shared_reference_result_origin, Some(1));
+    assert_eq!(
+        id.safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 1 }
+    );
     assert_eq!(result, id.body.locals[id.parameters[1].0 as usize].ty);
     assert_eq!(reference_types(program).len(), 1);
 }
@@ -491,7 +494,10 @@ fn nested_shared_reference_result_forwarding_executes() {
 fn recursive_shared_reference_result_forwarding_lowers_without_execution() {
     let lowered = lower_source("fn recursive(r: &I64) -> &I64 { return recursive(r); }");
     let recursive = function(lowered.as_program(), "recursive");
-    assert_eq!(recursive.shared_reference_result_origin, Some(0));
+    assert_eq!(
+        recursive.safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 0 }
+    );
     assert_eq!(
         recursive.result,
         Some(recursive.body.locals[recursive.parameters[0].0 as usize].ty)

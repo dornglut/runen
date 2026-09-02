@@ -1,7 +1,8 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Function, FunctionId, LoanDecl, LoanId, LocalDecl,
-    LocalId, MirLocation, MirValidationErrorKind, Operand, Place, Program, ScalarType, Statement,
-    Terminator, TypeDef, TypeTable, Value, validate_program,
+    LocalId, MirLocation, MirValidationErrorKind, Operand, Place, Program,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
+    validate_program,
 };
 
 fn scalar_program_types() -> (TypeTable, runen_core_ir::TypeId) {
@@ -26,7 +27,7 @@ fn validates_no_result_call_and_parameter_is_live_on_entry() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("arg", i64_ty, false)],
             vec![
@@ -50,7 +51,7 @@ fn validates_no_result_call_and_parameter_is_live_on_entry() {
         name: "callee".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("parameter", i64_ty, false)],
             vec![BasicBlock::new(
@@ -76,7 +77,7 @@ fn result_call_initializes_destination_on_normal_successor() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("arg", i64_ty, false),
@@ -108,7 +109,7 @@ fn result_call_initializes_destination_on_normal_successor() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("parameter", i64_ty, false)],
             vec![BasicBlock::new(
@@ -132,7 +133,7 @@ fn call_arguments_reject_exact_arity_and_type_mismatches() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
@@ -153,7 +154,7 @@ fn call_arguments_reject_exact_arity_and_type_mismatches() {
         name: "take_one".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("parameter", i64_ty, false)],
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -179,7 +180,7 @@ fn call_arguments_reject_exact_arity_and_type_mismatches() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("argument", bool_ty, false)],
             vec![
@@ -203,7 +204,7 @@ fn call_arguments_reject_exact_arity_and_type_mismatches() {
         name: "take_i64".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("parameter", i64_ty, false)],
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -227,7 +228,7 @@ fn call_arguments_apply_move_effects_left_to_right() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![
@@ -254,7 +255,7 @@ fn call_arguments_apply_move_effects_left_to_right() {
         name: "take_two".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("left", i64_ty, false),
@@ -283,7 +284,7 @@ fn call_arguments_apply_copy_then_move_effects_left_to_right() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![
@@ -310,7 +311,7 @@ fn call_arguments_apply_copy_then_move_effects_left_to_right() {
         name: "take_two".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("left", i64_ty, false),
@@ -334,7 +335,7 @@ fn result_destination_must_be_vacant() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("result", i64_ty, false)],
             vec![
@@ -358,7 +359,7 @@ fn result_destination_must_be_vacant() {
         name: "produce".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -388,7 +389,7 @@ fn result_destination_vacancy_is_checked_before_argument_moves() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("result", i64_ty, false)],
             vec![
@@ -412,7 +413,7 @@ fn result_destination_vacancy_is_checked_before_argument_moves() {
         name: "identity".into(),
         parameters: vec![LocalId(0)],
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("parameter", i64_ty, false)],
             vec![BasicBlock::new(
@@ -441,7 +442,7 @@ fn cyclic_result_call_reuses_destination_after_prior_lifetime_ends() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("result", i64_ty, false)],
             vec![
@@ -467,7 +468,7 @@ fn cyclic_result_call_reuses_destination_after_prior_lifetime_ends() {
         name: "produce".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -492,7 +493,7 @@ fn result_destination_requires_init_like_exclusive_authority() {
         name: "caller".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: Body {
             locals: vec![LocalDecl::new("result", i64_ty, false)],
             loans: vec![LoanDecl::new("shared", i64_ty)],
@@ -525,7 +526,7 @@ fn result_destination_requires_init_like_exclusive_authority() {
         name: "produce".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -558,7 +559,7 @@ fn raw_pointer_containing_signatures_are_rejected() {
         name: "pointer_parameter".into(),
         parameters: vec![LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("pointer", pointer_ty, false)],
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -586,7 +587,7 @@ fn raw_pointer_containing_results_are_rejected() {
         name: "pointer_result".into(),
         parameters: Vec::new(),
         result: Some(pointer_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -612,7 +613,7 @@ fn direct_and_mutual_recursive_call_graphs_are_valid() {
         name: "left".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
@@ -633,7 +634,7 @@ fn direct_and_mutual_recursive_call_graphs_are_valid() {
         name: "right".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
@@ -665,7 +666,7 @@ fn result_return_requires_an_owned_value() {
         name: "bad_return".into(),
         parameters: Vec::new(),
         result: Some(i64_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -687,7 +688,7 @@ fn no_result_return_rejects_an_owned_value() {
         name: "bad_return".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -712,7 +713,7 @@ fn parameter_local_designations_are_unique() {
         name: "duplicate_parameter".into(),
         parameters: vec![LocalId(0), LocalId(0)],
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("parameter", i64_ty, false)],
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -737,7 +738,7 @@ fn body_points_include_function_identity() {
         name: "first".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
@@ -747,7 +748,7 @@ fn body_points_include_function_identity() {
         name: "second".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -811,7 +812,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         name: "valid".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
@@ -833,7 +834,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         name: "invalid_target".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -856,7 +857,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         name: "non_bool".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -876,7 +877,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         name: "bad_access".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![BasicBlock::new(
@@ -906,7 +907,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         name: "copy_bool".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("condition", bool_ty, false)],
             vec![
@@ -942,7 +943,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         name: "move_non_bool".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![BasicBlock::new(
@@ -962,7 +963,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         name: "copy_noncopy".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", tracked_ty, false)],
             vec![BasicBlock::new(
@@ -985,7 +986,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         name: "raw_bool".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("condition", bool_ty, false),
@@ -1019,7 +1020,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         name: "raw_i64".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("pointer", i64_ptr, false)],
             vec![BasicBlock::new(
@@ -1045,7 +1046,7 @@ fn branch_move_effect_is_propagated_to_both_validation_edges() {
         name: "move_condition".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("condition", bool_ty, false)],
             vec![
@@ -1088,7 +1089,7 @@ fn constant_branches_validate_both_cfg_edges_without_value_pruning() {
             name: "constant_branch".into(),
             parameters: Vec::new(),
             result: None,
-            shared_reference_result_origin: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
             body: body(
                 vec![LocalDecl::new("uninitialized", i64_ty, false)],
                 vec![
@@ -1140,7 +1141,7 @@ fn branch_join_keeps_distinct_partial_initialization_states() {
         name: "partial_join".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![LocalDecl::new("value", i64_ty, false)],
             vec![
@@ -1186,7 +1187,7 @@ fn branch_join_keeps_distinct_active_loan_states() {
         name: "loan_join".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: Body {
             locals: vec![LocalDecl::new("value", i64_ty, true)],
             loans: vec![LoanDecl::new("shared", i64_ty)],
@@ -1249,7 +1250,7 @@ fn branch_join_keeps_raw_pointer_targets_and_no_continuation_is_path_local() {
         name: "pointer_join".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: Body {
             locals: vec![
                 LocalDecl::new("a", i64_ty, false),
@@ -1341,7 +1342,7 @@ fn branch_condition_ub_creates_no_successor_work_item() {
         name: "ub_condition".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("condition", bool_ty, false),
@@ -1393,7 +1394,7 @@ fn disconnected_invalid_branch_is_still_statically_rejected() {
         name: "disconnected".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
@@ -1424,7 +1425,7 @@ fn branch_and_goto_cycles_deduplicate_complete_validation_states() {
         name: "cycle".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![
