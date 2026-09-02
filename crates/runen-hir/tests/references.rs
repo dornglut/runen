@@ -381,10 +381,7 @@ fn external_reference_parameters_duplicate_and_dereference_without_local_target_
             ownership: OwnedUse::Duplicate,
         } if reference == *local_reference
     ));
-    assert!(!matches!(
-        initializer.kind,
-        ValueKind::ReferenceRoot { .. }
-    ));
+    assert!(!matches!(initializer.kind, ValueKind::ReferenceRoot { .. }));
 }
 
 #[test]
