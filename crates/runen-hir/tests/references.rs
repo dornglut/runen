@@ -1,6 +1,7 @@
 use runen_hir::{
     DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, ReferencePermission, ReferenceReferent,
-    SourceUnit, Statement, Type, TypedCompilation, ValueKind, build_typed_hir,
+    SafeReferenceResultContract, SourceUnit, Statement, Type, TypedCompilation, ValueKind,
+    build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -128,15 +129,21 @@ fn accepts_intrinsic_and_selected_record_referents_but_rejects_nonduplicable_rec
 }
 
 #[test]
-fn shared_reference_result_requires_unique_exact_parameter_origin() {
+fn shared_reference_result_requires_deterministic_exact_parameter_origin() {
     let missing = compile("fn f(x: I64) -> &I64 { return &x; }")
-        .expect_err("Shared-reference result without an exact Shared parameter must be rejected");
+        .expect_err("Shared-reference result without an exact reference candidate must be rejected");
     assert!(has_diagnostic(&missing, |kind| kind
         == DiagnosticKind::MissingSharedReferenceResultOrigin));
 
-    let ambiguous = compile("fn f(a: &I64, b: &I64) -> &I64 { return a; }")
+    let ambiguous_shared = compile("fn f(a: &I64, b: &I64) -> &I64 { return a; }")
         .expect_err("multiple exact Shared parameters leave the elided result origin ambiguous");
-    assert!(has_diagnostic(&ambiguous, |kind| kind
+    assert!(has_diagnostic(&ambiguous_shared, |kind| kind
+        == DiagnosticKind::AmbiguousSharedReferenceResultOrigin));
+
+    let ambiguous_replacement =
+        compile("fn f(a: &mut I64, b: &mut I64) -> &I64 { return &*a; }")
+            .expect_err("multiple exact replacement parameters leave the derived origin ambiguous");
+    assert!(has_diagnostic(&ambiguous_replacement, |kind| kind
         == DiagnosticKind::AmbiguousSharedReferenceResultOrigin));
 
     let field = compile("record Holder { value: &I64 }")
@@ -150,24 +157,32 @@ fn shared_reference_result_requires_unique_exact_parameter_origin() {
 }
 
 #[test]
-fn shared_reference_result_retains_direct_nonzero_and_local_duplicate_origins() {
+fn shared_reference_result_retains_identity_contract_and_shared_precedence() {
     let hir = compile(
         "fn direct(r: &I64) -> &I64 { return r; }\
          fn nonzero(x: I64, r: &I64) -> &I64 { return r; }\
-         fn local(r: &I64) -> &I64 { let s: &I64 = r; return s; }",
+         fn local(r: &I64) -> &I64 { let s: &I64 = r; return s; }\
+         fn mixed(shared: &I64, replacement: &mut I64) -> &I64 { return shared; }",
     )
-    .expect("unique exact Shared parameter origins must validate");
+    .expect("identity contracts and Shared precedence must validate");
 
     assert_eq!(
-        function(&hir, "direct").shared_reference_result_origin,
-        Some(0)
+        function(&hir, "direct").safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 0 }
     );
     assert_eq!(
-        function(&hir, "nonzero").shared_reference_result_origin,
-        Some(1)
+        function(&hir, "nonzero").safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 1 }
+    );
+    assert_eq!(
+        function(&hir, "mixed").safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 0 }
     );
     let local = function(&hir, "local");
-    assert_eq!(local.shared_reference_result_origin, Some(0));
+    assert_eq!(
+        local.safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 0 }
+    );
     let Statement::Local { initializer, .. } = &local.body.statements[0] else {
         panic!("expected copied Shared-reference local");
     };
@@ -181,7 +196,28 @@ fn shared_reference_result_retains_direct_nonzero_and_local_duplicate_origins() 
 }
 
 #[test]
-fn shared_reference_result_origin_composes_through_nested_recursive_and_mutual_calls() {
+fn shared_direct_child_contract_accepts_exact_reborrow_moved_parent_and_child_transport() {
+    let hir = compile(
+        "fn direct(r: &mut I64) -> &I64 { return &*r; }\
+         fn moved(r: &mut I64) -> &I64 { let parent: &mut I64 = r; return &*parent; }\
+         fn transported(r: &mut I64) -> &I64 {\
+             let child: &I64 = &*r;\
+             let duplicate: &I64 = child;\
+             return duplicate;\
+         }",
+    )
+    .expect("exact direct children remain valid across parent movement and Shared carrier transport");
+
+    for name in ["direct", "moved", "transported"] {
+        assert_eq!(
+            function(&hir, name).safe_reference_result_contract,
+            SafeReferenceResultContract::SharedDirectChild { origin: 0 }
+        );
+    }
+}
+
+#[test]
+fn shared_reference_identity_composes_through_nested_recursive_and_mutual_calls() {
     let hir = compile(
         "fn inner(r: &I64) -> &I64 { return r; }\
          fn outer(r: &I64) -> &I64 { return inner(r); }\
@@ -189,10 +225,13 @@ fn shared_reference_result_origin_composes_through_nested_recursive_and_mutual_c
          fn left(r: &I64) -> &I64 { return right(r); }\
          fn right(r: &I64) -> &I64 { return left(r); }",
     )
-    .expect("call summaries must compose Shared result provenance without body expansion");
+    .expect("call summaries must compose Shared identity provenance without body expansion");
 
     for name in ["inner", "outer", "recursive", "left", "right"] {
-        assert_eq!(function(&hir, name).shared_reference_result_origin, Some(0));
+        assert_eq!(
+            function(&hir, name).safe_reference_result_contract,
+            SafeReferenceResultContract::SharedIdentity { origin: 0 }
+        );
     }
 
     let outer = function(&hir, "outer");
@@ -218,7 +257,39 @@ fn shared_reference_result_origin_composes_through_nested_recursive_and_mutual_c
 }
 
 #[test]
-fn shared_reference_result_rejects_fresh_and_wrong_composed_origins() {
+fn shared_direct_child_composes_through_identity_nested_and_recursive_calls() {
+    let hir = compile(
+        "fn id(r: &I64) -> &I64 { return r; }\
+         fn inner(r: &mut I64) -> &I64 { return &*r; }\
+         fn through_identity(r: &mut I64) -> &I64 { return id(&*r); }\
+         fn nested(r: &mut I64) -> &I64 { return inner(r); }\
+         fn recursive(r: &mut I64) -> &I64 { return recursive(r); }\
+         fn left(r: &mut I64) -> &I64 { return right(r); }\
+         fn right(r: &mut I64) -> &I64 { return left(r); }",
+    )
+    .expect("direct-child summaries must compose from callable contracts without body expansion");
+
+    assert_eq!(
+        function(&hir, "id").safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 0 }
+    );
+    for name in [
+        "inner",
+        "through_identity",
+        "nested",
+        "recursive",
+        "left",
+        "right",
+    ] {
+        assert_eq!(
+            function(&hir, name).safe_reference_result_contract,
+            SafeReferenceResultContract::SharedDirectChild { origin: 0 }
+        );
+    }
+}
+
+#[test]
+fn shared_reference_identity_rejects_fresh_and_wrong_composed_origins() {
     for source in [
         "fn f(r: &I64, x: I64) -> &I64 { return &x; }",
         "fn f(r: &I64, x: I64) -> &I64 { let s: &I64 = &x; return s; }",
@@ -231,6 +302,29 @@ fn shared_reference_result_rejects_fresh_and_wrong_composed_origins() {
             has_diagnostic(&errors, |kind| kind
                 == DiagnosticKind::SharedReferenceResultOriginMismatch),
             "missing Shared result origin mismatch: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn shared_direct_child_rejects_fresh_wrong_parent_and_grandchild_results() {
+    for source in [
+        "fn f(r: &mut I64, x: I64) -> &I64 { return &x; }",
+        "fn f(r: &mut I64) -> &I64 {\
+             let replacement_child: &mut I64 = &mut *r;\
+             return &*replacement_child;\
+         }",
+        "fn f(r: &mut I64) -> &I64 {\
+             let shared_child: &I64 = &*r;\
+             return &*shared_child;\
+         }",
+    ] {
+        let errors = compile(source)
+            .expect_err("direct-child result must have the exact activation origin as direct parent");
+        assert!(
+            has_diagnostic(&errors, |kind| kind
+                == DiagnosticKind::SharedReferenceResultOriginMismatch),
+            "missing direct-child result origin mismatch: {errors:?}"
         );
     }
 }
@@ -257,7 +351,10 @@ fn exported_shared_reference_results_preserve_nominal_accessibility() {
          export fn id(r: &Public) -> &Public { return r; }",
     )
     .expect("exported Shared result may expose an exported duplicable nominal referent");
-    assert_eq!(function(&hir, "id").shared_reference_result_origin, Some(0));
+    assert_eq!(
+        function(&hir, "id").safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 0 }
+    );
 
     let errors = compile(
         "record copy Hidden { value: I64 }\
