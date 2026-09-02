@@ -130,8 +130,9 @@ fn accepts_intrinsic_and_selected_record_referents_but_rejects_nonduplicable_rec
 
 #[test]
 fn shared_reference_result_requires_deterministic_exact_parameter_origin() {
-    let missing = compile("fn f(x: I64) -> &I64 { return &x; }")
-        .expect_err("Shared-reference result without an exact reference candidate must be rejected");
+    let missing = compile("fn f(x: I64) -> &I64 { return &x; }").expect_err(
+        "Shared-reference result without an exact reference candidate must be rejected",
+    );
     assert!(has_diagnostic(&missing, |kind| kind
         == DiagnosticKind::MissingSharedReferenceResultOrigin));
 
@@ -140,9 +141,8 @@ fn shared_reference_result_requires_deterministic_exact_parameter_origin() {
     assert!(has_diagnostic(&ambiguous_shared, |kind| kind
         == DiagnosticKind::AmbiguousSharedReferenceResultOrigin));
 
-    let ambiguous_replacement =
-        compile("fn f(a: &mut I64, b: &mut I64) -> &I64 { return &*a; }")
-            .expect_err("multiple exact replacement parameters leave the derived origin ambiguous");
+    let ambiguous_replacement = compile("fn f(a: &mut I64, b: &mut I64) -> &I64 { return &*a; }")
+        .expect_err("multiple exact replacement parameters leave the derived origin ambiguous");
     assert!(has_diagnostic(&ambiguous_replacement, |kind| kind
         == DiagnosticKind::AmbiguousSharedReferenceResultOrigin));
 
@@ -206,7 +206,9 @@ fn shared_direct_child_contract_accepts_exact_reborrow_moved_parent_and_child_tr
              return duplicate;\
          }",
     )
-    .expect("exact direct children remain valid across parent movement and Shared carrier transport");
+    .expect(
+        "exact direct children remain valid across parent movement and Shared carrier transport",
+    );
 
     for name in ["direct", "moved", "transported"] {
         assert_eq!(
@@ -311,6 +313,11 @@ fn shared_direct_child_rejects_fresh_wrong_parent_and_grandchild_results() {
     for source in [
         "fn f(r: &mut I64, x: I64) -> &I64 { return &x; }",
         "fn f(r: &mut I64) -> &I64 {\
+             let mut x: I64 = 1;\
+             let other: &mut I64 = &mut x;\
+             return &*other;\
+         }",
+        "fn f(r: &mut I64) -> &I64 {\
              let replacement_child: &mut I64 = &mut *r;\
              return &*replacement_child;\
          }",
@@ -319,8 +326,9 @@ fn shared_direct_child_rejects_fresh_wrong_parent_and_grandchild_results() {
              return &*shared_child;\
          }",
     ] {
-        let errors = compile(source)
-            .expect_err("direct-child result must have the exact activation origin as direct parent");
+        let errors = compile(source).expect_err(
+            "direct-child result must have the exact activation origin as direct parent",
+        );
         assert!(
             has_diagnostic(&errors, |kind| kind
                 == DiagnosticKind::SharedReferenceResultOriginMismatch),
