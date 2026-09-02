@@ -45,9 +45,7 @@ fn local_named(function: &runen_core_ir::Function, name: &str) -> LocalId {
     LocalId(u32::try_from(index).expect("test local index fits u32"))
 }
 
-fn reference_types(
-    program: &runen_core_ir::Program,
-) -> Vec<(TypeId, TypeId, ReferencePermission)> {
+fn reference_types(program: &runen_core_ir::Program) -> Vec<(TypeId, TypeId, ReferencePermission)> {
     (0..program.types.len())
         .filter_map(|index| {
             let id = TypeId(u32::try_from(index).expect("test type index fits u32"));
@@ -146,18 +144,22 @@ fn maps_replacement_reference_type_and_carrier_move_to_core_exclusive_replace() 
     assert_eq!(f.body.locals[moved.0 as usize].ty, reference_ty);
     assert_ne!(referent_ty, reference_ty);
 
-    assert!(f.body.blocks.iter().flat_map(|block| &block.statements).any(
-        |statement| matches!(
-            statement,
-            CoreStatement::Init {
-                dst,
-                src: Operand::Move(PlaceAccess::Direct(source)),
-            } if dst.local == moved
-                && dst.projections.is_empty()
-                && source.local == r
-                && source.projections.is_empty()
-        )
-    ));
+    assert!(
+        f.body
+            .blocks
+            .iter()
+            .flat_map(|block| &block.statements)
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Init {
+                    dst,
+                    src: Operand::Move(PlaceAccess::Direct(source)),
+                } if dst.local == moved
+                    && dst.projections.is_empty()
+                    && source.local == r
+                    && source.projections.is_empty()
+            ))
+    );
 }
 
 #[test]
