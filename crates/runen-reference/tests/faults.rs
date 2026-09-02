@@ -1,6 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
-    Place, Program, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
+    TypeTable, Value, validate_program,
 };
 use runen_reference::{Machine, TerminalStatus, VerificationEventKind};
 
@@ -18,7 +19,7 @@ fn execute_fault(code: &str) -> TerminalStatus {
         name: "fault".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
@@ -59,7 +60,7 @@ fn explicit_fault_cleans_live_locals_once_in_reverse_declaration_order() {
         name: "fault_with_cleanup".into(),
         parameters: Vec::new(),
         result: None,
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             vec![
                 LocalDecl::new("first", tracked, false),
@@ -111,7 +112,7 @@ fn result_bearing_top_level_fault_produces_no_normal_result() {
         name: "faulting_result".into(),
         parameters: Vec::new(),
         result: Some(result_ty),
-        shared_reference_result_origin: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
         body: body(
             Vec::new(),
             vec![BasicBlock::new(
