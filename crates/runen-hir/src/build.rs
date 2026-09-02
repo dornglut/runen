@@ -1011,9 +1011,10 @@ fn type_contains_reference_or_pointer_inner(
             if !visiting.insert(record) {
                 return false;
             }
-            let contains = records[record.0].fields.iter().any(|field| {
-                type_contains_reference_or_pointer_inner(field.ty, records, visiting)
-            });
+            let contains = records[record.0]
+                .fields
+                .iter()
+                .any(|field| type_contains_reference_or_pointer_inner(field.ty, records, visiting));
             visiting.remove(&record);
             contains
         }
