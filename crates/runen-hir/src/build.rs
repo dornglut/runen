@@ -1330,7 +1330,7 @@ fn visit_record(
                 location: field.location,
             });
         } else if state[target.0] == 0 {
-            visit_record(target, records, &mut state, diagnostics);
+            visit_record(target, records, state, diagnostics);
         }
     }
     state[id.0] = 2;
@@ -3150,22 +3150,27 @@ fn validate_return(
                 produced.reference_authority == context.safe_reference_result_origin_authority
             }
             SafeReferenceResultContract::SharedDirectChild { .. } => {
-                let Some(origin) = context.safe_reference_result_origin_authority else {
-                    unreachable!("direct-child result contract has activation origin authority");
-                };
-                let Some(authority) = produced.reference_authority else {
-                    false
-                };
-                let Some(origin_state) = state.reference_authorities.get(&origin) else {
-                    false
-                };
-                let Some(result_state) = state.reference_authorities.get(&authority) else {
-                    false
-                };
-                result_state.permission == ReferencePermission::Shared
-                    && result_state.parent == Some(origin)
-                    && result_state.target == origin_state.target
-                    && state.authority_satisfies(authority, ReferencePermission::Shared)
+                let origin = context
+                    .safe_reference_result_origin_authority
+                    .expect("direct-child result contract has activation origin authority");
+                match (
+                    produced.reference_authority,
+                    state.reference_authorities.get(&origin),
+                ) {
+                    (Some(authority), Some(origin_state)) => state
+                        .reference_authorities
+                        .get(&authority)
+                        .is_some_and(|result_state| {
+                            result_state.permission == ReferencePermission::Shared
+                                && result_state.parent == Some(origin)
+                                && result_state.target == origin_state.target
+                                && state.authority_satisfies(
+                                    authority,
+                                    ReferencePermission::Shared,
+                                )
+                        }),
+                    _ => false,
+                }
             }
         };
         if !valid_reference_result {
