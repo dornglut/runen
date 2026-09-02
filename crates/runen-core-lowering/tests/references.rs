@@ -419,6 +419,32 @@ fn shared_reference_result_lowers_exact_type_and_origin_slot() {
 }
 
 #[test]
+fn shared_direct_child_result_maps_exactly_and_survives_parent_carrier_release() {
+    let source =
+        "fn child(r: &mut I64) -> &I64 { return &*r; }\
+         fn entry() -> I64 {\
+             let mut x: I64 = 71;\
+             let returned: &I64 = child(&mut x);\
+             return *returned;\
+         }";
+    let lowered = lower_source(source);
+    let child = function(lowered.as_program(), "child");
+
+    assert_eq!(
+        child.safe_reference_result_contract,
+        SafeReferenceResultContract::SharedDirectChild { origin: 0 }
+    );
+    assert_eq!(
+        child.result,
+        Some(child.body.locals[child.parameters[0].0 as usize].ty)
+    );
+
+    let report = execute_source(source, "entry");
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(71)));
+}
+
+#[test]
 fn shared_reference_result_round_trip_and_existing_carrier_coexist() {
     let report = execute_source(
         "fn id(r: &I64) -> &I64 { return r; }\
