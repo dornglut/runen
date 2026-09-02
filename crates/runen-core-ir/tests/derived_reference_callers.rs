@@ -14,7 +14,10 @@ fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
     }
 }
 
-fn direct_child_callee(parent_ty: runen_core_ir::TypeId, child_ty: runen_core_ir::TypeId) -> Function {
+fn direct_child_callee(
+    parent_ty: runen_core_ir::TypeId,
+    child_ty: runen_core_ir::TypeId,
+) -> Function {
     Function {
         name: "direct_child".into(),
         parameters: vec![LocalId(0)],
