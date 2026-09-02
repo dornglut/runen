@@ -212,7 +212,7 @@ Dynamic execution is exactly:
 
 The consumed operand result receives no separate cleanup after step 5. There is no held-left operand or other negation-specific transient because no later operand exists. After successful operand production, the integer-negation value transformation itself is non-faulting and non-diverging and adds no source-visible side effect, structural transition, cleanup category, storage identity, numeric-contract state, or runtime state. Plain fixed-width overflow selects the value required by `operators.md`; it does not select a fault.
 
-Nested integer-negation producers apply this same complete producer relation recursively where the concrete grammar establishes the nesting. Mixed Boolean/integer prefix syntax likewise validates recursively under each operator's exact required type and may be source-invalid even though concrete syntax represents it. Each successful integer-negation nesting level retains the same exact required type `T`; no operand-derived inference, promotion, conversion, defaulting, signed-literal rewriting, or generic arithmetic dispatch occurs.
+Nested integer-negation producers apply this same complete producer relation recursively where the concrete prefix grammar establishes the nesting. Mixed Boolean/integer prefix syntax likewise validates recursively under each operator's exact required type and may be source-invalid even though concrete syntax represents it. Each successful integer-negation nesting level retains the same exact required type `T`; no operand-derived inference, promotion, conversion, defaulting, signed-literal rewriting, or generic arithmetic dispatch occurs.
 
 ## Plain fixed-width integer-bitwise-complement producer validation and execution
 
@@ -291,7 +291,7 @@ After `T` and `C` are established, validate the complete binary producer as one 
 1. clone the current source producer-validation state;
 2. validate the complete left producer with required source type exactly `T` against that clone;
 3. only after complete left validation succeeds, validate the complete right producer with required source type exactly `T` against the resulting speculative state;
-4. commit the final speculative state to the containing source producer-validation state only when both complete operands are source-valid; and
+4. commit the final speculative state to the containing source-validation state only when both complete operands are source-valid; and
 5. add no further source-state transition for the floating-addition operation itself.
 
 A left validation failure therefore commits no speculative producer-state consequence. A right validation failure also commits no speculative consequence from the otherwise-valid left producer. This transaction remains required even though represented intrinsic floating values are duplicable, because a complete producer of floating type `T` may consume a non-duplicable binding or external referent internally while producing its floating result.
@@ -901,8 +901,6 @@ For a source-valid assignment, execution is **source-first** with respect to rep
 The target remains in scope during RHS evaluation. Every RHS use follows its ordinary producer semantics rather than a special self-assignment rule.
 
 For duplicable `x = x`, RHS evaluation duplicates the complete old value, leaving the old root fully available; replacement then cleans that complete old value and transfers the duplicate into `x`. When `x` is a raw-pointer local, that duplicate retains the same exact origin and cleanup of the old pointer value has no pointee effect.
-
-For non-duplicable `x = x`, RHS evaluation consumes the complete old value, leaving no old target-owned frontier; replacement transfers the produced value back into `x` without duplicate cleanup when source-valid under the canonical direct-authority rule.
 
 For non-duplicable `x = x`, RHS evaluation consumes the complete old value, leaving no old target-owned frontier; replacement transfers the produced value back into `x` without duplicate cleanup when source-valid under the canonical direct-authority rule.
 
