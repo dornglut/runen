@@ -1,8 +1,6 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::interprocedural::{
-    Body, Function, Program, SafeReferenceResultContract, Terminator,
-};
+use crate::interprocedural::{Body, Function, Program, SafeReferenceResultContract, Terminator};
 use crate::{
     BasicBlockId, BorrowKind, FunctionId, LoanDecl, LoanId, LocalId, Operand, Place, PlaceAccess,
     Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement, TypeId, TypeKind,
