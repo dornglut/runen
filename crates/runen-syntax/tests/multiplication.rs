@@ -62,7 +62,7 @@ fn adjacent_dereference_rhs_is_not_exponentiation_and_star_equals_remains_invali
     let double = parse("fn f(a: I64, b: I64) -> I64 { return a ** b; }");
     assert!(double.errors().is_empty(), "{:?}", double.errors());
     assert_eq!(count(&double, SyntaxKind::MulValue), 1);
-    assert_eq!(count(&double, SyntaxKind::SharedDereferenceValue), 1);
+    assert_eq!(count(&double, SyntaxKind::ReferenceDereferenceValue), 1);
     assert!(
         nontrivia_kinds(&double)
             .windows(2)
