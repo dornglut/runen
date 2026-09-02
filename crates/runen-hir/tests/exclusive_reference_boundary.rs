@@ -280,7 +280,9 @@ fn divergence_needs_no_synthetic_restoration_before_a_potentially_diverging_call
              *r = ticket;\
          }",
     )
-    .expect("the possible normal path restores after the call; divergence needs no pre-call repair");
+    .expect(
+        "the possible normal path restores after the call; divergence needs no pre-call repair",
+    );
 }
 
 #[test]
