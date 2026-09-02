@@ -38,10 +38,7 @@ fn boolean_conjunction_compares_complete_reference_state_and_ignores_ended_child
     )
     .expect_err("RHS carrier move must disagree with the short-circuited left-false state");
     assert!(
-        has_diagnostic(
-            &errors,
-            DiagnosticKind::BooleanConjunctionOwnershipMismatch
-        ),
+        has_diagnostic(&errors, DiagnosticKind::BooleanConjunctionOwnershipMismatch),
         "missing complete conjunction-state mismatch: {errors:?}"
     );
 }
