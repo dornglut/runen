@@ -364,7 +364,7 @@ Ordinary use of an existing Shared binding duplicates a carrier. Ordinary use of
 
 At successful call entry, every replacement-capable parameter establishes its external referent structural root fully available. The callee may move its complete referent and later restore it through replacement.
 
-On normal callee continuation, every transferred replacement-capable external referent MUST be fully available before activation cleanup. A valid safe-reference result carrier is preserved according to the result contract below before parameter cleanup can remove its origin carrier. On defined fault there is no normal restoration obligation; ordinary fault cleanup applies to carriers/locals and produces no result. On divergence no synthetic restoration or cleanup occurs and the caller remains suspended.
+On normal callee continuation, every transferred replacement-capable external referent MUST be fully available before activation cleanup. A valid safe-reference result carrier is preserved according to the result contract below before normal call completion can end any still-live carrier for its designated origin authority. The origin authority may already be carrierless when earlier ordinary transport or nested-call cleanup ended that carrier. On defined fault there is no normal restoration obligation; ordinary fault cleanup applies to carriers/locals and produces no result. On divergence no synthetic restoration or cleanup occurs and the caller remains suspended.
 
 Nested and recursive calls repeat the same relation.
 
@@ -436,7 +436,7 @@ For `SharedDirectChild(i)`, let caller authority `A` and target `R` be carried b
 - fresh derived-child provenance; and
 - no replacement capability.
 
-Ordinary callee activation cleanup then releases the transferred parent carrier and every other non-surviving callee-owned carrier before control resumes in the caller. The normal caller continuation therefore exposes the already-preserved result child `C`; it does not create `C` after cleanup. `A` remains active carrierlessly while `C` or any descendant of `C` remains active. Every pre-existing ancestor of `A` remains unchanged. When the final descendant branch ends, ordinary authority lifecycle recursively ends any eligible carrierless ancestors.
+Before control resumes in the caller, ordinary callee execution and cleanup have ended the transferred parent carrier: if that carrier is still owned by a callee binding at activation cleanup, cleanup releases it there; it may instead have been moved and ended earlier by ordinary transport or nested-call completion. The normal caller continuation therefore exposes the already-preserved result child `C`; it does not create `C` after parent-carrier release. `A` remains active carrierlessly while `C` or any descendant of `C` remains active. Every pre-existing ancestor of `A` remains unchanged. When the final descendant branch ends, ordinary authority lifecycle recursively ends any eligible carrierless ancestors.
 
 This caller-side validation summary denotes the one callee-created child authority required by valid execution. It does not add another runtime reborrow, duplicate the result carrier, detach/re-root the child, or recreate a parent carrier.
 
