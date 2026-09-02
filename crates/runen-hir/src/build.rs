@@ -240,12 +240,11 @@ impl SemanticState {
                 .is_some_and(|state| {
                     state.ownership.path_availability(&[]) == PathAvailability::FullyAvailable
                 }),
-            ReferenceTarget::External(slot) => self
-                .external_referents
-                .get(&slot)
-                .is_none_or(|state| {
+            ReferenceTarget::External(slot) => {
+                self.external_referents.get(&slot).is_none_or(|state| {
                     state.path_availability(&[]) == PathAvailability::FullyAvailable
-                }),
+                })
+            }
         }
     }
 
@@ -998,12 +997,26 @@ fn validate_exported_signature_type(
 }
 
 fn type_contains_reference_or_pointer(ty: Type, records: &[Record]) -> bool {
+    type_contains_reference_or_pointer_inner(ty, records, &mut BTreeSet::new())
+}
+
+fn type_contains_reference_or_pointer_inner(
+    ty: Type,
+    records: &[Record],
+    visiting: &mut BTreeSet<RecordId>,
+) -> bool {
     match ty {
         Type::Intrinsic(_) => false,
-        Type::Record(record) => records[record.0]
-            .fields
-            .iter()
-            .any(|field| type_contains_reference_or_pointer(field.ty, records)),
+        Type::Record(record) => {
+            if !visiting.insert(record) {
+                return false;
+            }
+            let contains = records[record.0].fields.iter().any(|field| {
+                type_contains_reference_or_pointer_inner(field.ty, records, visiting)
+            });
+            visiting.remove(&record);
+            contains
+        }
         Type::SafeReference { .. } | Type::RawPointer(_) => true,
     }
 }
@@ -2063,9 +2076,8 @@ fn reference_state_matches_target(actual: &SemanticState, required: &SemanticSta
         return false;
     }
     required.bindings.values().all(|expected| {
-        binding_state_by_id(&actual.bindings, expected.id).is_some_and(|candidate| {
-            candidate.reference_authority == expected.reference_authority
-        })
+        binding_state_by_id(&actual.bindings, expected.id)
+            .is_some_and(|candidate| candidate.reference_authority == expected.reference_authority)
     })
 }
 
@@ -2252,7 +2264,10 @@ fn validate_local(
     }
 
     let reference_authority = initializer.reference_authority;
-    debug_assert_eq!(reference_authority.is_some(), matches!(ty, Type::SafeReference { .. }));
+    debug_assert_eq!(
+        reference_authority.is_some(),
+        matches!(ty, Type::SafeReference { .. })
+    );
     let binding = BindingId(*next_binding);
     *next_binding += 1;
     candidate.bindings.insert(
@@ -2887,16 +2902,13 @@ fn validate_reference_assign(
         diagnostics,
     )?;
 
-    let destination_usable = state.bindings.get(&name).is_some_and(|binding| {
-        binding.id == binding.id
-            && binding.ownership.path_availability(&[]) == PathAvailability::FullyAvailable
-            && binding.reference_authority == Some(original_authority)
+    let destination_usable = state.bindings.get(&name).is_some_and(|candidate| {
+        candidate.id == binding
+            && candidate.ownership.path_availability(&[]) == PathAvailability::FullyAvailable
+            && candidate.reference_authority == Some(original_authority)
     });
     if !destination_usable
-        || !state.authority_satisfies(
-            original_authority,
-            ReferencePermission::ExclusiveReplace,
-        )
+        || !state.authority_satisfies(original_authority, ReferencePermission::ExclusiveReplace)
     {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ReferenceReplacementUnavailable,
@@ -3095,7 +3107,9 @@ fn validate_return(
         (_, None) => None,
     };
 
-    if let (Some(origin), Some(produced)) = (header.shared_reference_result_origin, produced.as_ref()) {
+    if let (Some(origin), Some(produced)) =
+        (header.shared_reference_result_origin, produced.as_ref())
+    {
         let expected = state
             .bindings
             .values()
@@ -3840,23 +3854,12 @@ fn validate_value_inner(
                 location: value_location,
             }))
         }
-        SyntaxKind::IdentifierUse => validate_identifier_use(
-            header,
-            node,
-            required,
-            context,
-            state,
-            diagnostics,
-        ),
+        SyntaxKind::IdentifierUse => {
+            validate_identifier_use(header, node, required, context, state, diagnostics)
+        }
         SyntaxKind::DirectCall => {
-            let validated = validate_call(
-                header,
-                node,
-                context,
-                value_context,
-                state,
-                diagnostics,
-            )?;
+            let validated =
+                validate_call(header, node, context, value_context, state, diagnostics)?;
             let Some(ty) = validated.result else {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::NoResultCallUsedAsValue,
@@ -4306,28 +4309,27 @@ fn validate_reference_dereference(
         });
         return None;
     }
-    let ownership = if permission == ReferencePermission::Shared
-        || context.type_is_duplicable(found)
-    {
-        if !state.authority_satisfies(authority, ReferencePermission::Shared) {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::ReferencePermissionUnavailable,
-                location: value_location,
-            });
-            return None;
-        }
-        OwnedUse::Duplicate
-    } else {
-        if !state.authority_satisfies(authority, ReferencePermission::ExclusiveReplace) {
-            diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::ReferencePermissionUnavailable,
-                location: value_location,
-            });
-            return None;
-        }
-        state.consume_reference_target(target);
-        OwnedUse::Consume
-    };
+    let ownership =
+        if permission == ReferencePermission::Shared || context.type_is_duplicable(found) {
+            if !state.authority_satisfies(authority, ReferencePermission::Shared) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReferencePermissionUnavailable,
+                    location: value_location,
+                });
+                return None;
+            }
+            OwnedUse::Duplicate
+        } else {
+            if !state.authority_satisfies(authority, ReferencePermission::ExclusiveReplace) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReferencePermissionUnavailable,
+                    location: value_location,
+                });
+                return None;
+            }
+            state.consume_reference_target(target);
+            OwnedUse::Consume
+        };
     Some(ProducedValue::ordinary(Value {
         ty: found,
         kind: ValueKind::ReferenceDereference {
