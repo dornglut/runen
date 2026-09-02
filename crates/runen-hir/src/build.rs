@@ -5826,9 +5826,9 @@ fn validate_call_inner(
             continue;
         };
         let authority = authority.expect("validated safe-reference argument has one carrier");
-        let target = state.reference_target(*authority);
+        let target = state.reference_target(authority);
         if !state.target_is_fully_available(target)
-            || !state.authority_satisfies(*authority, permission)
+            || !state.authority_satisfies(authority, permission)
         {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ReferencePermissionUnavailable,
