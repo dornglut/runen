@@ -241,7 +241,9 @@ fn shared_direct_child_return_rejects_fresh_root_escape() {
         name: "fresh_root_escape".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild { origin: 0 },
+        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild {
+            origin: 0,
+        },
         body: body(
             vec![
                 LocalDecl::new("origin", exclusive_i64, false),
@@ -293,7 +295,9 @@ fn shared_direct_child_return_rejects_same_target_wrong_parent() {
         name: "wrong_direct_parent".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild { origin: 0 },
+        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild {
+            origin: 0,
+        },
         body: body(
             vec![
                 LocalDecl::new("origin", exclusive_i64, false),
@@ -348,7 +352,9 @@ fn shared_direct_child_return_rejects_grandchild_even_when_parent_is_copied() {
         name: "copied_parent_grandchild".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild { origin: 0 },
+        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild {
+            origin: 0,
+        },
         body: body(
             vec![
                 LocalDecl::new("origin", replace_i64, false),
@@ -412,7 +418,9 @@ fn projected_subregion_cannot_be_admitted_as_direct_child_result() {
         name: "projected_child".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild { origin: 0 },
+        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild {
+            origin: 0,
+        },
         body: body(
             vec![
                 LocalDecl::new("origin", exclusive_pair, false),
@@ -460,7 +468,9 @@ fn exclusive_replace_direct_child_allows_move_restore_before_return() {
         name: "move_restore_then_child".into(),
         parameters: vec![LocalId(0)],
         result: Some(shared_i64),
-        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild { origin: 0 },
+        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild {
+            origin: 0,
+        },
         body: body(
             vec![
                 LocalDecl::new("origin", replace_i64, false),
@@ -521,7 +531,9 @@ fn direct_child_normal_return_rejects_any_unavailable_external_referent() {
         name: "unavailable_external".into(),
         parameters: vec![LocalId(0), LocalId(1)],
         result: Some(shared_i64),
-        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild { origin: 0 },
+        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild {
+            origin: 0,
+        },
         body: body(
             vec![
                 LocalDecl::new("origin", exclusive_i64, false),
