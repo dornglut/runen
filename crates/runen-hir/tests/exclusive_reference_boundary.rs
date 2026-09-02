@@ -129,3 +129,17 @@ fn conditional_rejects_unequal_live_reference_authority_state() {
         "missing conditional reference-state mismatch: {errors:?}"
     );
 }
+
+#[test]
+fn cyclic_record_safe_referent_still_uses_canonical_cycle_diagnostic() {
+    let errors = compile(
+        "record Cycle { next: Cycle }\
+         fn f(r: &mut Cycle) {}",
+    )
+    .expect_err("cyclic ordinary records remain rejected by the canonical containment validator");
+
+    assert!(
+        has_diagnostic(&errors, DiagnosticKind::RecordContainmentCycle),
+        "safe-referent shape inspection must not pre-empt the containment-cycle diagnostic: {errors:?}"
+    );
+}
