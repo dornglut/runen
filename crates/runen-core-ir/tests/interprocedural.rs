@@ -1,7 +1,8 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, Function, FunctionId, LoanDecl, LoanId, LocalDecl,
-    LocalId, MirLocation, MirValidationErrorKind, Operand, Place, Program, SafeReferenceResultContract,
-    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    LocalId, MirLocation, MirValidationErrorKind, Operand, Place, Program,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
+    validate_program,
 };
 
 fn scalar_program_types() -> (TypeTable, runen_core_ir::TypeId) {
