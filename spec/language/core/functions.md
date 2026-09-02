@@ -21,7 +21,7 @@ Each represented function contains exactly one body under the Core body relation
 
 1. one finite ordered sequence of owned-value parameter slots;
 2. either no result value or exactly one result type; and
-3. either no Shared-reference result-origin parameter slot or exactly one such slot when the special result contract below requires it.
+3. exactly one **safe-reference result contract** selected from the bounded alternatives below.
 
 The program-wide type domain is shared by every function body and callable structure in that program. A type identity used by two different functions therefore denotes the same represented Core type.
 
@@ -46,7 +46,15 @@ No-result structure does not introduce Unit, Void, or another Core value type.
 
 Parameter slots remain ordinary owned-value slots even when their types contain safe references. This revision introduces no separate borrowed-parameter slot or call pass-mode category.
 
-A **Shared-reference result-origin parameter slot** is an additional callable fact only for the bounded result form defined below. It selects one parameter slot by semantic slot identity. It is not a body-local `LocalId`, a source binding identity, a lifetime name, a physical frame location, a runtime counter, or a second parameter value.
+A **safe-reference result contract** is one semantic callable fact selected from exactly these alternatives:
+
+- **None** — no special safe-reference result contract;
+- **SharedIdentity(i)** — one identity-preserving scalar Shared-reference result whose designated origin is parameter slot `i`; or
+- **SharedDirectChild(i)** — one scalar Shared-reference result whose authority is a direct complete-referent Shared child of the exclusive safe-reference authority transferred through parameter slot `i`.
+
+These alternatives are mutually exclusive. A represented function has exactly one of them; it cannot simultaneously advertise two result-origin facts. The variant names above identify semantic alternatives and do not require a particular implementation enum, field layout, serialization, or source spelling.
+
+A designated result-origin slot selects one parameter slot by semantic slot identity. It is not a body-local `LocalId`, a source binding identity, a lifetime name, a physical frame location, a runtime counter, or a second parameter value.
 
 ## Parameter-transfer-safe types
 
@@ -87,34 +95,60 @@ A represented Core type is **result-transfer-safe** exactly when its structural 
 - a safe-reference type is not result-transfer-safe; and
 - a structural aggregate is result-transfer-safe exactly when every recursively contained field type is result-transfer-safe.
 
-A bare safe-reference type therefore does not become result-transfer-safe merely because this revision adds one contract-bearing Shared-reference result form. Reference-containing aggregate types and raw-pointer-containing types also remain outside the ordinary result-transfer-safe class.
+A bare safe-reference type therefore does not become result-transfer-safe merely because this revision adds bounded contract-bearing Shared-reference result forms. Reference-containing aggregate types and raw-pointer-containing types also remain outside the ordinary result-transfer-safe class.
 
-## Shared-reference result-origin contract
+## Safe-reference result contracts
 
 A represented function result is admissible exactly when one of the following holds:
 
-1. the function has no result type and has no Shared-reference result-origin slot;
-2. the function has one result-transfer-safe result type and has no Shared-reference result-origin slot; or
-3. the function has one scalar Shared safe-reference result type and exactly one Shared-reference result-origin parameter slot satisfying the contract below.
+1. the function has no result type and its safe-reference result contract is `None`;
+2. the function has one result-transfer-safe result type and its safe-reference result contract is `None`;
+3. the function has one scalar Shared safe-reference result type and contract `SharedIdentity(i)` satisfying the identity-preserving contract below; or
+4. the function has one scalar Shared safe-reference result type and contract `SharedDirectChild(i)` satisfying the complete direct-child contract below.
 
-For case 3, every one of these declaration requirements MUST hold:
+A reference leaf nested inside an aggregate parameter cannot be selected indirectly as the result origin in either special result form.
+
+### Identity-preserving Shared result
+
+For `SharedIdentity(i)`, every one of these declaration requirements MUST hold:
 
 - the result type is exactly one scalar safe-reference type whose permission is `Shared`;
-- the designated origin slot exists in the function's ordered parameter sequence;
+- the designated origin slot `i` exists in the function's ordered parameter sequence;
 - the designated origin parameter type is itself exactly one scalar Shared safe-reference type; and
 - the designated origin parameter type is exactly equal to the function result type.
 
-Because exact safe-reference type identity already fixes exact referent type identity and permission, the equality requirement permits neither referent mismatch nor permission strengthening/weakening. A reference leaf nested inside an aggregate parameter cannot be selected indirectly as the result origin in this slice.
+Because exact safe-reference type identity already fixes exact referent type identity and permission, the equality requirement permits neither referent mismatch nor permission strengthening/weakening.
 
-At activation entry, after the designated argument value has been transferred into the designated parameter local, that parameter's incoming safe-reference value establishes one **activation result origin**: the exact semantic target region and reference-authority identity carried by that incoming value.
+At activation entry, after the designated argument value has been transferred into the designated parameter local, that parameter's incoming safe-reference value establishes one **activation identity result origin**: the exact semantic target region and reference-authority identity carried by that incoming value.
 
-The activation result origin is a validation fact about an already existing transferred reference value. It creates no carrier, authority, target, storage, `LoanId`, allocation, physical address, or hidden runtime object.
+The activation identity result origin is a validation fact about an already existing transferred reference value. It creates no carrier, authority, target, storage, `LoanId`, allocation, physical address, or hidden runtime object.
 
 Independent function validation treats parameter slots according to their advertised callable identities. A body cannot satisfy an origin contract naming slot `i` merely by returning slot `j` because some particular dynamic call might pass aliasing Shared arguments. The contract must hold for every admitted call, including calls where the two parameter values name distinct authorities/targets.
 
-This first contract is **identity-preserving**. A normal result may be carried through ordinary Shared `Copy`, `Move`, initialization, local storage, or a nested contract-bearing direct call, but the final returned carrier MUST name the exact activation result-origin authority and target. A reference reborrow creates a fresh child authority and therefore does not satisfy this contract. A fresh root reference, including one targeting callee-local storage, likewise does not satisfy it.
+This contract is identity-preserving. A normal result may be carried through ordinary Shared `Copy`, `Move`, initialization, local storage, or a nested contract-bearing direct call, but the final returned carrier MUST name the exact activation identity-result-origin authority and target. A reference reborrow creates a fresh child authority and therefore does not satisfy this contract. A fresh root reference, including one targeting callee-local storage, likewise does not satisfy it.
 
-The contract deliberately has no result-origin projection, alternative-origin set, authority-detachment relation, or general borrowed-effect summary.
+### Complete direct-child Shared result
+
+For `SharedDirectChild(i)`, every one of these declaration requirements MUST hold:
+
+- the result type is exactly one scalar safe-reference type with permission `Shared` and exact referent type `T`;
+- the designated origin slot `i` exists in the function's ordered parameter sequence;
+- the designated origin parameter type is exactly one scalar safe-reference type with permission `Exclusive` or `ExclusiveReplace` and exact referent type `T`; and
+- the designated origin parameter type remains parameter-transfer-safe under the ordinary parameter rule.
+
+At activation entry, after the designated argument has been transferred into the designated parameter local, the incoming value establishes one **activation derived-result parent origin**: its exact semantic target region and exact reference-authority identity.
+
+The derived-result parent origin records an existing transferred authority. It creates no carrier, child authority, reborrow, target, storage, allocation, `LoanId`, address, lifetime object, or hidden runtime object.
+
+A normal result satisfies this contract only when the produced Shared carrier names an active authority whose target is exactly the activation derived-result parent target and whose direct parent authority identity is exactly the activation derived-result parent authority. The child must retain the complete Shared capability promised by the result type.
+
+The relation is intentionally **direct child + complete same referent**. A structural subregion child, a grandchild or other arbitrary descendant, a fresh root, an authority descended from another parameter, or an independently rooted authority cannot satisfy this contract merely because its final type or dynamic target aliases a designated argument.
+
+`Exclusive` and `ExclusiveReplace` are both admitted parent permissions because both carry exclusive alias authority and both permit Shared reborrow under [Core references](references.md). Replacement capability does not change Shared-child formation. A Shared parent is not admitted by this first derived form: complete-target Shared-to-Shared fresh authority identity adds no currently represented capability or target-selection power beyond `SharedIdentity`, while later structural subregion consumers may require a separate extension.
+
+The returned Shared child is a capability downgrade through that handle, not release of the parent exclusive authority interval. Result transfer preserves the child and its existing ancestry under `references.md`; it does not detach, re-root, reparent, widen, narrow, restore, or otherwise rewrite the authority branch.
+
+Neither special contract defines a result-origin projection, alternative-origin set, general descendant summary, authority-detachment relation, or general borrowed-effect summary.
 
 ## Dynamic function activations
 
@@ -126,7 +160,7 @@ Safe-reference-backed authority is different. A reference carrier in one activat
 
 When an activation is created, one fresh dynamic local storage instance is created for every local declaration in the target body. All of those local storage instances initially contain no initialized stored value.
 
-Parameter transfer then initializes the designated parameter locals as defined below. The function body begins only after all parameter transfers have completed. For a contract-bearing Shared-reference result, the designated transferred parameter value also establishes the activation result origin defined above before body execution begins.
+Parameter transfer then initializes the designated parameter locals as defined below. The function body begins only after all parameter transfers have completed. When the target has `SharedIdentity(i)` or `SharedDirectChild(i)`, the designated transferred parameter value also establishes the corresponding activation origin fact defined above before body execution begins.
 
 Activation identity is not Core-observable program data and does not imply a physical stack frame, stack address, calling convention, target stack guarantee, thread identity, or task identity.
 
@@ -164,7 +198,7 @@ A successful result return initializes the admitted vacant destination without r
 
 A faulting or diverging callee does not initialize the destination and does not follow the normal target.
 
-An admitted result destination may receive either an ordinary result-transfer-safe value or the one scalar Shared-reference value authorized by the target's result-origin contract. Raw-pointer-containing results, reference-containing aggregate results, and uncontracted safe-reference results remain invalid.
+An admitted result destination may receive either an ordinary result-transfer-safe value or one scalar Shared-reference value authorized by the target's selected safe-reference result contract. Raw-pointer-containing results, reference-containing aggregate results, and uncontracted safe-reference results remain invalid.
 
 ## Argument evaluation and parameter transfer
 
@@ -201,13 +235,13 @@ After call-entry admission succeeds:
 1. create one fresh activation of the target function;
 2. transfer the transient argument values into the designated parameter locals in parameter-slot order;
 3. mark each transferred parameter local initialized with the transferred value before target-body entry; and
-4. when the target has a Shared-reference result-origin contract, record the exact target/authority identity carried by the selected transferred parameter as that activation's result origin.
+4. when the target has `SharedIdentity(i)` or `SharedDirectChild(i)`, record the exact target/authority identity carried by the selected transferred parameter as the corresponding activation origin fact.
 
 Parameter transfer does not duplicate a transient argument value. When the value contains safe-reference carriers, those existing carriers are transferred unchanged into the callee parameter storage; the call boundary does not create a new reference authority, reborrow, target, or carrier merely because transfer occurred.
 
 A caller that requires a temporary borrowed-call interval may explicitly produce a child safe-reference reborrow before the call and move that child value as the ordinary argument. The retained parent carrier remains in the caller while its authority is delegated over the child's target according to [Core references](references.md). The child itself is transferable when it retains the complete capability promised by its own reference type and its complete target is fully Live. No borrowed-call pass mode is implied or required.
 
-If such a caller-created Shared child is supplied to the parameter designated by a result-origin contract and the callee returns that exact authority, the child does not end merely because the callee returns: the preserved result carrier keeps that same child authority active after callee cleanup. Its parent remains delegated until the returned carrier later ends under ordinary reference lifecycle rules.
+If such a caller-created Shared child is supplied to the parameter designated by `SharedIdentity(i)` and the callee returns that exact authority, the child does not end merely because the callee returns: the preserved result carrier keeps that same child authority active after callee cleanup. Its parent remains delegated until the returned carrier later ends under ordinary reference lifecycle rules.
 
 The represented operand set in this revision does not itself add a new defined-fault or divergence relation for operand evaluation. Undefined behavior selected by an existing unsafe operand has no defined post-state to continue into a call. A future operand owner that adds another abnormal evaluation outcome must define its interaction with held transient call values rather than inferring that behavior from this direct-call relation.
 
@@ -219,7 +253,7 @@ At callee body entry, every such external referent domain is fully Live by call 
 
 The combined alias-authority law guarantees that an Exclusive or ExclusiveReplace external referent target does not overlap another independently active authority at call entry. Shared external referent targets may overlap one another, but Shared operations cannot make a target vacant; legal `InteriorAssign` may change the semantic value while leaving the complete target fully Live.
 
-Because each external referent type is reference-parameter-referent-safe, callee mutation of the target cannot create, destroy, replace, or transport a nested safe-reference carrier or raw-pointer provenance fact inside suspended caller storage. The caller-visible post-call path-state contract therefore needs to preserve structural liveness, not an unexpressed nested reference/provenance graph. The one scalar Shared-reference result contract above separately preserves one already transferred top-level authority identity; it does not permit extracting a nested reference from the referent.
+Because each external referent type is reference-parameter-referent-safe, callee mutation of the target cannot create, destroy, replace, or transport a nested safe-reference carrier or raw-pointer provenance fact inside suspended caller storage. The caller-visible post-call path-state contract therefore needs to preserve structural liveness, not an unexpressed nested reference/provenance graph. The bounded scalar Shared-reference result contracts separately preserve either one already transferred top-level Shared authority identity or one direct complete-referent Shared child of one transferred exclusive authority; neither permits extracting a nested reference from the referent.
 
 Every normal `Return` from a function with one or more safe-reference parameter carriers MUST leave the complete target region of every such external referent domain fully Live after any return-result operand effects and before activation cleanup begins.
 
@@ -253,20 +287,25 @@ A function with one result type MUST return with exactly one owned result operan
 
 For an ordinary result-transfer-safe result, the preserved result value remains free of safe-reference and raw-pointer leaves.
 
-For a contract-bearing scalar Shared-reference result, the result value contains exactly one Shared-reference carrier of the declared type, and that carrier is additionally constrained by the result-origin rule below.
+For a contract-bearing scalar Shared-reference result, the result value contains exactly one Shared-reference carrier of the declared type, and that carrier is additionally constrained by the selected safe-reference result contract.
 
 For any result-bearing return:
 
 1. evaluate the result operand completely under its existing operand semantics;
-2. when the function has a Shared-reference result-origin contract, require the produced result carrier to name the activation's exact designated result-origin authority and target, and require that authority to remain active with the complete Shared capability promised by the result type;
-3. require every external referent domain introduced by safe-reference parameters to be fully Live after those result-operand effects;
-4. preserve the successfully produced owned result value, including any permitted result carrier, outside the activation-local cleanup set;
-5. perform termination explicit-loan handling, reference-carrier cleanup consequences, and local cleanup for the current activation under the existing Core borrowing, reference, and value/storage rules;
-6. require every local storage extent that ends during that cleanup to satisfy the safe-reference storage-extent validity relation from `references.md`;
-7. terminate the current activation normally; and
-8. transfer the preserved owned result value to the suspended caller without duplication.
+2. when the function has `SharedIdentity(i)`, require the produced result carrier to name the activation's exact identity-result-origin authority and target, and require that authority to remain active with complete Shared capability;
+3. when the function has `SharedDirectChild(i)`, require the produced result carrier to name an active Shared authority whose exact target equals the activation derived-result parent target, whose direct parent authority identity equals the activation derived-result parent authority identity, and whose capability is complete Shared;
+4. require every external referent domain introduced by safe-reference parameters to be fully Live after those result-operand effects;
+5. preserve the successfully produced owned result value, including any permitted result carrier, outside the activation-local cleanup set;
+6. perform termination explicit-loan handling, reference-carrier cleanup consequences, and local cleanup for the current activation under the existing Core borrowing, reference, and value/storage rules;
+7. require every local storage extent that ends during that cleanup to satisfy the safe-reference storage-extent validity relation from `references.md`;
+8. terminate the current activation normally; and
+9. transfer the preserved owned result value to the suspended caller without duplication.
 
-A Shared result produced by ordinary Shared `Copy` may therefore be a different carrier from the carrier originally transferred into the designated parameter while still naming the same authority and target. A result produced by `Move` may transport an existing carrier through one or more callee locals. Neither operation creates a new authority. A reborrow result is invalid under this contract because reborrow creates a fresh child authority, even when the child's target and referent type happen to equal the parent's.
+Under `SharedIdentity`, a Shared result produced by ordinary Shared `Copy` may be a different carrier from the carrier originally transferred into the designated parameter while still naming the same authority and target. A result produced by `Move` may transport an existing carrier through one or more callee locals. Neither operation creates a new authority. A reborrow remains invalid under this identity contract because reborrow creates a fresh child authority.
+
+Under `SharedDirectChild`, one direct complete-referent Shared reborrow from the designated `Exclusive` or `ExclusiveReplace` origin is the admitted derivation. The result may be transported through ordinary Shared value operations or an exact identity-preserving nested call after that child exists, provided the final returned authority still has the required direct-parent identity and exact target. A second derivation from that child creates a grandchild and does not satisfy the advertised direct-child contract for the original parent.
+
+A fresh root reference, including one targeting callee-local storage, satisfies neither special result contract.
 
 For a no-result return, require the same fully-Live external-referent postcondition before performing the same activation termination relation, but produce no Core value.
 
@@ -278,13 +317,15 @@ The external target values observed by the resumed caller are the actual values 
 
 A moved return source is already Dead before termination cleanup and therefore is not destroyed again by that cleanup.
 
-A safe-reference parameter or caller-created temporary child may escape through a normal result only when it is the exact authority selected by the function's Shared-reference result-origin contract. If a temporary reference reborrow is not preserved as that result, ordinary callee cleanup removes its remaining callee-owned carriers; when no descendant remains, the child authority ends and delegated parent authority is restored before caller continuation.
+A safe-reference value may escape through a normal result only when it satisfies the function's selected safe-reference result contract. An unpreserved temporary reborrow follows ordinary callee cleanup: when its remaining callee-owned carriers and descendants end, its authority ends and delegated parent capability is restored according to `references.md`. A preserved direct-child result instead keeps its parent authority delegated after Return for as long as that child branch remains active.
 
-The outer consumer of a represented Core function execution receives the same optional result structure: no-result normal completion yields no value, an ordinary result-bearing normal completion yields the preserved owned result value, and a contract-bearing Shared-reference result preserves the same authority/target identity selected by the callable contract. This fact defines Core execution structure and does not establish source entry-point semantics.
+The outer consumer of a represented Core function execution receives the same optional result structure: no-result normal completion yields no value, an ordinary result-bearing normal completion yields the preserved owned result value, and a contract-bearing Shared-reference result preserves the exact authority/target/ancestry relation guaranteed by the selected callable contract. This fact defines Core execution structure and does not establish source entry-point semantics.
 
 ## Contract-bearing Shared-reference result at the caller
 
-For a target with a Shared-reference result-origin contract selecting parameter slot `i`, let the successfully admitted held argument for slot `i` contain Shared carrier `C` naming target `R` and authority `A`.
+### Identity-preserving result
+
+For a target with `SharedIdentity(i)`, let the successfully admitted held argument for slot `i` contain Shared carrier `C` naming target `R` and authority `A`.
 
 The callable contract guarantees that every normal result from that activation contains one Shared carrier naming exactly `R` and `A`. Dynamic result transfer preserves the carrier produced by the callee's return operand; the call boundary does not create a fresh authority, target, reborrow, or additional carrier merely because the result crosses activations.
 
@@ -299,7 +340,36 @@ This summary describes the net guaranteed carrier state; it does not assert that
 
 If the caller retained another Shared carrier for authority `A` before the call, that carrier and the returned carrier coexist normally. If `C` was the only carrier before transfer, the returned carrier keeps `A` active after callee cleanup. If `A` is itself a child authority created by the caller, preserving the returned carrier keeps that child active and its parent remains delegated until the result carrier later ends.
 
-A nested or recursive contract-bearing call composes by the same rule. If a callee's selected argument names authority `A`, its normal result is known from callable structure alone to name the same `A`; an enclosing contract-bearing function may therefore forward that result when `A` is its own advertised activation result origin. Call-graph expansion or fixed-point inference is unnecessary.
+A nested or recursive identity-contract call composes by the same rule. If a callee's selected argument names authority `A`, its normal result is known from callable structure alone to name the same `A`; an enclosing `SharedIdentity` function may therefore forward that result when `A` is its own advertised activation identity result origin. Call-graph expansion or fixed-point inference is unnecessary.
+
+### Complete direct-child result
+
+For a target with `SharedDirectChild(i)`, let the successfully admitted held argument for slot `i` contain one `Exclusive` or `ExclusiveReplace` carrier naming target `R` and authority `A`.
+
+The callable contract guarantees that every normal result from that activation contains one Shared carrier naming a callee-created authority `C` such that:
+
+- `C` targets exactly `R`;
+- `C` has permission `Shared`; and
+- the direct parent of `C` is exactly `A`.
+
+The child authority is fresh by the ordinary reborrow relation that created it. Dynamic result transfer preserves the produced child carrier; the call boundary does not create another authority, target, reborrow, or carrier and does not detach or re-root `C`.
+
+Independent caller path-state validation MUST preserve this finite guaranteed relation without expanding the callee body. For the normal continuation it accounts for the surviving result carrier `C` and direct parent edge `A -> C` before applying the ordinary end-of-call carrier consequences, then:
+
+1. applies the existing fully-Live normal-return summary to every transferred external referent domain;
+2. removes the transferred/held argument carriers that do not survive as caller values under the ordinary carrier lifecycle;
+3. keeps `A` active carrierlessly when removal of its transferred parameter carrier would otherwise leave it without a carrier, because `C` remains its active child;
+4. preserves every pre-existing ancestor of `A` through the unchanged authority chain;
+5. initializes the previously admitted result destination with the preserved `C` carrier, without replacement destruction, authority creation, or parent-carrier synthesis; and
+6. continues at the target's normal continuation block.
+
+Because `A` is an active exclusive authority while `C` survives, direct/root alias checks after caller continuation continue to observe that exclusive ancestor under the common conflict law from `borrowing.md`. The returned Shared child therefore weakens capability through the returned handle but does not release the original exclusive authority interval. When `C` and any descendants later end, carrierless ancestors that then have no active child end transitively under the ordinary reference lifecycle.
+
+If `A` was itself a child authority with retained ancestor `P`, the returned branch is `P -> A -> C`; result transfer does not skip `A` or attach `C` directly to `P`.
+
+Nested composition remains finite. An already-derived Shared child `C` may pass through `SharedIdentity` unchanged. A nested `SharedDirectChild` call receiving exact exclusive origin `A` may produce `C`, and an enclosing `SharedDirectChild` function advertising the same exact origin `A` may forward that `C` unchanged because its direct parent remains `A`. Deriving again from `C` produces a grandchild and does not satisfy an outer contract advertising `A` in this slice.
+
+Direct recursion and mutual recursion consume these same callable summaries. The direct-child relation is checked against the concrete transferred origin of each activation; no call-graph expansion, ancestry fixed point, or body-derived public contract is required.
 
 ## Defined-fault propagation through calls
 
@@ -317,7 +387,7 @@ Propagation therefore preserves the selected defined-fault outcome while cleanin
 
 No fully-Live external-referent normal-return postcondition is required on the fault path because the call has no normal continuation and the same fault immediately propagates through the suspended caller.
 
-The caller result destination is not initialized on the fault path. A Shared-reference result-origin contract creates or preserves no result carrier on that path.
+The caller result destination is not initialized on the fault path. A safe-reference result contract creates or preserves no result carrier on that path.
 
 Reference-backed authorities that span multiple still-live activations remain governed by their carriers and descendants during this outward cleanup. Removal of a callee's final temporary-reborrow carrier may restore parent authority before the next caller itself terminates; no hidden catch or synthetic reference-result boundary is introduced.
 
@@ -329,7 +399,7 @@ Undefined behavior remains distinct from defined fault. Detection of undefined b
 
 If a called activation diverges, its caller remains suspended at that call.
 
-Divergence does not follow the normal continuation, does not initialize a result destination, does not produce a Shared-reference result carrier, and does not trigger return or fault cleanup merely because execution continues indefinitely.
+Divergence does not follow the normal continuation, does not initialize a result destination, does not produce a safe-reference result carrier, and does not trigger return or fault cleanup merely because execution continues indefinitely.
 
 Caller storage extents, body-local explicit loans, live reference carriers, external referent domains, and reference-backed authorities therefore continue while the caller remains suspended. A diverging callee may continue to access an ancestor target through a valid reference according to the ordinary reference relation.
 
@@ -345,7 +415,7 @@ A parameter local participates in that same local declaration order. A compiler 
 
 Before each local storage extent ends after its cleanup, the reference owner additionally requires that no surviving safe-reference authority in the active call stack still targets that storage instance. This is a validity condition on the represented program, not a second cleanup order.
 
-A preserved contract-bearing Shared-reference result carrier is outside the callee activation-local cleanup set. Its callable origin guarantees that its target is the still-live external referent domain selected by the designated parameter rather than callee-local storage. That carrier may therefore keep its existing authority active after the other callee-local carriers have been destroyed without violating callee storage-extent ending.
+A preserved contract-bearing Shared-reference result carrier is outside the callee activation-local cleanup set. Under `SharedIdentity`, its callable origin guarantees a still-live external target directly. Under `SharedDirectChild`, its exact target equals the designated incoming external target and its parent is the designated incoming external authority. In either case the preserved result therefore does not depend on callee-local target storage. It may keep its authority and, for the direct-child variant, a now-carrierless parent authority active after other callee-local carriers have been destroyed without violating callee storage-extent ending.
 
 The external referent domains targeted through safe-reference parameters belong to still-live ancestor storage extents rather than this activation's local cleanup set. Normal Return checks their fully-Live postcondition before local cleanup; defined Fault propagation does not restore them merely for cleanup.
 
@@ -356,19 +426,22 @@ A represented Core program is language-valid under this relation only when all o
 - every represented function body and callable type references the program-wide type domain;
 - every designated parameter local exists in that function body and parameter-local designations are unique;
 - every parameter type is parameter-transfer-safe;
-- every function result is either absent, one ordinary result-transfer-safe type with no result-origin slot, or one scalar Shared-reference type with exactly one valid result-origin parameter slot;
-- every Shared-reference result-origin slot exists, designates one scalar Shared-reference parameter, and has exact type equality with the result;
+- every function result is either absent with contract `None`, one ordinary result-transfer-safe type with contract `None`, or one scalar Shared-reference type with exactly one valid special safe-reference result contract;
+- every `SharedIdentity(i)` slot exists, designates one scalar Shared-reference parameter, and has exact type equality with the result;
+- every `SharedDirectChild(i)` slot exists, designates one scalar `Exclusive` or `ExclusiveReplace` reference parameter, and has exact referent-type equality with the scalar Shared result;
 - every direct-call target function exists;
 - every direct call has exactly the target parameter count;
 - each argument operand type exactly matches its corresponding target parameter-local type;
 - argument operand state transitions, including safe-reference carrier/authority transitions, are valid in left-to-right order;
 - after all argument operands complete, every recursively contained safe-reference carrier has complete advertised authority and a fully-Live complete target before callee activation creation;
 - function-body validation treats each transferred safe-reference target as a fully-Live external referent domain with its exact reference permission;
-- function-body validation remembers the exact target/authority carried by the designated Shared-reference origin parameter when such a result contract exists;
+- function-body validation remembers the exact target/authority carried by the designated parameter when a special safe-reference result contract exists;
 - every normal Return proves every external referent domain fully Live after result-operand effects and before cleanup;
-- every contract-bearing Shared-reference Return additionally proves that the result carrier names the exact designated activation result-origin authority/target and retains complete Shared capability before cleanup;
+- every `SharedIdentity` Return additionally proves exact designated activation-origin authority/target identity and complete Shared capability before cleanup;
+- every `SharedDirectChild` Return additionally proves exact designated target equality, direct-parent authority identity, and complete Shared capability before cleanup;
 - a caller normal continuation treats transferred referent regions as fully Live with their actual callee-produced non-reference/non-pointer values, while validation may conservatively forget value identity;
-- a caller normal continuation for a contract-bearing result preserves one result carrier for the exact authority/target of the designated admitted argument before transient call-carrier cleanup and initializes the admitted destination with that carrier;
+- a caller normal continuation for `SharedIdentity` preserves one result carrier for the exact authority/target of the designated admitted argument before transient call-carrier cleanup and initializes the admitted destination with that carrier;
+- a caller normal continuation for `SharedDirectChild` preserves one callee-created Shared result authority with exact target equal to the designated argument target and direct parent equal to the designated argument authority, preserving that ancestry through transient call-carrier cleanup before initializing the admitted destination;
 - result-destination presence exactly matches target result/no-result structure;
 - a result destination has exactly the target result type, is wholly vacant at the call point, and has ordinary direct exclusive initialization authority;
 - every normal call continuation block exists in the caller body;
@@ -379,7 +452,7 @@ A represented Core program is language-valid under this relation only when all o
 
 Validation MUST NOT reject a program merely because its call graph contains a cycle or because a call might diverge or yield a defined fault.
 
-Reference parameter transfer does not require recursive expansion of the callee body into each caller. The call-entry authority/liveness invariants establish the callee's bounded external-domain entry state, the mandatory fully-Live normal-return postcondition establishes the caller's bounded referent continuation state, and the designated Shared-reference result-origin contract establishes exactly one identity-preserving returned authority when present. Reference-containing aggregate results, derived/subregion reference results, Exclusive/ExclusiveReplace reference results, nested-reference referent transfer, raw-pointer results, and richer borrowed effects remain forbidden because this revision does not define their required callable origin/effect contracts.
+Reference parameter transfer does not require recursive expansion of the callee body into each caller. The call-entry authority/liveness invariants establish the callee's bounded external-domain entry state, the mandatory fully-Live normal-return postcondition establishes the caller's bounded referent continuation state, and the selected special result contract establishes either one identity-preserving Shared returned authority or one direct complete-referent Shared child of one designated exclusive origin. Reference-containing aggregate results, structural-subregion results, arbitrary-descendant result contracts, Exclusive/ExclusiveReplace results, nested-reference referent transfer, raw-pointer results, and richer borrowed effects remain forbidden because this revision does not define their required callable origin/effect contracts.
 
 Body-local validation diagnostics must identify enough function-local context to distinguish equal body-local identifiers belonging to different functions. That diagnostic identity is implementation evidence and does not make numeric function or block handles Core-observable.
 
@@ -390,12 +463,14 @@ This revision does not define:
 - source syntax, source name resolution, source callable identity, source references/lifetimes, or source-to-Core lowering;
 - cross-activation raw-pointer transfer or pointer escape;
 - safe-reference-containing aggregate results;
-- Shared-reference results derived from callee-created reborrows, structural subregions, another origin parameter, or an Exclusive/ExclusiveReplace origin;
-- authority detachment, re-rooting, or result-origin projections;
+- Shared-origin complete-referent fresh-child result derivation;
+- Shared-reference result origins selecting structural subregions or projections;
+- arbitrary descendant or grandchild result-origin relations;
+- another origin parameter, multiple alternative result origins, or generic callable borrow/effect summaries;
+- authority detachment, re-rooting, reparenting, or result-origin projection rewriting;
 - Exclusive or ExclusiveReplace reference results;
-- multiple alternative result origins or generic callable borrow/effect summaries;
 - parameter transfer through a safe reference whose referent structural value contains another safe-reference or raw-pointer leaf;
-- callable borrowed-effect summaries beyond the fixed fully-Live entry/normal-return referent-state contract and the one identity-preserving Shared result origin above;
+- callable borrowed-effect summaries beyond the fixed fully-Live entry/normal-return referent-state contract and the two bounded scalar Shared result contracts above;
 - a borrowed/reference parameter pass mode distinct from ordinary owned-value transfer;
 - indirect calls, function values, closures, methods, virtual dispatch, or overload resolution;
 - variadics, default arguments, generics, traits, or effect-polymorphic calls;
@@ -408,6 +483,8 @@ This revision does not define:
 - optimizer transformation legality; or
 - a universal inter-stratum refinement proof.
 
-A broader derived/subregion reference result requires a later consumer to decide whether a surviving child keeps its broader carrierless ancestor authority active under the existing lifecycle or whether a new authority-detachment/re-rooting relation is required. This revision deliberately does not make that choice.
+The admitted direct-child result deliberately preserves the complete authority ancestry selected by ordinary reference reborrow. A carrierless exclusive parent may therefore remain active and continue to constrain direct/root access while the returned Shared child survives. This is a capability downgrade through the returned handle, not an implicit release or shortening of the exclusive authority interval. When the final descendant branch ends, childless carrierless ancestors terminate transitively under the existing reference lifecycle.
+
+Broader structural-subregion or arbitrary-descendant results require a later consumer to define the exact finite origin/effect relation needed by independent caller validation. This revision does not infer such a relation and introduces no authority detachment or re-rooting mechanism.
 
 Those concerns require their own accepted semantic owner or consumer before this relation is extended.
