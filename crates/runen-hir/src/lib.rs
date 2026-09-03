@@ -328,7 +328,7 @@ pub struct RecordPatternTransientCleanup {
 ///
 /// This is deliberately distinct from record-pattern transient cleanup. Paths are
 /// retained in canonical structural cleanup order. An empty path denotes the
-/// complete receiver value; an empty path list means no transient ownership remains.
+/// complete receiver value; an empty path list means no receiver ownership remains.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FieldReceiverTransientCleanup {
     pub paths: Vec<Vec<usize>>,
