@@ -142,6 +142,134 @@ fn direct_field_access_uses_the_canonical_safe_authority_requirements() {
 }
 
 #[test]
+fn shared_field_root_observes_exact_structural_availability() {
+    let consumed_ancestor = compile(
+        "record Token {}\
+         record Inner { token: Token, count: I64 }\
+         record Outer { inner: Inner, other: I64 }\
+         fn f(root: Outer) {\
+             let moved: Inner = root.inner;\
+             let r: &I64 = &root.inner.count;\
+         }",
+    )
+    .expect_err("a consumed ancestor path makes its selected descendant unavailable");
+    assert!(
+        has_diagnostic(&consumed_ancestor, DiagnosticKind::UnavailableFieldValue),
+        "missing consumed-ancestor field-root diagnostic: {consumed_ancestor:?}"
+    );
+
+    compile(
+        "record Token {}\
+         record Inner { token: Token, count: I64 }\
+         record Outer { inner: Inner, other: I64 }\
+         fn f(root: Outer) {\
+             let moved: Inner = root.inner;\
+             let r: &I64 = &root.other;\
+         }",
+    )
+    .expect("a consumed disjoint sibling must not make the Shared field-root target unavailable");
+}
+
+#[test]
+fn shared_field_authorities_use_ancestor_descendant_overlap_but_not_sibling_overlap() {
+    compile(
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(root: Outer) {\
+             let ancestor: &Inner = &root.inner;\
+             let descendant: &I64 = &root.inner.value;\
+             let sibling: &I64 = &root.other;\
+         }",
+    )
+    .expect("overlapping Shared ancestors/descendants and disjoint Shared siblings are compatible");
+}
+
+#[test]
+fn shared_field_authority_blocks_whole_root_exclusive_operations() {
+    let replacement = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(seed: Pair) {\
+             let mut root: Pair = seed;\
+             let shared: &I64 = &root.left;\
+             let replacement: &mut Pair = &mut root;\
+         }",
+    )
+    .expect_err("whole-root replacement overlaps every descendant Shared authority");
+    assert!(
+        has_diagnostic(&replacement, DiagnosticKind::InvalidReplacementReferenceTarget),
+        "missing projected-Shared/replacement conflict: {replacement:?}"
+    );
+
+    let assignment = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(seed: Pair, replacement: Pair) {\
+             let mut root: Pair = seed;\
+             let shared: &I64 = &root.left;\
+             root = replacement;\
+         }",
+    )
+    .expect_err("whole-root assignment overlaps every descendant Shared authority");
+    assert!(
+        has_diagnostic(&assignment, DiagnosticKind::BorrowedAssignmentTarget),
+        "missing projected-Shared/assignment conflict: {assignment:?}"
+    );
+
+    let raw_move = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(seed: Pair) {\
+             let mut root: Pair = seed;\
+             let pointer: raw Pair = raw &root;\
+             let shared: &I64 = &root.left;\
+             unsafe { let moved: Pair = raw move pointer; }\
+         }",
+    )
+    .expect_err("raw ownership move requires Exclusive compatibility with the whole root");
+    assert!(
+        has_diagnostic(&raw_move, DiagnosticKind::RawTargetSafeAuthorityConflict),
+        "missing projected-Shared/raw-move conflict: {raw_move:?}"
+    );
+}
+
+#[test]
+fn raw_address_and_direct_field_access_use_exact_shared_field_overlap() {
+    compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(root: Pair) {\
+             let shared: &I64 = &root.left;\
+             let pointer: raw Pair = raw &root;\
+             let overlapping: I64 = root.left;\
+             let disjoint: I64 = root.right;\
+         }",
+    )
+    .expect("raw address and duplicating field uses remain Shared-compatible with projected authority");
+
+    compile(
+        "record Token {}\
+         record Box { token: Token, count: I64 }\
+         fn f(root: Box) {\
+             let shared: &I64 = &root.count;\
+             let moved: Token = root.token;\
+         }",
+    )
+    .expect("consuming a disjoint sibling must not be blocked by a Shared field authority");
+}
+
+#[test]
+fn direct_pattern_compatibility_is_applied_per_selected_leaf_path() {
+    compile(
+        "record Token {}\
+         record Box { token: Token, count: I64 }\
+         fn f(root: Box) {\
+             let shared: &I64 = &root.count;\
+             let Box { token: moved, count: copied } = root;\
+         }",
+    )
+    .expect(
+        "pattern consume on a disjoint leaf and Shared-compatible duplicate on the overlapping leaf must coexist",
+    );
+}
+
+#[test]
 fn direct_pattern_production_uses_the_canonical_safe_authority_requirements() {
     for source in [
         "record copy Pair { left: I64, right: I64 }\
