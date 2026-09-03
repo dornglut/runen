@@ -420,8 +420,7 @@ fn shared_reference_result_lowers_exact_type_and_origin_slot() {
 
 #[test]
 fn shared_direct_child_result_maps_exactly_and_survives_parent_carrier_release() {
-    let source =
-        "fn child(r: &mut I64) -> &I64 { return &*r; }\
+    let source = "fn child(r: &mut I64) -> &I64 { return &*r; }\
          fn entry() -> I64 {\
              let mut x: I64 = 71;\
              let returned: &I64 = child(&mut x);\
@@ -430,7 +429,9 @@ fn shared_direct_child_result_maps_exactly_and_survives_parent_carrier_release()
     let lowered = lower_source(source);
     let program = lowered.as_program();
     let child = function(program, "child");
-    let result_ty = child.result.expect("Shared direct-child result type is retained");
+    let result_ty = child
+        .result
+        .expect("Shared direct-child result type is retained");
     let parameter_ty = child.body.locals[child.parameters[0].0 as usize].ty;
     let (result_referent, result_permission) = program
         .types
