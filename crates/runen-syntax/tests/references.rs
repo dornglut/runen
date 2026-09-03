@@ -68,8 +68,7 @@ fn parses_shared_binding_field_root_paths_as_single_reference_values() {
 
 #[test]
 fn parses_shared_field_relative_reborrow_paths_as_single_reference_values() {
-    let source =
-        "fn f(r: &I64) { let one: &I64 = &*r.value; let nested: &I64 = &*r.outer.inner; }";
+    let source = "fn f(r: &I64) { let one: &I64 = &*r.value; let nested: &I64 = &*r.outer.inner; }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -106,10 +105,7 @@ fn prefix_dereference_does_not_reinterpret_binary_multiplication() {
         ),
         1
     );
-    assert_eq!(
-        count_kind(&dereference_then_multiply, SyntaxKind::MulValue),
-        1
-    );
+    assert_eq!(count_kind(&dereference_then_multiply, SyntaxKind::MulValue), 1);
 }
 
 #[test]
