@@ -2465,12 +2465,12 @@ impl<'a> FunctionLowerer<'a> {
     fn push_core_temporary(&mut self, ty: core::TypeId) -> Result<core::LocalId, LoweringError> {
         let id = self.next_local_id()?;
         let name = format!("$tmp{}", self.next_temp);
-        self.next_temp = self
-            .next_temp
-            .checked_add(1)
-            .ok_or(LoweringError::RepresentationLimit(
-                "compiler temporary identity",
-            ))?;
+        self.next_temp =
+            self.next_temp
+                .checked_add(1)
+                .ok_or(LoweringError::RepresentationLimit(
+                    "compiler temporary identity",
+                ))?;
         self.locals.push(core::LocalDecl::new(name, ty, false));
         Ok(id)
     }
