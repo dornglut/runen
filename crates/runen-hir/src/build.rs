@@ -3164,10 +3164,7 @@ fn validate_return(
                             result_state.permission == ReferencePermission::Shared
                                 && result_state.parent == Some(origin)
                                 && result_state.target == origin_state.target
-                                && state.authority_satisfies(
-                                    authority,
-                                    ReferencePermission::Shared,
-                                )
+                                && state.authority_satisfies(authority, ReferencePermission::Shared)
                         }),
                     _ => false,
                 }
