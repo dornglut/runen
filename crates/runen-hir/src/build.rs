@@ -288,13 +288,12 @@ impl SemanticState {
 
     fn consume_reference_target(&mut self, target: &ReferenceTarget) {
         match target {
-            ReferenceTarget::Local { binding, fields } => binding_state_by_id_mut(
-                &mut self.bindings,
-                *binding,
-            )
-            .expect("reference target names active local binding")
-            .ownership
-            .consume_path(fields),
+            ReferenceTarget::Local { binding, fields } => {
+                binding_state_by_id_mut(&mut self.bindings, *binding)
+                    .expect("reference target names active local binding")
+                    .ownership
+                    .consume_path(fields)
+            }
             ReferenceTarget::External(slot) => self
                 .external_referents
                 .get_mut(slot)
@@ -4352,9 +4351,7 @@ fn validate_reference_reborrow(
         .reference_authority
         .expect("live safe-reference binding retains authority");
     let target = state.reference_target(parent);
-    if !state.target_is_fully_available(&target)
-        || !state.authority_satisfies(parent, permission)
-    {
+    if !state.target_is_fully_available(&target) || !state.authority_satisfies(parent, permission) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ReferencePermissionUnavailable,
             location: value_location,
