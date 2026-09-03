@@ -636,5 +636,7 @@ fn field_root_cleanup_precedes_control_join_and_whole_root_assignment() {
              root = seed;\
          }",
     )
-    .expect("branch-local projected carriers must be cleaned before exact-state join and assignment");
+    .expect(
+        "branch-local projected carriers must be cleaned before exact-state join and assignment",
+    );
 }
