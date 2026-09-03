@@ -92,7 +92,10 @@ enum ReferenceTarget {
         binding: BindingId,
         fields: Vec<usize>,
     },
-    External(usize),
+    External {
+        slot: usize,
+        fields: Vec<usize>,
+    },
 }
 
 impl ReferenceTarget {
@@ -105,6 +108,34 @@ impl ReferenceTarget {
 
     fn local_root(binding: BindingId) -> Self {
         Self::local(binding, &[])
+    }
+
+    fn external_root(slot: usize) -> Self {
+        Self::External {
+            slot,
+            fields: Vec::new(),
+        }
+    }
+
+    fn projected(&self, relative_fields: &[usize]) -> Self {
+        match self {
+            Self::Local { binding, fields } => {
+                let mut projected = fields.clone();
+                projected.extend_from_slice(relative_fields);
+                Self::Local {
+                    binding: *binding,
+                    fields: projected,
+                }
+            }
+            Self::External { slot, fields } => {
+                let mut projected = fields.clone();
+                projected.extend_from_slice(relative_fields);
+                Self::External {
+                    slot: *slot,
+                    fields: projected,
+                }
+            }
+        }
     }
 
     fn overlaps(&self, other: &Self) -> bool {
@@ -123,10 +154,22 @@ impl ReferenceTarget {
                     && (left_fields.starts_with(right_fields)
                         || right_fields.starts_with(left_fields))
             }
-            (Self::External(left), Self::External(right)) => left == right,
-            (Self::Local { .. }, Self::External(_)) | (Self::External(_), Self::Local { .. }) => {
-                false
+            (
+                Self::External {
+                    slot: left_slot,
+                    fields: left_fields,
+                },
+                Self::External {
+                    slot: right_slot,
+                    fields: right_fields,
+                },
+            ) => {
+                left_slot == right_slot
+                    && (left_fields.starts_with(right_fields)
+                        || right_fields.starts_with(left_fields))
             }
+            (Self::Local { .. }, Self::External { .. })
+            | (Self::External { .. }, Self::Local { .. }) => false,
         }
     }
 }
@@ -278,9 +321,9 @@ impl SemanticState {
                     state.ownership.path_availability(fields) == PathAvailability::FullyAvailable
                 })
             }
-            ReferenceTarget::External(slot) => {
+            ReferenceTarget::External { slot, fields } => {
                 self.external_referents.get(slot).is_none_or(|state| {
-                    state.path_availability(&[]) == PathAvailability::FullyAvailable
+                    state.path_availability(fields) == PathAvailability::FullyAvailable
                 })
             }
         }
@@ -294,11 +337,11 @@ impl SemanticState {
                     .ownership
                     .consume_path(fields)
             }
-            ReferenceTarget::External(slot) => self
+            ReferenceTarget::External { slot, fields } => self
                 .external_referents
                 .get_mut(slot)
                 .expect("consuming reference target has external structural root")
-                .consume_path(&[]),
+                .consume_path(fields),
         }
     }
 
@@ -313,7 +356,11 @@ impl SemanticState {
                     .expect("reference target names active local binding")
                     .ownership = StructuralOwnershipState::default();
             }
-            ReferenceTarget::External(slot) => {
+            ReferenceTarget::External { slot, fields } => {
+                debug_assert!(
+                    fields.is_empty(),
+                    "replacement-capable external reference targets remain complete roots"
+                );
                 *self
                     .external_referents
                     .get_mut(slot)
@@ -1447,7 +1494,7 @@ fn validate_body(
                         .insert(slot, StructuralOwnershipState::default());
                 }
                 Some(state.create_reference_authority(
-                    ReferenceTarget::External(slot),
+                    ReferenceTarget::external_root(slot),
                     permission,
                     None,
                 ))
@@ -3842,7 +3889,7 @@ fn validate_value_inner(
                 .children_with_tokens()
                 .filter_map(|element| element.into_token())
                 .find(|token| matches!(token.kind(), SyntaxKind::EqEq | SyntaxKind::BangEq))
-                .expect("syntax-clean Boolean equality contains one operator token");
+                .expect("syntax-clean Boolean equality contains one boolean equality operator token");
             let relation = match operator.kind() {
                 SyntaxKind::EqEq => BooleanEqualityRelation::Equal,
                 SyntaxKind::BangEq => BooleanEqualityRelation::NotEqual,
@@ -4299,8 +4346,16 @@ fn validate_reference_reborrow(
 ) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
     let permission = requested_reference_permission(node);
-    let token = direct_token(node, SyntaxKind::Ident);
-    let name = key(&token);
+    let identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let (reference_token, selectors) = identifiers
+        .split_first()
+        .expect("syntax-clean reference reborrow has one reference identifier");
+    debug_assert!(permission == ReferencePermission::Shared || selectors.is_empty());
+    let name = key(reference_token);
     let Some(binding) = state.bindings.get(&name).cloned() else {
         let entity = context
             .modules
@@ -4323,12 +4378,42 @@ fn validate_reference_reborrow(
         });
         return None;
     }
-    let Type::SafeReference { referent, .. } = binding.ty else {
+    let Type::SafeReference {
+        referent: parent_referent,
+        ..
+    } = binding.ty
+    else {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ExpectedSafeReference,
             location: value_location,
         });
         return None;
+    };
+    let (fields, selected_ty) = if selectors.is_empty() {
+        (Vec::new(), parent_referent.ty())
+    } else {
+        debug_assert_eq!(permission, ReferencePermission::Shared);
+        resolve_field_path(
+            header,
+            selectors,
+            parent_referent.ty(),
+            context,
+            diagnostics,
+        )?
+    };
+    let referent = match selected_ty {
+        Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
+        Type::Record(record) => ReferenceReferent::Record(record),
+        Type::SafeReference { .. } | Type::RawPointer(_) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidSafeReferenceReferent {
+                    referent: selected_ty,
+                    permission,
+                },
+                location: value_location,
+            });
+            return None;
+        }
     };
     let found = Type::SafeReference {
         referent,
@@ -4350,7 +4435,7 @@ fn validate_reference_reborrow(
     let parent = binding
         .reference_authority
         .expect("live safe-reference binding retains authority");
-    let target = state.reference_target(parent);
+    let target = state.reference_target(parent).projected(&fields);
     if !state.target_is_fully_available(&target) || !state.authority_satisfies(parent, permission) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ReferencePermissionUnavailable,
@@ -4364,6 +4449,7 @@ fn validate_reference_reborrow(
             ty: found,
             kind: ValueKind::ReferenceReborrow {
                 reference: binding.id,
+                fields,
                 permission,
             },
             location: value_location,
