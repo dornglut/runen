@@ -2016,7 +2016,11 @@ impl<'a> FunctionLowerer<'a> {
                 self.current = join_target.0 as usize;
                 Ok(result)
             }
-            hir::ValueKind::ReferenceRoot { target, permission } => {
+            hir::ValueKind::ReferenceRoot {
+                target,
+                fields,
+                permission,
+            } => {
                 let hir::Type::SafeReference {
                     referent,
                     permission: value_permission,
@@ -2031,9 +2035,11 @@ impl<'a> FunctionLowerer<'a> {
                         "reference-root permission does not match its safe-reference type",
                     ));
                 }
-                let target_local = self.binding(*target)?;
+                let place = self.binding_place(*target, fields)?;
+                let root_ty = self.local_type(place.local)?;
+                let projected_ty = self.types.project_type(root_ty, &place.projections)?;
                 let referent_ty = self.types.get(referent.ty())?;
-                if self.local_type(target_local)? != referent_ty {
+                if projected_ty != referent_ty {
                     return Err(LoweringError::InvalidHirInvariant(
                         "reference-root target type does not match its reference referent",
                     ));
@@ -2044,7 +2050,7 @@ impl<'a> FunctionLowerer<'a> {
                     dst: core::Place::local(temporary),
                     src: core::Operand::ReferenceRoot {
                         permission: lower_reference_permission(*permission),
-                        place: core::Place::local(target_local),
+                        place,
                     },
                 });
                 Ok(temporary)
