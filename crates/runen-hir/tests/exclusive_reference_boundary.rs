@@ -196,7 +196,10 @@ fn shared_field_authority_blocks_whole_root_exclusive_operations() {
     )
     .expect_err("whole-root replacement overlaps every descendant Shared authority");
     assert!(
-        has_diagnostic(&replacement, DiagnosticKind::InvalidReplacementReferenceTarget),
+        has_diagnostic(
+            &replacement,
+            DiagnosticKind::InvalidReplacementReferenceTarget
+        ),
         "missing projected-Shared/replacement conflict: {replacement:?}"
     );
 
@@ -241,7 +244,9 @@ fn raw_address_and_direct_field_access_use_exact_shared_field_overlap() {
              let disjoint: I64 = root.right;\
          }",
     )
-    .expect("raw address and duplicating field uses remain Shared-compatible with projected authority");
+    .expect(
+        "raw address and duplicating field uses remain Shared-compatible with projected authority",
+    );
 
     compile(
         "record Token {}\
