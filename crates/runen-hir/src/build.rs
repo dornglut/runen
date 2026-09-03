@@ -86,10 +86,49 @@ enum BindingSource {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 struct ReferenceAuthorityId(usize);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum ReferenceTarget {
-    Local(BindingId),
+    Local {
+        binding: BindingId,
+        fields: Vec<usize>,
+    },
     External(usize),
+}
+
+impl ReferenceTarget {
+    fn local(binding: BindingId, fields: &[usize]) -> Self {
+        Self::Local {
+            binding,
+            fields: fields.to_vec(),
+        }
+    }
+
+    fn local_root(binding: BindingId) -> Self {
+        Self::local(binding, &[])
+    }
+
+    fn overlaps(&self, other: &Self) -> bool {
+        match (self, other) {
+            (
+                Self::Local {
+                    binding: left_binding,
+                    fields: left_fields,
+                },
+                Self::Local {
+                    binding: right_binding,
+                    fields: right_fields,
+                },
+            ) => {
+                left_binding == right_binding
+                    && (left_fields.starts_with(right_fields)
+                        || right_fields.starts_with(left_fields))
+            }
+            (Self::External(left), Self::External(right)) => left == right,
+            (Self::Local { .. }, Self::External(_)) | (Self::External(_), Self::Local { .. }) => {
+                false
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -191,6 +230,7 @@ impl SemanticState {
             .get(&authority)
             .expect("live authority is present")
             .target
+            .clone()
     }
 
     fn reference_capability(&self, authority: ReferenceAuthorityId) -> Option<ReferencePermission> {
@@ -231,61 +271,70 @@ impl SemanticState {
         )
     }
 
-    fn target_is_fully_available(&self, target: ReferenceTarget) -> bool {
+    fn target_is_fully_available(&self, target: &ReferenceTarget) -> bool {
         match target {
-            ReferenceTarget::Local(binding) => binding_state_by_id(&self.bindings, binding)
-                .is_some_and(|state| {
-                    state.ownership.path_availability(&[]) == PathAvailability::FullyAvailable
-                }),
+            ReferenceTarget::Local { binding, fields } => {
+                binding_state_by_id(&self.bindings, *binding).is_some_and(|state| {
+                    state.ownership.path_availability(fields) == PathAvailability::FullyAvailable
+                })
+            }
             ReferenceTarget::External(slot) => {
-                self.external_referents.get(&slot).is_none_or(|state| {
+                self.external_referents.get(slot).is_none_or(|state| {
                     state.path_availability(&[]) == PathAvailability::FullyAvailable
                 })
             }
         }
     }
 
-    fn consume_reference_target(&mut self, target: ReferenceTarget) {
+    fn consume_reference_target(&mut self, target: &ReferenceTarget) {
         match target {
-            ReferenceTarget::Local(binding) => binding_state_by_id_mut(&mut self.bindings, binding)
-                .expect("reference target names active local binding")
-                .ownership
-                .consume_path(&[]),
+            ReferenceTarget::Local { binding, fields } => binding_state_by_id_mut(
+                &mut self.bindings,
+                *binding,
+            )
+            .expect("reference target names active local binding")
+            .ownership
+            .consume_path(fields),
             ReferenceTarget::External(slot) => self
                 .external_referents
-                .get_mut(&slot)
+                .get_mut(slot)
                 .expect("consuming reference target has external structural root")
                 .consume_path(&[]),
         }
     }
 
-    fn restore_reference_target(&mut self, target: ReferenceTarget) {
+    fn restore_reference_target(&mut self, target: &ReferenceTarget) {
         match target {
-            ReferenceTarget::Local(binding) => {
-                binding_state_by_id_mut(&mut self.bindings, binding)
+            ReferenceTarget::Local { binding, fields } => {
+                debug_assert!(
+                    fields.is_empty(),
+                    "replacement-capable local reference targets remain complete roots"
+                );
+                binding_state_by_id_mut(&mut self.bindings, *binding)
                     .expect("reference target names active local binding")
                     .ownership = StructuralOwnershipState::default();
             }
             ReferenceTarget::External(slot) => {
                 *self
                     .external_referents
-                    .get_mut(&slot)
+                    .get_mut(slot)
                     .expect("replacement target has external structural root") =
                     StructuralOwnershipState::default();
             }
         }
     }
 
-    fn target_satisfies_shared_requirement(&self, target: ReferenceTarget) -> bool {
+    fn target_satisfies_shared_requirement(&self, target: &ReferenceTarget) -> bool {
         self.reference_authorities.values().all(|authority| {
-            authority.target != target || authority.permission == ReferencePermission::Shared
+            !authority.target.overlaps(target)
+                || authority.permission == ReferencePermission::Shared
         })
     }
 
-    fn target_satisfies_exclusive_requirement(&self, target: ReferenceTarget) -> bool {
+    fn target_satisfies_exclusive_requirement(&self, target: &ReferenceTarget) -> bool {
         self.reference_authorities
             .values()
-            .all(|authority| authority.target != target)
+            .all(|authority| !authority.target.overlaps(target))
     }
 
     fn release_binding_reference_carrier(&mut self, binding: BindingId) {
@@ -2651,23 +2700,21 @@ fn validate_record_destructure(
                         location: leaf.location,
                     });
                     validation.valid = false;
+                    continue;
                 }
-            }
-            let consumes = validation
-                .bindings
-                .iter()
-                .any(|leaf| !context.type_is_duplicable(leaf.ty));
-            let compatible = if consumes {
-                state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(root_state.id))
-            } else {
-                state.target_satisfies_shared_requirement(ReferenceTarget::Local(root_state.id))
-            };
-            if !compatible {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::ReferencePermissionUnavailable,
-                    location: *root_location,
-                });
-                validation.valid = false;
+                let target = ReferenceTarget::local(root_state.id, &leaf.fields);
+                let compatible = if context.type_is_duplicable(leaf.ty) {
+                    state.target_satisfies_shared_requirement(&target)
+                } else {
+                    state.target_satisfies_exclusive_requirement(&target)
+                };
+                if !compatible {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::ReferencePermissionUnavailable,
+                        location: leaf.location,
+                    });
+                    validation.valid = false;
+                }
             }
         }
     }
@@ -2820,7 +2867,8 @@ fn validate_assignment(
         diagnostics,
     )?;
 
-    if !state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(target)) {
+    let reference_target = ReferenceTarget::local_root(target);
+    if !state.target_satisfies_exclusive_requirement(&reference_target) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::BorrowedAssignmentTarget,
             location: target_location,
@@ -2953,7 +3001,7 @@ fn validate_reference_assign(
         return None;
     }
 
-    state.restore_reference_target(target);
+    state.restore_reference_target(&target);
     Some(Statement::ReferenceAssign {
         reference: binding,
         value: value.value,
@@ -3043,7 +3091,8 @@ fn validate_raw_assign(
         diagnostics,
     )?;
 
-    if !state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(target)) {
+    let reference_target = ReferenceTarget::local_root(target);
+    if !state.target_satisfies_exclusive_requirement(&reference_target) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::RawTargetSafeAuthorityConflict,
             location: statement_location,
@@ -4020,11 +4069,11 @@ fn validate_identifier_use(
     }
 
     let duplicable = context.type_is_duplicable(binding.ty);
-    let target = ReferenceTarget::Local(binding.id);
+    let target = ReferenceTarget::local_root(binding.id);
     let compatible = if duplicable {
-        state.target_satisfies_shared_requirement(target)
+        state.target_satisfies_shared_requirement(&target)
     } else {
-        state.target_satisfies_exclusive_requirement(target)
+        state.target_satisfies_exclusive_requirement(&target)
     };
     if !compatible {
         diagnostics.push(Diagnostic {
@@ -4118,8 +4167,16 @@ fn validate_reference_root(
 ) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
     let permission = requested_reference_permission(node);
-    let token = direct_token(node, SyntaxKind::Ident);
-    let name = key(&token);
+    let identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let (root_token, selectors) = identifiers
+        .split_first()
+        .expect("syntax-clean reference root has one root identifier");
+    debug_assert!(permission == ReferencePermission::Shared || selectors.is_empty());
+    let name = key(root_token);
     let Some(binding) = state.bindings.get(&name).cloned() else {
         let entity = context
             .modules
@@ -4136,13 +4193,18 @@ fn validate_reference_root(
         return None;
     };
 
-    let referent = match binding.ty {
+    let (fields, selected_ty) = if selectors.is_empty() {
+        (Vec::new(), binding.ty)
+    } else {
+        resolve_field_path(header, selectors, binding.ty, context, diagnostics)?
+    };
+    let referent = match selected_ty {
         Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
         Type::Record(record) => ReferenceReferent::Record(record),
         Type::SafeReference { .. } | Type::RawPointer(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSafeReferenceReferent {
-                    referent: binding.ty,
+                    referent: selected_ty,
                     permission,
                 },
                 location: value_location,
@@ -4168,17 +4230,28 @@ fn validate_reference_root(
         return None;
     }
 
-    let target = ReferenceTarget::Local(binding.id);
+    let target = ReferenceTarget::local(binding.id, &fields);
     match permission {
         ReferencePermission::Shared => {
-            if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+            if binding.ownership.path_availability(&fields) != PathAvailability::FullyAvailable {
+                let (kind, unavailable_location) = if let Some(selector) = selectors.last() {
+                    (
+                        DiagnosticKind::UnavailableFieldValue,
+                        SourceLocation {
+                            unit: header.unit,
+                            range: selector.text_range(),
+                        },
+                    )
+                } else {
+                    (DiagnosticKind::UnavailableBinding, value_location)
+                };
                 diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::UnavailableBinding,
-                    location: value_location,
+                    kind,
+                    location: unavailable_location,
                 });
                 return None;
             }
-            if !state.target_satisfies_shared_requirement(target) {
+            if !state.target_satisfies_shared_requirement(&target) {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ReferencePermissionUnavailable,
                     location: value_location,
@@ -4187,10 +4260,11 @@ fn validate_reference_root(
             }
         }
         ReferencePermission::ExclusiveReplace => {
+            debug_assert!(fields.is_empty());
             if binding.source != BindingSource::Local
                 || !binding.mutability.is_mutable()
                 || binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable
-                || !state.target_satisfies_exclusive_requirement(target)
+                || !state.target_satisfies_exclusive_requirement(&target)
             {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::InvalidReplacementReferenceTarget,
@@ -4207,6 +4281,7 @@ fn validate_reference_root(
             ty: found,
             kind: ValueKind::ReferenceRoot {
                 target: binding.id,
+                fields,
                 permission,
             },
             location: value_location,
@@ -4277,7 +4352,9 @@ fn validate_reference_reborrow(
         .reference_authority
         .expect("live safe-reference binding retains authority");
     let target = state.reference_target(parent);
-    if !state.target_is_fully_available(target) || !state.authority_satisfies(parent, permission) {
+    if !state.target_is_fully_available(&target)
+        || !state.authority_satisfies(parent, permission)
+    {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ReferencePermissionUnavailable,
             location: value_location,
@@ -4357,7 +4434,7 @@ fn validate_reference_dereference(
         .reference_authority
         .expect("live safe-reference binding retains authority");
     let target = state.reference_target(authority);
-    if !state.target_is_fully_available(target) {
+    if !state.target_is_fully_available(&target) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::UnavailableBinding,
             location: value_location,
@@ -4382,7 +4459,7 @@ fn validate_reference_dereference(
                 });
                 return None;
             }
-            state.consume_reference_target(target);
+            state.consume_reference_target(&target);
             OwnedUse::Consume
         };
     Some(ProducedValue::ordinary(Value {
@@ -4449,7 +4526,8 @@ fn validate_raw_address(
         });
         return None;
     }
-    if !state.target_satisfies_shared_requirement(ReferenceTarget::Local(binding.id)) {
+    let target = ReferenceTarget::local_root(binding.id);
+    if !state.target_satisfies_shared_requirement(&target) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::RawTargetSafeAuthorityConflict,
             location: value_location,
@@ -4545,7 +4623,8 @@ fn validate_raw_move(
         });
         return None;
     }
-    if !state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(target)) {
+    let reference_target = ReferenceTarget::local_root(target);
+    if !state.target_satisfies_exclusive_requirement(&reference_target) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::RawTargetSafeAuthorityConflict,
             location: value_location,
@@ -5052,10 +5131,11 @@ fn validate_field_value_use(
     } else {
         OwnedUse::Consume
     };
+    let target = ReferenceTarget::local(binding_id, &fields);
     let compatible = if ownership == OwnedUse::Duplicate {
-        state.target_satisfies_shared_requirement(ReferenceTarget::Local(binding_id))
+        state.target_satisfies_shared_requirement(&target)
     } else {
-        state.target_satisfies_exclusive_requirement(ReferenceTarget::Local(binding_id))
+        state.target_satisfies_exclusive_requirement(&target)
     };
     if !compatible {
         diagnostics.push(Diagnostic {
@@ -5880,8 +5960,8 @@ fn validate_call_inner(
             continue;
         };
         let authority = authority.expect("validated safe-reference argument has one carrier");
-        let target = state.reference_target(authority);
-        if !state.target_is_fully_available(target)
+        let reference_target = state.reference_target(authority);
+        if !state.target_is_fully_available(&reference_target)
             || !state.authority_satisfies(authority, permission)
         {
             diagnostics.push(Diagnostic {
@@ -5903,9 +5983,9 @@ fn validate_call_inner(
         SafeReferenceResultContract::SharedDirectChild { origin } => {
             let parent = authorities[origin]
                 .expect("Shared direct-child result origin has safe-reference argument authority");
-            let target = state.reference_target(parent);
+            let reference_target = state.reference_target(parent);
             Some(state.create_reference_authority(
-                target,
+                reference_target,
                 ReferencePermission::Shared,
                 Some(parent),
             ))
