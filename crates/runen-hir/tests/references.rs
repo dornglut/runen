@@ -281,12 +281,8 @@ fn shared_field_relative_reborrow_reuses_field_and_referent_diagnostics() {
 
 #[test]
 fn shared_field_relative_reborrow_reuses_exact_field_accessibility() {
-    let dep = parse(
-        "export record copy Public { export shown: I64, hidden: I64 }",
-    );
-    let app_ok = parse(
-        "import dep; fn f(r: &dep::Public) { let child: &I64 = &*r.shown; }",
-    );
+    let dep = parse("export record copy Public { export shown: I64, hidden: I64 }");
+    let app_ok = parse("import dep; fn f(r: &dep::Public) { let child: &I64 = &*r.shown; }");
     let dep_target = ImportTarget::new("dep", ModuleId::new(2)).expect("valid import alias");
     build_typed_hir(&[
         SourceUnit::new(ModuleId::new(2), &dep, &[]),
@@ -294,9 +290,7 @@ fn shared_field_relative_reborrow_reuses_exact_field_accessibility() {
     ])
     .expect("foreign exported relative field is accessible");
 
-    let app_hidden = parse(
-        "import dep; fn f(r: &dep::Public) { let child: &I64 = &*r.hidden; }",
-    );
+    let app_hidden = parse("import dep; fn f(r: &dep::Public) { let child: &I64 = &*r.hidden; }");
     let errors = build_typed_hir(&[
         SourceUnit::new(ModuleId::new(2), &dep, &[]),
         SourceUnit::new(
