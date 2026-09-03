@@ -105,7 +105,10 @@ fn prefix_dereference_does_not_reinterpret_binary_multiplication() {
         ),
         1
     );
-    assert_eq!(count_kind(&dereference_then_multiply, SyntaxKind::MulValue), 1);
+    assert_eq!(
+        count_kind(&dereference_then_multiply, SyntaxKind::MulValue),
+        1
+    );
 }
 
 #[test]
