@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
 use runen_core_ir::{
-    FunctionId, LocalId, Operand, PlaceAccess, ReferencePermission, SafeReferenceResultContract,
-    ScalarType, Statement as CoreStatement, TypeId, TypeKind, ValidatedProgram,
+    FunctionId, LocalId, Operand, PlaceAccess, Projection, ReferencePermission,
+    SafeReferenceResultContract, ScalarType, Statement as CoreStatement, TypeId, TypeKind,
+    ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
@@ -255,6 +256,100 @@ fn lowers_root_borrow_reference_duplication_and_dereference_to_exact_core_operat
         })
         .collect::<BTreeSet<_>>();
     assert_eq!(dereferenced_sources, BTreeSet::from([formed, copied]));
+}
+
+#[test]
+fn lowers_shared_field_roots_to_exact_projected_reference_root_places() {
+    let lowered = lower_source(
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(root: Outer) {\
+             let direct: &Inner = &root.inner;\
+             let nested: &I64 = &root.inner.value;\
+         }",
+    );
+    let program = lowered.as_program();
+    let f = function(program, "f");
+    let root = f.parameters[0];
+    let root_ty = f.body.locals[root.0 as usize].ty;
+    let statements = f
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect::<Vec<_>>();
+    let roots = statements
+        .iter()
+        .filter_map(|statement| {
+            let CoreStatement::Init {
+                src: Operand::ReferenceRoot { permission, place },
+                ..
+            } = statement
+            else {
+                return None;
+            };
+            (*permission == ReferencePermission::Shared && place.local == root).then_some(place)
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(roots.len(), 2);
+    assert_eq!(roots[0].projections, vec![Projection::Field(0)]);
+    assert_eq!(
+        roots[1].projections,
+        vec![Projection::Field(0), Projection::Field(0)]
+    );
+
+    let direct_ty = f.body.locals[local_named(f, "direct").0 as usize].ty;
+    let nested_ty = f.body.locals[local_named(f, "nested").0 as usize].ty;
+    let (direct_referent, direct_permission) = program
+        .types
+        .reference(direct_ty)
+        .expect("direct projected root local has a Core reference type");
+    let (nested_referent, nested_permission) = program
+        .types
+        .reference(nested_ty)
+        .expect("nested projected root local has a Core reference type");
+    assert_eq!(direct_permission, ReferencePermission::Shared);
+    assert_eq!(nested_permission, ReferencePermission::Shared);
+    assert_eq!(
+        program.types.project_type(root_ty, &roots[0].projections),
+        Some(direct_referent)
+    );
+    assert_eq!(
+        program.types.project_type(root_ty, &roots[1].projections),
+        Some(nested_referent)
+    );
+
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::Copy(PlaceAccess::Direct(place))
+                | Operand::Move(PlaceAccess::Direct(place)),
+            ..
+        } if place.local == root && !place.projections.is_empty()
+    )));
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::ReferenceReborrow { .. } | Operand::AddressOf(_),
+            ..
+        }
+    )));
+}
+
+#[test]
+fn projected_shared_reference_root_executes_through_existing_reference_runtime() {
+    let report = execute_source(
+        "record copy Pair { left: I64, right: I64 }\
+         fn entry() -> I64 {\
+             let root: Pair = Pair { left: 83, right: 17 };\
+             let r: &I64 = &root.left;\
+             return *r;\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(83)));
 }
 
 #[test]

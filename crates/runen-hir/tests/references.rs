@@ -78,11 +78,12 @@ fn root_borrow_and_dereference_retain_exact_binding_identities() {
         panic!("expected reference local");
     };
     assert!(matches!(
-        borrow.kind,
+        &borrow.kind,
         ValueKind::ReferenceRoot {
             target,
+            fields,
             permission: ReferencePermission::Shared,
-        } if target == f.parameters[0].binding
+        } if *target == f.parameters[0].binding && fields.is_empty()
     ));
     assert_eq!(
         borrow.ty,
@@ -100,6 +101,100 @@ fn root_borrow_and_dereference_retain_exact_binding_identities() {
             ownership: OwnedUse::Duplicate,
         } if reference == *reference_binding
     ));
+}
+
+#[test]
+fn shared_field_roots_retain_exact_ordered_paths_and_final_referents() {
+    let hir = compile(
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(root: Outer) {\
+             let direct: &Inner = &root.inner;\
+             let nested: &I64 = &root.inner.value;\
+         }",
+    )
+    .expect("Shared field roots must resolve through the canonical structural field path");
+    let f = function(&hir, "f");
+    let inner = hir.records[0].id;
+
+    let Statement::Local {
+        initializer: direct,
+        ..
+    } = &f.body.statements[0]
+    else {
+        panic!("expected direct field-root local");
+    };
+    assert_eq!(
+        direct.ty,
+        shared_reference(ReferenceReferent::Record(inner))
+    );
+    assert!(matches!(
+        &direct.kind,
+        ValueKind::ReferenceRoot {
+            target,
+            fields,
+            permission: ReferencePermission::Shared,
+        } if *target == f.parameters[0].binding && fields.as_slice() == [0]
+    ));
+
+    let Statement::Local {
+        initializer: nested,
+        ..
+    } = &f.body.statements[1]
+    else {
+        panic!("expected nested field-root local");
+    };
+    assert_eq!(
+        nested.ty,
+        shared_reference(ReferenceReferent::Intrinsic(IntrinsicType::I64))
+    );
+    assert!(matches!(
+        &nested.kind,
+        ValueKind::ReferenceRoot {
+            target,
+            fields,
+            permission: ReferencePermission::Shared,
+        } if *target == f.parameters[0].binding && fields.as_slice() == [0, 0]
+    ));
+}
+
+#[test]
+fn shared_field_roots_use_existing_field_type_and_admission_diagnostics() {
+    let non_record = compile("fn f(x: I64) { let r: &I64 = &x.value; }")
+        .expect_err("field-root selector through a non-record must reject");
+    assert!(has_diagnostic(&non_record, |kind| kind
+        == DiagnosticKind::ExpectedRecordForFieldAccess));
+
+    let unknown = compile(
+        "record copy Pair { left: I64 }\
+         fn f(root: Pair) { let r: &I64 = &root.missing; }",
+    )
+    .expect_err("unknown field-root selector must use the canonical field diagnostic");
+    assert!(has_diagnostic(&unknown, |kind| kind == DiagnosticKind::UnknownRecordField));
+
+    let mismatch = compile(
+        "record copy Pair { left: I64 }\
+         fn f(root: Pair) { let r: &I32 = &root.left; }",
+    )
+    .expect_err("the final selected field type must match the required Shared referent");
+    assert!(has_diagnostic(&mismatch, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
+
+    let invalid_referent = compile(
+        "record Ticket { value: I64 }\
+         record Holder { ticket: Ticket }\
+         fn f(root: Holder) { let r: &Ticket = &root.ticket; }",
+    )
+    .expect_err("Shared admission is determined by the selected field referent");
+    assert!(has_diagnostic(&invalid_referent, |kind| matches!(
+        kind,
+        DiagnosticKind::InvalidSafeReferenceReferent {
+            permission: ReferencePermission::Shared,
+            ..
+        }
+    )));
 }
 
 #[test]
@@ -193,6 +288,33 @@ fn shared_reference_result_retains_identity_contract_and_shared_precedence() {
             ownership: OwnedUse::Duplicate,
         } if binding == local.parameters[0].binding
     ));
+}
+
+#[test]
+fn projected_shared_authority_survives_transport_call_identity_and_reborrow() {
+    compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn id(r: &I64) -> &I64 { return r; }\
+         fn f(root: Pair) -> I64 {\
+             let projected: &I64 = &root.left;\
+             let duplicate: &I64 = projected;\
+             let child: &I64 = &*duplicate;\
+             let returned: &I64 = id(child);\
+             return *returned;\
+         }",
+    )
+    .expect("projected Shared target must survive carrier transport, reborrow, and identity calls");
+}
+
+#[test]
+fn callee_local_shared_field_root_cannot_satisfy_external_identity_result_contract() {
+    let errors = compile(
+        "record copy Pair { left: I64 }\
+         fn f(origin: &I64, root: Pair) -> &I64 { return &root.left; }",
+    )
+    .expect_err("callee-local field-root authority is not the advertised external identity origin");
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::SharedReferenceResultOriginMismatch));
 }
 
 #[test]
@@ -501,4 +623,20 @@ fn lexical_reference_cleanup_precedes_outer_assignment_and_control_flow_join() {
          }",
     )
     .expect("branch-local carriers must be cleaned before the enclosing join and assignment");
+}
+
+#[test]
+fn field_root_cleanup_precedes_control_join_and_whole_root_assignment() {
+    compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(seed: Pair, flag: Bool) {\
+             let mut root: Pair = seed;\
+             if flag { let left: &I64 = &root.left; }\
+             else { let right: &I64 = &root.right; }\
+             root = seed;\
+         }",
+    )
+    .expect(
+        "branch-local projected carriers must be cleaned before exact-state join and assignment",
+    );
 }

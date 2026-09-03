@@ -62,14 +62,15 @@ fn replacement_reference_type_is_nonduplicable_and_type_mut_is_not_binding_mutab
     assert_eq!(*local_ty, ty);
     assert_eq!(*mutability, AssignmentMutability::Immutable);
     assert!(matches!(
-        initializer.kind,
+        &initializer.kind,
         ValueKind::ReferenceRoot {
             target,
+            fields,
             permission: ReferencePermission::ExclusiveReplace,
-        } if target == match &f.body.statements[0] {
+        } if *target == match &f.body.statements[0] {
             Statement::Local { binding, .. } => *binding,
             _ => panic!("expected mutable ordinary local"),
-        }
+        } && fields.is_empty()
     ));
 
     let Statement::Local {
