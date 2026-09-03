@@ -379,23 +379,24 @@ fn lowers_shared_field_relative_reborrows_to_exact_reference_access_projections(
         .iter()
         .flat_map(|block| block.statements.iter())
         .collect::<Vec<_>>();
-    let reborrows = statements
-        .iter()
-        .filter_map(|statement| {
-            let CoreStatement::Init {
-                dst,
-                src: Operand::ReferenceReborrow { permission, src },
-            } = statement
-            else {
-                return None;
-            };
-            let PlaceAccess::Direct(reference_place) = &src.reference else {
-                return None;
-            };
-            (reference_place.local == parent && reference_place.projections.is_empty())
-                .then_some((dst.local, *permission, src))
-        })
-        .collect::<Vec<_>>();
+    let reborrows =
+        statements
+            .iter()
+            .filter_map(|statement| {
+                let CoreStatement::Init {
+                    dst,
+                    src: Operand::ReferenceReborrow { permission, src },
+                } = statement
+                else {
+                    return None;
+                };
+                let PlaceAccess::Direct(reference_place) = &src.reference else {
+                    return None;
+                };
+                (reference_place.local == parent && reference_place.projections.is_empty())
+                    .then_some((dst.local, *permission, src))
+            })
+            .collect::<Vec<_>>();
 
     assert_eq!(reborrows.len(), 3);
     let expected = [
@@ -403,8 +404,7 @@ fn lowers_shared_field_relative_reborrows_to_exact_reference_access_projections(
         vec![Projection::Field(0)],
         vec![Projection::Field(0), Projection::Field(0)],
     ];
-    for ((destination, permission, access), expected_projections) in
-        reborrows.iter().zip(&expected)
+    for ((destination, permission, access), expected_projections) in reborrows.iter().zip(&expected)
     {
         assert_eq!(*permission, ReferencePermission::Shared);
         assert_eq!(&access.projections, expected_projections);
@@ -808,10 +808,8 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         ))
     );
 
-    let mut projected_type_mismatch = hir(
-        "record copy Pair { left: I64 }\
-         fn f(r: &Pair) { let child: &I64 = &*r.left; }",
-    );
+    let mut projected_type_mismatch = hir("record copy Pair { left: I64 }\
+         fn f(r: &Pair) { let child: &I64 = &*r.left; }");
     let HirStatement::Local { initializer, .. } =
         &mut projected_type_mismatch.functions[0].body.statements[0]
     else {
@@ -828,10 +826,8 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         ))
     );
 
-    let mut projected_replacement = hir(
-        "record copy Pair { left: I64 }\
-         fn f(r: &Pair) { let child: &I64 = &*r.left; }",
-    );
+    let mut projected_replacement = hir("record copy Pair { left: I64 }\
+         fn f(r: &Pair) { let child: &I64 = &*r.left; }");
     let HirStatement::Local { initializer, .. } =
         &mut projected_replacement.functions[0].body.statements[0]
     else {
