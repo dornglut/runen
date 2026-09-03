@@ -287,7 +287,7 @@ For `ExclusiveReplaceRef(T)`:
 - when `T` is duplicable, `*r` requires retained Shared reference-relative authority plus a fully available complete target and produces one non-consuming duplicate of `T`;
 - when `T` is non-duplicable, `*r` requires retained Exclusive reference-relative authority plus a fully available complete target and ownership-moves the complete referent `T`, consuming the complete target structural root while target storage and reference authority remain live.
 
-The complete target structural state is the existing local binding root/path selected by root formation for a local-root reference or the external referent structural root for a replacement-capable parameter. `*r` still addresses the complete referent of that stored reference: for a field-root Shared reference, that complete referent is exactly the field structural region selected when the authority was formed.
+The complete target structural state for a reference into a local binding is the existing structural ownership state of that containing binding, observed at the exact target path selected by root formation; for a replacement-capable parameter it is the external referent structural root. `*r` still addresses the complete referent of that stored reference: for a field-root Shared reference, that complete referent is exactly the field structural region selected when the authority was formed.
 
 No explicit source safe-reference Drop, interior assignment, field-relative dereference, or general dereference place is represented.
 
