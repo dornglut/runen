@@ -57,8 +57,7 @@ fn refs(x: I64, r: &I64, mr: &mut I64, foreign: &dep::Ticket) -> I64 {
 
 #[test]
 fn parses_shared_binding_field_root_paths_as_single_reference_values() {
-    let source =
-        "fn f(x: I64) { let one: &I64 = &x.value; let nested: &I64 = &x.outer.inner; }";
+    let source = "fn f(x: I64) { let one: &I64 = &x.value; let nested: &I64 = &x.outer.inner; }";
     let parsed = parse(source);
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
