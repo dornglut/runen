@@ -296,6 +296,7 @@ The represented statement-level conditional has this grammar:
 ```text
 IfStatement =
     "if" ConditionalValue BlockStatement ("else" BlockStatement)?
+
 ConditionalValue = ConditionalLogicalAndValue
 ConditionalLogicalAndValue =
     ConditionalEqualityValue ConditionalLogicalAndSuffix?
