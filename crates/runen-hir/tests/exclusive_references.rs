@@ -207,11 +207,12 @@ fn complete_reborrow_preserves_permission_without_strengthening() {
         panic!("expected Shared child local");
     };
     assert!(matches!(
-        initializer.kind,
+        &initializer.kind,
         ValueKind::ReferenceReborrow {
             reference,
+            fields,
             permission: ReferencePermission::Shared,
-        } if reference == f.parameters[0].binding
+        } if *reference == f.parameters[0].binding && fields.is_empty()
     ));
 
     let Statement::Block(exclusive_block) = &f.body.statements[1] else {
@@ -221,15 +222,56 @@ fn complete_reborrow_preserves_permission_without_strengthening() {
         panic!("expected replacement child local");
     };
     assert!(matches!(
-        initializer.kind,
+        &initializer.kind,
         ValueKind::ReferenceReborrow {
             reference,
+            fields,
             permission: ReferencePermission::ExclusiveReplace,
-        } if reference == f.parameters[0].binding
+        } if *reference == f.parameters[0].binding && fields.is_empty()
     ));
 
     let errors = compile("fn f(r: &I64) { let child: &mut I64 = &mut *r; }")
         .expect_err("Shared authority cannot be strengthened by reborrow");
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::ReferencePermissionUnavailable));
+}
+
+#[test]
+fn projected_shared_child_from_replacement_parent_is_bounded_to_selected_field() {
+    let hir = compile(
+        "record Ticket { value: I64, other: I64 }\
+         fn f(r: &mut Ticket) {\
+             { let child: &I64 = &*r.value; let copied: I64 = *child; }\
+             let moved: Ticket = *r;\
+             *r = moved;\
+         }",
+    )
+    .expect("Shared projected child may borrow an admissible field of a nonduplicable replacement parent");
+    let f = function(&hir, "f");
+    let Statement::Block(block) = &f.body.statements[0] else {
+        panic!("expected projected child block");
+    };
+    let Statement::Local { initializer, .. } = &block.statements[0] else {
+        panic!("expected projected child local");
+    };
+    assert!(matches!(
+        &initializer.kind,
+        ValueKind::ReferenceReborrow {
+            reference,
+            fields,
+            permission: ReferencePermission::Shared,
+        } if *reference == f.parameters[0].binding && fields.as_slice() == [0]
+    ));
+
+    let errors = compile(
+        "record Ticket { value: I64, other: I64 }\
+         fn sink(r: &mut Ticket) {}\
+         fn blocked(r: &mut Ticket) {\
+             let child: &I64 = &*r.value;\
+             sink(r);\
+         }",
+    )
+    .expect_err("any active projected child prevents complete replacement-capable call transfer");
     assert!(has_diagnostic(&errors, |kind| kind
         == DiagnosticKind::ReferencePermissionUnavailable));
 }
