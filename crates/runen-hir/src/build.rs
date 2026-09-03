@@ -3889,7 +3889,7 @@ fn validate_value_inner(
                 .children_with_tokens()
                 .filter_map(|element| element.into_token())
                 .find(|token| matches!(token.kind(), SyntaxKind::EqEq | SyntaxKind::BangEq))
-                .expect("syntax-clean Boolean equality contains one boolean equality operator token");
+                .expect("syntax-clean Boolean equality contains one operator token");
             let relation = match operator.kind() {
                 SyntaxKind::EqEq => BooleanEqualityRelation::Equal,
                 SyntaxKind::BangEq => BooleanEqualityRelation::NotEqual,
