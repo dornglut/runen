@@ -1022,9 +1022,12 @@ impl Parser<'_> {
         self.builder
             .start_node(SyntaxKind::SafeReferenceValue.into());
         self.expect(SyntaxKind::Amp, ExpectedSyntax::Value);
-        self.eat(SyntaxKind::KwMut);
-        self.eat(SyntaxKind::Star);
+        let replacement = self.eat(SyntaxKind::KwMut);
+        let reborrow = self.eat(SyntaxKind::Star);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if !replacement && !reborrow && self.at(SyntaxKind::Dot) {
+            self.parse_field_selectors();
+        }
         self.builder.finish_node();
     }
 
