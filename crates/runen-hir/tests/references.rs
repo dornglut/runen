@@ -1,7 +1,7 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, ReferencePermission, ReferenceReferent,
-    SafeReferenceResultContract, SourceUnit, Statement, Type, TypedCompilation, ValueKind,
-    build_typed_hir,
+    DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse, ReferencePermission,
+    ReferenceReferent, SafeReferenceResultContract, SourceUnit, Statement, Type, TypedCompilation,
+    ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -198,6 +198,113 @@ fn shared_field_roots_use_existing_field_type_and_admission_diagnostics() {
 }
 
 #[test]
+fn shared_field_relative_reborrows_retain_exact_paths_and_final_referents() {
+    let hir = compile(
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(parent: &Outer) {\
+             let complete: &Outer = &*parent;\
+             let direct: &Inner = &*parent.inner;\
+             let nested: &I64 = &*parent.inner.value;\
+         }",
+    )
+    .expect("Shared field-relative reborrows must resolve from the parent referent");
+    let f = function(&hir, "f");
+    let inner = hir.records[0].id;
+
+    for (index, expected_fields, expected_ty) in [
+        (0, Vec::<usize>::new(), f.parameters[0].ty),
+        (
+            1,
+            vec![0],
+            shared_reference(ReferenceReferent::Record(inner)),
+        ),
+        (
+            2,
+            vec![0, 0],
+            shared_reference(ReferenceReferent::Intrinsic(IntrinsicType::I64)),
+        ),
+    ] {
+        let Statement::Local { initializer, .. } = &f.body.statements[index] else {
+            panic!("expected reborrow local");
+        };
+        assert_eq!(initializer.ty, expected_ty);
+        assert!(matches!(
+            &initializer.kind,
+            ValueKind::ReferenceReborrow {
+                reference,
+                fields,
+                permission: ReferencePermission::Shared,
+            } if *reference == f.parameters[0].binding && *fields == expected_fields
+        ));
+    }
+}
+
+#[test]
+fn shared_field_relative_reborrow_reuses_field_and_referent_diagnostics() {
+    let non_record = compile("fn f(r: &I64) { let child: &I64 = &*r.value; }")
+        .expect_err("relative selector through a non-record referent must reject");
+    assert!(has_diagnostic(&non_record, |kind| kind
+        == DiagnosticKind::ExpectedRecordForFieldAccess));
+
+    let unknown = compile(
+        "record copy Pair { left: I64 }\
+         fn f(r: &Pair) { let child: &I64 = &*r.missing; }",
+    )
+    .expect_err("unknown relative field must use the canonical field diagnostic");
+    assert!(has_diagnostic(&unknown, |kind| kind == DiagnosticKind::UnknownRecordField));
+
+    let mismatch = compile(
+        "record copy Pair { left: I64 }\
+         fn f(r: &Pair) { let child: &I32 = &*r.left; }",
+    )
+    .expect_err("selected relative field type must match the required Shared referent");
+    assert!(has_diagnostic(&mismatch, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
+
+    let invalid_referent = compile(
+        "record Ticket { value: I64 }\
+         record Holder { ticket: Ticket }\
+         fn f(r: &mut Holder) { let child: &Ticket = &*r.ticket; }",
+    )
+    .expect_err("selected relative field must independently satisfy Shared referent admission");
+    assert!(has_diagnostic(&invalid_referent, |kind| matches!(
+        kind,
+        DiagnosticKind::InvalidSafeReferenceReferent {
+            permission: ReferencePermission::Shared,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn shared_field_relative_reborrow_reuses_exact_field_accessibility() {
+    let dep = parse("export record copy Public { export shown: I64, hidden: I64 }");
+    let app_ok = parse("import dep; fn f(r: &dep::Public) { let child: &I64 = &*r.shown; }");
+    let dep_target = ImportTarget::new("dep", ModuleId::new(2)).expect("valid import alias");
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &dep, &[]),
+        SourceUnit::new(ModuleId::new(1), &app_ok, std::slice::from_ref(&dep_target)),
+    ])
+    .expect("foreign exported relative field is accessible");
+
+    let app_hidden = parse("import dep; fn f(r: &dep::Public) { let child: &I64 = &*r.hidden; }");
+    let errors = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &dep, &[]),
+        SourceUnit::new(
+            ModuleId::new(1),
+            &app_hidden,
+            std::slice::from_ref(&dep_target),
+        ),
+    ])
+    .expect_err("foreign private relative field remains inaccessible");
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::InaccessibleRecordField));
+}
+
+#[test]
 fn accepts_intrinsic_and_selected_record_referents_but_rejects_nonduplicable_records() {
     let hir = compile(
         "record copy Point { x: I64 }\
@@ -304,6 +411,48 @@ fn projected_shared_authority_survives_transport_call_identity_and_reborrow() {
          }",
     )
     .expect("projected Shared target must survive carrier transport, reborrow, and identity calls");
+}
+
+#[test]
+fn field_relative_child_survives_transport_and_identity_call_without_becoming_identity_origin() {
+    let hir = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn id(r: &I64) -> &I64 { return r; }\
+         fn f(parent: &Pair) -> I64 {\
+             let child: &I64 = &*parent.left;\
+             let duplicate: &I64 = child;\
+             let returned: &I64 = id(duplicate);\
+             return *returned;\
+         }",
+    )
+    .expect("field-relative child authority must survive local and call transport");
+    let f = function(&hir, "f");
+    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+        panic!("expected projected child local");
+    };
+    assert!(matches!(
+        &initializer.kind,
+        ValueKind::ReferenceReborrow {
+            reference,
+            fields,
+            permission: ReferencePermission::Shared,
+        } if *reference == f.parameters[0].binding && fields.as_slice() == [0]
+    ));
+}
+
+#[test]
+fn field_relative_child_cannot_satisfy_unrelated_identity_or_direct_child_result_contract() {
+    for source in [
+        "record copy Pair { left: I64 }\
+         fn f(origin: &I64, parent: &Pair) -> &I64 { return &*parent.left; }",
+        "record copy Pair { left: I64 }\
+         fn f(origin: &mut I64, parent: &Pair) -> &I64 { return &*parent.left; }",
+    ] {
+        let errors = compile(source)
+            .expect_err("projected child must not widen identity or direct-child result contracts");
+        assert!(has_diagnostic(&errors, |kind| kind
+            == DiagnosticKind::SharedReferenceResultOriginMismatch));
+    }
 }
 
 #[test]

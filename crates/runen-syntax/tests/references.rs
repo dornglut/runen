@@ -67,6 +67,18 @@ fn parses_shared_binding_field_root_paths_as_single_reference_values() {
 }
 
 #[test]
+fn parses_shared_field_relative_reborrow_paths_as_single_reference_values() {
+    let source = "fn f(r: &I64) { let one: &I64 = &*r.value; let nested: &I64 = &*r.outer.inner; }";
+    let parsed = parse(source);
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert_eq!(count_kind(&parsed, SyntaxKind::SafeReferenceValue), 2);
+    assert_eq!(count_kind(&parsed, SyntaxKind::FieldValueUse), 0);
+    assert_eq!(count_kind(&parsed, SyntaxKind::Dot), 3);
+    assert_eq!(count_kind(&parsed, SyntaxKind::Star), 2);
+}
+
+#[test]
 fn prefix_dereference_does_not_reinterpret_binary_multiplication() {
     let multiplication = parse("fn f(a: I64, b: I64) -> I64 { return a * b; }");
     assert!(
@@ -108,8 +120,8 @@ fn rejects_unrepresented_reference_syntax() {
         "fn f(r: &I64) { let x: I64 = *(r); }",
         "fn f(r: &mut I64) { let x: &mut I64 = &mut **r; }",
         "fn f(x: I64) { let r: &mut I64 = &mut x.value; }",
-        "fn f(r: &I64) { let child: &I64 = &*r.value; }",
         "fn f(r: &mut I64) { let child: &mut I64 = &mut *r.value; }",
+        "fn f(r: &I64) { let x: I64 = *r.value; }",
         "fn f(x: I64) { let p: raw I64 = raw &x.value; }",
         "import dep; fn f(x: I64) { let r: &I64 = &dep::x; }",
         "fn f(r: &mut I64) { **r = 1; }",

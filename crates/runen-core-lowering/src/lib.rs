@@ -2057,6 +2057,7 @@ impl<'a> FunctionLowerer<'a> {
             }
             hir::ValueKind::ReferenceReborrow {
                 reference,
+                fields,
                 permission,
             } => {
                 let hir::Type::SafeReference {
@@ -2073,6 +2074,11 @@ impl<'a> FunctionLowerer<'a> {
                         "reference-reborrow permission does not match its safe-reference type",
                     ));
                 }
+                if !fields.is_empty() && *permission != hir::ReferencePermission::Shared {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "projected reference-reborrow is not Shared",
+                    ));
+                }
 
                 let source = self.binding(*reference)?;
                 let source_ty = self.local_type(source)?;
@@ -2083,10 +2089,17 @@ impl<'a> FunctionLowerer<'a> {
                         "reference-reborrow source is not a safe-reference binding",
                     ));
                 };
+                let mut access = core::ReferenceAccess::new(core::Place::local(source));
+                for field in fields {
+                    access = access.field(index_u32(*field, "Core field projection")?);
+                }
+                let projected_referent = self
+                    .types
+                    .project_type(parent_referent, &access.projections)?;
                 let referent_ty = self.types.get(referent.ty())?;
-                if parent_referent != referent_ty {
+                if projected_referent != referent_ty {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "reference-reborrow parent referent does not match child referent",
+                        "reference-reborrow projected parent referent does not match child referent",
                     ));
                 }
                 let requested = lower_reference_permission(*permission);
@@ -2101,7 +2114,7 @@ impl<'a> FunctionLowerer<'a> {
                     dst: core::Place::local(temporary),
                     src: core::Operand::ReferenceReborrow {
                         permission: requested,
-                        src: core::ReferenceAccess::new(core::Place::local(source)),
+                        src: access,
                     },
                 });
                 Ok(temporary)

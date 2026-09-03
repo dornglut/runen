@@ -444,6 +444,7 @@ pub enum ValueKind {
     },
     ReferenceReborrow {
         reference: BindingId,
+        fields: Vec<usize>,
         permission: ReferencePermission,
     },
     ReferenceDereference {
