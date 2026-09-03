@@ -419,6 +419,43 @@ fn shared_reference_result_lowers_exact_type_and_origin_slot() {
 }
 
 #[test]
+fn shared_direct_child_result_maps_exactly_and_survives_parent_carrier_release() {
+    let source = "fn child(r: &mut I64) -> &I64 { return &*r; }\
+         fn entry() -> I64 {\
+             let mut x: I64 = 71;\
+             let returned: &I64 = child(&mut x);\
+             return *returned;\
+         }";
+    let lowered = lower_source(source);
+    let program = lowered.as_program();
+    let child = function(program, "child");
+    let result_ty = child
+        .result
+        .expect("Shared direct-child result type is retained");
+    let parameter_ty = child.body.locals[child.parameters[0].0 as usize].ty;
+    let (result_referent, result_permission) = program
+        .types
+        .reference(result_ty)
+        .expect("Shared direct-child result lowers to a Core reference type");
+    let (parameter_referent, parameter_permission) = program
+        .types
+        .reference(parameter_ty)
+        .expect("direct-child origin parameter lowers to a Core reference type");
+
+    assert_eq!(
+        child.safe_reference_result_contract,
+        SafeReferenceResultContract::SharedDirectChild { origin: 0 }
+    );
+    assert_eq!(result_permission, ReferencePermission::Shared);
+    assert_eq!(parameter_permission, ReferencePermission::ExclusiveReplace);
+    assert_eq!(result_referent, parameter_referent);
+
+    let report = execute_source(source, "entry");
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(71)));
+}
+
+#[test]
 fn shared_reference_result_round_trip_and_existing_carrier_coexist() {
     let report = execute_source(
         "fn id(r: &I64) -> &I64 { return r; }\

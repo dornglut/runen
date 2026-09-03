@@ -11,8 +11,9 @@ use crate::{
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
     LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
     Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
-    RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent, Return, SourceLocation,
-    SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent, Return,
+    SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type, TypedCompilation,
+    Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -66,7 +67,7 @@ struct FunctionHeader {
     accessibility: Accessibility,
     parameters: Vec<Parameter>,
     result: Option<Type>,
-    shared_reference_result_origin: Option<usize>,
+    safe_reference_result_contract: SafeReferenceResultContract,
     body: SyntaxNode,
     location: SourceLocation,
 }
@@ -359,6 +360,7 @@ struct BodyResolutionContext<'a> {
     imports: &'a [UnitImports],
     records: &'a [Record],
     headers: &'a [FunctionHeader],
+    safe_reference_result_origin_authority: Option<ReferenceAuthorityId>,
 }
 
 impl BodyResolutionContext<'_> {
@@ -449,7 +451,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             accessibility: header.accessibility,
             parameters: header.parameters.clone(),
             result: header.result,
-            shared_reference_result_origin: header.shared_reference_result_origin,
+            safe_reference_result_contract: header.safe_reference_result_contract,
             body,
             location: header.location,
         });
@@ -866,7 +868,7 @@ fn resolve_function_headers(
             }
         }
 
-        let mut shared_reference_result_origin = None;
+        let mut safe_reference_result_contract = SafeReferenceResultContract::None;
         let result = function
             .node
             .children()
@@ -917,27 +919,50 @@ fn resolve_function_headers(
                     &type_node,
                     diagnostics,
                 );
-                if matches!(
-                    ty,
-                    Type::SafeReference {
-                        permission: ReferencePermission::Shared,
-                        ..
-                    }
-                ) {
-                    let mut matching = parameters
+                if let Type::SafeReference {
+                    referent,
+                    permission: ReferencePermission::Shared,
+                } = ty
+                {
+                    let mut matching_shared = parameters
                         .iter()
                         .enumerate()
                         .filter(|(_, parameter)| parameter.ty == ty);
-                    match (matching.next(), matching.next()) {
-                        (None, _) => diagnostics.push(Diagnostic {
-                            kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
-                            location: location(function.unit, &type_node),
-                        }),
-                        (Some((slot, _)), None) => shared_reference_result_origin = Some(slot),
+                    match (matching_shared.next(), matching_shared.next()) {
+                        (Some((slot, _)), None) => {
+                            safe_reference_result_contract =
+                                SafeReferenceResultContract::SharedIdentity { origin: slot };
+                        }
                         (Some(_), Some(_)) => diagnostics.push(Diagnostic {
                             kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
                             location: location(function.unit, &type_node),
                         }),
+                        (None, _) => {
+                            let replacement_ty = Type::SafeReference {
+                                referent,
+                                permission: ReferencePermission::ExclusiveReplace,
+                            };
+                            let mut matching_replacement = parameters
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, parameter)| parameter.ty == replacement_ty);
+                            match (matching_replacement.next(), matching_replacement.next()) {
+                                (None, _) => diagnostics.push(Diagnostic {
+                                    kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
+                                    location: location(function.unit, &type_node),
+                                }),
+                                (Some((slot, _)), None) => {
+                                    safe_reference_result_contract =
+                                        SafeReferenceResultContract::SharedDirectChild {
+                                            origin: slot,
+                                        };
+                                }
+                                (Some(_), Some(_)) => diagnostics.push(Diagnostic {
+                                    kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
+                                    location: location(function.unit, &type_node),
+                                }),
+                            }
+                        }
                     }
                 }
                 Some(ty)
@@ -951,7 +976,7 @@ fn resolve_function_headers(
             accessibility: function.accessibility,
             parameters,
             result,
-            shared_reference_result_origin,
+            safe_reference_result_contract,
             body,
             location: function.location,
         });
@@ -1396,11 +1421,25 @@ fn validate_body(
         );
     }
 
+    let safe_reference_result_origin_authority = match header.safe_reference_result_contract {
+        SafeReferenceResultContract::None => None,
+        SafeReferenceResultContract::SharedIdentity { origin }
+        | SafeReferenceResultContract::SharedDirectChild { origin } => Some(
+            state
+                .bindings
+                .values()
+                .find(|binding| binding.id == header.parameters[origin].binding)
+                .and_then(|binding| binding.reference_authority)
+                .expect("safe-reference result origin parameter has activation authority"),
+        ),
+    };
+
     let context = BodyResolutionContext {
         modules,
         imports,
         records,
         headers,
+        safe_reference_result_origin_authority,
     };
     let mut control = ControlValidationContext::default();
     let value_context = ValueValidationContext::default();
@@ -3104,15 +3143,34 @@ fn validate_return(
         (_, None) => None,
     };
 
-    if let (Some(origin), Some(produced)) =
-        (header.shared_reference_result_origin, produced.as_ref())
-    {
-        let expected = state
-            .bindings
-            .values()
-            .find(|binding| binding.id == header.parameters[origin].binding)
-            .and_then(|binding| binding.reference_authority);
-        if produced.reference_authority != expected {
+    if let Some(produced) = produced.as_ref() {
+        let valid_reference_result = match header.safe_reference_result_contract {
+            SafeReferenceResultContract::None => true,
+            SafeReferenceResultContract::SharedIdentity { .. } => {
+                produced.reference_authority == context.safe_reference_result_origin_authority
+            }
+            SafeReferenceResultContract::SharedDirectChild { .. } => {
+                let origin = context
+                    .safe_reference_result_origin_authority
+                    .expect("direct-child result contract has activation origin authority");
+                match (
+                    produced.reference_authority,
+                    state.reference_authorities.get(&origin),
+                ) {
+                    (Some(authority), Some(origin_state)) => state
+                        .reference_authorities
+                        .get(&authority)
+                        .is_some_and(|result_state| {
+                            result_state.permission == ReferencePermission::Shared
+                                && result_state.parent == Some(origin)
+                                && result_state.target == origin_state.target
+                                && state.authority_satisfies(authority, ReferencePermission::Shared)
+                        }),
+                    _ => false,
+                }
+            }
+        };
+        if !valid_reference_result {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::SharedReferenceResultOriginMismatch,
                 location: produced.value.location,
@@ -5834,12 +5892,25 @@ fn validate_call_inner(
         }
     }
 
-    let result_reference_authority = target.shared_reference_result_origin.map(|slot| {
-        authorities[slot].expect("Shared result origin slot has safe-reference argument authority")
-    });
-    if let Some(authority) = result_reference_authority {
-        state.add_reference_carrier(authority);
-    }
+    let result_reference_authority = match target.safe_reference_result_contract {
+        SafeReferenceResultContract::None => None,
+        SafeReferenceResultContract::SharedIdentity { origin } => {
+            let authority = authorities[origin]
+                .expect("Shared identity result origin has safe-reference argument authority");
+            state.add_reference_carrier(authority);
+            Some(authority)
+        }
+        SafeReferenceResultContract::SharedDirectChild { origin } => {
+            let parent = authorities[origin]
+                .expect("Shared direct-child result origin has safe-reference argument authority");
+            let target = state.reference_target(parent);
+            Some(state.create_reference_authority(
+                target,
+                ReferencePermission::Shared,
+                Some(parent),
+            ))
+        }
+    };
     for authority in authorities.into_iter().flatten() {
         state.release_reference_carrier(authority);
     }

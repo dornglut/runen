@@ -673,9 +673,14 @@ impl<'a> FunctionLowerer<'a> {
             })
             .collect::<Result<Vec<_>, LoweringError>>()?;
 
-        let safe_reference_result_contract = match self.function.shared_reference_result_origin {
-            Some(origin) => core::SafeReferenceResultContract::SharedIdentity { origin },
-            None => core::SafeReferenceResultContract::None,
+        let safe_reference_result_contract = match self.function.safe_reference_result_contract {
+            hir::SafeReferenceResultContract::None => core::SafeReferenceResultContract::None,
+            hir::SafeReferenceResultContract::SharedIdentity { origin } => {
+                core::SafeReferenceResultContract::SharedIdentity { origin }
+            }
+            hir::SafeReferenceResultContract::SharedDirectChild { origin } => {
+                core::SafeReferenceResultContract::SharedDirectChild { origin }
+            }
         };
 
         Ok(core::Function {
