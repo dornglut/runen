@@ -1,6 +1,6 @@
 use runen_hir::{
-    AssignmentMutability, DiagnosticKind, ModuleId, OwnedUse, SourceUnit, Statement, ValueKind,
-    build_typed_hir,
+    AssignmentMutability, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
+    SourceUnit, Statement, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -20,6 +20,10 @@ fn has_diagnostic(
     errors.iter().any(|error| predicate(error.kind))
 }
 
+fn count_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> usize {
+    errors.iter().filter(|error| error.kind == kind).count()
+}
+
 #[test]
 fn retains_local_mutability_and_resolved_assignment_identity() {
     let hir = build("fn f(input: I64) { let mut x: I64 = input; x = input; }")
@@ -36,14 +40,54 @@ fn retains_local_mutability_and_resolved_assignment_identity() {
     };
     assert_eq!(mutability, AssignmentMutability::Mutable);
 
-    let Statement::Assignment { target, value, .. } = &function.body.statements[1] else {
+    let Statement::Assignment {
+        target,
+        fields,
+        value,
+        ..
+    } = &function.body.statements[1]
+    else {
         panic!("expected resolved assignment");
     };
     assert_eq!(*target, binding);
+    assert!(fields.is_empty(), "whole-binding assignment retains empty path");
     let ValueKind::BindingUse { ownership, .. } = value.kind else {
         panic!("expected binding-use assignment RHS");
     };
     assert_eq!(ownership, OwnedUse::Duplicate);
+}
+
+#[test]
+fn retains_exact_resolved_field_assignment_path_and_type() {
+    let hir = build(
+        "record Inner { pad: I8, value: I64 } \
+         record Outer { first: I8, inner: Inner } \
+         fn f(seed: Outer, replacement: I64) { \
+             let mut root: Outer = seed; \
+             root.inner.value = replacement; \
+         }",
+    )
+    .expect("nested field assignment must validate");
+    let function = hir
+        .functions
+        .iter()
+        .find(|function| function.name == "f")
+        .unwrap();
+    let Statement::Local { binding, .. } = function.body.statements[0] else {
+        panic!("expected mutable root local");
+    };
+    let Statement::Assignment {
+        target,
+        fields,
+        value,
+        ..
+    } = &function.body.statements[1]
+    else {
+        panic!("expected field assignment");
+    };
+    assert_eq!(*target, binding);
+    assert_eq!(fields, &[1, 1]);
+    assert_eq!(value.ty, Type::Intrinsic(IntrinsicType::I64));
 }
 
 #[test]
@@ -52,6 +96,8 @@ fn immutable_locals_and_parameters_reject_assignment_independent_of_availability
         "fn f(input: I64) { let x: I64 = input; x = input; }",
         "fn f(input: I64) { input = input; }",
         "record Ticket {} fn sink(v: Ticket) {} fn f(x: Ticket, replacement: Ticket) { sink(x); x = replacement; }",
+        "record Box { value: I64 } fn f(seed: Box, replacement: I64) { let x: Box = seed; x.value = replacement; }",
+        "record Box { value: I64 } fn f(x: Box, replacement: I64) { x.value = replacement; }",
     ] {
         let errors = build(source).expect_err("immutable assignment must be source-invalid");
         assert!(
@@ -93,6 +139,49 @@ fn assignment_requires_exact_source_type() {
         kind,
         DiagnosticKind::TypeMismatch { .. }
     )));
+
+    let errors = build(
+        "record Box { value: I64 } fn f(seed: Box, replacement: I32) { let mut x: Box = seed; x.value = replacement; }",
+    )
+    .expect_err("field assignment must require the selected field's exact type");
+    assert!(has_diagnostic(&errors, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Intrinsic(IntrinsicType::I64),
+            found: Type::Intrinsic(IntrinsicType::I32),
+        }
+    )));
+}
+
+#[test]
+fn field_assignment_reuses_field_resolution_diagnostics() {
+    let non_record = build(
+        "fn f(seed: I64, replacement: I64) { let mut x: I64 = seed; x.value = replacement; }",
+    )
+    .expect_err("selector on a scalar target must reject");
+    assert!(has_diagnostic(&non_record, |kind| kind
+        == DiagnosticKind::ExpectedRecordForFieldAccess));
+
+    let unknown = build(
+        "record Box { value: I64 } fn f(seed: Box, replacement: I64) { let mut x: Box = seed; x.missing = replacement; }",
+    )
+    .expect_err("unknown target field must reject");
+    assert!(has_diagnostic(&unknown, |kind| kind
+        == DiagnosticKind::UnknownRecordField));
+
+    let dependency = parse("export record Foreign { hidden: I64 }");
+    let application = parse(
+        "import dep; fn f(seed: dep::Foreign, replacement: I64) { let mut x: dep::Foreign = seed; x.hidden = replacement; }",
+    );
+    let dependency_module = ModuleId::new(2);
+    let imports = [ImportTarget::new("dep", dependency_module).unwrap()];
+    let inaccessible = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &application, &imports),
+        SourceUnit::new(dependency_module, &dependency, &[]),
+    ])
+    .expect_err("foreign private assignment field must reject");
+    assert!(has_diagnostic(&inaccessible, |kind| kind
+        == DiagnosticKind::InaccessibleRecordField));
 }
 
 #[test]
@@ -158,6 +247,182 @@ fn call_rhs_ownership_effects_precede_assignment_reavailability() {
             .value
             .is_some()
     );
+}
+
+#[test]
+fn field_assignment_admits_replacement_reinitialization_and_partial_reconstruction() {
+    build(
+        "record Leaf {} record Inner { a: Leaf, b: Leaf } record Outer { inner: Inner, spare: Leaf } \
+         fn sink(v: Leaf) {} \
+         fn replacement(seed: Outer) -> Outer { \
+             let mut x: Outer = seed; \
+             x.inner = Inner { a: Leaf {}, b: Leaf {} }; \
+             return x; \
+         } \
+         fn exact(seed: Outer) -> Outer { \
+             let mut x: Outer = seed; \
+             sink(x.inner.a); \
+             x.inner.a = Leaf {}; \
+             return x; \
+         } \
+         fn partial(seed: Outer) -> Outer { \
+             let mut x: Outer = seed; \
+             sink(x.inner.a); \
+             x.inner = Inner { a: Leaf {}, b: Leaf {} }; \
+             return x; \
+         }",
+    )
+    .expect("field assignment must admit fully available, exact-consumed, and partial targets");
+}
+
+#[test]
+fn field_assignment_rejects_consumed_strict_ancestor_without_splitting_state() {
+    let errors = build(
+        "record Leaf {} record Inner { a: Leaf, b: Leaf } record Outer { inner: Inner, spare: Leaf } \
+         fn sink(v: Inner) {} \
+         fn f(seed: Outer) { \
+             let mut x: Outer = seed; \
+             sink(x.inner); \
+             x.inner.a = Leaf {}; \
+         }",
+    )
+    .expect_err("assignment below a consumed strict ancestor must reject");
+    assert_eq!(
+        count_diagnostic(&errors, DiagnosticKind::UnavailableFieldValue),
+        1,
+        "strict-ancestor rejection must use the existing field-unavailable diagnostic: {errors:?}"
+    );
+}
+
+#[test]
+fn field_assignment_rhs_consumption_composes_with_installation_law() {
+    build(
+        "record Leaf {} record Inner { a: Leaf, b: Leaf } record Outer { inner: Inner, spare: Leaf } \
+         fn id(v: Leaf) -> Leaf { return v; } \
+         fn rebuild(a: Leaf, b: Leaf) -> Inner { return Inner { a: a, b: b }; } \
+         fn exact(seed: Outer) -> Outer { \
+             let mut x: Outer = seed; \
+             x.inner.a = id(x.inner.a); \
+             return x; \
+         } \
+         fn descendant(seed: Outer) -> Outer { \
+             let mut x: Outer = seed; \
+             x.inner = rebuild(x.inner.a, Leaf {}); \
+             return x; \
+         }",
+    )
+    .expect("RHS exact-target and descendant consumption must compose with installation");
+
+    let disjoint = build(
+        "record Leaf {} record Inner { a: Leaf, b: Leaf } record Outer { inner: Inner, spare: Leaf } \
+         fn choose(value: Inner, discard: Leaf) -> Inner { return value; } \
+         fn sink(v: Leaf) {} \
+         fn f(seed: Outer) { \
+             let mut x: Outer = seed; \
+             x.inner = choose(Inner { a: Leaf {}, b: Leaf {} }, x.spare); \
+             sink(x.spare); \
+         }",
+    )
+    .expect_err("disjoint RHS consumption must remain consumed after target installation");
+    assert_eq!(
+        count_diagnostic(&disjoint, DiagnosticKind::UnavailableFieldValue),
+        1,
+        "target installation must preserve the disjoint consumed path: {disjoint:?}"
+    );
+}
+
+#[test]
+fn field_assignment_authority_is_exact_target_relative() {
+    let overlap = build(
+        "record Pair { left: I64, right: I64 } \
+         fn f(seed: Pair, replacement: I64) { \
+             let mut x: Pair = seed; \
+             let r: &I64 = &x.left; \
+             x.left = replacement; \
+         }",
+    )
+    .expect_err("overlapping Shared authority must block field replacement");
+    assert!(has_diagnostic(&overlap, |kind| kind
+        == DiagnosticKind::BorrowedAssignmentTarget));
+
+    build(
+        "record Pair { left: I64, right: I64 } \
+         fn f(seed: Pair, replacement: I64) { \
+             let mut x: Pair = seed; \
+             let r: &I64 = &x.right; \
+             x.left = replacement; \
+             let observed: I64 = *r; \
+         }",
+    )
+    .expect("disjoint sibling Shared authority must remain compatible with assignment");
+}
+
+#[test]
+fn field_assignment_entry_authority_cannot_be_cured_by_rhs_consuming_carrier() {
+    let errors = build(
+        "record Pair { left: I64, right: I64 } \
+         fn release(r: &mut Pair) -> I64 { return 1; } \
+         fn consume(r: &mut Pair) {} \
+         fn f(seed: Pair) { \
+             let mut x: Pair = seed; \
+             let r: &mut Pair = &mut x; \
+             x.left = release(r); \
+             consume(r); \
+         }",
+    )
+    .expect_err("entry-state overlapping authority must reject even if RHS consumes its carrier");
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::BorrowedAssignmentTarget));
+    assert!(
+        !has_diagnostic(&errors, |kind| kind == DiagnosticKind::UnavailableBinding),
+        "rejected field assignment must not leak speculative RHS carrier consumption: {errors:?}"
+    );
+}
+
+#[test]
+fn invalid_field_rhs_diagnostic_precedes_entry_authority_admission() {
+    let errors = build(
+        "record Pair { left: I64, right: I64 } \
+         fn f(seed: Pair) { \
+             let mut x: Pair = seed; \
+             let r: &I64 = &x.left; \
+             x.left = missing; \
+         }",
+    )
+    .expect_err("invalid RHS must reject before entry authority diagnostic");
+    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::UnresolvedName));
+    assert!(
+        !has_diagnostic(&errors, |kind| kind
+            == DiagnosticKind::BorrowedAssignmentTarget),
+        "RHS diagnostics retain priority over remembered entry authority: {errors:?}"
+    );
+}
+
+#[test]
+fn field_assignment_reuses_existing_branch_and_loop_exact_state_rules() {
+    build(
+        "record Leaf {} record Inner { a: Leaf, b: Leaf } record Outer { inner: Inner } \
+         fn sink(v: Leaf) {} \
+         fn branch(cond: Bool, seed: Outer) -> Outer { \
+             let mut x: Outer = seed; \
+             sink(x.inner.a); \
+             if cond { \
+                 x.inner = Inner { a: Leaf {}, b: Leaf {} }; \
+             } else { \
+                 x.inner = Inner { a: Leaf {}, b: Leaf {} }; \
+             } \
+             return x; \
+         } \
+         fn looping(cond: Bool, seed: Outer) -> Outer { \
+             let mut x: Outer = seed; \
+             while cond { \
+                 sink(x.inner.a); \
+                 x.inner.a = Leaf {}; \
+             } \
+             return x; \
+         }",
+    )
+    .expect("explicit field restoration may satisfy existing branch and loop state equality");
 }
 
 #[test]

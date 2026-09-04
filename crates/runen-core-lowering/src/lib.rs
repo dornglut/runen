@@ -725,12 +725,30 @@ impl<'a> FunctionLowerer<'a> {
                     bindings,
                     ..
                 } => self.lower_record_destructure(*record, scrutinee, bindings)?,
-                hir::Statement::Assignment { target, value, .. } => {
-                    let destination = self.binding(*target)?;
-                    let value = self.lower_value(value)?;
+                hir::Statement::Assignment {
+                    target,
+                    fields,
+                    value,
+                    ..
+                } => {
+                    let destination = self.binding_place(*target, fields)?;
+                    let root_ty = self.local_type(destination.local)?;
+                    let projected_ty = self.types.project_type(root_ty, &destination.projections)?;
+                    let retained_ty = self.types.get(value.ty)?;
+                    if projected_ty != retained_ty {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "assignment target type does not match retained RHS type",
+                        ));
+                    }
+                    let value_local = self.lower_value(value)?;
+                    if self.local_type(value_local)? != retained_ty {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "assignment RHS temporary type does not match retained HIR type",
+                        ));
+                    }
                     self.push_statement(core::Statement::Assign {
-                        dst: core::Place::local(destination).into(),
-                        src: core::Operand::Move(core::Place::local(value).into()),
+                        dst: destination.into(),
+                        src: core::Operand::Move(core::Place::local(value_local).into()),
                     });
                 }
                 hir::Statement::ReferenceAssign {
