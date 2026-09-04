@@ -144,7 +144,8 @@ fn projected_replacement_root_and_reborrow_retain_exact_paths_and_permission() {
 
     let root = function(&hir, "root");
     let Statement::Local {
-        binding: root_binding, ..
+        binding: root_binding,
+        ..
     } = &root.body.statements[0]
     else {
         panic!("expected mutable root local");
@@ -185,8 +186,9 @@ fn projected_replacement_root_observes_exact_structural_availability() {
         "record Token {} record Inner { token: Token, count: I64 } record Outer { inner: Inner, other: Token }\
          fn f(seed: Outer) { let mut root: Outer = seed; let moved: Inner = root.inner; let r: &mut Token = &mut root.inner.token; }",
     ] {
-        let errors = compile(source)
-            .expect_err("equal, partial, or strict-ancestor consumption must reject projected root formation");
+        let errors = compile(source).expect_err(
+            "equal, partial, or strict-ancestor consumption must reject projected root formation",
+        );
         assert!(
             has_diagnostic(&errors, |kind| kind
                 == DiagnosticKind::InvalidReplacementReferenceTarget),
@@ -398,7 +400,8 @@ fn projected_replacement_reconstructs_descendants_and_preserves_disjoint_consump
          }",
     )
     .expect_err("projected installation must preserve a disjoint consumed sibling");
-    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::UnavailableFieldValue));
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::UnavailableFieldValue));
 }
 
 #[test]
