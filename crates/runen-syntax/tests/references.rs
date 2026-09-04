@@ -132,6 +132,7 @@ fn rejects_unrepresented_reference_syntax() {
         "fn f(r: &I64) { let x: I64 = *(r); }",
         "fn f(r: &mut I64) { let x: &mut I64 = &mut **r; }",
         "fn f(r: &I64) { let x: I64 = *r.value; }",
+        "fn f(r: &mut I64) { *r.value = 1; }",
         "fn f(x: I64) { let p: raw I64 = raw &x.value; }",
         "import dep; fn f(x: I64) { let r: &I64 = &dep::x; }",
         "fn f(r: &mut I64) { **r = 1; }",
