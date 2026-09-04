@@ -364,7 +364,7 @@ fn field_assignment_authority_is_exact_target_relative() {
              let r: &I64 = &x.left; \
              x.left = replacement; \
          }",
-        "record Inner { left: I64, right: I64 } record Outer { inner: Inner } \
+        "record copy Inner { left: I64, right: I64 } record Outer { inner: Inner } \
          fn f(seed: Outer, replacement: I64) { \
              let mut x: Outer = seed; \
              let r: &Inner = &x.inner; \
