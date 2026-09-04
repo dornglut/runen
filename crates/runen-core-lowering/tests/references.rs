@@ -466,23 +466,24 @@ fn lowers_projected_replacement_reborrows_to_exact_reference_access_projections(
         .iter()
         .flat_map(|block| block.statements.iter())
         .collect::<Vec<_>>();
-    let reborrows = statements
-        .iter()
-        .filter_map(|statement| {
-            let CoreStatement::Init {
-                dst,
-                src: Operand::ReferenceReborrow { permission, src },
-            } = statement
-            else {
-                return None;
-            };
-            let PlaceAccess::Direct(reference_place) = &src.reference else {
-                return None;
-            };
-            (reference_place.local == parent && reference_place.projections.is_empty())
-                .then_some((dst.local, *permission, src))
-        })
-        .collect::<Vec<_>>();
+    let reborrows =
+        statements
+            .iter()
+            .filter_map(|statement| {
+                let CoreStatement::Init {
+                    dst,
+                    src: Operand::ReferenceReborrow { permission, src },
+                } = statement
+                else {
+                    return None;
+                };
+                let PlaceAccess::Direct(reference_place) = &src.reference else {
+                    return None;
+                };
+                (reference_place.local == parent && reference_place.projections.is_empty())
+                    .then_some((dst.local, *permission, src))
+            })
+            .collect::<Vec<_>>();
 
     assert_eq!(reborrows.len(), 2);
     let expected = [
