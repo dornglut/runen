@@ -2093,11 +2093,6 @@ impl<'a> FunctionLowerer<'a> {
                         "reference-reborrow permission does not match its safe-reference type",
                     ));
                 }
-                if !fields.is_empty() && *permission != hir::ReferencePermission::Shared {
-                    return Err(LoweringError::InvalidHirInvariant(
-                        "projected reference-reborrow is not Shared",
-                    ));
-                }
 
                 let source = self.binding(*reference)?;
                 let source_ty = self.local_type(source)?;
