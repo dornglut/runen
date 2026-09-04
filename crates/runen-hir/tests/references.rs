@@ -306,10 +306,9 @@ fn shared_field_relative_reborrow_reuses_exact_field_accessibility() {
 
 #[test]
 fn projected_replacement_forms_reuse_canonical_field_type_and_permission_diagnostics() {
-    let root_non_record = compile(
-        "fn f(seed: I64) { let mut x: I64 = seed; let r: &mut I64 = &mut x.value; }",
-    )
-    .expect_err("replacement root selector through a non-record must reject canonically");
+    let root_non_record =
+        compile("fn f(seed: I64) { let mut x: I64 = seed; let r: &mut I64 = &mut x.value; }")
+            .expect_err("replacement root selector through a non-record must reject canonically");
     assert!(has_diagnostic(&root_non_record, |kind| kind
         == DiagnosticKind::ExpectedRecordForFieldAccess));
 
@@ -318,7 +317,8 @@ fn projected_replacement_forms_reuse_canonical_field_type_and_permission_diagnos
          fn f(seed: Box) { let mut x: Box = seed; let r: &mut I64 = &mut x.missing; }",
     )
     .expect_err("unknown replacement-root selector must use the canonical field diagnostic");
-    assert!(has_diagnostic(&root_unknown, |kind| kind == DiagnosticKind::UnknownRecordField));
+    assert!(has_diagnostic(&root_unknown, |kind| kind
+        == DiagnosticKind::UnknownRecordField));
 
     let root_mismatch = compile(
         "record Box { value: I64 }\
@@ -340,7 +340,8 @@ fn projected_replacement_forms_reuse_canonical_field_type_and_permission_diagnos
          fn f(r: &mut Box) { let child: &mut I64 = &mut *r.missing; }",
     )
     .expect_err("unknown replacement-child selector must use the canonical field diagnostic");
-    assert!(has_diagnostic(&child_unknown, |kind| kind == DiagnosticKind::UnknownRecordField));
+    assert!(has_diagnostic(&child_unknown, |kind| kind
+        == DiagnosticKind::UnknownRecordField));
 
     let child_mismatch = compile(
         "record Box { value: I64 }\
@@ -387,7 +388,9 @@ fn projected_replacement_forms_reuse_exact_field_accessibility() {
         parse(
             "import dep; fn root(seed: dep::Public) { let mut value: dep::Public = seed; let r: &mut I64 = &mut value.hidden; }",
         ),
-        parse("import dep; fn child(r: &mut dep::Public) { let selected: &mut I64 = &mut *r.hidden; }"),
+        parse(
+            "import dep; fn child(r: &mut dep::Public) { let selected: &mut I64 = &mut *r.hidden; }",
+        ),
     ] {
         let errors = build_typed_hir(&[
             SourceUnit::new(ModuleId::new(2), &dep, &[]),
@@ -409,7 +412,9 @@ fn projected_descendant_does_not_create_a_shared_direct_child_result_contract() 
         "record copy Pair { left: I64, right: I64 }\
          fn f(parent: &mut Pair) -> &I64 { return &*parent.left; }",
     )
-    .expect_err("projected descendant result must not widen the complete-target SharedDirectChild contract");
+    .expect_err(
+        "projected descendant result must not widen the complete-target SharedDirectChild contract",
+    );
     assert!(has_diagnostic(&errors, |kind| kind
         == DiagnosticKind::MissingSharedReferenceResultOrigin));
 }
