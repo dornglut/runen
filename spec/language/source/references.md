@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source-language safe-reference relation: Shared and replacement-capable exclusive reference types and values, complete-root and bounded Shared binding-field safe-reference targets, bounded Shared field-relative child targets, source safe-authority compatibility, reference authority/carrier lifetime, source-validation result provenance, root formation, bounded complete-referent dereference, explicit bounded reborrow, replacement through a replacement-capable reference, parameter/result transfer consequences, external-referent structural ownership, bounded safe-reference result validity, implicit lexical lifetime validity, and source-to-Core refinement for this bounded slice.
+This document owns the represented source-language safe-reference relation: Shared and replacement-capable exclusive reference types and values, complete-root and bounded Shared/replacement-capable binding-field safe-reference targets, bounded Shared field-relative child targets, source safe-authority compatibility, reference authority/carrier lifetime, source-validation result provenance, root formation, bounded complete-referent dereference, explicit bounded reborrow, replacement through a replacement-capable reference, parameter/result transfer consequences, external-referent structural ownership, bounded safe-reference result validity, implicit lexical lifetime validity, and source-to-Core refinement for this bounded slice.
 
-It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, ordinary value use, and assignment from [Source function-local bindings](local-bindings.md); structural root/path availability, consumption, replacement reset, and remaining ownership frontiers from [Source structural ownership](structural-ownership.md); nominal record field identity and direct field accessibility for bounded Shared binding-field root and field-relative reborrow selection from [Source field-value access](field-access.md); function entity/parameter/result-contract callable structure from [Source callables](callables.md); direct-call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); represented control-flow state composition from [Source control flow](control-flow.md); the independently owned raw-pointer/unsafe relation from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
+It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, ordinary value use, and assignment from [Source function-local bindings](local-bindings.md); structural root/path availability, consumption, replacement reset, bounded non-empty subpath installation, and remaining ownership frontiers from [Source structural ownership](structural-ownership.md); nominal record field identity and direct field accessibility for bounded Shared/replacement-capable binding-field root and Shared field-relative reborrow selection from [Source field-value access](field-access.md); function entity/parameter/result-contract callable structure from [Source callables](callables.md); direct-call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); represented control-flow state composition from [Source control flow](control-flow.md); the independently owned raw-pointer/unsafe relation from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
 
 The lower refinement target is the accepted safe-reference relation in [Core references](../core/references.md) and the parameter/result-transfer plus safe-reference result-contract relation in [Core functions and direct calls](../core/functions.md). Core reference identity, `StorageRegion`, reference-authority identity, Core liveness, and proving representation are not source-language authority.
 
-This source relation represents Shared references and one replacement-capable exclusive class. It exposes bounded Shared root formation over a binding root or one resolved binding field path, bounded Shared field-relative child reborrow through an existing safe reference, exact Shared-identity results, and one complete-referent Shared direct-child result contract. It does not expose plain Core `Exclusive`, reference-containing aggregate fields/results, replacement-capable field/subregion roots or field-relative children, direct reference-relative field/subregion value access, projected/subregion result origins, arbitrary descendant or multiple-origin result contracts, named lifetimes, non-lexical lifetime shortening, or a general source place/lvalue/address category.
+This source relation represents Shared references and one replacement-capable exclusive class. It exposes bounded Shared and replacement-capable root formation over a binding root or one resolved binding field path, bounded Shared field-relative child reborrow through an existing safe reference, exact Shared-identity results, and one complete-referent Shared direct-child result contract. It does not expose plain Core `Exclusive`, reference-containing aggregate fields/results, replacement-capable field-relative children, direct reference-relative field/subregion value access, projected/subregion result origins, arbitrary descendant or multiple-origin result contracts, named lifetimes, non-lexical lifetime shortening, or a general source place/lvalue/address category.
 
 ## Source reference types
 
@@ -121,16 +121,16 @@ A source safe-reference target is one dynamic structural region. Root formation 
 
 A local safe-reference root target begins at one active parameter or ordinary local binding selected through the unqualified function-local lookup relation from `local-bindings.md`.
 
-For Shared root formation, the target path is either:
+For represented root formation, the target path is either:
 
-- the complete empty structural path of that binding; or
-- one non-empty structural field path selected by the bounded Shared field-root relation below.
+- the complete empty structural path of the selected binding; or
+- one non-empty structural field path selected by the bounded binding-field root relation below.
 
-For every non-empty Shared field-root path, selection begins from the root binding's declared source type and resolves each concrete field selector in order. Every step requires the current type to be one nominal record, resolves exactly one declared field identity, requires the existing direct field-accessibility relation from `field-access.md`, appends that field identity to the structural path from `structural-ownership.md`, and continues from that field's exact declared source type. Unknown, wrong-category, or inaccessible steps reject the complete formation before any fresh authority/carrier is created.
+For every non-empty binding-field root path, selection begins from the root binding's declared source type and resolves each concrete field selector in order. Every step requires the current type to be one nominal record, resolves exactly one declared field identity, requires the existing direct field-accessibility relation from `field-access.md`, appends that field identity to the structural path from `structural-ownership.md`, and continues from that field's exact declared source type. Unknown, wrong-category, or inaccessible steps reject the complete formation before any fresh authority/carrier is created.
 
-The final selected field/root type, not the outer record type, is the candidate Shared referent type. The containing binding storage extent remains the target extent for every selected descendant structural region.
+The final selected field/root type, not the outer record type, is the candidate referent type. Shared root formation applies Shared-referent admission to that exact type; replacement-capable root formation applies replacement-reference-referent admission to that exact type. The containing binding storage extent remains the target extent for every selected descendant structural region.
 
-Replacement-capable root formation remains narrower and may select only the complete empty structural path of a mutable ordinary local, as defined below. It does not select a field path in this slice.
+Replacement-capable root formation additionally requires the selected binding to be one mutable ordinary local as defined below. Parameters remain eligible only for Shared root formation because represented parameters do not establish ordinary local replacement permission.
 
 No root formation selects a pattern path independently of its root binding, producer transient, direct-call result, record-construction transient, dereference result, arbitrary temporary, grouped value, or general source expression/place/lvalue. No source qualification syntax is introduced inside a field path.
 
@@ -185,7 +185,7 @@ Two local-binding structural targets overlap exactly when their roots are the sa
 
 `SharedRef` authorities are shared. `ExclusiveReplaceRef` authorities are exclusive; replacement capability is an additional operation permission, not a third alias kind.
 
-For direct operations on an original local root or selected descendant path, every active overlapping safe-reference branch is considered, including a root replacement-capable authority whose own retained reference-relative capability has been reduced by a child. A Shared child does not legalize unrelated direct access to an overlapping original region. A disjoint field-root authority does not constrain a direct operation on a structurally disjoint sibling merely because both lie in one containing record. The live root replacement-capable authority continues to block direct operations requiring Shared compatibility throughout its complete target, including descendant fields, until that authority branch actually ends.
+For direct operations on an original local root or selected descendant path, every active overlapping safe-reference branch is considered, including a root replacement-capable authority whose own retained reference-relative capability has been reduced by a child. A Shared child does not legalize unrelated direct access to an overlapping original region. A field-root authority constrains exactly overlapping equal/ancestor/descendant regions and does not constrain a structurally disjoint sibling merely because both lie in one containing record. A live replacement-capable root authority continues to block direct operations requiring Shared compatibility throughout its exact target and overlapping descendants or ancestors until that authority branch actually ends.
 
 For reference-relative operations through a parent authority `A`, retained capability is evaluated at the exact selected target region. An active Shared child branch is compatible with a Shared requirement over an overlapping selected region. An active replacement-capable child branch suspends parent capability over every selected region that overlaps that child branch. A child branch targeting a structurally disjoint sibling does not constrain the parent's capability at the selected region. Ancestor/descendant overlap is the same structural overlap relation above. Consequently a Shared field-relative child downgrades an `ExclusiveReplace` parent's retained capability only over its overlapping structural region; it does not spuriously remove replacement-capable authority over disjoint siblings. Full complete-referent capability, when another rule requires it, still fails whenever any active child branch delegates part of that complete referent in a way incompatible with that required complete capability.
 
@@ -200,7 +200,7 @@ The represented direct/root operations consume the compatibility classes as foll
 - consuming binding-root field-value production: Exclusive requirement;
 - consuming direct-root pattern production: Exclusive requirement;
 - whole-binding assignment/reinitialization: Exclusive requirement;
-- replacement-capable root formation: Exclusive requirement;
+- replacement-capable root formation, including bounded binding-field root formation: Exclusive requirement;
 - raw ownership move: Exclusive requirement; and
 - raw replacement: Exclusive requirement at its post-source commit point.
 
@@ -228,9 +228,9 @@ Independent Shared root formations create independent authorities when compatibi
 
 ## Root replacement-capable formation
 
-Concrete `&mut x` requests one root replacement-capable exclusive reference.
+Concrete `&mut x` requests one complete-root replacement-capable exclusive reference. Concrete `&mut x.field...` requests one bounded replacement-capable exclusive reference to the exact selected binding field path.
 
-Let `x` resolve to one active ordinary local binding whose declared source type is `T`, and let the receiving position require exact source type `ExclusiveReplaceRef(U)`.
+Let `x` resolve to one active ordinary local binding with declared source type `R`. Let the zero-or-more concrete field selectors resolve under the local binding structural-target relation above to exact structural path `p` with final selected source type `T`. Let the receiving position require exact source type `ExclusiveReplaceRef(U)`.
 
 Formation is source-valid only when:
 
@@ -238,13 +238,17 @@ Formation is source-valid only when:
 2. `T` is replacement-reference-referent-admissible;
 3. `x` is an ordinary local binding, not a parameter;
 4. `x` is mutable under `local-bindings.md`;
-5. the complete structural root of `x` is fully available;
-6. the target binding extent is active; and
-7. the canonical Exclusive requirement succeeds for the complete target root.
+5. the selected structural path `p` is fully available immediately before formation;
+6. the containing target binding extent is active; and
+7. the canonical Exclusive requirement succeeds for exactly the selected target region `p` against every overlapping active safe authority.
 
-Parameters are not replacement-capable root targets because represented parameters do not establish ordinary local replacement permission. A non-empty field path is not a represented replacement-capable root target in this slice.
+For the zero-selector case, `p` is the complete empty path and these rules are exactly the existing `&mut x` rules. For a non-empty path, a consumed equal or ancestor path rejects formation, a consumed descendant that makes `p` only partially available rejects formation, and a consumed structurally disjoint sibling does not reject formation. Replacement-reference-referent admission applies to the exact final type `T`; the containing root type `R` need not itself be replacement-reference-referent-admissible when a selected descendant `T` is.
 
-Successful formation creates one fresh replacement-capable exclusive authority and one carrier, leaves the target value/ownership unchanged, and performs no target read, move, mutation, destruction, or replacement.
+The broader bounded non-empty subpath-installation relation from `structural-ownership.md` does not widen formation admission. Exactly consumed or partially available `p` remains invalid for root formation even though an already valid replacement-capable reference may later reinitialize or reconstruct its selected target through the separate replacement relation below. Formation always requires a currently fully available referent value.
+
+Parameters are not replacement-capable root targets because represented parameters do not establish ordinary local replacement permission. No independent field-level mutability property is introduced: the selected root binding's existing assignment mutability supplies replacement permission for every source-valid descendant target selected here.
+
+Successful formation creates one fresh replacement-capable exclusive root authority and one carrier targeting exactly structural path `p`, leaves target ownership/value unchanged, and performs no target read, copy, move, mutation, destruction, replacement, restoration, or normalization. A projected replacement-capable field-root authority is a fresh root authority, not a child/reborrow of another safe reference merely because another authority targets an ancestor, descendant, or equal structural region.
 
 ## Authority and carrier lifecycle
 
@@ -276,7 +280,7 @@ While active safe authority overlaps a local binding structural region, direct o
 
 A direct non-consuming duplicate/path operation may proceed only under the Shared requirement. A direct ownership-consuming path operation or whole-binding assignment may proceed only under the Exclusive requirement.
 
-Thus an active complete-root replacement-capable authority blocks direct access to every overlapping descendant path even when that authority currently has only a Shared child and the parent's retained reference-relative capability is Shared on the overlap. Ending the child alone does not end the root authority; overlapping direct access becomes eligible only after the complete conflicting authority branch ends. Conversely, a Shared field-root authority for `x.left` does not constrain a direct operation on disjoint `x.right` merely because both share binding root `x`.
+Thus an active replacement-capable root authority blocks direct access to every region overlapping its exact target even when that authority currently has only a Shared child and the parent's retained reference-relative capability is Shared on the overlap. Ending the child alone does not end the root authority; overlapping direct access becomes eligible only after the complete conflicting authority branch ends. A projected replacement-capable authority over `x.left` does not constrain direct access to disjoint `x.right`, just as a Shared field-root authority for `x.left` does not constrain a direct operation on disjoint `x.right` merely because both share binding root `x`.
 
 No separate borrow mark is added to `structural-ownership.md`. Safe authority and structural consumed-path state are distinct validation relations.
 
@@ -309,9 +313,9 @@ For `SharedRef(T)`, successful `*r` requires a live carrier/authority, active ta
 For `ExclusiveReplaceRef(T)`:
 
 - when `T` is duplicable, `*r` requires retained Shared reference-relative authority plus a fully available complete target and produces one non-consuming duplicate of `T`;
-- when `T` is non-duplicable, `*r` requires retained Exclusive reference-relative authority plus a fully available complete target and ownership-moves the complete referent `T`, consuming the complete target structural root while target storage and reference authority remain live.
+- when `T` is non-duplicable, `*r` requires retained Exclusive reference-relative authority plus a fully available complete target and ownership-moves the complete referent `T`, consuming exactly the structural region denoted by that reference while target storage and reference authority remain live.
 
-The complete target structural state for a reference into a local binding is the existing structural ownership state of that containing binding, observed at the exact target path selected by root formation; for a replacement-capable parameter it is the external referent structural root. `*r` still addresses the complete referent of that stored reference: for a field-root Shared reference, that complete referent is exactly the field structural region selected when the authority was formed.
+For a reference into a current-activation local binding, the complete target structural state is the existing structural ownership state of that containing binding observed at the exact target path selected by root formation; a non-duplicable Move consumes exactly that path. For a replacement-capable parameter, the complete target is its external referent structural root and a non-duplicable Move consumes that root. `*r` always addresses the complete referent of the stored reference, even when that complete referent is one projected binding-field region selected when a root authority was formed.
 
 No explicit source safe-reference Drop, interior assignment, field-relative dereference, or general dereference place is represented.
 
@@ -322,18 +326,23 @@ Concrete statement `*r = Value;` is represented only when `r` has exact type `Ex
 Replacement is source-first:
 
 1. resolve `r` and identify its current complete referent domain without consuming the destination carrier;
-2. validate and evaluate the RHS producer under exact required type `T`;
-3. if RHS evaluation faults or diverges, perform no outer referent replacement;
-4. after successful RHS production, require the destination reference carrier still to be live and its authority branch to retain full replacement-capable exclusive authority over the complete referent;
-5. select and end the referent's then-current remaining ownership frontier;
-6. install the produced exact-`T` value; and
-7. reset that referent structural ownership state to complete with an empty consumed-path set.
+2. before RHS producer consequences may commit, require the destination reference carrier to be live and its authority branch to retain full replacement-capable exclusive authority over the complete referent;
+3. validate and evaluate the RHS producer under exact required type `T`;
+4. if RHS evaluation faults or diverges, perform no outer referent replacement;
+5. after successful RHS production, require the destination reference carrier still to be live and its authority branch still to retain full replacement-capable exclusive authority over the complete referent;
+6. for a complete external-referent root or a local-binding target at empty path, select and end the then-current complete-root remaining ownership frontier; for a local-binding target at non-empty path `p`, require the canonical bounded non-empty subpath-installation admission and select and end exactly the then-current `frontier(p)`;
+7. install the produced exact-`T` value into the complete referent; and
+8. for a complete external-referent root or local-binding empty path, establish fresh complete ownership with an empty consumed-path set; for a local-binding target at non-empty path `p`, apply the canonical successful bounded subpath-installation transition, removing exactly consumed paths equal to or below `p` while preserving every structurally disjoint consumed path.
 
-The RHS may itself move from the referent through the same reference when otherwise valid. The outer replacement therefore selects the remaining frontier only after successful RHS evaluation.
+The pre-RHS authority requirement prevents an already active incompatible delegation from being bypassed merely because RHS evaluation might later change authority state. The post-RHS requirement revalidates the actual replacement point after all successful RHS consequences. Both checks apply to the reference's exact complete referent target.
+
+The structural admission in step 6 is evaluated on the successful post-RHS state at the actual replacement point. For a non-empty local-binding target `p`, replacement therefore admits the canonical fully available, exactly consumed, or partially available descendant-consumed cases and rejects a state containing a consumed strict ancestor of `p`. This does not split a consumed ancestor, add a runtime moved-state check, or create a second structural ownership relation.
+
+The RHS may itself move from the referent through the same reference when otherwise valid. The outer replacement therefore selects the applicable remaining frontier only after successful RHS evaluation. An already valid projected replacement-capable root may consequently reinitialize its exactly consumed target; ending the reference authority alone would not restore that ownership.
 
 The destination reference carrier/authority MUST remain usable through the commit check. This slice does not permit an RHS to consume or disable that destination carrier and then commit through a snapshotted stale dereference destination.
 
-No Shared-reference replacement or plain-Exclusive replacement source form exists.
+No Shared-reference replacement or plain-Exclusive replacement source form exists. This relation remains complete-referent relative to the stored reference and does not add a concrete `*r.field... = Value;` spelling.
 
 ## Explicit bounded reborrow
 
@@ -389,7 +398,7 @@ Every safe-reference ordinary local is immutable. Its initializer is evaluated b
 
 A local may initialize from root formation, ordinary transport of an existing reference, explicit reborrow, or a valid Shared contract-bearing direct-call result as applicable to its exact type.
 
-Reverse lexical cleanup and activation cleanup guarantee that a non-escaping local reference ends before an earlier same-scope or ancestor local target extent. A Shared field-root authority uses the containing root binding's storage extent; it creates no independently longer-lived field extent. A Shared field-relative child likewise uses the continuing parent target's storage extent and creates no separate field lifetime. Replacement-capable child locals likewise end before their parent/target extent under the represented lexical rules.
+Reverse lexical cleanup and activation cleanup guarantee that a non-escaping local reference ends before an earlier same-scope or ancestor local target extent. A binding-field root authority, whether Shared or replacement-capable, uses the containing root binding's storage extent; it creates no independently longer-lived field extent. A Shared field-relative child likewise uses the continuing parent target's storage extent and creates no separate field lifetime. Replacement-capable child locals likewise end before their parent/target extent under the represented lexical rules.
 
 A Shared-reference local may be returned only when its exact authority/provenance relation satisfies the enclosing callable's advertised safe-reference result contract. A replacement-capable reference is never result-admissible.
 
@@ -397,7 +406,7 @@ A Shared-reference local may be returned only when its exact authority/provenanc
 
 A Shared-reference parameter receives one valid Shared carrier targeting storage in a still-live suspended ancestor activation. It remains governed by its exact authority and may be explicitly reborrowed where allowed. Its target may already be one projected structural field region because parameter transfer preserves the exact target of the caller-produced Shared value. A bounded Shared relative reborrow composes its selector path from that exact transported target; it does not rediscover the caller's source root.
 
-A replacement-capable parameter receives one moved replacement-capable carrier plus one external referent structural root that begins fully available. The target extent remains live while the caller activation is suspended. Bounded Shared relative reborrow through such a parameter selects one path within that existing external structural root without creating another ownership domain.
+A replacement-capable parameter receives one moved replacement-capable carrier plus one external referent structural root that begins fully available. Its transported target may likewise be one caller-selected projected binding-field region; the callee treats that exact transported region as the complete referent represented by its external structural root rather than rediscovering or widening the caller's source binding path. The target extent remains live while the caller activation is suspended. Bounded Shared relative reborrow through such a parameter selects one path within that existing external structural root without creating another ownership domain.
 
 Parameter reference bindings are immutable as bindings. Their permission class governs referent operations independently of parameter binding mutability.
 
@@ -410,7 +419,7 @@ Arguments are evaluated left-to-right and successful produced values are held by
 1. its complete target/referent structural root is fully available; and
 2. its authority retains the complete capability promised by its exact source reference type.
 
-Here "complete target/referent" means the complete structural region denoted by that safe-reference authority. A Shared field-root or field-relative child value therefore carries its selected structural region as its complete referent; call transfer does not widen that target to an ancestor region.
+Here "complete target/referent" means the complete structural region denoted by that safe-reference authority. A Shared or replacement-capable field-root reference, or a Shared field-relative child value, therefore carries its selected structural region as its complete referent; call transfer does not widen that target to an ancestor region.
 
 A held `SharedRef(T)` requires full Shared capability. A held `ExclusiveReplaceRef(T)` requires full replacement-capable exclusive capability. A parent with an active child that reduces or suspends the required complete capability cannot satisfy call entry.
 
@@ -521,7 +530,7 @@ A faithful lowering MUST preserve these semantic facts:
 - `ExclusiveReplaceRef(T)` maps to the canonical Core safe-reference type with permission `ExclusiveReplace` and exact lowered referent `T`;
 - root `&x` maps to Core Shared root-reference formation from the direct Core storage for `x`;
 - bounded Shared root `&x.field...` maps to that same Core Shared root-reference operation with one direct place rooted at the lowered storage for `x` plus the exact resolved structural field-projection sequence;
-- root `&mut x` maps to Core `ExclusiveReplace` root-reference formation only for the source-valid mutable ordinary local complete-root target;
+- root `&mut x` maps to Core `ExclusiveReplace` root-reference formation for the source-valid mutable ordinary local complete-root target, and bounded `&mut x.field...` maps to that same Core operation with the exact resolved structural field-projection sequence on the direct local place;
 - Shared source duplication maps to ordinary Core Copy of the Shared reference value;
 - replacement-capable reference transport maps to ordinary Core Move/owned transfer and never to Copy;
 - source `*r` through Shared or duplicable replacement-capable referents maps to Core reference-relative Copy of the complete referent;
@@ -535,7 +544,7 @@ A faithful lowering MUST preserve these semantic facts:
 - `SharedDirectChild(i)` maps to Core `SafeReferenceResultContract::SharedDirectChild { origin: i }`; and
 - lexical/activation cleanup maps to ordinary Core carrier-aware cleanup.
 
-A bounded Shared field-root path maps to Core structural projections on the direct root place without producing an intermediate field value. A bounded Shared field-relative reborrow path maps to Core structural projections on the existing `ReferenceAccess` for the stored parent carrier. Zero relative selectors preserve the existing zero-projection reborrow. A faithful lowering does not reconstruct an originating root place from parent provenance and does not insert a synthetic target load/copy/move, root borrow, parent carrier Copy/Move, raw-pointer/address operation, authority detachment, or result-contract operation merely to realize either projected target.
+A bounded Shared or replacement-capable binding-field root path maps to Core structural projections on the direct root place without producing an intermediate field value. A bounded Shared field-relative reborrow path maps to Core structural projections on the existing `ReferenceAccess` for the stored parent carrier. Zero relative selectors preserve the existing zero-projection reborrow. A faithful lowering does not reconstruct an originating root place from parent provenance and does not insert a synthetic target load/copy/move, root borrow, parent carrier Copy/Move, raw-pointer/address operation, authority detachment, or result-contract operation merely to realize either projected target.
 
 Source result provenance, activation result-origin authority facts, structural target paths, and external referent structural state are validation/refinement evidence. They need not become source-observable runtime objects, but a frontend/lowerer MUST retain enough accepted semantic information to validate exact target overlap, target-relative delegation, identity/direct-parent result relations, call entry, control flow, caller summaries, and normal restoration without reconstructing those rules from host-language behavior or lower implementation convenience.
 
@@ -543,7 +552,7 @@ The following remain source authority and MUST NOT be reconstructed from lower r
 
 - source binding identity and lookup;
 - source referent admission/contextual restrictions;
-- source Shared field-path resolution/accessibility for root and relative reborrow selection and complete-root-only `&mut x` / complete-referent-only `&mut *r` eligibility;
+- source Shared/replacement-capable binding-field path resolution/accessibility for root selection, Shared field-relative reborrow selection, and complete-referent-only `&mut *r` eligibility;
 - source safe-authority compatibility for direct operations and target-relative delegation through parent references;
 - result provenance, activation result-origin authority, and advertised safe-reference result-contract selection;
 - lexical lifetime validity;
@@ -563,7 +572,7 @@ Their safe-reference interaction is exactly:
 - lexical `unsafe` never weakens, ends, or bypasses safe authority; and
 - no reference-to-raw or raw-to-reference conversion is defined.
 
-The existing raw source forms remain complete-root-only. This bounded Shared structural-reference delivery does not add `raw &x.field...`, a reference-relative raw address, or another raw-pointer field-target syntax.
+The existing raw source forms remain complete-root-only. This bounded structural-reference delivery does not add `raw &x.field...`, a reference-relative raw address, or another raw-pointer field-target syntax.
 
 ## Explicit exclusions
 
@@ -573,7 +582,6 @@ This revision does not define:
 - safe-reference record fields or reference-containing aggregates;
 - mutable/rebindable reference locals;
 - nested reference referents;
-- replacement-capable field/subregion root formation;
 - replacement-capable field/subregion reborrow through an existing reference;
 - direct reference-relative field/subregion value access or dereference such as `*r.field`;
 - producer/transient reference targets or a general source place/lvalue/postfix category;
@@ -586,4 +594,4 @@ This revision does not define:
 - unsafe callable contracts;
 - closures/captures, generics/traits/coherence, const/static storage, async/tasks, ABI/layout/FFI/linkage, or package behavior.
 
-The bounded Shared complete-root/field-root formation, bounded Shared complete/field-relative child reborrow, exact-identity result, complete-referent direct-child Shared-result, and complete-referent replacement-capable reference/reborrow relations above are the only represented safe-reference forms. The absence of broader relations does not permit them to be inferred from Core, host-language behavior, another language, parser convenience, or test expectations.
+The bounded Shared and replacement-capable complete-root/binding-field-root formation, bounded Shared complete/field-relative child reborrow, exact-identity result, complete-referent direct-child Shared-result, and complete-referent replacement-capable reborrow relations above are the only represented safe-reference forms. The absence of broader relations does not permit them to be inferred from Core, host-language behavior, another language, parser convenience, or test expectations.
