@@ -204,7 +204,8 @@ fn entry_borrow_cannot_be_cured_by_rhs_consuming_its_authority() {
     .expect_err("entry-state Exclusive conflict must reject assignment even if RHS consumes it");
 
     assert!(
-        has_diagnostic(&errors, |kind| kind == DiagnosticKind::BorrowedAssignmentTarget),
+        has_diagnostic(&errors, |kind| kind
+            == DiagnosticKind::BorrowedAssignmentTarget),
         "missing statement-entry borrowed-target rejection: {errors:?}"
     );
     assert!(
@@ -226,7 +227,8 @@ fn invalid_rhs_diagnostic_precedes_entry_borrow_admission() {
 
     assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::UnresolvedName));
     assert!(
-        !has_diagnostic(&errors, |kind| kind == DiagnosticKind::BorrowedAssignmentTarget),
+        !has_diagnostic(&errors, |kind| kind
+            == DiagnosticKind::BorrowedAssignmentTarget),
         "speculative RHS validation must preserve existing diagnostic priority: {errors:?}"
     );
 }
