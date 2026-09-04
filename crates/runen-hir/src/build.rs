@@ -2234,7 +2234,7 @@ fn release_transfer_reference_carriers(
         .flat_map(|scope| scope.direct_bindings.iter().rev().copied())
         .collect::<Vec<_>>();
     for binding in bindings {
-        state.release_reference_carrier(binding);
+        state.release_binding_reference_carrier(binding);
     }
 }
 
