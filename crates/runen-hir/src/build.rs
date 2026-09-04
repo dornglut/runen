@@ -2902,6 +2902,10 @@ fn validate_assignment(
         }
     };
 
+    let reference_target = ReferenceTarget::local_root(target);
+    let entry_exclusive = state.target_satisfies_exclusive_requirement(&reference_target);
+    let mut candidate = state.clone();
+
     let value_node = value_child(node);
     let value = validate_value(
         header,
@@ -2909,12 +2913,19 @@ fn validate_assignment(
         target_ty,
         context,
         value_context,
-        state,
+        &mut candidate,
         diagnostics,
     )?;
 
-    let reference_target = ReferenceTarget::local_root(target);
-    if !state.target_satisfies_exclusive_requirement(&reference_target) {
+    if !entry_exclusive {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::BorrowedAssignmentTarget,
+            location: target_location,
+        });
+        return None;
+    }
+
+    if !candidate.target_satisfies_exclusive_requirement(&reference_target) {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::BorrowedAssignmentTarget,
             location: target_location,
@@ -2923,7 +2934,7 @@ fn validate_assignment(
     }
 
     let incoming_pointer_origin = if matches!(target_ty, Type::RawPointer(_)) {
-        let origin = pointer_origin_for_value(&value.value, &state.bindings)
+        let origin = pointer_origin_for_value(&value.value, &candidate.bindings)
             .expect("validated raw-pointer value retains exact source origin");
         let domain = target_domain
             .as_ref()
@@ -2940,7 +2951,7 @@ fn validate_assignment(
         None
     };
 
-    let target_state = state
+    let target_state = candidate
         .bindings
         .get_mut(&name)
         .expect("resolved assignment target remains in the active binding scope");
@@ -2949,6 +2960,7 @@ fn validate_assignment(
         target_state.pointer_origin = incoming_pointer_origin;
     }
 
+    *state = candidate;
     Some(Statement::Assignment {
         target,
         value: value.value,
