@@ -188,3 +188,45 @@ fn assignment_target_lookup_never_bypasses_selected_entity() {
     assert!(has_diagnostic(&local_blocks_module, |kind| kind
         == DiagnosticKind::ImmutableAssignmentTarget));
 }
+
+#[test]
+fn entry_borrow_cannot_be_cured_by_rhs_consuming_its_authority() {
+    let errors = build(
+        "fn release(r: &mut I64) -> I64 { return 1; }\
+         fn consume(r: &mut I64) {}\
+         fn f(seed: I64) {\
+             let mut x: I64 = seed;\
+             let r: &mut I64 = &mut x;\
+             x = release(r);\
+             consume(r);\
+         }",
+    )
+    .expect_err("entry-state Exclusive conflict must reject assignment even if RHS consumes it");
+
+    assert!(
+        has_diagnostic(&errors, |kind| kind == DiagnosticKind::BorrowedAssignmentTarget),
+        "missing statement-entry borrowed-target rejection: {errors:?}"
+    );
+    assert!(
+        !has_diagnostic(&errors, |kind| kind == DiagnosticKind::UnavailableBinding),
+        "rejected assignment must not leak the speculative RHS consumption of r: {errors:?}"
+    );
+}
+
+#[test]
+fn invalid_rhs_diagnostic_precedes_entry_borrow_admission() {
+    let errors = build(
+        "fn f(seed: I64) {\
+             let mut x: I64 = seed;\
+             let r: &I64 = &x;\
+             x = missing;\
+         }",
+    )
+    .expect_err("invalid RHS must reject before a borrowed-target diagnostic is emitted");
+
+    assert!(has_diagnostic(&errors, |kind| kind == DiagnosticKind::UnresolvedName));
+    assert!(
+        !has_diagnostic(&errors, |kind| kind == DiagnosticKind::BorrowedAssignmentTarget),
+        "speculative RHS validation must preserve existing diagnostic priority: {errors:?}"
+    );
+}
