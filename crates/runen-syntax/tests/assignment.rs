@@ -32,7 +32,7 @@ fn round_trips_mutable_locals_and_assignment_with_trivia() {
 
 #[test]
 fn round_trips_one_and_nested_field_assignment_targets() {
-    let source = "record Inner { value: I64 } record Outer { inner: Inner } fn f(input: I64, root: Outer) { root /*a*/ . /*b*/ inner /*c*/ . /*d*/ value /*e*/ = /*f*/ input; root.inner.value = input; }";
+    let source = "record Inner { value: I64 } record Outer { inner: Inner } fn f(input: I64, root: Outer) { root /*a*/ . /*b*/ inner /*c*/ = /*d*/ input; root.inner.value = input; }";
     let parsed = parse(source);
 
     assert_eq!(parsed.text(), source);
@@ -43,16 +43,19 @@ fn round_trips_one_and_nested_field_assignment_targets() {
         .filter(|node| node.kind() == SyntaxKind::AssignmentStatement)
         .collect::<Vec<_>>();
     assert_eq!(assignments.len(), 2);
-    for assignment in assignments {
-        assert_eq!(
-            assignment
-                .children_with_tokens()
-                .filter_map(|element| element.into_token())
-                .filter(|token| token.kind() == SyntaxKind::Dot)
-                .count(),
-            2
-        );
-    }
+    assert_eq!(
+        assignments
+            .iter()
+            .map(|assignment| {
+                assignment
+                    .children_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .filter(|token| token.kind() == SyntaxKind::Dot)
+                    .count()
+            })
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
 }
 
 #[test]

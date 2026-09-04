@@ -203,7 +203,6 @@ fn malformed_or_unrepresented_dot_forms_remain_syntax_invalid() {
         "record Box { value: I8 } fn f(root: Box) -> I8 { return root.; }",
         "record Box { value: I8 } fn f(root: Box) -> I8 { return root.value(); }",
         "record Box { value: I8 } fn make() -> Box { return Box { value: 1 }; } fn f() -> I8 { return make().value(); }",
-        "record Box { value: I8 } fn f(root: Box) { root.value = 1; }",
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);

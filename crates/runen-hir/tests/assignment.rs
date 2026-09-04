@@ -297,6 +297,28 @@ fn field_assignment_rejects_consumed_strict_ancestor_without_splitting_state() {
 }
 
 #[test]
+fn failed_post_rhs_structural_admission_does_not_leak_speculative_state() {
+    let errors = build(
+        "record Leaf {} record Inner { a: Leaf, b: Leaf } record Outer { inner: Inner, spare: Leaf } \
+         fn sink_inner(v: Inner) {} \
+         fn sink_leaf(v: Leaf) {} \
+         fn id(v: Leaf) -> Leaf { return v; } \
+         fn f(seed: Outer) { \
+             let mut x: Outer = seed; \
+             sink_inner(x.inner); \
+             x.inner.a = id(x.spare); \
+             sink_leaf(x.spare); \
+         }",
+    )
+    .expect_err("post-RHS strict-ancestor rejection must reject the assignment");
+    assert_eq!(
+        count_diagnostic(&errors, DiagnosticKind::UnavailableFieldValue),
+        1,
+        "rejected assignment must not leak speculative RHS consumption of the disjoint field: {errors:?}"
+    );
+}
+
+#[test]
 fn field_assignment_rhs_consumption_composes_with_installation_law() {
     build(
         "record Leaf {} record Inner { a: Leaf, b: Leaf } record Outer { inner: Inner, spare: Leaf } \
@@ -335,17 +357,33 @@ fn field_assignment_rhs_consumption_composes_with_installation_law() {
 
 #[test]
 fn field_assignment_authority_is_exact_target_relative() {
-    let overlap = build(
+    for source in [
         "record Pair { left: I64, right: I64 } \
          fn f(seed: Pair, replacement: I64) { \
              let mut x: Pair = seed; \
              let r: &I64 = &x.left; \
              x.left = replacement; \
          }",
-    )
-    .expect_err("overlapping Shared authority must block field replacement");
-    assert!(has_diagnostic(&overlap, |kind| kind
-        == DiagnosticKind::BorrowedAssignmentTarget));
+        "record Inner { left: I64, right: I64 } record Outer { inner: Inner } \
+         fn f(seed: Outer, replacement: I64) { \
+             let mut x: Outer = seed; \
+             let r: &Inner = &x.inner; \
+             x.inner.left = replacement; \
+         }",
+        "record Inner { left: I64, right: I64 } record Outer { inner: Inner } \
+         fn f(seed: Outer, replacement: Inner) { \
+             let mut x: Outer = seed; \
+             let r: &I64 = &x.inner.left; \
+             x.inner = replacement; \
+         }",
+    ] {
+        let errors = build(source).expect_err("overlapping Shared authority must block replacement");
+        assert!(
+            has_diagnostic(&errors, |kind| kind
+                == DiagnosticKind::BorrowedAssignmentTarget),
+            "missing overlapping Shared-authority rejection for {source}: {errors:?}"
+        );
+    }
 
     build(
         "record Pair { left: I64, right: I64 } \
