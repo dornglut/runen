@@ -326,14 +326,17 @@ Concrete statement `*r = Value;` is represented only when `r` has exact type `Ex
 Replacement is source-first:
 
 1. resolve `r` and identify its current complete referent domain without consuming the destination carrier;
-2. validate and evaluate the RHS producer under exact required type `T`;
-3. if RHS evaluation faults or diverges, perform no outer referent replacement;
-4. after successful RHS production, require the destination reference carrier still to be live and its authority branch to retain full replacement-capable exclusive authority over the complete referent;
-5. for a complete external-referent root or a local-binding target at empty path, select and end the then-current complete-root remaining ownership frontier; for a local-binding target at non-empty path `p`, require the canonical bounded non-empty subpath-installation admission and select and end exactly the then-current `frontier(p)`;
-6. install the produced exact-`T` value into the complete referent; and
-7. for a complete external-referent root or local-binding empty path, establish fresh complete ownership with an empty consumed-path set; for a local-binding non-empty path `p`, apply the canonical successful bounded subpath-installation transition, removing exactly consumed paths equal to or below `p` while preserving every structurally disjoint consumed path.
+2. before RHS producer consequences may commit, require the destination reference carrier to be live and its authority branch to retain full replacement-capable exclusive authority over the complete referent;
+3. validate and evaluate the RHS producer under exact required type `T`;
+4. if RHS evaluation faults or diverges, perform no outer referent replacement;
+5. after successful RHS production, require the destination reference carrier still to be live and its authority branch still to retain full replacement-capable exclusive authority over the complete referent;
+6. for a complete external-referent root or a local-binding target at empty path, select and end the then-current complete-root remaining ownership frontier; for a local-binding target at non-empty path `p`, require the canonical bounded non-empty subpath-installation admission and select and end exactly the then-current `frontier(p)`;
+7. install the produced exact-`T` value into the complete referent; and
+8. for a complete external-referent root or local-binding empty path, establish fresh complete ownership with an empty consumed-path set; for a local-binding target at non-empty path `p`, apply the canonical successful bounded subpath-installation transition, removing exactly consumed paths equal to or below `p` while preserving every structurally disjoint consumed path.
 
-The structural admission in step 5 is evaluated on the successful post-RHS state at the actual replacement point. For a non-empty local-binding target `p`, replacement therefore admits the canonical fully available, exactly consumed, or partially available descendant-consumed cases and rejects a state containing a consumed strict ancestor of `p`. This does not split a consumed ancestor, add a runtime moved-state check, or create a second structural ownership relation.
+The pre-RHS authority requirement prevents an already active incompatible delegation from being bypassed merely because RHS evaluation might later change authority state. The post-RHS requirement revalidates the actual replacement point after all successful RHS consequences. Both checks apply to the reference's exact complete referent target.
+
+The structural admission in step 6 is evaluated on the successful post-RHS state at the actual replacement point. For a non-empty local-binding target `p`, replacement therefore admits the canonical fully available, exactly consumed, or partially available descendant-consumed cases and rejects a state containing a consumed strict ancestor of `p`. This does not split a consumed ancestor, add a runtime moved-state check, or create a second structural ownership relation.
 
 The RHS may itself move from the referent through the same reference when otherwise valid. The outer replacement therefore selects the applicable remaining frontier only after successful RHS evaluation. An already valid projected replacement-capable root may consequently reinitialize its exactly consumed target; ending the reference authority alone would not restore that ownership.
 
