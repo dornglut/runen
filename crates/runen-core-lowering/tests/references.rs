@@ -441,6 +441,91 @@ fn lowers_shared_field_relative_reborrows_to_exact_reference_access_projections(
 }
 
 #[test]
+fn lowers_projected_replacement_reborrows_to_exact_reference_access_projections() {
+    let lowered = lower_source(
+        "record Inner { value: I64 }\
+         record Outer { inner: Inner, other: I64 }\
+         fn f(parent: &mut Outer) {\
+             { let direct: &mut Inner = &mut *parent.inner; }\
+             { let nested: &mut I64 = &mut *parent.inner.value; }\
+         }",
+    );
+    let program = lowered.as_program();
+    let f = function(program, "f");
+    let parent = f.parameters[0];
+    let parent_ty = f.body.locals[parent.0 as usize].ty;
+    let (parent_referent, parent_permission) = program
+        .types
+        .reference(parent_ty)
+        .expect("projected replacement parent has a Core reference type");
+    assert_eq!(parent_permission, ReferencePermission::ExclusiveReplace);
+
+    let statements = f
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect::<Vec<_>>();
+    let reborrows = statements
+        .iter()
+        .filter_map(|statement| {
+            let CoreStatement::Init {
+                dst,
+                src: Operand::ReferenceReborrow { permission, src },
+            } = statement
+            else {
+                return None;
+            };
+            let PlaceAccess::Direct(reference_place) = &src.reference else {
+                return None;
+            };
+            (reference_place.local == parent && reference_place.projections.is_empty())
+                .then_some((dst.local, *permission, src))
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(reborrows.len(), 2);
+    let expected = [
+        vec![Projection::Field(0)],
+        vec![Projection::Field(0), Projection::Field(0)],
+    ];
+    for ((destination, permission, access), expected_projections) in reborrows.iter().zip(&expected)
+    {
+        assert_eq!(*permission, ReferencePermission::ExclusiveReplace);
+        assert_eq!(&access.projections, expected_projections);
+        let destination_ty = f.body.locals[destination.0 as usize].ty;
+        let (child_referent, child_permission) = program
+            .types
+            .reference(destination_ty)
+            .expect("projected replacement reborrow temporary has a Core reference type");
+        assert_eq!(child_permission, ReferencePermission::ExclusiveReplace);
+        assert_eq!(
+            program
+                .types
+                .project_type(parent_referent, &access.projections),
+            Some(child_referent)
+        );
+    }
+
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::ReferenceRoot { place, .. },
+            ..
+        } if place.local == parent
+    )));
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::Copy(PlaceAccess::Direct(place))
+                | Operand::Move(PlaceAccess::Direct(place))
+                | Operand::AddressOf(PlaceAccess::Direct(place)),
+            ..
+        } if place.local == parent
+    )));
+}
+
+#[test]
 fn projected_shared_child_executes_and_round_trips_through_identity_result() {
     let report = execute_source(
         "record Holder { left: I64, right: I64 }\
@@ -456,6 +541,30 @@ fn projected_shared_child_executes_and_round_trips_through_identity_result() {
     );
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(ObservedValue::I64(83)));
+}
+
+#[test]
+fn projected_replacement_child_executes_move_and_reinitialize() {
+    let report = execute_source(
+        "record Ticket { value: I64 }\
+         record Holder { ticket: Ticket, other: I64 }\
+         fn replace(r: &mut Holder) {\
+             let child: &mut Ticket = &mut *r.ticket;\
+             let old: Ticket = *child;\
+             *child = Ticket { value: 73 };\
+         }\
+         fn entry() -> I64 {\
+             let mut holder: Holder = Holder {\
+                 ticket: Ticket { value: 11 },\
+                 other: 5\
+             };\
+             replace(&mut holder);\
+             return holder.ticket.value;\
+         }",
+        "entry",
+    );
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(73)));
 }
 
 #[test]
@@ -823,28 +932,6 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         lower(&projected_type_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "reference-reborrow projected parent referent does not match child referent"
-        ))
-    );
-
-    let mut projected_replacement = hir("record copy Pair { left: I64 }\
-         fn f(r: &Pair) { let child: &I64 = &*r.left; }");
-    let HirStatement::Local { initializer, .. } =
-        &mut projected_replacement.functions[0].body.statements[0]
-    else {
-        panic!("expected projected reference local");
-    };
-    initializer.ty = safe_reference(
-        ReferenceReferent::Intrinsic(IntrinsicType::I64),
-        HirReferencePermission::ExclusiveReplace,
-    );
-    let ValueKind::ReferenceReborrow { permission, .. } = &mut initializer.kind else {
-        panic!("expected projected reference reborrow");
-    };
-    *permission = HirReferencePermission::ExclusiveReplace;
-    assert_eq!(
-        lower(&projected_replacement),
-        Err(LoweringError::InvalidHirInvariant(
-            "projected reference-reborrow is not Shared"
         ))
     );
 }
