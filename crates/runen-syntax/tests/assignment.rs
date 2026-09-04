@@ -31,6 +31,34 @@ fn round_trips_mutable_locals_and_assignment_with_trivia() {
 }
 
 #[test]
+fn round_trips_one_and_nested_field_assignment_targets() {
+    let source = "record Inner { value: I64 } record Outer { inner: Inner } fn f(input: I64, root: Outer) { root /*a*/ . /*b*/ inner /*c*/ = /*d*/ input; root.inner.value = input; }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    let assignments = parsed
+        .syntax()
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::AssignmentStatement)
+        .collect::<Vec<_>>();
+    assert_eq!(assignments.len(), 2);
+    assert_eq!(
+        assignments
+            .iter()
+            .map(|assignment| {
+                assignment
+                    .children_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .filter(|token| token.kind() == SyntaxKind::Dot)
+                    .count()
+            })
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+}
+
+#[test]
 fn mut_is_reserved_only_after_complete_identifier_formation() {
     assert!(user_identifier_key("mut").is_none());
     assert_eq!(user_identifier_key("mutable").as_deref(), Some("mutable"));
@@ -51,7 +79,7 @@ fn mut_is_reserved_only_after_complete_identifier_formation() {
 
 #[test]
 fn identifier_started_statements_distinguish_assignment_and_calls() {
-    let source = "fn id(v: I64) -> I64 { return v; } fn f(x: I64) { x = id(x); id(x); }";
+    let source = "record Box { value: I64 } fn id(v: I64) -> I64 { return v; } fn f(x: I64, root: Box) { x = id(x); root.value = id(x); id(x); }";
     let parsed = parse(source);
 
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -61,7 +89,7 @@ fn identifier_started_statements_distinguish_assignment_and_calls() {
             .descendants()
             .filter(|node| node.kind() == SyntaxKind::AssignmentStatement)
             .count(),
-        1
+        2
     );
     assert_eq!(
         parsed
@@ -77,8 +105,8 @@ fn identifier_started_statements_distinguish_assignment_and_calls() {
             .descendants()
             .filter(|node| node.kind() == SyntaxKind::DirectCall)
             .count(),
-        2,
-        "result call in the assignment and the no-result call statement"
+        3,
+        "two result calls in assignments and the no-result call statement"
     );
 }
 
@@ -88,6 +116,9 @@ fn malformed_assignment_forms_preserve_following_constructs() {
         "fn f(x: I64) { x = ; let kept: I64 = x; } fn ok() {}",
         "fn f(x: I64) { x = x let kept: I64 = x; } fn ok() {}",
         "fn f(x: I64) { x x; let kept: I64 = x; } fn ok() {}",
+        "record Box { value: I64 } fn f(x: I64, root: Box) { root. = x; let kept: I64 = x; } fn ok() {}",
+        "record Box { value: I64 } fn f(x: I64, root: Box) { root.value x; let kept: I64 = x; } fn ok() {}",
+        "record Box { value: I64 } fn f(x: I64, root: Box) { root.value = ; let kept: I64 = x; } fn ok() {}",
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);

@@ -516,6 +516,7 @@ pub enum Statement {
     },
     Assignment {
         target: BindingId,
+        fields: Vec<usize>,
         value: Value,
         location: SourceLocation,
     },

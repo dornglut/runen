@@ -626,7 +626,7 @@ impl Parser<'_> {
 
     fn parse_identifier_statement(&mut self) {
         match self.peek_nontrivia(1) {
-            Some(SyntaxKind::Eq) => self.parse_assignment_statement(),
+            Some(SyntaxKind::Eq | SyntaxKind::Dot) => self.parse_assignment_statement(),
             Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_call_statement(),
             _ => {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
@@ -658,6 +658,9 @@ impl Parser<'_> {
         self.builder
             .start_node(SyntaxKind::AssignmentStatement.into());
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if self.at(SyntaxKind::Dot) {
+            self.parse_field_selectors();
+        }
         self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
         self.parse_value();
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);

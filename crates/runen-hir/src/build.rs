@@ -446,6 +446,30 @@ impl StructuralOwnershipState {
                 .all(|right| left == right || !(left.starts_with(right) || right.starts_with(left)))
         }));
     }
+
+    fn nonempty_installation_is_admitted(&self, path: &[usize]) -> bool {
+        debug_assert!(!path.is_empty());
+        !self
+            .consumed_paths
+            .iter()
+            .any(|consumed| consumed.len() < path.len() && path.starts_with(consumed))
+    }
+
+    fn install_nonempty_path(&mut self, path: &[usize]) {
+        debug_assert!(!path.is_empty());
+        debug_assert!(self.nonempty_installation_is_admitted(path));
+        self.consumed_paths
+            .retain(|consumed| !consumed.starts_with(path));
+        debug_assert_eq!(
+            self.path_availability(path),
+            PathAvailability::FullyAvailable
+        );
+        debug_assert!(self.consumed_paths.iter().all(|left| {
+            self.consumed_paths
+                .iter()
+                .all(|right| left == right || !(left.starts_with(right) || right.starts_with(left)))
+        }));
+    }
 }
 
 type UnitImports = BTreeMap<String, ModuleId>;
@@ -2863,14 +2887,21 @@ fn validate_assignment(
     state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
-    let target_token = direct_token(node, SyntaxKind::Ident);
-    let name = key(&target_token);
+    let identifiers = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    let (target_token, selectors) = identifiers
+        .split_first()
+        .expect("syntax-clean assignment has one root identifier");
+    let name = key(target_token);
     let target_location = SourceLocation {
         unit: header.unit,
         range: target_token.text_range(),
     };
 
-    let (target, target_ty, target_domain) = match state.bindings.get(&name) {
+    let (target, root_ty, target_domain) = match state.bindings.get(&name) {
         Some(binding) => {
             if !binding.mutability.is_mutable() {
                 diagnostics.push(Diagnostic {
@@ -2902,7 +2933,12 @@ fn validate_assignment(
         }
     };
 
-    let reference_target = ReferenceTarget::local_root(target);
+    let (fields, target_ty) = if selectors.is_empty() {
+        (Vec::new(), root_ty)
+    } else {
+        resolve_field_path(header, selectors, root_ty, context, diagnostics)?
+    };
+    let reference_target = ReferenceTarget::local(target, &fields);
     let entry_exclusive = state.target_satisfies_exclusive_requirement(&reference_target);
     let mut candidate = state.clone();
 
@@ -2925,44 +2961,83 @@ fn validate_assignment(
         return None;
     }
 
-    if !candidate.target_satisfies_exclusive_requirement(&reference_target) {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::BorrowedAssignmentTarget,
-            location: target_location,
-        });
-        return None;
-    }
-
-    let incoming_pointer_origin = if matches!(target_ty, Type::RawPointer(_)) {
-        let origin = pointer_origin_for_value(&value.value, &candidate.bindings)
-            .expect("validated raw-pointer value retains exact source origin");
-        let domain = target_domain
-            .as_ref()
-            .expect("validated raw-pointer local retains lexical target domain");
-        if !domain.contains(&origin) {
+    if fields.is_empty() {
+        if !candidate.target_satisfies_exclusive_requirement(&reference_target) {
             diagnostics.push(Diagnostic {
-                kind: DiagnosticKind::RawPointerTargetExtentMismatch,
-                location: value.value.location,
+                kind: DiagnosticKind::BorrowedAssignmentTarget,
+                location: target_location,
             });
             return None;
         }
-        Some(origin)
-    } else {
-        None
-    };
 
-    let target_state = candidate
-        .bindings
-        .get_mut(&name)
-        .expect("resolved assignment target remains in the active binding scope");
-    target_state.ownership = StructuralOwnershipState::default();
-    if matches!(target_ty, Type::RawPointer(_)) {
-        target_state.pointer_origin = incoming_pointer_origin;
+        let incoming_pointer_origin = if matches!(target_ty, Type::RawPointer(_)) {
+            let origin = pointer_origin_for_value(&value.value, &candidate.bindings)
+                .expect("validated raw-pointer value retains exact source origin");
+            let domain = target_domain
+                .as_ref()
+                .expect("validated raw-pointer local retains lexical target domain");
+            if !domain.contains(&origin) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::RawPointerTargetExtentMismatch,
+                    location: value.value.location,
+                });
+                return None;
+            }
+            Some(origin)
+        } else {
+            None
+        };
+
+        let target_state = candidate
+            .bindings
+            .get_mut(&name)
+            .expect("resolved assignment target remains in the active binding scope");
+        target_state.ownership = StructuralOwnershipState::default();
+        if matches!(target_ty, Type::RawPointer(_)) {
+            target_state.pointer_origin = incoming_pointer_origin;
+        }
+    } else {
+        let target_state = candidate
+            .bindings
+            .get(&name)
+            .expect("resolved field-assignment root remains in the active binding scope");
+        if !target_state
+            .ownership
+            .nonempty_installation_is_admitted(&fields)
+        {
+            let selector = selectors
+                .last()
+                .expect("field assignment has at least one selector");
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnavailableFieldValue,
+                location: SourceLocation {
+                    unit: header.unit,
+                    range: selector.text_range(),
+                },
+            });
+            return None;
+        }
+
+        if !candidate.target_satisfies_exclusive_requirement(&reference_target) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::BorrowedAssignmentTarget,
+                location: target_location,
+            });
+            return None;
+        }
+
+        candidate
+            .bindings
+            .get_mut(&name)
+            .expect("resolved field-assignment root remains in the active binding scope")
+            .ownership
+            .install_nonempty_path(&fields);
     }
 
     *state = candidate;
     Some(Statement::Assignment {
         target,
+        fields,
         value: value.value,
         location: location(header.unit, node),
     })
