@@ -2,13 +2,13 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for function-local binding identity, lexical scope and lookup precedence, binding assignment mutability, binding lifecycle, ordinary whole-binding owned-value use, whole-binding assignment legality, safe-reference/raw-pointer local contextual integration, and the points at which a binding's structural ownership state begins, persists, resets, or ends.
+This document owns the represented source semantics for function-local binding identity, lexical scope and lookup precedence, binding assignment mutability, binding lifecycle, ordinary whole-binding owned-value use, whole-binding assignment legality, bounded binding-root field assignment/reinitialization legality, safe-reference/raw-pointer local contextual integration, and the points at which a binding's structural ownership state begins, persists, resets, or ends.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), structural paths, structural ownership state, path availability, consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), callable parameter-slot types from [Source callables](callables.md), safe-reference target/authority/carrier/lifetime and direct safe-authority compatibility rules from [Source safe references](references.md), and raw-pointer contextual admission, pointer-origin provenance, lexical target validity, and raw pointee operations from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), structural paths, structural ownership state, path availability, consumption, remaining-ownership frontiers, complete-root replacement reset, and bounded non-empty subpath installation from [Source structural ownership](structural-ownership.md), callable parameter-slot types from [Source callables](callables.md), safe-reference target/authority/carrier/lifetime and direct safe-authority compatibility rules from [Source safe references](references.md), and raw-pointer contextual admission, pointer-origin provenance, lexical target validity, and raw pointee operations from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
 
-Represented binding-rooted field-path selection, direct field accessibility, and final-field duplicate-or-consume value production are owned by [Source field-value access](field-access.md). Represented recursive record-pattern selection, including bounded node-local rest/omission, and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer including safe-reference carriers and replacement-capable external referents, local initialization, assignment replacement ordering, reference-relative replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, defined-fault propagation, and raw-operation execution ordering are owned by [Source function execution](function-execution.md). Represented conditional selection, zero/one/two normal-outcome composition, bounded `while` condition/body selection, structural-state joins/backedges including external referent roots, and raw-pointer-origin joins/backedges are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/while/return/reference/raw-pointer/unsafe spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented binding-rooted field-path selection, direct field accessibility, final-field duplicate-or-consume value production, and bounded assignment-target field-path resolution/accessibility are owned by [Source field-value access](field-access.md). Represented recursive record-pattern selection, including bounded node-local rest/omission, and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer including safe-reference carriers and replacement-capable external referents, local initialization, whole-binding and bounded field-assignment replacement ordering, reference-relative replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, defined-fault propagation, and raw-operation execution ordering are owned by [Source function execution](function-execution.md). Represented conditional selection, zero/one/two normal-outcome composition, bounded `while` condition/body selection, structural-state joins/backedges including external referent roots, and raw-pointer-origin joins/backedges are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/while/return/reference/raw-pointer/unsafe spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define structural ownership mathematics, safe-reference formation/dereference/reborrow/replacement/authority semantics, raw-pointer formation/pointee access/unsafe admission semantics, normal-continuation presence, conditional or loop selection/successor composition, field lookup, pattern structure, general expression evaluation, traits, ABI, Core liveness, or an implementation representation.
+This document does not define structural ownership mathematics, safe-reference formation/dereference/reborrow/replacement/authority semantics, raw-pointer formation/pointee access/unsafe admission semantics, normal-continuation presence, conditional or loop selection/successor composition, field lookup/accessibility, pattern structure, general expression evaluation, traits, ABI, Core liveness, or an implementation representation.
 
 ## Function-local binding identity
 
@@ -145,7 +145,9 @@ Only when no active parameter/local binding resolves the key does lookup fall th
 
 Lookup MUST NOT skip an active function-local binding merely because the consuming context would prefer a module-level entity of another category.
 
-The concrete whole-binding value use, binding-rooted `FieldValueUse` root, direct binding-root pattern scrutinee, whole-binding assignment target, unqualified direct-call target, safe-reference root/reborrow/dereference/reference-replacement operands, raw-address target, raw-move pointer operand, and raw-assign pointer operand consume this precedence. A wrong-category selected entity is rejected rather than bypassed.
+The concrete whole-binding value use, binding-rooted `FieldValueUse` root, direct binding-root pattern scrutinee, whole-binding or bounded binding-root field assignment target, unqualified direct-call target, safe-reference root/reborrow/dereference/reference-replacement operands, raw-address target, raw-move pointer operand, and raw-assign pointer operand consume this precedence. A wrong-category selected entity is rejected rather than bypassed.
+
+For a bounded binding-root field assignment target, the first identifier resolves through this relation to one parameter/local binding; `field-access.md` then resolves the one-or-more field selectors from that binding's declared type. The selected binding still MUST satisfy the assignment-mutability rule below. No module-level fallback, qualified assignment root, arbitrary receiver, or general lvalue lookup is introduced.
 
 For Shared root `&x` or `&x.field...`, `references.md` additionally requires the root identifier to resolve to one active parameter or ordinary local binding and owns selection of the complete root or bounded structural field path plus the exact Shared referent/accessibility/availability requirements. For root `&mut x`, that owner additionally requires one active mutable ordinary local binding with a replacement-reference-admissible referent and selects only its complete root.
 
@@ -157,7 +159,7 @@ A nominal record-pattern head is not a function-local value-binding lookup. `pat
 
 Source-unit module aliases remain the distinct qualified-lookup mechanism owned by `names-modules.md`. The concrete `alias::member` direct-call target resolves through that mechanism rather than this unqualified lookup.
 
-Beyond the represented two-part module alias/member qualification, operation-specific field selectors, bounded record-pattern field selection, bounded safe-reference root/dereference/reborrow/replacement lookup, and bounded raw-pointer root/pointer-operand lookup above, this revision defines no arbitrary member lookup, nested module paths, labels, generic parameters, lifetime names, methods, associated items, or another future name domain.
+Beyond the represented two-part module alias/member qualification, operation-specific field selectors, bounded record-pattern field selection, bounded binding-root field assignment, bounded safe-reference root/dereference/reborrow/replacement lookup, and bounded raw-pointer root/pointer-operand lookup above, this revision defines no arbitrary member lookup, nested module paths, labels, generic parameters, lifetime names, methods, associated items, or another future name domain.
 
 ## Binding assignment mutability
 
@@ -168,17 +170,17 @@ Every represented parameter/local binding is exactly one of:
 
 Assignment mutability is a binding property independent of source type identity, structural ownership state, source owned-value duplicability, callable-signature identity/equality, safe-reference alias authority/permission, and raw-pointer origin provenance.
 
-Consuming an owned value from an immutable binding, including a represented structural subvalue when `field-access.md` or `patterns.md` permits that consumption, is valid when the applicable safe-authority compatibility requirement is also satisfied. Immutability restricts ordinary binding assignment/reinitialization; it does not require the binding to retain ownership of every subvalue and it is not raw target-access authority.
+Consuming an owned value from an immutable binding, including a represented structural subvalue when `field-access.md` or `patterns.md` permits that consumption, is valid when the applicable safe-authority compatibility requirement is also satisfied. Immutability restricts ordinary whole-binding and binding-root field assignment/reinitialization; it does not require the binding to retain ownership of every subvalue and it is not raw target-access authority.
 
-Represented parameters are immutable. Ordinary locals are immutable unless their concrete declaration carries `mut`. Every binding introduced by the represented record pattern is immutable. No parameter-mutability or pattern-binding-mutability form is represented.
+Represented parameters are immutable. Ordinary locals are immutable unless their concrete declaration carries `mut`. Every binding introduced by the represented record pattern is immutable. No parameter-mutability or pattern-binding-mutability form is represented. Therefore the current concrete bounded field-assignment form can successfully target only a mutable ordinary local, although the semantic lookup relation remains parameter/local and rejects an immutable parameter through the ordinary mutability rule.
 
 Every represented local whose declared type is `SharedRef(T)` or `ExclusiveReplaceRef(T)` MUST be immutable; the otherwise represented mutable-local form is invalid for either safe-reference type.
 
 A local whose declared type is `RawPtr(T)` MAY be immutable or mutable. A mutable raw-pointer local may be ordinarily assigned another exact `RawPtr(T)` value only when the incoming pointer origin satisfies the lexical target-validity rule from `raw-pointers-unsafe.md` for the complete receiving-local extent.
 
-Assignment to any immutable binding is source-invalid regardless of whether its complete structural root is fully available, partially available, or unavailable.
+Assignment to any immutable binding is source-invalid regardless of whether its complete structural root or a selected structural subpath is fully available, partially available, or unavailable.
 
-Binding mutability does not itself replace a value or restore ownership. Replacement is an explicit ordinary assignment operation under the rules below. Replacement capability carried by `ExclusiveReplaceRef(T)` separately permits `*r = Value;` to replace the referent even though the reference binding `r` itself is immutable. Unsafe raw replacement through a pointer may likewise replace an immutable **pointee target** because `raw-pointers-unsafe.md` deliberately does not consume ordinary target-binding assignment mutability as a precondition. Neither operation is whole-binding assignment to the reference/pointer binding.
+Binding mutability does not itself replace a value or restore ownership. Replacement is an explicit ordinary assignment operation under the rules below. Replacement capability carried by `ExclusiveReplaceRef(T)` separately permits `*r = Value;` to replace the referent even though the reference binding `r` itself is immutable. Unsafe raw replacement through a pointer may likewise replace an immutable **pointee target** because `raw-pointers-unsafe.md` deliberately does not consume ordinary target-binding assignment mutability as a precondition. Neither operation is whole-binding or binding-root field assignment to the reference/pointer binding.
 
 ## Binding structural ownership state
 
@@ -190,14 +192,15 @@ This document owns only the binding lifecycle around that structural state:
 - successful ordinary local initialization establishes the local with complete initial ownership;
 - successful pattern binding production establishes each new pattern binding with complete initial ownership;
 - represented consuming/duplicating operations act on the binding's structural state only through their canonical operation owners and `structural-ownership.md`;
-- successful whole-binding replacement establishes a fresh complete structural ownership state for the replacement value; and
+- successful whole-binding replacement establishes a fresh complete structural ownership state for the replacement value;
+- successful bounded binding-root field assignment applies the canonical non-empty subpath-installation transition from `structural-ownership.md` to the binding's existing root state; and
 - lexical/activation termination ends whatever binding ownership remains according to `function-execution.md`.
 
 Safe-reference authority/carrier state, replacement-capable external referent structural state, and raw-pointer origin provenance are deliberately distinct facts. `references.md` owns safe authority and external-referent state; `raw-pointers-unsafe.md` owns pointer origin. Root safe-reference formation and raw address formation leave the target binding's structural ownership state unchanged. Dereference Move through a replacement-capable reference updates the actual local-root structural state when the reference targets a local binding. Raw ownership move and raw replacement likewise alter the target structural state only through the explicit transitions consumed by their canonical owners.
 
 Entering or normally exiting a child lexical scope does not itself change the structural ownership state, external-referent state, safe authority, or pointer-origin provenance of an ancestor/enclosing domain. Valid ownership transitions, reference child lifecycle, pointer retargeting, or assignment affecting an enclosing domain inside the child remain in force at the following parent-scope program point when the applicable control-flow relation admits that normal continuation. Child reference-local cleanup may end a child authority and thereby restore parent reference-relative authority before the enclosing normal outcome is formed.
 
-Structural source paths, prefix-free consumed-path state, fully/partially/unavailable classification, path consumption, and recursive remaining-frontier selection are defined only by `structural-ownership.md`. They are not redefined here.
+Structural source paths, prefix-free consumed-path state, fully/partially/unavailable classification, path consumption, bounded subpath-installation state, and recursive remaining-frontier selection are defined only by `structural-ownership.md`. They are not redefined here.
 
 For represented statement-level conditionals, `control-flow.md` owns normal-continuation composition for enclosing binding states and replacement-capable external referent states:
 
@@ -214,7 +217,7 @@ For represented bounded `while`, `control-flow.md` likewise owns the complete bi
 - an ordinary normal body backedge and `continue` MUST restore every applicable structural root to exactly its `H` state and every continuing raw-pointer origin to exactly its `H` origin;
 - `break` MUST carry every applicable structural root and raw-pointer origin exactly in the state required by `C`;
 - a body/path with no applicable normal transfer contributes no corresponding state comparison; and
-- assignment/replacement rules remain explicit: only an accepted source replacement may restore a consumed structural root before an edge, and immutable bindings receive no implicit binding replacement.
+- assignment/replacement rules remain explicit: only an accepted source replacement may restore consumed structural ownership before an edge, and immutable bindings receive no implicit binding replacement or subpath reinitialization.
 
 Safe-reference authority/delegation state does not introduce a general control-flow lattice. Immutable reference locals, non-copyable replacement-capable carrier movement, explicit reborrow, lexical child cleanup, and the no-field/no-result/no-rebinding restrictions make persistent carrier/authority consequences definite through existing binding ownership plus the sequential reference relation. `control-flow.md` owns the exact composition boundary.
 
@@ -284,13 +287,50 @@ Safe-reference locals themselves cannot be whole-binding assignment targets beca
 
 A defined fault or divergence during RHS evaluation performs no replacement/reset merely because assignment was intended. Ownership, safe-reference authority/carrier, external-referent, and pointer-origin transitions that completed while evaluating the RHS remain in force under their existing owners.
 
-This assignment relation defines no field assignment, partial-field reinitialization, general source place/lvalue, plain-Exclusive replacement, interior mutability, raw pointee replacement, or destructuring assignment.
+This whole-binding relation defines no general source place/lvalue, plain-Exclusive replacement, interior mutability, raw pointee replacement, or destructuring assignment.
+
+## Bounded binding-root field assignment and reinitialization
+
+A represented **bounded binding-root field assignment** targets one non-empty structural field path `p` under one selected parameter/local binding root.
+
+The root identifier MUST resolve through the same function-local lookup relation as whole-binding assignment and MUST denote one represented parameter/local binding. The binding MUST be mutable. Because represented parameters are immutable in the current concrete subset, a successful concrete field assignment currently targets a mutable ordinary local.
+
+`field-access.md` resolves the one-or-more field selectors from the binding's exact declared type, requires every selector step to select one declared nominal-record field with the existing direct accessibility, and supplies the exact non-empty structural path `p` and final type `type(p)`. This operation does not first produce, duplicate, consume, or otherwise evaluate an intermediate field value merely to select the target.
+
+The RHS MUST produce exactly one owned source value whose type is exactly equal under `types.md` to `type(p)`. No conversion, coercion, inferred target type, structural record equivalence, method/property setter, or independently mutable field relation is introduced.
+
+Before RHS consequences can commit, the exact selected structural target `p` MUST satisfy the canonical Exclusive direct safe-authority compatibility requirement from `references.md`. An overlapping authority targeting an ancestor, equal path, or descendant blocks this direct replacement as that canonical relation requires; a structurally disjoint sibling authority does not spuriously block it.
+
+The selected binding and field path remain statically identified while RHS evaluation proceeds. Every RHS use observes the binding's then-current structural ownership and safe-authority state. A consuming RHS may therefore consume the exact target, one or more descendants of the target, or structurally disjoint paths before replacement commits.
+
+On the RHS producer's normal successful continuation immediately before replacement, let `C` be the binding root's resulting consumed-path set. The assignment MUST satisfy the bounded non-empty subpath-installation admission relation from `structural-ownership.md`: no member of `C` may be a strict ancestor of `p`.
+
+Therefore the post-RHS target may be:
+
+- fully available, for ordinary replacement;
+- exactly consumed at `p`, for reinitialization; or
+- partially available because strict descendants of `p` are consumed, for reconstruction.
+
+If a strict ancestor of `p` remains consumed on that successful continuation, the assignment is source-invalid. It does not split that consumed ancestor into sibling/complement consumed paths, implicitly reconstruct the ancestor, or defer validity to a runtime moved-state check.
+
+After successful RHS production, satisfaction of the post-RHS structural admission, and a second satisfaction of the canonical Exclusive safe-authority compatibility requirement at the actual replacement point, `function-execution.md` owns source-first replacement ordering:
+
+1. select and end only the target's then-current `frontier(p)` through `structural-ownership.md`;
+2. preserve already consumed descendants as already ended rather than destroying them again;
+3. transfer the successfully produced complete replacement value into the exact selected target `p`; and
+4. apply the canonical successful non-empty subpath-installation transition, removing from `C` exactly `p` and consumed descendants of `p` while preserving every structurally disjoint consumed path.
+
+The resulting selected target `p` is fully available. The complete binding root may still be partially available because a structurally disjoint path remains consumed.
+
+A defined fault or divergence during RHS evaluation performs no target frontier cleanup, value installation, or consumed-path reset merely because field assignment was intended. Structural, reference, external-referent, and pointer-origin transitions that completed while evaluating the RHS remain in force under their existing owners.
+
+This relation introduces no qualified assignment root, arbitrary receiver, general place/lvalue, assignment expression, compound/destructuring assignment, reference-relative field assignment, projected safe-reference replacement, raw field/path replacement, interior-mutability rule, or structural state splitting beneath a consumed ancestor.
 
 ## Binding cleanup and discard boundary
 
 When represented execution ends a binding's ownership, its remaining owned source subvalues are exactly the complete-root remaining ownership frontier selected by `structural-ownership.md` from the binding's then-current state.
 
-`function-execution.md` owns when that frontier is selected and the ordering between bindings, scopes, parameters, activations, ordinary assignment replacement, safe-reference referent replacement, raw replacement, normal return, and defined-fault cleanup.
+`function-execution.md` owns when that frontier is selected and the ordering between bindings, scopes, parameters, activations, whole-binding assignment replacement, bounded binding-root field replacement, safe-reference referent replacement, raw replacement, normal return, and defined-fault cleanup.
 
 When a binding's remaining owned value is a safe reference, ending that value additionally removes its source reference carrier at that existing cleanup point under `references.md`. Removing the final carrier may end its authority or may leave a carrierless ancestor authority alive while a descendant remains. The reference-specific consequence adds no custom cleanup body and does not access the referent.
 
@@ -304,14 +344,14 @@ Zero-field and recursively zero-leaf frontier members remain source-owned values
 
 ## Function, call, assignment, pattern, control-flow, reference, raw-pointer, and fault boundary
 
-This document defines body-local binding identity, scope, lookup, assignment mutability, binding lifecycle around structural ownership, safe-reference/raw-pointer local integration, ordinary whole-binding use, and ordinary assignment legality/reset.
+This document defines body-local binding identity, scope, lookup, assignment mutability, binding lifecycle around structural ownership, safe-reference/raw-pointer local integration, ordinary whole-binding use, whole-binding assignment legality/reset, and bounded binding-root field assignment legality/reset.
 
 It does not redefine the execution relation owned by `function-execution.md`, including:
 
 - function body execution and normal-continuation presence;
 - direct-call argument evaluation and parameter transfer;
 - safe-reference produced-carrier transfer/caller suspension/external-referent consequences;
-- ordinary assignment RHS evaluation, old-value cleanup, and replacement transfer;
+- whole-binding and bounded binding-root field assignment RHS evaluation, old-value cleanup, and replacement transfer;
 - safe-reference referent replacement ordering;
 - raw replacement source-first execution ordering;
 - result production and return transfer;
@@ -325,7 +365,7 @@ It does not redefine raw address formation, raw pointee move/replacement, unsafe
 
 It does not redefine represented conditional or bounded-`while` condition/body selection, normal-successor composition, binding/external-referent structural-state equality, raw-pointer-origin equality, or loop backedge/transfer admission from `control-flow.md`.
 
-It likewise does not redefine field-path selection/production from `field-access.md`, pattern structure/ownership from `patterns.md`, or structural ownership mathematics from `structural-ownership.md`.
+It likewise does not redefine field identity/path resolution or accessibility from `field-access.md`, field-value production from that owner, pattern structure/ownership from `patterns.md`, or structural ownership mathematics from `structural-ownership.md`.
 
 Indirect calls, function values, closures, plain-Exclusive source references, reference pass modes, lifetime names, unsafe callable contracts, broader panic/catch forms, and other future execution relations remain outside this owner.
 
@@ -337,6 +377,6 @@ A faithful implementation MAY retain structural ownership for bindings/external 
 
 ## Further boundaries
 
-Beyond the represented concrete subset, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, field assignment or partial-field reinitialization, arbitrary member/method lookup, additional refutable/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, additional loop forms or general loop fixed-point inference, catch/recovery joins, plain-Exclusive source references, reference targets beyond the bounded Shared binding-root/field-path and complete-root replacement-capable forms owned by `references.md`, reference-containing aggregates/results beyond the existing bounded Shared result, lifetime names/parameters/non-lexical shortening, raw-pointer call transfer or pointer-containing aggregates, unsafe callable contracts, closures/captures, generics, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the represented concrete subset, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, arbitrary member/method lookup beyond the bounded assignment-target field path and existing field-value/reference selectors, additional refutable/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, additional loop forms or general loop fixed-point inference, catch/recovery joins, plain-Exclusive source references, reference targets beyond the bounded Shared binding-root/field-path and complete-root replacement-capable forms owned by `references.md`, reference-containing aggregates/results beyond the existing bounded Shared result, lifetime names/parameters/non-lexical shortening, raw-pointer call transfer or pointer-containing aggregates, unsafe callable contracts, closures/captures, generics, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, structural state splitting beneath a consumed ancestor, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
 
 Activation-local raw pointers and lexical unsafe admission are represented by `raw-pointers-unsafe.md`; their existence does not create the excluded broader pointer/call/unsafe relations here.

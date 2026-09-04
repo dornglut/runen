@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source-semantic relation for structural owned-value roots, structural source paths, structural ownership state, path availability, consuming and non-consuming path-use requirements, structural replacement reset, and deterministic remaining-ownership frontiers.
+This document owns the represented source-semantic relation for structural owned-value roots, structural source paths, structural ownership state, path availability, consuming and non-consuming path-use requirements, structural root replacement reset, bounded structural subpath installation/replacement/reinitialization state, and deterministic remaining-ownership frontiers.
 
 It consumes represented source type identity, nominal record identity, record field identity and source structural field order from [Source type foundation](types.md). It does not redefine those owners.
 
-[Source function-local bindings](local-bindings.md) instantiates this relation for each represented parameter/local binding and owns binding identity, lexical scope, lookup, assignment mutability, declaration lifecycle, ordinary whole-binding owned-value use, assignment legality, and binding reset points. [Source safe references](references.md) instantiates this relation for each replacement-capable parameter's non-binding external referent root and owns the reference operations that consume or restore that root. [Source field-value access](field-access.md) consumes this relation for binding-rooted selected paths and for the structural ownership state/frontier of a producer-backed field-receiver transient. [Source patterns](patterns.md) consumes this relation for direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding, external-referent replacement, or transient ownership ends. [Source control flow](control-flow.md) consumes complete binding and external-referent structural ownership states to establish definite represented conditional successors and bounded-loop transfer/backedge states.
+[Source function-local bindings](local-bindings.md) instantiates this relation for each represented parameter/local binding and owns binding identity, lexical scope, lookup, assignment mutability, declaration lifecycle, ordinary whole-binding owned-value use, whole-binding and bounded binding-root field assignment legality, and binding reset points. [Source safe references](references.md) instantiates this relation for each replacement-capable parameter's non-binding external referent root and owns the reference operations that consume or restore that root. [Source field-value access](field-access.md) consumes this relation for binding-rooted selected paths and for the structural ownership state/frontier of a producer-backed field-receiver transient. [Source patterns](patterns.md) consumes this relation for direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding, external-referent replacement, bounded binding-root field replacement, or transient ownership ends. [Source control flow](control-flow.md) consumes complete binding and external-referent structural ownership states to establish definite represented conditional successors and bounded-loop transfer/backedge states.
 
 This document does not define lexical bindings, names, mutability, field lookup/accessibility, pattern syntax, source type duplicability selection, reference authority/reborrow/lifetime, conditional or loop selection, custom destruction, a source place/lvalue category, physical storage, layout, Core MIR liveness, or an implementation representation.
 
@@ -158,9 +158,11 @@ These source facts MUST NOT be reconstructed from whether a Core or backend repr
 
 Ending ownership of one zero-leaf source frontier member may faithfully refine to no lower scalar destruction operation when the applicable Core destruction domain is empty. That lower erasure does not retroactively remove or change source ownership state.
 
-## Structural replacement boundary
+## Structural replacement and subpath installation boundary
 
-This structural owner does not itself define assignment or another replacement operation.
+This structural owner does not itself authorize assignment or another replacement operation. An operation owner may install a complete new value only when its own semantics explicitly authorize that replacement/reinitialization and define the commit point at which this structural relation is consumed.
+
+### Complete-root replacement
 
 A consuming owner may replace a structural root only when its own semantics explicitly authorize replacement. When such an owner establishes a new complete owned root value, it establishes a fresh empty consumed-path set for that root.
 
@@ -168,9 +170,38 @@ A consuming owner may replace a structural root only when its own semantics expl
 
 Replacement selects the then-current remaining frontier at the commit point defined by the operation owner; this document does not move that selection earlier.
 
+### Bounded non-empty subpath installation
+
+For one structurally valid **non-empty** path `p`, an accepted operation owner may install one complete new value of exact source type `type(p)` at `p` only through this relation.
+
+Let `C` be the root's consumed-path set on the operation's normal successful continuation immediately before replacement commits. The installation is structurally admitted exactly when no member of `C` is a strict ancestor of `p`.
+
+Therefore:
+
+- a fully available `p` is admitted for replacement;
+- an exactly consumed `p`, where `p` itself is in `C`, is admitted for reinitialization;
+- a partially available `p`, where one or more strict descendants of `p` are in `C` and no equal/ancestor path is consumed, is admitted for reconstruction; and
+- a `p` enclosed by a consumed strict ancestor is rejected.
+
+The rejected ancestor-consumed case does not implicitly split that consumed ancestor into consumed sibling/complement paths and does not reconstruct ownership from below. Such a structural state-splitting relation is not represented by this revision.
+
+At the commit point the applicable execution owner selects and ends only the then-current `frontier(p)` before installing the preserved new complete `type(p)` value. Already consumed descendants therefore contribute no frontier member and are not ended twice.
+
+After successful installation, the new consumed-path set is exactly:
+
+```text
+C' = { c in C | p is not equal to c and is not an ancestor of c }
+```
+
+Equivalently, remove from `C` exactly every consumed path equal to `p` or strictly below `p`; preserve every structurally disjoint consumed path unchanged.
+
+Because the admitted pre-commit state contains no consumed strict ancestor of `p`, this transition preserves prefix-freedom. It makes `p` fully available, leaves a previously fully available target's consumed-path state unchanged, removes exactly `p` for exact-path reinitialization, removes exactly consumed descendants for partial reconstruction, and never normalizes a disjoint region.
+
+The operation owner decides how the target path is selected, which mutation/replacement permission is required, how the new value is produced, and what fault/divergence or alias-authority checks occur before commit. This structural relation supplies only the target-state admission, remaining-frontier selection, and successful consumed-path transition.
+
 ## Definite source validity and control flow
 
-Structural availability is statically required source validity for operations that consume or duplicate a path through this relation. An invalid use is not converted into a defined runtime use-after-consumption fault merely because a physical implementation could track moves dynamically.
+Structural availability is statically required source validity for operations that consume or duplicate a path through this relation. Structural subpath installation likewise requires its operation owner to prove the exact admitted pre-commit state; an invalid installation is not converted into a defined runtime moved-state fault merely because a physical implementation could track moves dynamically.
 
 [Source control flow](control-flow.md) owns represented multi-path and cyclic consumers. It treats every continuing binding structural root and every continuing replacement-capable external referent root as definite structural state.
 
@@ -198,19 +229,21 @@ Future refutable matches, catch/recovery forms, additional loop forms, or other 
 
 `local-bindings.md` associates one structural owned-value root with every in-scope represented parameter/local binding.
 
-Binding lifecycle establishes when that state begins, persists, resets, or ends. This owner supplies only the structural mathematics applied to that state.
+Binding lifecycle establishes when that state begins, persists, resets, or ends. Successful whole-binding replacement uses the complete-root replacement boundary above. Successful bounded direct binding-root field assignment uses the non-empty subpath-installation relation above at its operation-defined post-RHS commit point. This owner supplies only the structural mathematics applied to that state.
 
 ### Replacement-capable external referents
 
 `references.md` associates one non-binding structural owned-value root with every incoming `ExclusiveReplaceRef(T)` parameter.
 
-The root begins fully available at call entry, complete-referent Move may consume it, complete-referent replacement resets it to complete ownership, explicit child reborrows select that same domain, control flow carries its exact state, and normal completion requires it to be fully available. This structural owner supplies only the state mathematics.
+The root begins fully available at call entry, complete-referent Move may consume it, complete-referent replacement resets it to complete ownership, explicit child reborrows select that same domain, control flow carries its exact state, and normal completion requires it to be fully available. This structural owner supplies only the state mathematics. This revision does not by itself authorize projected replacement through a safe reference merely because the generic non-empty installation relation exists.
 
 ### Field-value access
 
 For a binding-root receiver, `field-access.md` resolves one non-empty structural path from the selected binding root, requires its final selected path to be fully available, and selects duplicate or consume according to the final field type's duplicability. Field lookup/accessibility, safe-authority compatibility, and producer semantics remain owned there and in `references.md`.
 
 For a producer-backed receiver, successful receiver production establishes one non-binding field-receiver transient structural root with an empty consumed-path set. `field-access.md` applies the source-selected duplicate-or-consume consequence to its resolved path and selects the transient's remaining frontier through this document; `function-execution.md` owns the transient's dynamic ending and cleanup order.
+
+For bounded direct binding-root field assignment, `field-access.md` supplies the existing nominal field-resolution/accessibility relation while `local-bindings.md` and `function-execution.md` own assignment permission, RHS production, and commit ordering. This document supplies only the selected non-empty path's structural installation state.
 
 ### Record patterns
 
@@ -222,7 +255,7 @@ For a successful producer-backed pattern, the produced transient begins as one c
 
 ### Function execution and cleanup
 
-`function-execution.md` decides when represented binding/transient ownership ends and when replacement frontiers are ended. It also owns ordering between distinct bindings, lexical scopes, activations, producer transients, safe-reference replacement, and raw replacement.
+`function-execution.md` decides when represented binding/transient ownership ends and when complete-root or bounded subpath replacement frontiers are ended. It also owns ordering between distinct bindings, lexical scopes, activations, producer transients, safe-reference replacement, raw replacement, and bounded binding-root field replacement.
 
 ### Conditional and bounded-loop control flow
 
@@ -236,10 +269,10 @@ Source structural ownership is independent of Core proving representation.
 
 Core path state, `Live`/`Dead`, Never-initialized state, scalar copyability, destruction domains, local identifiers, projections, and Core external-referent state are not source structural ownership authority.
 
-A faithful lowering MAY map resolved source paths to Core structural projections after source validation and MAY omit lower destruction for source-owned zero-leaf frontier members where Core has no scalar destruction domain. It MUST preserve replacement-capable external-referent Move/restore and normal-return obligations through the accepted Core reference/direct-call relation. It MUST NOT use lower liveness or copyability to reconstruct source path availability, duplicate-versus-consume selection, remaining-frontier membership, represented control-flow validity, or source normal-completion restoration.
+A faithful lowering MAY map resolved source paths to Core structural projections after source validation and MAY omit lower destruction for source-owned zero-leaf frontier members where Core has no scalar destruction domain. For an accepted direct binding-root subpath assignment, it MAY refine the selected source path to an existing projected Core ordinary-assignment destination only after the source owner has proved the structural installation relation above. It MUST preserve replacement-capable external-referent Move/restore and normal-return obligations through the accepted Core reference/direct-call relation. It MUST NOT use lower liveness or copyability to reconstruct source path availability, subpath-installation admission, consumed-path reset, duplicate-versus-consume selection, remaining-frontier membership, represented control-flow validity, or source normal-completion restoration.
 
 ## Further boundaries
 
-This revision does not define general source places/lvalues, field assignment, partial-field reinitialization, field-relative safe-reference access/reborrow, named lifetimes, pointer provenance, interior mutability, custom destructors, must-consume policy, arbitrary temporary lifetime extension, unequal-state/path-dependent conditional joins, additional loop forms or general loop fixed-point inference, refutable-match joins, exception/catch state merges, ABI/layout, parser/HIR/Core MIR representation, runtime moved-state flags, or backend storage.
+This revision does not define general source places/lvalues, field-relative safe-reference replacement/access/reborrow, named lifetimes, pointer provenance, interior mutability, custom destructors, must-consume policy, arbitrary temporary lifetime extension, structural state splitting beneath a consumed ancestor, unequal-state/path-dependent conditional joins, additional loop forms or general loop fixed-point inference, refutable-match joins, exception/catch state merges, ABI/layout, parser/HIR/Core MIR representation, runtime moved-state flags, or backend storage.
 
 Those concerns require their own accepted owners and may consume this structural relation only when their canonical semantics explicitly say so.
