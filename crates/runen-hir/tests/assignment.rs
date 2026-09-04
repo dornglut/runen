@@ -377,7 +377,8 @@ fn field_assignment_authority_is_exact_target_relative() {
              x.inner = replacement; \
          }",
     ] {
-        let errors = build(source).expect_err("overlapping Shared authority must block replacement");
+        let errors =
+            build(source).expect_err("overlapping Shared authority must block replacement");
         assert!(
             has_diagnostic(&errors, |kind| kind
                 == DiagnosticKind::BorrowedAssignmentTarget),
