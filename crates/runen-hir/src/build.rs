@@ -308,7 +308,10 @@ impl SemanticState {
         required: ReferencePermission,
     ) -> bool {
         matches!(
-            (self.reference_capability_at(authority, target), required),
+            (
+                self.reference_capability_at(authority, target),
+                required
+            ),
             (Some(ReferencePermission::ExclusiveReplace), _)
                 | (
                     Some(ReferencePermission::Shared),
@@ -361,9 +364,10 @@ impl SemanticState {
         match target {
             ReferenceTarget::Local { binding, fields } => {
                 fields.is_empty()
-                    || binding_state_by_id(&self.bindings, *binding).is_some_and(|state| {
-                        state.ownership.nonempty_installation_is_admitted(fields)
-                    })
+                    || binding_state_by_id(&self.bindings, *binding)
+                        .is_some_and(|state| {
+                            state.ownership.nonempty_installation_is_admitted(fields)
+                        })
             }
             ReferenceTarget::External { slot, fields } => {
                 fields.is_empty()
@@ -2230,7 +2234,7 @@ fn release_transfer_reference_carriers(
         .flat_map(|scope| scope.direct_bindings.iter().rev().copied())
         .collect::<Vec<_>>();
     for binding in bindings {
-        state.release_binding_reference_carrier(binding);
+        state.release_reference_carrier(binding);
     }
 }
 
