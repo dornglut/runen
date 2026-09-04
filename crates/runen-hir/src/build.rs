@@ -308,10 +308,7 @@ impl SemanticState {
         required: ReferencePermission,
     ) -> bool {
         matches!(
-            (
-                self.reference_capability_at(authority, target),
-                required
-            ),
+            (self.reference_capability_at(authority, target), required),
             (Some(ReferencePermission::ExclusiveReplace), _)
                 | (
                     Some(ReferencePermission::Shared),
@@ -364,16 +361,16 @@ impl SemanticState {
         match target {
             ReferenceTarget::Local { binding, fields } => {
                 fields.is_empty()
-                    || binding_state_by_id(&self.bindings, *binding)
-                        .is_some_and(|state| {
-                            state.ownership.nonempty_installation_is_admitted(fields)
-                        })
+                    || binding_state_by_id(&self.bindings, *binding).is_some_and(|state| {
+                        state.ownership.nonempty_installation_is_admitted(fields)
+                    })
             }
             ReferenceTarget::External { slot, fields } => {
                 fields.is_empty()
-                    || self.external_referents.get(slot).is_some_and(|state| {
-                        state.nonempty_installation_is_admitted(fields)
-                    })
+                    || self
+                        .external_referents
+                        .get(slot)
+                        .is_some_and(|state| state.nonempty_installation_is_admitted(fields))
             }
         }
     }
@@ -3167,8 +3164,7 @@ fn validate_reference_assign(
             && candidate.reference_authority == Some(original_authority)
     });
     if !destination_usable
-        || !candidate
-            .authority_satisfies(original_authority, ReferencePermission::ExclusiveReplace)
+        || !candidate.authority_satisfies(original_authority, ReferencePermission::ExclusiveReplace)
         || !candidate.reference_target_installation_is_admitted(&target)
     {
         diagnostics.push(Diagnostic {
