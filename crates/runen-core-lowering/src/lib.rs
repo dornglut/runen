@@ -733,7 +733,8 @@ impl<'a> FunctionLowerer<'a> {
                 } => {
                     let destination = self.binding_place(*target, fields)?;
                     let root_ty = self.local_type(destination.local)?;
-                    let projected_ty = self.types.project_type(root_ty, &destination.projections)?;
+                    let projected_ty =
+                        self.types.project_type(root_ty, &destination.projections)?;
                     let retained_ty = self.types.get(value.ty)?;
                     if projected_ty != retained_ty {
                         return Err(LoweringError::InvalidHirInvariant(

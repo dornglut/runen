@@ -50,7 +50,10 @@ fn retains_local_mutability_and_resolved_assignment_identity() {
         panic!("expected resolved assignment");
     };
     assert_eq!(*target, binding);
-    assert!(fields.is_empty(), "whole-binding assignment retains empty path");
+    assert!(
+        fields.is_empty(),
+        "whole-binding assignment retains empty path"
+    );
     let ValueKind::BindingUse { ownership, .. } = value.kind else {
         panic!("expected binding-use assignment RHS");
     };
@@ -166,8 +169,7 @@ fn field_assignment_reuses_field_resolution_diagnostics() {
         "record Box { value: I64 } fn f(seed: Box, replacement: I64) { let mut x: Box = seed; x.missing = replacement; }",
     )
     .expect_err("unknown target field must reject");
-    assert!(has_diagnostic(&unknown, |kind| kind
-        == DiagnosticKind::UnknownRecordField));
+    assert!(has_diagnostic(&unknown, |kind| kind == DiagnosticKind::UnknownRecordField));
 
     let dependency = parse("export record Foreign { hidden: I64 }");
     let application = parse(
