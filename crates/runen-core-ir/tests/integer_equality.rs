@@ -422,7 +422,7 @@ fn integer_eq_preserves_raw_move_integer_operand_semantics() {
             },
             Statement::Init {
                 dst: pointer.clone(),
-                src: Operand::AddressOf(target),
+                src: Operand::AddressOf(target.into()),
             },
             equality(
                 result.clone(),
