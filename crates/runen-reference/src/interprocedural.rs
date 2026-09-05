@@ -266,6 +266,21 @@ impl RuntimeValue {
         }
     }
 
+    fn integer_eq(left: Self, right: Self) -> Self {
+        let equal = match (left, right) {
+            (Self::I8(left), Self::I8(right)) => left == right,
+            (Self::I16(left), Self::I16(right)) => left == right,
+            (Self::I32(left), Self::I32(right)) => left == right,
+            (Self::I64(left), Self::I64(right)) => left == right,
+            (Self::U8(left), Self::U8(right)) => left == right,
+            (Self::U16(left), Self::U16(right)) => left == right,
+            (Self::U32(left), Self::U32(right)) => left == right,
+            (Self::U64(left), Self::U64(right)) => left == right,
+            _ => unreachable!("validated IntegerEq has matching fixed-width integer operands"),
+        };
+        Self::Bool(equal)
+    }
+
     fn floating_add(contract: NumericContract, left: Self, right: Self) -> Self {
         match contract {
             NumericContract::Standard | NumericContract::Reproducible | NumericContract::Fast => {
@@ -738,6 +753,16 @@ impl Machine {
                 right,
                 VerificationWriteKind::IntegerOr,
                 RuntimeValue::integer_or,
+            ),
+            Statement::IntegerEq {
+                dst, left, right, ..
+            } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::IntegerEq,
+                RuntimeValue::integer_eq,
             ),
             Statement::FloatAdd {
                 contract,
