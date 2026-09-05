@@ -81,8 +81,14 @@ fn integer_equality_lowers_to_exactly_one_typed_integer_eq_for_every_width() {
 
         let expected_operand_type = f.body.locals[f.parameters[0].0 as usize].ty;
         assert_eq!(*operand_type, expected_operand_type);
-        assert_eq!(f.body.locals[f.parameters[1].0 as usize].ty, expected_operand_type);
-        assert_eq!(f.body.locals[dst.local.0 as usize].ty, f.result.expect("Bool result type"));
+        assert_eq!(
+            f.body.locals[f.parameters[1].0 as usize].ty,
+            expected_operand_type
+        );
+        assert_eq!(
+            f.body.locals[dst.local.0 as usize].ty,
+            f.result.expect("Bool result type")
+        );
         assert!(moved_local(left).is_some());
         assert!(moved_local(right).is_some());
         assert_eq!(
@@ -125,17 +131,21 @@ fn integer_inequality_uses_one_integer_eq_then_existing_boolean_negation_cfg() {
 
     let true_block = &f.body.blocks[branch.1.0 as usize];
     let false_block = &f.body.blocks[branch.2.0 as usize];
-    let [CoreStatement::Init {
-        dst: true_dst,
-        src: Operand::Constant(runen_core_ir::Value::Bool(false)),
-    }] = true_block.statements.as_slice()
+    let [
+        CoreStatement::Init {
+            dst: true_dst,
+            src: Operand::Constant(runen_core_ir::Value::Bool(false)),
+        },
+    ] = true_block.statements.as_slice()
     else {
         panic!("true equality outcome must initialize inequality false");
     };
-    let [CoreStatement::Init {
-        dst: false_dst,
-        src: Operand::Constant(runen_core_ir::Value::Bool(true)),
-    }] = false_block.statements.as_slice()
+    let [
+        CoreStatement::Init {
+            dst: false_dst,
+            src: Operand::Constant(runen_core_ir::Value::Bool(true)),
+        },
+    ] = false_block.statements.as_slice()
     else {
         panic!("false equality outcome must initialize inequality true");
     };
@@ -190,10 +200,12 @@ fn call_backed_inequality_lowers_left_then_right_once_before_integer_eq() {
         "integer != must not re-lower either call operand"
     );
     assert_eq!(integer_eq_statements(f).len(), 1);
-    assert!(f.body.blocks[after_right.0 as usize]
-        .statements
-        .iter()
-        .any(|statement| matches!(statement, CoreStatement::IntegerEq { .. })));
+    assert!(
+        f.body.blocks[after_right.0 as usize]
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, CoreStatement::IntegerEq { .. }))
+    );
     assert!(matches!(
         f.body.blocks[after_right.0 as usize].terminator,
         Terminator::Branch { .. }
