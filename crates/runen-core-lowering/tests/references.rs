@@ -936,3 +936,75 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         ))
     );
 }
+
+#[test]
+fn lowers_projected_replacement_roots_to_exact_projected_reference_root_places() {
+    let lowered = lower_source(
+        "record Inner { value: I64 }\
+         record Outer { inner: Inner, other: I64 }\
+         fn f(seed: Outer) {\
+             let mut root: Outer = seed;\
+             { let direct: &mut Inner = &mut root.inner; }\
+             { let nested: &mut I64 = &mut root.inner.value; }\
+         }",
+    );
+    let program = lowered.as_program();
+    let f = function(program, "f");
+    let root = local_named(f, "root");
+    let root_ty = f.body.locals[root.0 as usize].ty;
+    let statements = f
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| block.statements.iter())
+        .collect::<Vec<_>>();
+    let roots = statements
+        .iter()
+        .filter_map(|statement| {
+            let CoreStatement::Init {
+                dst,
+                src: Operand::ReferenceRoot { permission, place },
+            } = statement
+            else {
+                return None;
+            };
+            (*permission == ReferencePermission::ExclusiveReplace && place.local == root)
+                .then_some((dst.local, place))
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(roots.len(), 2);
+    let expected = [
+        vec![Projection::Field(0)],
+        vec![Projection::Field(0), Projection::Field(0)],
+    ];
+    for ((destination, place), expected_projections) in roots.iter().zip(&expected) {
+        assert_eq!(&place.projections, expected_projections);
+        let destination_ty = f.body.locals[destination.0 as usize].ty;
+        let (referent, permission) = program
+            .types
+            .reference(destination_ty)
+            .expect("projected replacement root temporary has a Core reference type");
+        assert_eq!(permission, ReferencePermission::ExclusiveReplace);
+        assert_eq!(
+            program.types.project_type(root_ty, &place.projections),
+            Some(referent)
+        );
+    }
+
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::Copy(PlaceAccess::Direct(place))
+                | Operand::Move(PlaceAccess::Direct(place)),
+            ..
+        } if place.local == root && !place.projections.is_empty()
+    )));
+    assert!(!statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init {
+            src: Operand::ReferenceReborrow { .. } | Operand::AddressOf(_),
+            ..
+        }
+    )));
+}
