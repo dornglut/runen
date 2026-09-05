@@ -46,10 +46,10 @@ fn integer_eq_statements(function: &runen_core_ir::Function) -> Vec<&CoreStateme
         .collect()
 }
 
-fn returned_value_mut(
-    compilation: &mut runen_hir::TypedCompilation,
+fn returned_value_mut<'a>(
+    compilation: &'a mut runen_hir::TypedCompilation,
     name: &str,
-) -> &mut runen_hir::Value {
+) -> &'a mut runen_hir::Value {
     compilation
         .functions
         .iter_mut()
