@@ -4028,7 +4028,7 @@ fn validate_value_inner(
                     },
                     location: evidence_location,
                 });
-                EqualityOperandEvidence::Invalid
+                Invalid
             }
 
             fn classify_equality_operand(
