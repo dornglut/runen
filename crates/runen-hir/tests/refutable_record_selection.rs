@@ -114,7 +114,10 @@ fn nested_tests_rest_and_bindings_retain_complete_depth_first_paths() {
     assert!(matches!(scrutinee, RecordPatternScrutinee::DirectRoot(_)));
     assert!(mismatch.is_none());
     assert_eq!(
-        tests.iter().map(|test| test.fields.clone()).collect::<Vec<_>>(),
+        tests
+            .iter()
+            .map(|test| test.fields.clone())
+            .collect::<Vec<_>>(),
         [vec![1, 1], vec![1, 0]]
     );
     assert_eq!(tests[0].value, LiteralValue::I16(-7));
@@ -202,10 +205,9 @@ fn zero_literal_pattern_is_semantically_rejected() {
 
 #[test]
 fn literal_tests_require_the_exact_resolved_field_type() {
-    let bool_on_integer = build(
-        "record R { value: I8 } fn f(root: R) { if let R { value: true } = (root) {} }",
-    )
-    .expect_err("Bool literal may test only Bool field");
+    let bool_on_integer =
+        build("record R { value: I8 } fn f(root: R) { if let R { value: true } = (root) {} }")
+            .expect_err("Bool literal may test only Bool field");
     assert!(has_diagnostic(
         &bool_on_integer,
         DiagnosticKind::TypeMismatch {
@@ -214,10 +216,9 @@ fn literal_tests_require_the_exact_resolved_field_type() {
         }
     ));
 
-    let integer_on_bool = build(
-        "record R { value: Bool } fn f(root: R) { if let R { value: 1 } = (root) {} }",
-    )
-    .expect_err("integer literal may test only fixed-width integer field");
+    let integer_on_bool =
+        build("record R { value: Bool } fn f(root: R) { if let R { value: 1 } = (root) {} }")
+            .expect_err("integer literal may test only fixed-width integer field");
     assert!(has_diagnostic(
         &integer_on_bool,
         DiagnosticKind::IntegerLiteralRequiresInteger {
@@ -264,8 +265,7 @@ fn success_bindings_are_success_scoped_and_mismatch_may_reuse_the_same_key() {
          }",
     )
     .expect("sibling success/mismatch scopes may independently use one key");
-    let (_, _, bindings, _, success, mismatch) =
-        selection(&function(&hir, "f").body.statements[0]);
+    let (_, _, bindings, _, success, mismatch) = selection(&function(&hir, "f").body.statements[0]);
     assert_eq!(bindings.len(), 1);
     assert!(matches!(success.statements[0], Statement::Call { .. }));
     let mismatch = mismatch.expect("explicit mismatch block");
