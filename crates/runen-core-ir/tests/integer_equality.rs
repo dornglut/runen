@@ -19,12 +19,7 @@ fn one_block(types: TypeTable, locals: Vec<LocalDecl>, statements: Vec<Statement
     )
 }
 
-fn equality(
-    dst: Place,
-    operand_type: TypeId,
-    left: Operand,
-    right: Operand,
-) -> Statement {
+fn equality(dst: Place, operand_type: TypeId, left: Operand, right: Operand) -> Statement {
     Statement::IntegerEq {
         dst,
         operand_type,
@@ -124,7 +119,13 @@ fn integer_eq_rejects_known_non_integer_operand_types_before_operands() {
         ReferencePermission::Shared,
     ));
 
-    for operand_type in [bool_type, float_type, tracked_type, raw_type, reference_type] {
+    for operand_type in [
+        bool_type,
+        float_type,
+        tracked_type,
+        raw_type,
+        reference_type,
+    ] {
         let program = one_block(
             types.clone(),
             vec![LocalDecl::new("result", bool_type, false)],
@@ -135,7 +136,8 @@ fn integer_eq_rejects_known_non_integer_operand_types_before_operands() {
                 Operand::Constant(Value::I8(1)),
             )],
         );
-        let error = validate_program(program).expect_err("known non-integer operand type must fail");
+        let error =
+            validate_program(program).expect_err("known non-integer operand type must fail");
         assert_eq!(
             error.kind,
             MirValidationErrorKind::IntegerEqRequiresIntegerOperands(operand_type)
@@ -179,7 +181,8 @@ fn integer_eq_uses_explicit_operand_type_for_constants_and_place_constant_pairs(
             ],
         );
 
-        validate_program(program).expect("place/constant equality must use explicit operand TypeId");
+        validate_program(program)
+            .expect("place/constant equality must use explicit operand TypeId");
     }
 }
 
@@ -327,7 +330,8 @@ fn shared_and_exclusive_overlapping_loans_block_direct_eq_destination_first() {
             },
         );
 
-        let error = validate_program(program).expect_err("overlapping loan blocks direct equality dst");
+        let error =
+            validate_program(program).expect_err("overlapping loan blocks direct equality dst");
         assert_eq!(
             error.kind,
             MirValidationErrorKind::DirectAccessConflict {
@@ -366,7 +370,10 @@ fn integer_eq_evaluates_left_state_before_right_state() {
     );
 
     let error = validate_program(program).expect_err("right move observes the left move");
-    assert_eq!(error.kind, MirValidationErrorKind::UseOfUninitialized(source));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UseOfUninitialized(source)
+    );
 }
 
 #[test]
@@ -487,7 +494,8 @@ fn integer_eq_preserves_reference_copy_and_move_permission_semantics() {
             Operand::Constant(Value::I8(9)),
         )],
     );
-    let error = validate_program(invalid).expect_err("Shared ReferenceMove remains permission-invalid");
+    let error =
+        validate_program(invalid).expect_err("Shared ReferenceMove remains permission-invalid");
     assert_eq!(
         error.kind,
         MirValidationErrorKind::ReferencePermissionRequired(ReferencePermission::Exclusive)
