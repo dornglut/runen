@@ -25,7 +25,16 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
-fn selection(statement: &Statement) -> (&runen_hir::RecordPatternScrutinee, &[runen_hir::RecordPatternLiteralTest], &[runen_hir::RecordPatternBinding], Option<&RecordPatternTransientCleanup>, &runen_hir::Block, Option<&runen_hir::Block>) {
+fn selection(
+    statement: &Statement,
+) -> (
+    &runen_hir::RecordPatternScrutinee,
+    &[runen_hir::RecordPatternLiteralTest],
+    &[runen_hir::RecordPatternBinding],
+    Option<&RecordPatternTransientCleanup>,
+    &runen_hir::Block,
+    Option<&runen_hir::Block>,
+) {
     let Statement::RefutableRecordSelection {
         scrutinee,
         tests,
@@ -170,10 +179,12 @@ fn test_only_producer_keeps_complete_root_on_success_and_mismatch() {
             ..
         } if paths == &[Vec::<usize>::new()]
     ));
-    assert!(matches!(
+    assert_eq!(
         mismatch_cleanup,
-        Some(RecordPatternTransientCleanup { paths }) if paths == &[Vec::<usize>::new()]
-    ));
+        Some(&RecordPatternTransientCleanup {
+            paths: vec![Vec::new()],
+        })
+    );
 }
 
 #[test]
