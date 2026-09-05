@@ -139,6 +139,9 @@ pub enum SyntaxKind {
     RawAssignStatement,
     UnsafeBlockStatement,
     ReferenceAssignStatement,
+    RefutableRecordSelectionStatement,
+    RefutableRecordPattern,
+    RefutableRecordPatternField,
 }
 
 impl SyntaxKind {
@@ -296,6 +299,9 @@ impl Language for RunenLanguage {
             114 => SyntaxKind::RawAssignStatement,
             115 => SyntaxKind::UnsafeBlockStatement,
             116 => SyntaxKind::ReferenceAssignStatement,
+            117 => SyntaxKind::RefutableRecordSelectionStatement,
+            118 => SyntaxKind::RefutableRecordPattern,
+            119 => SyntaxKind::RefutableRecordPatternField,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
