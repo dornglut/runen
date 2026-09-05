@@ -375,7 +375,10 @@ impl TypeMap {
         path: &mut Vec<usize>,
         frontier: &mut Vec<Vec<usize>>,
     ) -> Result<(), LoweringError> {
-        if consumed.iter().any(|consumed| consumed.as_slice() == path.as_slice()) {
+        if consumed
+            .iter()
+            .any(|consumed| consumed.as_slice() == path.as_slice())
+        {
             return Ok(());
         }
         let has_consumed_descendant = consumed.iter().any(|consumed| {
@@ -1237,9 +1240,10 @@ impl<'a> FunctionLowerer<'a> {
                     "refutable record literal test has empty structural path",
                 ));
             }
-            if seen_paths.iter().any(|seen| {
-                test.fields.starts_with(seen) || seen.starts_with(&test.fields)
-            }) {
+            if seen_paths
+                .iter()
+                .any(|seen| test.fields.starts_with(seen) || seen.starts_with(&test.fields))
+            {
                 return Err(LoweringError::InvalidHirInvariant(
                     "refutable record selection leaf paths are not structurally disjoint",
                 ));
@@ -1292,9 +1296,10 @@ impl<'a> FunctionLowerer<'a> {
                     "refutable record selection binding has empty structural path",
                 ));
             }
-            if seen_paths.iter().any(|seen| {
-                binding.fields.starts_with(seen) || seen.starts_with(&binding.fields)
-            }) {
+            if seen_paths
+                .iter()
+                .any(|seen| binding.fields.starts_with(seen) || seen.starts_with(&binding.fields))
+            {
                 return Err(LoweringError::InvalidHirInvariant(
                     "refutable record selection leaf paths are not structurally disjoint",
                 ));
@@ -1368,11 +1373,9 @@ impl<'a> FunctionLowerer<'a> {
                         "producer-backed refutable selection success cleanup does not match canonical remaining frontier",
                     ));
                 }
-                let mismatch_cleanup = mismatch_cleanup.ok_or(
-                    LoweringError::InvalidHirInvariant(
-                        "producer-backed refutable selection lacks mismatch cleanup",
-                    ),
-                )?;
+                let mismatch_cleanup = mismatch_cleanup.ok_or(LoweringError::InvalidHirInvariant(
+                    "producer-backed refutable selection lacks mismatch cleanup",
+                ))?;
                 if mismatch_cleanup.paths.as_slice() != [Vec::<usize>::new()] {
                     return Err(LoweringError::InvalidHirInvariant(
                         "producer-backed refutable selection mismatch cleanup is not the complete transient root",
@@ -1472,9 +1475,14 @@ impl<'a> FunctionLowerer<'a> {
             self.lower_record_pattern_transient_cleanup(source_local, expected_ty, cleanup)?;
         }
         self.lower_block(success_block)?;
-        let success_end = success_block
-            .has_normal_continuation
-            .then(|| core::BasicBlockId(self.current as u32));
+        let success_end = if success_block.has_normal_continuation {
+            Some(core::BasicBlockId(index_u32(
+                self.current,
+                "Core basic block identity",
+            )?))
+        } else {
+            None
+        };
 
         self.current = mismatch_target.0 as usize;
         if let hir::RecordPatternScrutinee::Producer { .. } = scrutinee {
@@ -1490,7 +1498,14 @@ impl<'a> FunctionLowerer<'a> {
             self.lower_block(mismatch_block)?;
         }
         let mismatch_normal = mismatch_block.is_none_or(|block| block.has_normal_continuation);
-        let mismatch_end = mismatch_normal.then(|| core::BasicBlockId(self.current as u32));
+        let mismatch_end = if mismatch_normal {
+            Some(core::BasicBlockId(index_u32(
+                self.current,
+                "Core basic block identity",
+            )?))
+        } else {
+            None
+        };
 
         match (success_end, mismatch_end) {
             (Some(success_end), Some(mismatch_end)) => {
