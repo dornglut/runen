@@ -19,7 +19,10 @@ fn parses_parenthesized_direct_root_and_record_construction_scrutinees() {
 
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::RefutableRecordSelectionStatement), 2);
+    assert_eq!(
+        count(&parsed, SyntaxKind::RefutableRecordSelectionStatement),
+        2
+    );
     assert_eq!(count(&parsed, SyntaxKind::RefutableRecordPattern), 2);
     assert_eq!(count(&parsed, SyntaxKind::RefutableRecordPatternField), 2);
     assert_eq!(count(&parsed, SyntaxKind::RecordConstruction), 1);
@@ -60,7 +63,10 @@ fn zero_literal_refutable_pattern_is_syntax_valid_for_hir_rejection() {
 
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::RefutableRecordSelectionStatement), 1);
+    assert_eq!(
+        count(&parsed, SyntaxKind::RefutableRecordSelectionStatement),
+        1
+    );
     assert_eq!(count(&parsed, SyntaxKind::BooleanLiteral), 0);
     assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 0);
 }
