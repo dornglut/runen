@@ -200,6 +200,34 @@ A conforming implementation MAY use a native OR instruction or host-language bit
 
 This represented operation defines no binary AND, XOR rewrite, complement rewrite, shift, division, remainder, comparison, floating operation, vector operation, conversion, constant-evaluation rule, explicit overflow mode, source operator family, generic bitwise abstraction, or backend instruction requirement.
 
+## Plain fixed-width integer equality
+
+This revision represents one concrete fixed-width integer predicate: **integer equality**.
+
+Its represented operand scalar kinds are exactly:
+
+- signed fixed-width integer kinds `I8`, `I16`, `I32`, and `I64`; and
+- unsigned fixed-width integer kinds `U8`, `U16`, `U32`, and `U64`.
+
+For one selected fixed-width integer kind, let `l` and `r` be two semantic integer values of that same kind. The successful **fixed-width integer equality result** is exactly the semantic Bool value
+
+```text
+true   when l = r as mathematical integer values
+false  otherwise
+```
+
+The equality relation is total over every pair of semantic values in one represented fixed-width integer domain. Signed values are compared as their semantic mathematical integer values; equality does not compare a physical object representation, byte sequence, canonical width residue, ABI encoding, host signed representation, or target instruction result.
+
+Because both operands are already admitted values of the same selected fixed-width integer domain, equality performs no overflow mapping and has no checked, wrapping, saturating, or other overflow classification. Once both operand values are available, the equality step is finite, deterministic, non-faulting, and non-diverging.
+
+This numerical relation does not make distinct Core type identities interchangeable merely because they have the same scalar kind. The Core operation that consumes this relation owns the exact operand type identity independently of its Bool result destination and owns result storage. Source-language operand-type selection, `==`/`!=` spelling, and Boolean-result consumption are owned by their source and Core consumers rather than by this numerical relation.
+
+The represented Core operation consuming this relation evaluates its two operands left-to-right and writes the resulting Bool value through the non-replacing destination relation owned by [Core value and storage semantics](../value-storage.md). Those exact operand-type, operand-access, destination-type, storage, lifetime, initialization, and borrowing rules are not duplicated here.
+
+A conforming implementation MAY use a native equality primitive only when it preserves exactly the semantic integer equality relation above. Host-language `==`, backend predicate instructions, integer representation, instruction width, endianness, optimizer assumptions, and physical two's-complement storage are never semantic authority.
+
+This represented operation defines no integer inequality operation, ordering, three-way comparison, floating comparison, pointer/reference comparison, structural comparison, conversion, constant-evaluation rule, source operator family, generic predicate abstraction, or backend instruction requirement.
+
 ## Explicit checked overflow
 
 An **explicit checked fixed-width integer arithmetic operation** is one whose applicable operation contract selects checked overflow behavior.
@@ -238,9 +266,3 @@ When such an operation is otherwise defined and its operation-specific semantics
 
 - for an unsigned result type, `lo = 0` and `hi = 2^N - 1`;
 - for a signed result type, `lo = -2^(N-1)` and `hi = 2^(N-1) - 1`.
-
-The Runen result is `lo` when `x < lo`, exactly `x` when `lo <= x <= hi`, and `hi` when `x > hi`. Lower and upper out-of-range exact results therefore clamp to the nearest destination bound.
-
-An out-of-range exact result of an explicit saturating operation does not by itself produce a defined fault and is not undefined behavior. Saturation is defined over the mathematical value interval and does not require a physical integer representation.
-
-This is an overflow-result rule, not an operation-domain or source-form rule. It does not define checked arithmetic, division-by-zero behavior, shift-count validity, conversions, source spelling, constant-evaluation diagnostics, which operations or widths exist, or a physical saturation instruction. A realization MUST NOT derive a different saturating result from host behavior, backend overflow metadata, optimizer assumptions, or physical representation.
