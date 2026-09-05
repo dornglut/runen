@@ -2,8 +2,8 @@ mod support;
 
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, BorrowKind, LoanDecl, LoanId, LocalDecl, LocalId,
-    MirValidationErrorKind, Operand, Place, Program, ReferencePermission, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
+    MirValidationErrorKind, Operand, Place, Program, ReferenceAccess, ReferencePermission,
+    ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 use support::one_function_program;
 
@@ -390,4 +390,106 @@ fn integer_eq_result_becomes_live_as_bool() {
     );
 
     validate_program(program).expect("successful IntegerEq initializes a Bool destination once");
+}
+
+#[test]
+fn integer_eq_preserves_raw_move_integer_operand_semantics() {
+    let mut types = TypeTable::new();
+    let i8_type = types.push(TypeDef::scalar("i8", ScalarType::I8));
+    let bool_type = types.push(TypeDef::scalar("bool", ScalarType::Bool));
+    let raw_i8 = types.push(TypeDef::raw_pointer("raw-i8", i8_type));
+    let target = Place::local(LocalId(0));
+    let pointer = Place::local(LocalId(1));
+    let result = Place::local(LocalId(2));
+    let program = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", i8_type, false),
+            LocalDecl::new("pointer", raw_i8, false),
+            LocalDecl::new("result", bool_type, false),
+        ],
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::I8(5)),
+            },
+            Statement::Init {
+                dst: pointer.clone(),
+                src: Operand::AddressOf(target),
+            },
+            equality(
+                result.clone(),
+                i8_type,
+                Operand::RawMove(pointer.into()),
+                Operand::Constant(Value::I8(5)),
+            ),
+            Statement::Read { src: result.into() },
+        ],
+    );
+
+    validate_program(program).expect("IntegerEq must preserve existing RawMove integer semantics");
+}
+
+#[test]
+fn integer_eq_preserves_reference_copy_and_move_permission_semantics() {
+    let mut types = TypeTable::new();
+    let i8_type = types.push(TypeDef::scalar("i8", ScalarType::I8));
+    let bool_type = types.push(TypeDef::scalar("bool", ScalarType::Bool));
+    let shared_i8 = types.push(TypeDef::reference(
+        "shared-i8",
+        i8_type,
+        ReferencePermission::Shared,
+    ));
+    let target = Place::local(LocalId(0));
+    let reference = Place::local(LocalId(1));
+    let result = Place::local(LocalId(2));
+    let access = ReferenceAccess::new(reference.clone());
+    let valid = one_block(
+        types.clone(),
+        vec![
+            LocalDecl::new("target", i8_type, false),
+            LocalDecl::new("reference", shared_i8, false),
+            LocalDecl::new("result", bool_type, false),
+        ],
+        vec![
+            Statement::Init {
+                dst: target.clone(),
+                src: Operand::Constant(Value::I8(9)),
+            },
+            Statement::Init {
+                dst: reference.clone(),
+                src: Operand::ReferenceRoot {
+                    permission: ReferencePermission::Shared,
+                    place: target,
+                },
+            },
+            equality(
+                result,
+                i8_type,
+                Operand::ReferenceCopy(access.clone()),
+                Operand::Constant(Value::I8(9)),
+            ),
+        ],
+    );
+    validate_program(valid).expect("Shared ReferenceCopy remains a valid integer producer");
+
+    let invalid = one_block(
+        types,
+        vec![
+            LocalDecl::new("target", i8_type, false),
+            LocalDecl::new("reference", shared_i8, false),
+            LocalDecl::new("result", bool_type, false),
+        ],
+        vec![equality(
+            Place::local(LocalId(2)),
+            i8_type,
+            Operand::ReferenceMove(access),
+            Operand::Constant(Value::I8(9)),
+        )],
+    );
+    let error = validate_program(invalid).expect_err("Shared ReferenceMove remains permission-invalid");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::ReferencePermissionRequired(ReferencePermission::Exclusive)
+    );
 }
