@@ -479,7 +479,7 @@ pub enum Value {
     F32(BinaryFloatValue),
     F64(BinaryFloatValue),
     /// Verification-only fixture identity whose destruction is visible in the oracle trace.
-    /// This is not a Runen language value primitive.
+    /// This is not a Runen language scalar primitive.
     TrackedFixture(u64),
     Struct(Vec<Value>),
 }
@@ -718,6 +718,13 @@ pub enum Statement {
     /// Plain fixed-width integer bitwise OR into wholly vacant direct storage.
     IntegerOr {
         dst: Place,
+        left: Operand,
+        right: Operand,
+    },
+    /// Fixed-width integer equality into wholly vacant direct Bool storage.
+    IntegerEq {
+        dst: Place,
+        operand_type: TypeId,
         left: Operand,
         right: Operand,
     },
