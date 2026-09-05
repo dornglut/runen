@@ -721,6 +721,13 @@ pub enum Statement {
         left: Operand,
         right: Operand,
     },
+    /// Fixed-width integer equality into wholly vacant direct Bool storage.
+    IntegerEq {
+        dst: Place,
+        operand_type: TypeId,
+        left: Operand,
+        right: Operand,
+    },
     /// Same-format binary floating addition under one explicit numeric contract.
     FloatAdd {
         dst: Place,
