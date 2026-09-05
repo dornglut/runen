@@ -479,7 +479,7 @@ pub enum Value {
     F32(BinaryFloatValue),
     F64(BinaryFloatValue),
     /// Verification-only fixture identity whose destruction is visible in the oracle trace.
-    /// This is not a Runen language scalar primitive.
+    /// This is not a Runen language value primitive.
     TrackedFixture(u64),
     Struct(Vec<Value>),
 }
