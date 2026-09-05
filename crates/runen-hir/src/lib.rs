@@ -315,6 +315,17 @@ pub struct RecordPatternBinding {
     pub ownership: OwnedUse,
 }
 
+/// One resolved refutable record-pattern literal test in depth-first source order.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecordPatternLiteralTest {
+    /// Complete resolved structural field path from the top pattern root.
+    pub fields: Vec<usize>,
+    /// Exact scalar source type selected from the resolved field declaration.
+    pub ty: Type,
+    /// Materialized semantic literal value under `ty`.
+    pub value: LiteralValue,
+}
+
 /// Source-selected remaining cleanup paths for one producer-backed record-pattern transient.
 ///
 /// Paths are retained in canonical structural cleanup order. An empty path denotes
@@ -348,12 +359,13 @@ pub enum FieldValueReceiver {
     },
 }
 
-/// Resolved scrutinee category for the represented irrefutable record pattern.
+/// Resolved scrutinee category for the represented bounded record-pattern relations.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecordPatternScrutinee {
     /// Accepted bare binding root with direct per-leaf ownership semantics.
     DirectRoot(BindingId),
     /// Existing value producer whose successful result is the pattern transient.
+    /// `cleanup` is the source-selected remaining frontier after successful binding production.
     Producer {
         value: Value,
         cleanup: RecordPatternTransientCleanup,
@@ -522,6 +534,18 @@ pub enum Statement {
         record: RecordId,
         scrutinee: RecordPatternScrutinee,
         bindings: Vec<RecordPatternBinding>,
+        location: SourceLocation,
+    },
+    RefutableRecordSelection {
+        record: RecordId,
+        scrutinee: RecordPatternScrutinee,
+        tests: Vec<RecordPatternLiteralTest>,
+        bindings: Vec<RecordPatternBinding>,
+        /// Producer-backed mismatch cleanup for the complete pattern transient.
+        /// Direct-root selections retain `None` because no pattern transient exists.
+        mismatch_cleanup: Option<RecordPatternTransientCleanup>,
+        success_block: Block,
+        mismatch_block: Option<Box<Block>>,
         location: SourceLocation,
     },
     Assignment {
@@ -742,6 +766,7 @@ pub enum DiagnosticKind {
     DuplicateRecordPatternField,
     MissingRecordPatternField,
     DuplicatePatternBinding,
+    RefutableRecordPatternRequiresLiteralTest,
     ExpectedRecordForFieldAccess,
     InaccessibleRecordField,
     UnavailableFieldValue,
