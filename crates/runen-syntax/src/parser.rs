@@ -38,6 +38,12 @@ enum ValueContext {
     Conditional,
 }
 
+#[derive(Clone, Copy)]
+enum RecordPatternContext {
+    Irrefutable,
+    Refutable,
+}
+
 impl Parser<'_> {
     fn parse_root(&mut self) {
         self.builder.start_node(SyntaxKind::SourceUnit.into());
@@ -262,7 +268,7 @@ impl Parser<'_> {
                     self.parse_return_statement();
                     returned = true;
                 }
-                Some(SyntaxKind::KwIf) => self.parse_if_statement(),
+                Some(SyntaxKind::KwIf) => self.parse_if_or_refutable_record_selection_statement(),
                 Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
                 Some(SyntaxKind::KwRaw) => self.parse_raw_assign_statement(),
                 Some(SyntaxKind::KwUnsafe) => self.parse_unsafe_block_statement(),
@@ -339,7 +345,7 @@ impl Parser<'_> {
                     self.parse_return_statement();
                     returned = true;
                 }
-                Some(SyntaxKind::KwIf) => self.parse_if_statement(),
+                Some(SyntaxKind::KwIf) => self.parse_if_or_refutable_record_selection_statement(),
                 Some(SyntaxKind::KwWhile) => self.parse_while_statement(),
                 Some(SyntaxKind::KwRaw) => self.parse_raw_assign_statement(),
                 Some(SyntaxKind::KwUnsafe) => self.parse_unsafe_block_statement(),
@@ -368,10 +374,36 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
+    fn parse_if_or_refutable_record_selection_statement(&mut self) {
+        debug_assert!(self.at(SyntaxKind::KwIf));
+        if self.peek_nontrivia(1) == Some(SyntaxKind::KwLet) {
+            self.parse_refutable_record_selection_statement();
+        } else {
+            self.parse_if_statement();
+        }
+    }
+
     fn parse_if_statement(&mut self) {
         self.builder.start_node(SyntaxKind::IfStatement.into());
         self.expect(SyntaxKind::KwIf, ExpectedSyntax::Statement);
         self.parse_conditional_value();
+        self.parse_block_statement_with_else_boundary(true);
+        if self.eat(SyntaxKind::KwElse) {
+            self.parse_block_statement();
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_refutable_record_selection_statement(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::RefutableRecordSelectionStatement.into());
+        self.expect(SyntaxKind::KwIf, ExpectedSyntax::Statement);
+        self.expect(SyntaxKind::KwLet, ExpectedSyntax::Statement);
+        self.parse_refutable_record_pattern();
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        self.expect(SyntaxKind::LParen, ExpectedSyntax::LeftParen);
+        self.parse_record_pattern_scrutinee();
+        self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
         self.parse_block_statement_with_else_boundary(true);
         if self.eat(SyntaxKind::KwElse) {
             self.parse_block_statement();
@@ -431,7 +463,19 @@ impl Parser<'_> {
     }
 
     fn parse_record_pattern(&mut self) {
-        self.builder.start_node(SyntaxKind::RecordPattern.into());
+        self.parse_record_pattern_in(RecordPatternContext::Irrefutable);
+    }
+
+    fn parse_refutable_record_pattern(&mut self) {
+        self.parse_record_pattern_in(RecordPatternContext::Refutable);
+    }
+
+    fn parse_record_pattern_in(&mut self, context: RecordPatternContext) {
+        let node_kind = match context {
+            RecordPatternContext::Irrefutable => SyntaxKind::RecordPattern,
+            RecordPatternContext::Refutable => SyntaxKind::RefutableRecordPattern,
+        };
+        self.builder.start_node(node_kind.into());
         if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
             self.parse_qualified_module_member();
         } else {
@@ -517,7 +561,7 @@ impl Parser<'_> {
             }
 
             if self.at(SyntaxKind::Ident) {
-                self.parse_record_pattern_field();
+                self.parse_record_pattern_field_in(context);
                 if self.eat(SyntaxKind::Comma) {
                     self.bump_trivia();
                     continue;
@@ -585,25 +629,73 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_record_pattern_field(&mut self) {
-        self.builder
-            .start_node(SyntaxKind::RecordPatternField.into());
+    fn parse_record_pattern_field_in(&mut self, context: RecordPatternContext) {
+        let node_kind = match context {
+            RecordPatternContext::Irrefutable => SyntaxKind::RecordPatternField,
+            RecordPatternContext::Refutable => SyntaxKind::RefutableRecordPatternField,
+        };
+        self.builder.start_node(node_kind.into());
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
         if self.at(SyntaxKind::Ident) {
             match self.peek_nontrivia(1) {
-                Some(SyntaxKind::LBrace) => self.parse_record_pattern(),
+                Some(SyntaxKind::LBrace) => self.parse_record_pattern_in(context),
                 Some(SyntaxKind::ColonColon)
                     if self.qualified_member_follower() == Some(SyntaxKind::LBrace) =>
                 {
-                    self.parse_record_pattern();
+                    self.parse_record_pattern_in(context);
                 }
                 _ => self.bump(),
             }
+        } else if matches!(context, RecordPatternContext::Refutable)
+            && self.parse_refutable_record_literal_test()
+        {
         } else {
-            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+            let expected = if matches!(context, RecordPatternContext::Irrefutable) {
+                ExpectedSyntax::Identifier
+            } else {
+                ExpectedSyntax::Value
+            };
+            self.error_here(SyntaxErrorKind::Expected(expected));
+            if self.current().is_some()
+                && !self.at_any(&[SyntaxKind::Comma, SyntaxKind::RBrace])
+            {
+                self.recover_one();
+            }
         }
         self.builder.finish_node();
+    }
+
+    fn parse_refutable_record_literal_test(&mut self) -> bool {
+        match self.current() {
+            Some(SyntaxKind::KwTrue | SyntaxKind::KwFalse) => {
+                self.builder.start_node(SyntaxKind::BooleanLiteral.into());
+                self.bump();
+                self.builder.finish_node();
+                true
+            }
+            Some(SyntaxKind::DecimalMagnitude) => {
+                self.builder
+                    .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                self.bump();
+                self.builder.finish_node();
+                true
+            }
+            Some(SyntaxKind::Minus)
+                if self.peek_nontrivia(1) == Some(SyntaxKind::DecimalMagnitude) =>
+            {
+                self.builder
+                    .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                self.bump();
+                self.expect(
+                    SyntaxKind::DecimalMagnitude,
+                    ExpectedSyntax::DecimalMagnitude,
+                );
+                self.builder.finish_node();
+                true
+            }
+            _ => false,
+        }
     }
 
     fn parse_record_pattern_scrutinee(&mut self) {
