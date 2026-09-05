@@ -1841,6 +1841,19 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(result)
             }
+            hir::ValueKind::IntegerEq {
+                operand_type,
+                left,
+                right,
+            } => self.lower_integer_equality(value.ty, *operand_type, left, right),
+            hir::ValueKind::IntegerNe {
+                operand_type,
+                left,
+                right,
+            } => {
+                let equality = self.lower_integer_equality(value.ty, *operand_type, left, right)?;
+                self.lower_boolean_negation_local(equality)
+            }
             hir::ValueKind::BooleanNot { operand } => {
                 let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
                 if value.ty != bool_ty {
@@ -1862,32 +1875,7 @@ impl<'a> FunctionLowerer<'a> {
                     ));
                 }
 
-                let result = self.push_temporary(bool_ty)?;
-                let true_target = self.new_block()?;
-                let false_target = self.new_block()?;
-                let join_target = self.new_block()?;
-                self.terminate_current(core::Terminator::Branch {
-                    condition: core::Operand::Move(core::Place::local(operand_local).into()),
-                    true_target,
-                    false_target,
-                })?;
-
-                self.current = true_target.0 as usize;
-                self.push_statement(core::Statement::Init {
-                    dst: core::Place::local(result),
-                    src: core::Operand::Constant(core::Value::Bool(false)),
-                });
-                self.terminate_current(core::Terminator::Goto(join_target))?;
-
-                self.current = false_target.0 as usize;
-                self.push_statement(core::Statement::Init {
-                    dst: core::Place::local(result),
-                    src: core::Operand::Constant(core::Value::Bool(true)),
-                });
-                self.terminate_current(core::Terminator::Goto(join_target))?;
-
-                self.current = join_target.0 as usize;
-                Ok(result)
+                self.lower_boolean_negation_local(operand_local)
             }
             hir::ValueKind::BooleanAnd { left, right } => {
                 let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
@@ -2430,6 +2418,112 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(temporary)
             }
         }
+    }
+
+    fn lower_integer_equality(
+        &mut self,
+        result_type: hir::Type,
+        operand_type: hir::Type,
+        left: &hir::Value,
+        right: &hir::Value,
+    ) -> Result<core::LocalId, LoweringError> {
+        let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+        if result_type != bool_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-equality result type is not Bool",
+            ));
+        }
+        if !matches!(
+            operand_type,
+            hir::Type::Intrinsic(
+                hir::IntrinsicType::I8
+                    | hir::IntrinsicType::I16
+                    | hir::IntrinsicType::I32
+                    | hir::IntrinsicType::I64
+                    | hir::IntrinsicType::U8
+                    | hir::IntrinsicType::U16
+                    | hir::IntrinsicType::U32
+                    | hir::IntrinsicType::U64
+            )
+        ) {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-equality operand type is not a fixed-width integer",
+            ));
+        }
+        if left.ty != operand_type {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-equality left operand type does not match retained operand type",
+            ));
+        }
+        if right.ty != operand_type {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-equality right operand type does not match retained operand type",
+            ));
+        }
+
+        let core_integer_ty = self.types.get(operand_type)?;
+        let left_local = self.lower_value(left)?;
+        if self.local_type(left_local)? != core_integer_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "lowered Integer-equality left operand temporary type does not match retained operand type",
+            ));
+        }
+
+        let right_local = self.lower_value(right)?;
+        if self.local_type(right_local)? != core_integer_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "lowered Integer-equality right operand temporary type does not match retained operand type",
+            ));
+        }
+
+        let result = self.push_temporary(bool_ty)?;
+        self.push_statement(core::Statement::IntegerEq {
+            dst: core::Place::local(result),
+            operand_type: core_integer_ty,
+            left: core::Operand::Move(core::Place::local(left_local).into()),
+            right: core::Operand::Move(core::Place::local(right_local).into()),
+        });
+        Ok(result)
+    }
+
+    fn lower_boolean_negation_local(
+        &mut self,
+        operand_local: core::LocalId,
+    ) -> Result<core::LocalId, LoweringError> {
+        let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+        let core_bool_ty = self.types.get(bool_ty)?;
+        if self.local_type(operand_local)? != core_bool_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Boolean-negation input temporary is not Bool",
+            ));
+        }
+
+        let result = self.push_temporary(bool_ty)?;
+        let true_target = self.new_block()?;
+        let false_target = self.new_block()?;
+        let join_target = self.new_block()?;
+        self.terminate_current(core::Terminator::Branch {
+            condition: core::Operand::Move(core::Place::local(operand_local).into()),
+            true_target,
+            false_target,
+        })?;
+
+        self.current = true_target.0 as usize;
+        self.push_statement(core::Statement::Init {
+            dst: core::Place::local(result),
+            src: core::Operand::Constant(core::Value::Bool(false)),
+        });
+        self.terminate_current(core::Terminator::Goto(join_target))?;
+
+        self.current = false_target.0 as usize;
+        self.push_statement(core::Statement::Init {
+            dst: core::Place::local(result),
+            src: core::Operand::Constant(core::Value::Bool(true)),
+        });
+        self.terminate_current(core::Terminator::Goto(join_target))?;
+
+        self.current = join_target.0 as usize;
+        Ok(result)
     }
 
     fn lower_call(

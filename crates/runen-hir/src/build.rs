@@ -4002,6 +4002,386 @@ fn validate_value_inner(
             }))
         }
         SyntaxKind::BooleanEqualityValue => {
+            #[derive(Clone, Copy)]
+            enum EqualityOperandEvidence {
+                Exact(Type),
+                Contextual,
+                Invalid,
+            }
+
+            fn missing_binding_evidence(
+                header: &FunctionHeader,
+                name: &str,
+                evidence_location: SourceLocation,
+                context: &BodyResolutionContext<'_>,
+                diagnostics: &mut Vec<Diagnostic>,
+            ) -> EqualityOperandEvidence {
+                let entity = context
+                    .modules
+                    .get(&header.module)
+                    .and_then(|module| module.namespace.get(name));
+                diagnostics.push(Diagnostic {
+                    kind: if entity.is_some() {
+                        DiagnosticKind::ExpectedValueBinding
+                    } else {
+                        DiagnosticKind::UnresolvedName
+                    },
+                    location: evidence_location,
+                });
+                Invalid
+            }
+
+            fn classify_equality_operand(
+                header: &FunctionHeader,
+                node: &SyntaxNode,
+                context: &BodyResolutionContext<'_>,
+                state: &SemanticState,
+                diagnostics: &mut Vec<Diagnostic>,
+            ) -> EqualityOperandEvidence {
+                use EqualityOperandEvidence::{Contextual, Exact, Invalid};
+
+                let evidence_location = location(header.unit, node);
+                match node.kind() {
+                    SyntaxKind::GroupedValue => classify_equality_operand(
+                        header,
+                        &value_child(node),
+                        context,
+                        state,
+                        diagnostics,
+                    ),
+                    SyntaxKind::BooleanLiteral
+                    | SyntaxKind::BooleanNotValue
+                    | SyntaxKind::BooleanAndValue
+                    | SyntaxKind::BooleanEqualityValue => {
+                        Exact(Type::Intrinsic(IntrinsicType::Bool))
+                    }
+                    SyntaxKind::DecimalIntegerLiteral
+                    | SyntaxKind::DecimalFloatingLiteral
+                    | SyntaxKind::NumericContractSelectedValue
+                    | SyntaxKind::IntegerNegValue
+                    | SyntaxKind::IntegerComplementValue
+                    | SyntaxKind::AddValue
+                    | SyntaxKind::SubValue
+                    | SyntaxKind::MulValue
+                    | SyntaxKind::IntegerXorValue
+                    | SyntaxKind::IntegerOrValue => Contextual,
+                    SyntaxKind::IdentifierUse => {
+                        let token = direct_token(node, SyntaxKind::Ident);
+                        let name = key(&token);
+                        state.bindings.get(&name).map_or_else(
+                            || {
+                                missing_binding_evidence(
+                                    header,
+                                    &name,
+                                    SourceLocation {
+                                        unit: header.unit,
+                                        range: token.text_range(),
+                                    },
+                                    context,
+                                    diagnostics,
+                                )
+                            },
+                            |binding| Exact(binding.ty),
+                        )
+                    }
+                    SyntaxKind::DirectCall => {
+                        let Some(function) = resolve_call_target(
+                            header,
+                            node,
+                            context,
+                            &state.bindings,
+                            diagnostics,
+                        ) else {
+                            return Invalid;
+                        };
+                        let Some(result) = context.headers[function.0].result else {
+                            diagnostics.push(Diagnostic {
+                                kind: DiagnosticKind::NoResultCallUsedAsValue,
+                                location: evidence_location,
+                            });
+                            return Invalid;
+                        };
+                        Exact(result)
+                    }
+                    SyntaxKind::RecordConstruction => {
+                        let Some(record) =
+                            resolve_record_construction_target(header, node, context, diagnostics)
+                        else {
+                            return Invalid;
+                        };
+                        Exact(Type::Record(record))
+                    }
+                    SyntaxKind::FieldValueUse => {
+                        let producer_node = node.children().find(|child| {
+                            matches!(
+                                child.kind(),
+                                SyntaxKind::DirectCall | SyntaxKind::RecordConstruction
+                            )
+                        });
+                        let identifiers = node
+                            .children_with_tokens()
+                            .filter_map(|element| element.into_token())
+                            .filter(|token| token.kind() == SyntaxKind::Ident)
+                            .collect::<Vec<_>>();
+
+                        if let Some(producer_node) = producer_node {
+                            let receiver_ty = match producer_node.kind() {
+                                SyntaxKind::DirectCall => {
+                                    let Some(function) = resolve_call_target(
+                                        header,
+                                        &producer_node,
+                                        context,
+                                        &state.bindings,
+                                        diagnostics,
+                                    ) else {
+                                        return Invalid;
+                                    };
+                                    let Some(result) = context.headers[function.0].result else {
+                                        diagnostics.push(Diagnostic {
+                                            kind: DiagnosticKind::NoResultCallUsedAsValue,
+                                            location: location(header.unit, &producer_node),
+                                        });
+                                        return Invalid;
+                                    };
+                                    result
+                                }
+                                SyntaxKind::RecordConstruction => {
+                                    let Some(record) = resolve_record_construction_target(
+                                        header,
+                                        &producer_node,
+                                        context,
+                                        diagnostics,
+                                    ) else {
+                                        return Invalid;
+                                    };
+                                    Type::Record(record)
+                                }
+                                _ => unreachable!(
+                                    "producer-backed field receiver has accepted producer kind"
+                                ),
+                            };
+                            let Some((_, final_ty)) = resolve_field_path(
+                                header,
+                                &identifiers,
+                                receiver_ty,
+                                context,
+                                diagnostics,
+                            ) else {
+                                return Invalid;
+                            };
+                            return Exact(final_ty);
+                        }
+
+                        let (root_token, selectors) = identifiers
+                            .split_first()
+                            .expect("syntax-clean field-value use contains a root identifier");
+                        let root_name = key(root_token);
+                        let Some(binding) = state.bindings.get(&root_name) else {
+                            return missing_binding_evidence(
+                                header,
+                                &root_name,
+                                SourceLocation {
+                                    unit: header.unit,
+                                    range: root_token.text_range(),
+                                },
+                                context,
+                                diagnostics,
+                            );
+                        };
+                        let Some((_, final_ty)) =
+                            resolve_field_path(header, selectors, binding.ty, context, diagnostics)
+                        else {
+                            return Invalid;
+                        };
+                        Exact(final_ty)
+                    }
+                    SyntaxKind::SafeReferenceValue => {
+                        let permission = requested_reference_permission(node);
+                        let identifiers = node
+                            .children_with_tokens()
+                            .filter_map(|element| element.into_token())
+                            .filter(|token| token.kind() == SyntaxKind::Ident)
+                            .collect::<Vec<_>>();
+                        let reborrow = node
+                            .children_with_tokens()
+                            .filter_map(|element| element.into_token())
+                            .any(|token| token.kind() == SyntaxKind::Star);
+
+                        let selected_ty = if reborrow {
+                            let (reference_token, selectors) = identifiers
+                                .split_first()
+                                .expect("syntax-clean reborrow has a reference identifier");
+                            let name = key(reference_token);
+                            let Some(binding) = state.bindings.get(&name) else {
+                                return missing_binding_evidence(
+                                    header,
+                                    &name,
+                                    evidence_location,
+                                    context,
+                                    diagnostics,
+                                );
+                            };
+                            let Type::SafeReference { referent, .. } = binding.ty else {
+                                diagnostics.push(Diagnostic {
+                                    kind: DiagnosticKind::ExpectedSafeReference,
+                                    location: evidence_location,
+                                });
+                                return Invalid;
+                            };
+                            if selectors.is_empty() {
+                                referent.ty()
+                            } else {
+                                let Some((_, selected)) = resolve_field_path(
+                                    header,
+                                    selectors,
+                                    referent.ty(),
+                                    context,
+                                    diagnostics,
+                                ) else {
+                                    return Invalid;
+                                };
+                                selected
+                            }
+                        } else {
+                            let (root_token, selectors) = identifiers
+                                .split_first()
+                                .expect("syntax-clean reference root has a root identifier");
+                            let name = key(root_token);
+                            let Some(binding) = state.bindings.get(&name) else {
+                                return missing_binding_evidence(
+                                    header,
+                                    &name,
+                                    evidence_location,
+                                    context,
+                                    diagnostics,
+                                );
+                            };
+                            if selectors.is_empty() {
+                                binding.ty
+                            } else {
+                                let Some((_, selected)) = resolve_field_path(
+                                    header,
+                                    selectors,
+                                    binding.ty,
+                                    context,
+                                    diagnostics,
+                                ) else {
+                                    return Invalid;
+                                };
+                                selected
+                            }
+                        };
+
+                        let referent = match selected_ty {
+                            Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
+                            Type::Record(record) => ReferenceReferent::Record(record),
+                            Type::SafeReference { .. } | Type::RawPointer(_) => {
+                                diagnostics.push(Diagnostic {
+                                    kind: DiagnosticKind::InvalidSafeReferenceReferent {
+                                        referent: selected_ty,
+                                        permission,
+                                    },
+                                    location: evidence_location,
+                                });
+                                return Invalid;
+                            }
+                        };
+                        Exact(Type::SafeReference {
+                            referent,
+                            permission,
+                        })
+                    }
+                    SyntaxKind::ReferenceDereferenceValue => {
+                        let token = direct_token(node, SyntaxKind::Ident);
+                        let name = key(&token);
+                        let Some(binding) = state.bindings.get(&name) else {
+                            return missing_binding_evidence(
+                                header,
+                                &name,
+                                evidence_location,
+                                context,
+                                diagnostics,
+                            );
+                        };
+                        let Type::SafeReference { referent, .. } = binding.ty else {
+                            diagnostics.push(Diagnostic {
+                                kind: DiagnosticKind::ExpectedSafeReference,
+                                location: evidence_location,
+                            });
+                            return Invalid;
+                        };
+                        Exact(referent.ty())
+                    }
+                    SyntaxKind::RawAddressOfValue => {
+                        let token = direct_token(node, SyntaxKind::Ident);
+                        let name = key(&token);
+                        let Some(binding) = state.bindings.get(&name) else {
+                            return missing_binding_evidence(
+                                header,
+                                &name,
+                                SourceLocation {
+                                    unit: header.unit,
+                                    range: token.text_range(),
+                                },
+                                context,
+                                diagnostics,
+                            );
+                        };
+                        let pointee = match binding.ty {
+                            Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
+                            Type::Record(record) => RawPointerPointee::Record(record),
+                            Type::SafeReference { .. } | Type::RawPointer(_) => {
+                                diagnostics.push(Diagnostic {
+                                    kind: DiagnosticKind::InvalidRawPointerPointee {
+                                        pointee: binding.ty,
+                                    },
+                                    location: evidence_location,
+                                });
+                                return Invalid;
+                            }
+                        };
+                        Exact(Type::RawPointer(pointee))
+                    }
+                    SyntaxKind::RawMoveValue => {
+                        let identifiers = node
+                            .children_with_tokens()
+                            .filter_map(|element| element.into_token())
+                            .filter(|token| token.kind() == SyntaxKind::Ident)
+                            .collect::<Vec<_>>();
+                        let [_, pointer_token] = identifiers.as_slice() else {
+                            unreachable!(
+                                "syntax-clean raw move has contextual move and pointer identifiers"
+                            );
+                        };
+                        let pointer_name = key(pointer_token);
+                        let Some(binding) = state.bindings.get(&pointer_name) else {
+                            return missing_binding_evidence(
+                                header,
+                                &pointer_name,
+                                SourceLocation {
+                                    unit: header.unit,
+                                    range: pointer_token.text_range(),
+                                },
+                                context,
+                                diagnostics,
+                            );
+                        };
+                        let Type::RawPointer(pointee) = binding.ty else {
+                            diagnostics.push(Diagnostic {
+                                kind: DiagnosticKind::ExpectedRawPointer,
+                                location: SourceLocation {
+                                    unit: header.unit,
+                                    range: pointer_token.text_range(),
+                                },
+                            });
+                            return Invalid;
+                        };
+                        Exact(pointee.ty())
+                    }
+                    _ => unreachable!("syntax-clean equality operand has represented value kind"),
+                }
+            }
+
             let found = Type::Intrinsic(IntrinsicType::Bool);
             if required != found {
                 diagnostics.push(Diagnostic {
@@ -4013,28 +4393,72 @@ fn validate_value_inner(
                 });
                 return None;
             }
+
             let operator = node
                 .children_with_tokens()
                 .filter_map(|element| element.into_token())
                 .find(|token| matches!(token.kind(), SyntaxKind::EqEq | SyntaxKind::BangEq))
-                .expect("syntax-clean Boolean equality contains one operator token");
-            let relation = match operator.kind() {
-                SyntaxKind::EqEq => BooleanEqualityRelation::Equal,
-                SyntaxKind::BangEq => BooleanEqualityRelation::NotEqual,
-                _ => unreachable!("equality operator token has accepted equality kind"),
-            };
+                .expect("syntax-clean equality contains one operator token")
+                .kind();
             let mut operands = node.children().filter(|child| is_value_node(child.kind()));
             let left_node = operands
                 .next()
-                .expect("syntax-clean Boolean equality contains a left operand");
+                .expect("syntax-clean equality contains a left operand");
             let right_node = operands
                 .next()
-                .expect("syntax-clean Boolean equality contains a right operand");
+                .expect("syntax-clean equality contains a right operand");
             debug_assert!(operands.next().is_none());
+
+            let left_evidence =
+                classify_equality_operand(header, &left_node, context, state, diagnostics);
+            let right_evidence =
+                classify_equality_operand(header, &right_node, context, state, diagnostics);
+            use EqualityOperandEvidence::{Contextual, Exact, Invalid};
+            let operand_type = match (left_evidence, right_evidence) {
+                (Invalid, _) | (_, Invalid) => return None,
+                (Contextual, Contextual) => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::EqualityOperandsUnanchored,
+                        location: value_location,
+                    });
+                    return None;
+                }
+                (Exact(ty), Contextual) | (Contextual, Exact(ty)) => ty,
+                (Exact(left), Exact(right)) if left == right => left,
+                (Exact(left), Exact(right)) => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::EqualityOperandTypeConflict { left, right },
+                        location: value_location,
+                    });
+                    return None;
+                }
+            };
+
+            if !matches!(
+                operand_type,
+                Type::Intrinsic(
+                    IntrinsicType::Bool
+                        | IntrinsicType::I8
+                        | IntrinsicType::I16
+                        | IntrinsicType::I32
+                        | IntrinsicType::I64
+                        | IntrinsicType::U8
+                        | IntrinsicType::U16
+                        | IntrinsicType::U32
+                        | IntrinsicType::U64
+                )
+            ) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::EqualityRequiresBooleanOrInteger { operand_type },
+                    location: value_location,
+                });
+                return None;
+            }
+
             let left = validate_value(
                 header,
                 &left_node,
-                found,
+                operand_type,
                 context,
                 value_context,
                 state,
@@ -4044,20 +4468,44 @@ fn validate_value_inner(
             let right = validate_value(
                 header,
                 &right_node,
-                found,
+                operand_type,
                 context,
                 value_context,
                 state,
                 diagnostics,
             )?
             .value;
-            Some(ProducedValue::ordinary(Value {
-                ty: found,
-                kind: ValueKind::BooleanEquality {
+
+            let kind = if operand_type == found {
+                let relation = match operator {
+                    SyntaxKind::EqEq => BooleanEqualityRelation::Equal,
+                    SyntaxKind::BangEq => BooleanEqualityRelation::NotEqual,
+                    _ => unreachable!("equality operator token has accepted equality kind"),
+                };
+                ValueKind::BooleanEquality {
                     relation,
                     left: Box::new(left),
                     right: Box::new(right),
-                },
+                }
+            } else {
+                match operator {
+                    SyntaxKind::EqEq => ValueKind::IntegerEq {
+                        operand_type,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    SyntaxKind::BangEq => ValueKind::IntegerNe {
+                        operand_type,
+                        left: Box::new(left),
+                        right: Box::new(right),
+                    },
+                    _ => unreachable!("equality operator token has accepted equality kind"),
+                }
+            };
+
+            Some(ProducedValue::ordinary(Value {
+                ty: found,
+                kind,
                 location: value_location,
             }))
         }

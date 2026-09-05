@@ -433,6 +433,16 @@ pub enum ValueKind {
         left: Box<Value>,
         right: Box<Value>,
     },
+    IntegerEq {
+        operand_type: Type,
+        left: Box<Value>,
+        right: Box<Value>,
+    },
+    IntegerNe {
+        operand_type: Type,
+        left: Box<Value>,
+        right: Box<Value>,
+    },
     BooleanAnd {
         left: Box<Value>,
         right: Box<Value>,
@@ -708,6 +718,14 @@ pub enum DiagnosticKind {
     },
     IntegerOrRequiresInteger {
         required: Type,
+    },
+    EqualityOperandsUnanchored,
+    EqualityOperandTypeConflict {
+        left: Type,
+        right: Type,
+    },
+    EqualityRequiresBooleanOrInteger {
+        operand_type: Type,
     },
     IntegerLiteralRequiresInteger {
         required: Type,
