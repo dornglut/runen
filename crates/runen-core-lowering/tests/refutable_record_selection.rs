@@ -246,6 +246,126 @@ fn producer_call_is_evaluated_once_and_selects_distinct_success_and_mismatch_cle
 }
 
 #[test]
+fn record_construction_scrutinee_is_materialized_once_before_testing() {
+    let lowered = lower_source(
+        "record Ticket {} record R { tag: I8, ticket: Ticket, tail: U8 } \
+         fn f() { \
+             if let R { tag: 1, ticket: moved, tail: copied } = \
+                 (R { tag: 1, ticket: Ticket {}, tail: 2 }) { fault; } else { fault; } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let eqs = integer_eqs(f);
+    assert_eq!(eqs.len(), 1);
+    let (test_block, CoreStatement::IntegerEq { left, .. }) = eqs[0] else {
+        unreachable!();
+    };
+    let Operand::Copy(PlaceAccess::Direct(tested)) = left else {
+        panic!("integer test must copy a projected construction result");
+    };
+    assert_eq!(tested.projections, [Projection::Field(0)]);
+    let source = tested.local;
+
+    let construction_writes = f
+        .body
+        .blocks
+        .iter()
+        .flat_map(|block| &block.statements)
+        .filter(|statement| matches!(
+            statement,
+            CoreStatement::Init { dst, .. } if dst.local == source
+        ))
+        .count();
+    assert_eq!(
+        construction_writes, 3,
+        "bounded record-construction scrutinee must be materialized exactly once"
+    );
+    assert!(
+        f.body.blocks[test_block]
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, CoreStatement::IntegerEq { .. })),
+        "testing must consume the single materialized construction result"
+    );
+}
+
+#[test]
+fn field_value_receiver_cleanup_precedes_the_distinct_pattern_transient() {
+    let lowered = lower_source(
+        "record Ticket {} \
+         record R { tag: I8, ticket: Ticket } \
+         record Outer { inner: R, tail: U8 } \
+         fn make() -> Outer { \
+             return Outer { inner: R { tag: 1, ticket: Ticket {} }, tail: 9 }; \
+         } \
+         fn f() { \
+             if let R { tag: 1, ticket: moved } = (make().inner) { fault; } else { fault; } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let call_destination = f
+        .body
+        .blocks
+        .iter()
+        .find_map(|block| match &block.terminator {
+            Terminator::Call {
+                destination: Some(destination),
+                ..
+            } => Some(destination.local),
+            _ => None,
+        })
+        .expect("field-value producer must retain one call receiver temporary");
+
+    let eqs = integer_eqs(f);
+    assert_eq!(eqs.len(), 1);
+    let (test_block, CoreStatement::IntegerEq { left, .. }) = eqs[0] else {
+        unreachable!();
+    };
+    let Operand::Copy(PlaceAccess::Direct(tested)) = left else {
+        panic!("integer test must copy the selected R transient");
+    };
+    assert_ne!(tested.local, call_destination);
+
+    let block = &f.body.blocks[test_block];
+    let receiver_drop = block
+        .statements
+        .iter()
+        .position(|statement| matches!(
+            statement,
+            CoreStatement::Drop {
+                place: PlaceAccess::Direct(place),
+            } if place.local == call_destination
+                && place.projections == [Projection::Field(1)]
+        ))
+        .expect("consumed field receiver must clean its remaining Outer frontier");
+    let test = block
+        .statements
+        .iter()
+        .position(|statement| matches!(statement, CoreStatement::IntegerEq { .. }))
+        .expect("pattern test must be in the post-receiver-cleanup block");
+    assert!(
+        receiver_drop < test,
+        "field-value receiver cleanup must complete before the pattern test/transient relation"
+    );
+
+    let Terminator::Branch { false_target, .. } = block.terminator else {
+        panic!("integer pattern test must branch");
+    };
+    assert!(
+        f.body.blocks[false_target.0 as usize]
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Drop {
+                    place: PlaceAccess::Direct(place),
+                } if place.local == tested.local && place.projections.is_empty()
+            )),
+        "pattern mismatch cleanup must be distinct from the already-completed receiver cleanup"
+    );
+}
+
+#[test]
 fn lowering_rejects_literal_value_that_disagrees_with_retained_test_type() {
     let mut compilation = hir(
         "record R { value: I8 } fn f(root: R) { \
