@@ -64,20 +64,55 @@ fn execute_integer_eq(scalar: ScalarType, left: Value, right: Value) -> Executio
 fn integer_eq_executes_true_and_false_for_all_eight_fixed_width_integer_kinds() {
     let cases = [
         (ScalarType::I8, Value::I8(-5), Value::I8(-5), true),
-        (ScalarType::I8, Value::I8(i8::MIN), Value::I8(i8::MAX), false),
-        (ScalarType::I16, Value::I16(i16::MIN), Value::I16(i16::MIN), true),
+        (
+            ScalarType::I8,
+            Value::I8(i8::MIN),
+            Value::I8(i8::MAX),
+            false,
+        ),
+        (
+            ScalarType::I16,
+            Value::I16(i16::MIN),
+            Value::I16(i16::MIN),
+            true,
+        ),
         (ScalarType::I16, Value::I16(-1), Value::I16(0), false),
-        (ScalarType::I32, Value::I32(i32::MAX), Value::I32(i32::MAX), true),
+        (
+            ScalarType::I32,
+            Value::I32(i32::MAX),
+            Value::I32(i32::MAX),
+            true,
+        ),
         (ScalarType::I32, Value::I32(-17), Value::I32(17), false),
-        (ScalarType::I64, Value::I64(i64::MIN), Value::I64(i64::MIN), true),
-        (ScalarType::I64, Value::I64(i64::MAX), Value::I64(i64::MIN), false),
+        (
+            ScalarType::I64,
+            Value::I64(i64::MIN),
+            Value::I64(i64::MIN),
+            true,
+        ),
+        (
+            ScalarType::I64,
+            Value::I64(i64::MAX),
+            Value::I64(i64::MIN),
+            false,
+        ),
         (ScalarType::U8, Value::U8(0), Value::U8(0), true),
         (ScalarType::U8, Value::U8(0), Value::U8(u8::MAX), false),
-        (ScalarType::U16, Value::U16(u16::MAX), Value::U16(u16::MAX), true),
+        (
+            ScalarType::U16,
+            Value::U16(u16::MAX),
+            Value::U16(u16::MAX),
+            true,
+        ),
         (ScalarType::U16, Value::U16(1), Value::U16(2), false),
         (ScalarType::U32, Value::U32(42), Value::U32(42), true),
         (ScalarType::U32, Value::U32(u32::MAX), Value::U32(0), false),
-        (ScalarType::U64, Value::U64(u64::MAX), Value::U64(u64::MAX), true),
+        (
+            ScalarType::U64,
+            Value::U64(u64::MAX),
+            Value::U64(u64::MAX),
+            true,
+        ),
         (ScalarType::U64, Value::U64(123), Value::U64(124), false),
     ];
 
