@@ -79,8 +79,7 @@ fn all_fixed_width_integer_types_retain_exact_operand_type_for_eq_and_ne() {
         assert_eq!(left.ty, expected);
         assert_eq!(right.ty, expected);
 
-        let (is_equal, operand_type, left, right) =
-            integer_comparison(returned(&hir, "different"));
+        let (is_equal, operand_type, left, right) = integer_comparison(returned(&hir, "different"));
         assert!(!is_equal);
         assert_eq!(operand_type, expected);
         assert_eq!(left.ty, expected);
@@ -100,12 +99,18 @@ fn exact_and_contextual_selection_is_symmetric_and_materializes_i32_literals() {
     assert!(is_equal);
     assert_eq!(operand_type, Type::Intrinsic(IntrinsicType::I32));
     assert_eq!(left.ty, operand_type);
-    assert!(matches!(right.kind, ValueKind::Literal(LiteralValue::I32(1))));
+    assert!(matches!(
+        right.kind,
+        ValueKind::Literal(LiteralValue::I32(1))
+    ));
 
     let (is_equal, operand_type, left, right) = integer_comparison(returned(&hir, "left_literal"));
     assert!(!is_equal);
     assert_eq!(operand_type, Type::Intrinsic(IntrinsicType::I32));
-    assert!(matches!(left.kind, ValueKind::Literal(LiteralValue::I32(1))));
+    assert!(matches!(
+        left.kind,
+        ValueKind::Literal(LiteralValue::I32(1))
+    ));
     assert_eq!(right.ty, operand_type);
 }
 
@@ -130,10 +135,9 @@ fn conflicting_exact_integer_types_reject_before_producer_effects() {
             }
         )));
         assert!(
-            !errors.iter().any(|error| matches!(
-                error.kind,
-                DiagnosticKind::TypeMismatch { .. }
-            )),
+            !errors
+                .iter()
+                .any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. })),
             "call arguments must not be validated while exact result evidence is collected"
         );
         assert_eq!(unavailable_count(&errors), 0);
@@ -144,9 +148,11 @@ fn conflicting_exact_integer_types_reject_before_producer_effects() {
 fn two_contextual_operands_are_unanchored_without_default_numeric_type() {
     let errors = build("fn f() -> Bool { return 1 == 2; }")
         .expect_err("two contextual literals must not select a default integer type");
-    assert!(errors
-        .iter()
-        .any(|error| error.kind == DiagnosticKind::EqualityOperandsUnanchored));
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.kind == DiagnosticKind::EqualityOperandsUnanchored)
+    );
 }
 
 #[test]
@@ -168,9 +174,11 @@ fn direct_call_and_field_evidence_are_static_and_do_not_validate_receiver_argume
             right: Type::Intrinsic(IntrinsicType::I64),
         }
     )));
-    assert!(!call_errors
-        .iter()
-        .any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(
+        !call_errors
+            .iter()
+            .any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
     assert_eq!(unavailable_count(&call_errors), 0);
 
     let field_errors = build(
@@ -191,9 +199,11 @@ fn direct_call_and_field_evidence_are_static_and_do_not_validate_receiver_argume
             right: Type::Intrinsic(IntrinsicType::I64),
         }
     )));
-    assert!(!field_errors
-        .iter()
-        .any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. })));
+    assert!(
+        !field_errors
+            .iter()
+            .any(|error| matches!(error.kind, DiagnosticKind::TypeMismatch { .. }))
+    );
     assert_eq!(unavailable_count(&field_errors), 0);
 }
 
@@ -213,13 +223,18 @@ fn grouping_is_transparent_but_contextual_producer_children_are_not_mined() {
     let (_, operand_type, left, right) = integer_comparison(returned(&hir, "grouped"));
     assert_eq!(operand_type, Type::Intrinsic(IntrinsicType::I32));
     assert_eq!(left.ty, operand_type);
-    assert!(matches!(right.kind, ValueKind::Literal(LiteralValue::I32(1))));
+    assert!(matches!(
+        right.kind,
+        ValueKind::Literal(LiteralValue::I32(1))
+    ));
 
     let errors = build("fn unanchored(x: I32, y: I32) -> Bool { return (x + 1) == (y + 2); }")
         .expect_err("nested exact bindings inside contextual additions are not evidence anchors");
-    assert!(errors
-        .iter()
-        .any(|error| error.kind == DiagnosticKind::EqualityOperandsUnanchored));
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.kind == DiagnosticKind::EqualityOperandsUnanchored)
+    );
 }
 
 #[test]
@@ -234,9 +249,11 @@ fn invalid_evidence_and_later_operand_failure_commit_no_comparison_state() {
          }",
     )
     .expect_err("invalid right evidence rejects before the left producer is validated");
-    assert!(invalid
-        .iter()
-        .any(|error| error.kind == DiagnosticKind::UnresolvedName));
+    assert!(
+        invalid
+            .iter()
+            .any(|error| error.kind == DiagnosticKind::UnresolvedName)
+    );
     assert_eq!(unavailable_count(&invalid), 0);
 
     let later_failure = build(
@@ -292,10 +309,9 @@ fn record_safe_reference_and_raw_pointer_evidence_can_anchor_but_are_operation_i
         }
     )));
 
-    let raw_errors = build(
-        "fn f(left: I32, right: I32) -> Bool { return raw &left == raw &right; }",
-    )
-    .expect_err("same raw-pointer type anchors but is not equality-admissible");
+    let raw_errors =
+        build("fn f(left: I32, right: I32) -> Bool { return raw &left == raw &right; }")
+            .expect_err("same raw-pointer type anchors but is not equality-admissible");
     assert!(raw_errors.iter().any(|error| matches!(
         error.kind,
         DiagnosticKind::EqualityRequiresBooleanOrInteger {
@@ -331,9 +347,11 @@ fn integer_comparisons_are_bool_conditions_and_condition_context_never_anchors_l
 
     let errors = build("fn f() { if 1 == 2 {} }")
         .expect_err("condition Bool requirement does not select an integer operand type");
-    assert!(errors
-        .iter()
-        .any(|error| error.kind == DiagnosticKind::EqualityOperandsUnanchored));
+    assert!(
+        errors
+            .iter()
+            .any(|error| error.kind == DiagnosticKind::EqualityOperandsUnanchored)
+    );
 }
 
 #[test]
