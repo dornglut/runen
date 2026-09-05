@@ -354,24 +354,24 @@ fn equality_outer_non_bool_requirement_rejects_before_either_operand_validation(
 }
 
 #[test]
-fn equality_rejects_non_bool_left_and_right_under_exact_bool_requirements() {
+fn equality_rejects_conflicting_exact_operand_types() {
     let left_errors = build("fn f(value: I64, flag: Bool) { let result: Bool = value == flag; }")
-        .expect_err("I64 left operand cannot satisfy exact Bool");
+        .expect_err("I64 and Bool exact evidence conflicts");
     assert!(has_diagnostic(
         &left_errors,
-        DiagnosticKind::TypeMismatch {
-            expected: Type::Intrinsic(IntrinsicType::Bool),
-            found: Type::Intrinsic(IntrinsicType::I64),
+        DiagnosticKind::EqualityOperandTypeConflict {
+            left: Type::Intrinsic(IntrinsicType::I64),
+            right: Type::Intrinsic(IntrinsicType::Bool),
         }
     ));
 
     let right_errors = build("fn f(flag: Bool, value: I64) { let result: Bool = flag != value; }")
-        .expect_err("I64 right operand cannot satisfy exact Bool");
+        .expect_err("Bool and I64 exact evidence conflicts");
     assert!(has_diagnostic(
         &right_errors,
-        DiagnosticKind::TypeMismatch {
-            expected: Type::Intrinsic(IntrinsicType::Bool),
-            found: Type::Intrinsic(IntrinsicType::I64),
+        DiagnosticKind::EqualityOperandTypeConflict {
+            left: Type::Intrinsic(IntrinsicType::Bool),
+            right: Type::Intrinsic(IntrinsicType::I64),
         }
     ));
 }
@@ -490,13 +490,13 @@ fn equality_operands_reuse_call_field_construction_and_prefix_semantics() {
     let construction_errors = build(
         "record Flag { ready: Bool } fn bad(flag: Bool) { let result: Bool = Flag { ready: true } == flag; }",
     )
-    .expect_err("ordinary record construction remains syntactically admitted but is not Bool");
+    .expect_err("record and Bool exact evidence conflicts before operand validation");
     assert!(construction_errors.iter().any(|error| {
         matches!(
             error.kind,
-            DiagnosticKind::TypeMismatch {
-                expected: Type::Intrinsic(IntrinsicType::Bool),
-                found: Type::Record(_),
+            DiagnosticKind::EqualityOperandTypeConflict {
+                left: Type::Record(_),
+                right: Type::Intrinsic(IntrinsicType::Bool),
             }
         )
     }));
