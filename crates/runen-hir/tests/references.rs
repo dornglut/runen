@@ -305,6 +305,121 @@ fn shared_field_relative_reborrow_reuses_exact_field_accessibility() {
 }
 
 #[test]
+fn projected_replacement_forms_reuse_canonical_field_type_and_permission_diagnostics() {
+    let root_non_record =
+        compile("fn f(seed: I64) { let mut x: I64 = seed; let r: &mut I64 = &mut x.value; }")
+            .expect_err("replacement root selector through a non-record must reject canonically");
+    assert!(has_diagnostic(&root_non_record, |kind| kind
+        == DiagnosticKind::ExpectedRecordForFieldAccess));
+
+    let root_unknown = compile(
+        "record Box { value: I64 }\
+         fn f(seed: Box) { let mut x: Box = seed; let r: &mut I64 = &mut x.missing; }",
+    )
+    .expect_err("unknown replacement-root selector must use the canonical field diagnostic");
+    assert!(has_diagnostic(&root_unknown, |kind| kind
+        == DiagnosticKind::UnknownRecordField));
+
+    let root_mismatch = compile(
+        "record Box { value: I64 }\
+         fn f(seed: Box) { let mut x: Box = seed; let r: &mut I32 = &mut x.value; }",
+    )
+    .expect_err("replacement-root selected type must match the exact receiving referent");
+    assert!(has_diagnostic(&root_mismatch, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
+
+    let child_non_record = compile("fn f(r: &mut I64) { let child: &mut I64 = &mut *r.value; }")
+        .expect_err("replacement child selector through a non-record must reject canonically");
+    assert!(has_diagnostic(&child_non_record, |kind| kind
+        == DiagnosticKind::ExpectedRecordForFieldAccess));
+
+    let child_unknown = compile(
+        "record Box { value: I64 }\
+         fn f(r: &mut Box) { let child: &mut I64 = &mut *r.missing; }",
+    )
+    .expect_err("unknown replacement-child selector must use the canonical field diagnostic");
+    assert!(has_diagnostic(&child_unknown, |kind| kind
+        == DiagnosticKind::UnknownRecordField));
+
+    let child_mismatch = compile(
+        "record Box { value: I64 }\
+         fn f(r: &mut Box) { let child: &mut I32 = &mut *r.value; }",
+    )
+    .expect_err("replacement-child selected type must match the exact receiving referent");
+    assert!(has_diagnostic(&child_mismatch, |kind| matches!(
+        kind,
+        DiagnosticKind::TypeMismatch { .. }
+    )));
+
+    let strengthened = compile(
+        "record copy Box { value: I64 }\
+         fn f(r: &Box) { let child: &mut I64 = &mut *r.value; }",
+    )
+    .expect_err("projected child may not strengthen a Shared parent to replacement permission");
+    assert!(has_diagnostic(&strengthened, |kind| kind
+        == DiagnosticKind::ReferencePermissionUnavailable));
+}
+
+#[test]
+fn projected_replacement_forms_reuse_exact_field_accessibility() {
+    compile(
+        "record Local { hidden: I64 }\
+         fn root(seed: Local) { let mut value: Local = seed; let r: &mut I64 = &mut value.hidden; }\
+         fn child(r: &mut Local) { let selected: &mut I64 = &mut *r.hidden; }",
+    )
+    .expect("same-module private fields remain accessible to projected replacement forms");
+
+    let dep = parse("export record Public { export shown: I64, hidden: I64 }");
+    let dep_target = ImportTarget::new("dep", ModuleId::new(2)).expect("valid import alias");
+    let app_ok = parse(
+        "import dep;\
+         fn root(seed: dep::Public) { let mut value: dep::Public = seed; let r: &mut I64 = &mut value.shown; }\
+         fn child(r: &mut dep::Public) { let selected: &mut I64 = &mut *r.shown; }",
+    );
+    build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(2), &dep, &[]),
+        SourceUnit::new(ModuleId::new(1), &app_ok, std::slice::from_ref(&dep_target)),
+    ])
+    .expect("foreign exported fields remain accessible to projected replacement forms");
+
+    for app_hidden in [
+        parse(
+            "import dep; fn root(seed: dep::Public) { let mut value: dep::Public = seed; let r: &mut I64 = &mut value.hidden; }",
+        ),
+        parse(
+            "import dep; fn child(r: &mut dep::Public) { let selected: &mut I64 = &mut *r.hidden; }",
+        ),
+    ] {
+        let errors = build_typed_hir(&[
+            SourceUnit::new(ModuleId::new(2), &dep, &[]),
+            SourceUnit::new(
+                ModuleId::new(1),
+                &app_hidden,
+                std::slice::from_ref(&dep_target),
+            ),
+        ])
+        .expect_err("foreign private projected replacement field remains inaccessible");
+        assert!(has_diagnostic(&errors, |kind| kind
+            == DiagnosticKind::InaccessibleRecordField));
+    }
+}
+
+#[test]
+fn projected_descendant_does_not_create_a_shared_direct_child_result_contract() {
+    let errors = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(parent: &mut Pair) -> &I64 { return &*parent.left; }",
+    )
+    .expect_err(
+        "projected descendant result must not widen the complete-target SharedDirectChild contract",
+    );
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::MissingSharedReferenceResultOrigin));
+}
+
+#[test]
 fn accepts_intrinsic_and_selected_record_referents_but_rejects_nonduplicable_records() {
     let hir = compile(
         "record copy Point { x: I64 }\

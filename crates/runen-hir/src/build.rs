@@ -276,17 +276,19 @@ impl SemanticState {
             .clone()
     }
 
-    fn reference_capability(&self, authority: ReferenceAuthorityId) -> Option<ReferencePermission> {
+    fn reference_capability_at(
+        &self,
+        authority: ReferenceAuthorityId,
+        target: &ReferenceTarget,
+    ) -> Option<ReferencePermission> {
         let state = self
             .reference_authorities
             .get(&authority)
             .expect("live authority is present");
         let mut has_shared_child = false;
-        for child in self
-            .reference_authorities
-            .values()
-            .filter(|candidate| candidate.parent == Some(authority))
-        {
+        for child in self.reference_authorities.values().filter(|candidate| {
+            candidate.parent == Some(authority) && candidate.target.overlaps(target)
+        }) {
             match child.permission {
                 ReferencePermission::ExclusiveReplace => return None,
                 ReferencePermission::Shared => has_shared_child = true,
@@ -299,19 +301,29 @@ impl SemanticState {
         }
     }
 
-    fn authority_satisfies(
+    fn authority_satisfies_at(
         &self,
         authority: ReferenceAuthorityId,
+        target: &ReferenceTarget,
         required: ReferencePermission,
     ) -> bool {
         matches!(
-            (self.reference_capability(authority), required),
+            (self.reference_capability_at(authority, target), required),
             (Some(ReferencePermission::ExclusiveReplace), _)
                 | (
                     Some(ReferencePermission::Shared),
                     ReferencePermission::Shared
                 )
         )
+    }
+
+    fn authority_satisfies(
+        &self,
+        authority: ReferenceAuthorityId,
+        required: ReferencePermission,
+    ) -> bool {
+        let target = self.reference_target(authority);
+        self.authority_satisfies_at(authority, &target, required)
     }
 
     fn target_is_fully_available(&self, target: &ReferenceTarget) -> bool {
@@ -345,27 +357,46 @@ impl SemanticState {
         }
     }
 
-    fn restore_reference_target(&mut self, target: &ReferenceTarget) {
+    fn reference_target_installation_is_admitted(&self, target: &ReferenceTarget) -> bool {
         match target {
             ReferenceTarget::Local { binding, fields } => {
-                debug_assert!(
-                    fields.is_empty(),
-                    "replacement-capable local reference targets remain complete roots"
-                );
-                binding_state_by_id_mut(&mut self.bindings, *binding)
-                    .expect("reference target names active local binding")
-                    .ownership = StructuralOwnershipState::default();
+                fields.is_empty()
+                    || binding_state_by_id(&self.bindings, *binding).is_some_and(|state| {
+                        state.ownership.nonempty_installation_is_admitted(fields)
+                    })
             }
             ReferenceTarget::External { slot, fields } => {
-                debug_assert!(
-                    fields.is_empty(),
-                    "replacement-capable external reference targets remain complete roots"
-                );
-                *self
+                fields.is_empty()
+                    || self
+                        .external_referents
+                        .get(slot)
+                        .is_some_and(|state| state.nonempty_installation_is_admitted(fields))
+            }
+        }
+    }
+
+    fn install_reference_target(&mut self, target: &ReferenceTarget) {
+        match target {
+            ReferenceTarget::Local { binding, fields } => {
+                let ownership = &mut binding_state_by_id_mut(&mut self.bindings, *binding)
+                    .expect("reference target names active local binding")
+                    .ownership;
+                if fields.is_empty() {
+                    *ownership = StructuralOwnershipState::default();
+                } else {
+                    ownership.install_nonempty_path(fields);
+                }
+            }
+            ReferenceTarget::External { slot, fields } => {
+                let ownership = self
                     .external_referents
                     .get_mut(slot)
-                    .expect("replacement target has external structural root") =
-                    StructuralOwnershipState::default();
+                    .expect("replacement target has external structural root");
+                if fields.is_empty() {
+                    *ownership = StructuralOwnershipState::default();
+                } else {
+                    ownership.install_nonempty_path(fields);
+                }
             }
         }
     }
@@ -3107,7 +3138,15 @@ fn validate_reference_assign(
         }
     };
     let target = state.reference_target(original_authority);
+    if !state.authority_satisfies(original_authority, ReferencePermission::ExclusiveReplace) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ReferenceReplacementUnavailable,
+            location: statement_location,
+        });
+        return None;
+    }
 
+    let mut candidate = state.clone();
     let value_node = value_child(node);
     let value = validate_value(
         header,
@@ -3115,17 +3154,18 @@ fn validate_reference_assign(
         referent.ty(),
         context,
         value_context,
-        state,
+        &mut candidate,
         diagnostics,
     )?;
 
-    let destination_usable = state.bindings.get(&name).is_some_and(|candidate| {
+    let destination_usable = candidate.bindings.get(&name).is_some_and(|candidate| {
         candidate.id == binding
             && candidate.ownership.path_availability(&[]) == PathAvailability::FullyAvailable
             && candidate.reference_authority == Some(original_authority)
     });
     if !destination_usable
-        || !state.authority_satisfies(original_authority, ReferencePermission::ExclusiveReplace)
+        || !candidate.authority_satisfies(original_authority, ReferencePermission::ExclusiveReplace)
+        || !candidate.reference_target_installation_is_admitted(&target)
     {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ReferenceReplacementUnavailable,
@@ -3134,7 +3174,8 @@ fn validate_reference_assign(
         return None;
     }
 
-    state.restore_reference_target(&target);
+    candidate.install_reference_target(&target);
+    *state = candidate;
     Some(Statement::ReferenceAssign {
         reference: binding,
         value: value.value,
@@ -4308,7 +4349,6 @@ fn validate_reference_root(
     let (root_token, selectors) = identifiers
         .split_first()
         .expect("syntax-clean reference root has one root identifier");
-    debug_assert!(permission == ReferencePermission::Shared || selectors.is_empty());
     let name = key(root_token);
     let Some(binding) = state.bindings.get(&name).cloned() else {
         let entity = context
@@ -4393,10 +4433,9 @@ fn validate_reference_root(
             }
         }
         ReferencePermission::ExclusiveReplace => {
-            debug_assert!(fields.is_empty());
             if binding.source != BindingSource::Local
                 || !binding.mutability.is_mutable()
-                || binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable
+                || binding.ownership.path_availability(&fields) != PathAvailability::FullyAvailable
                 || !state.target_satisfies_exclusive_requirement(&target)
             {
                 diagnostics.push(Diagnostic {
@@ -4441,7 +4480,6 @@ fn validate_reference_reborrow(
     let (reference_token, selectors) = identifiers
         .split_first()
         .expect("syntax-clean reference reborrow has one reference identifier");
-    debug_assert!(permission == ReferencePermission::Shared || selectors.is_empty());
     let name = key(reference_token);
     let Some(binding) = state.bindings.get(&name).cloned() else {
         let entity = context
@@ -4479,7 +4517,6 @@ fn validate_reference_reborrow(
     let (fields, selected_ty) = if selectors.is_empty() {
         (Vec::new(), parent_referent.ty())
     } else {
-        debug_assert_eq!(permission, ReferencePermission::Shared);
         resolve_field_path(
             header,
             selectors,
@@ -4523,7 +4560,9 @@ fn validate_reference_reborrow(
         .reference_authority
         .expect("live safe-reference binding retains authority");
     let target = state.reference_target(parent).projected(&fields);
-    if !state.target_is_fully_available(&target) || !state.authority_satisfies(parent, permission) {
+    if !state.target_is_fully_available(&target)
+        || !state.authority_satisfies_at(parent, &target, permission)
+    {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ReferencePermissionUnavailable,
             location: value_location,

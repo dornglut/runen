@@ -111,10 +111,12 @@ fn replacement_reference_results_are_source_invalid() {
 }
 
 #[test]
-fn replacement_root_requires_complete_mutable_ordinary_local_not_parameter_or_immutable_local() {
+fn replacement_root_requires_mutable_ordinary_local_for_complete_or_projected_target() {
     for source in [
         "fn f(x: I64) { let r: &mut I64 = &mut x; }",
         "fn f(seed: I64) { let x: I64 = seed; let r: &mut I64 = &mut x; }",
+        "record Box { value: I64 } fn f(x: Box) { let r: &mut I64 = &mut x.value; }",
+        "record Box { value: I64 } fn f(seed: Box) { let x: Box = seed; let r: &mut I64 = &mut x.value; }",
     ] {
         let errors = compile(source).expect_err("invalid replacement root target must be rejected");
         assert!(
@@ -123,6 +125,86 @@ fn replacement_root_requires_complete_mutable_ordinary_local_not_parameter_or_im
             "missing replacement-target diagnostic: {errors:?}"
         );
     }
+}
+
+#[test]
+fn projected_replacement_root_and_reborrow_retain_exact_paths_and_permission() {
+    let hir = compile(
+        "record Inner { value: I64 }\
+         record Outer { inner: Inner, other: I64 }\
+         fn root(seed: Outer) {\
+             let mut value: Outer = seed;\
+             let selected: &mut I64 = &mut value.inner.value;\
+         }\
+         fn child(parent: &mut Outer) {\
+             let selected: &mut I64 = &mut *parent.inner.value;\
+         }",
+    )
+    .expect("projected replacement root and child must retain exact structural paths");
+
+    let root = function(&hir, "root");
+    let Statement::Local {
+        binding: root_binding,
+        ..
+    } = &root.body.statements[0]
+    else {
+        panic!("expected mutable root local");
+    };
+    let Statement::Local { initializer, .. } = &root.body.statements[1] else {
+        panic!("expected projected replacement-root local");
+    };
+    assert!(matches!(
+        &initializer.kind,
+        ValueKind::ReferenceRoot {
+            target,
+            fields,
+            permission: ReferencePermission::ExclusiveReplace,
+        } if *target == *root_binding && fields.as_slice() == [0, 0]
+    ));
+
+    let child = function(&hir, "child");
+    let Statement::Local { initializer, .. } = &child.body.statements[0] else {
+        panic!("expected projected replacement-child local");
+    };
+    assert!(matches!(
+        &initializer.kind,
+        ValueKind::ReferenceReborrow {
+            reference,
+            fields,
+            permission: ReferencePermission::ExclusiveReplace,
+        } if *reference == child.parameters[0].binding && fields.as_slice() == [0, 0]
+    ));
+}
+
+#[test]
+fn projected_replacement_root_observes_exact_structural_availability() {
+    for source in [
+        "record Token {} record Inner { token: Token, count: I64 } record Outer { inner: Inner, other: Token }\
+         fn f(seed: Outer) { let mut root: Outer = seed; let moved: Token = root.inner.token; let r: &mut Token = &mut root.inner.token; }",
+        "record Token {} record Inner { token: Token, count: I64 } record Outer { inner: Inner, other: Token }\
+         fn f(seed: Outer) { let mut root: Outer = seed; let moved: Token = root.inner.token; let r: &mut Inner = &mut root.inner; }",
+        "record Token {} record Inner { token: Token, count: I64 } record Outer { inner: Inner, other: Token }\
+         fn f(seed: Outer) { let mut root: Outer = seed; let moved: Inner = root.inner; let r: &mut Token = &mut root.inner.token; }",
+    ] {
+        let errors = compile(source).expect_err(
+            "equal, partial, or strict-ancestor consumption must reject projected root formation",
+        );
+        assert!(
+            has_diagnostic(&errors, |kind| kind
+                == DiagnosticKind::InvalidReplacementReferenceTarget),
+            "missing projected replacement availability diagnostic: {errors:?}"
+        );
+    }
+
+    compile(
+        "record Token {} record Inner { token: Token, count: I64 } record Outer { inner: Inner, other: Token }\
+         fn f(seed: Outer) {\
+             let mut root: Outer = seed;\
+             let moved: Token = root.other;\
+             let r: &mut Token = &mut root.inner.token;\
+         }",
+    )
+    .expect("a disjoint consumed sibling must not block projected replacement-root formation");
 }
 
 #[test]
@@ -277,6 +359,52 @@ fn projected_shared_child_from_replacement_parent_is_bounded_to_selected_field()
 }
 
 #[test]
+fn projected_replacement_children_move_and_reinitialize_exact_local_and_external_targets() {
+    compile(
+        "record Token {} record Pair { left: Token, right: Token }\
+         fn local(seed: Pair) {\
+             let mut root: Pair = seed;\
+             {\
+                 let parent: &mut Pair = &mut root;\
+                 { let child: &mut Token = &mut *parent.left; let moved: Token = *child; *child = moved; }\
+             }\
+             let sibling: Token = root.right;\
+         }\
+         fn external(parent: &mut Pair) {\
+             { let child: &mut Token = &mut *parent.left; let moved: Token = *child; *child = moved; }\
+             { let sibling: &mut Token = &mut *parent.right; }\
+         }",
+    )
+    .expect("projected replacement Move and reinitialization must operate on exact local/external backing paths");
+}
+
+#[test]
+fn projected_replacement_reconstructs_descendants_and_preserves_disjoint_consumption() {
+    compile(
+        "record Token {} record Inner { token: Token, count: I64 } record Outer { inner: Inner, other: I64 }\
+         fn f(parent: &mut Outer) {\
+             let child: &mut Inner = &mut *parent.inner;\
+             { let leaf: &mut Token = &mut *child.token; let moved: Token = *leaf; }\
+             *child = Inner { token: Token {}, count: 7 };\
+         }",
+    )
+    .expect("replacement of a projected child may reconstruct a descendant-consumed partial target");
+
+    let errors = compile(
+        "record Token {} record Inner { token: Token, count: I64 } record Outer { inner: Inner, other: Token }\
+         fn f(seed: Outer) {\
+             let mut root: Outer = seed;\
+             let moved_other: Token = root.other;\
+             { let inner: &mut Inner = &mut root.inner; *inner = Inner { token: Token {}, count: 7 }; }\
+             let moved_again: Token = root.other;\
+         }",
+    )
+    .expect_err("projected installation must preserve a disjoint consumed sibling");
+    assert!(has_diagnostic(&errors, |kind| kind
+        == DiagnosticKind::UnavailableFieldValue));
+}
+
+#[test]
 fn direct_temporary_and_explicit_child_calls_end_their_child_authority_on_normal_return() {
     compile(
         "fn sink(r: &mut I64) { *r = 7; }\
@@ -291,6 +419,19 @@ fn direct_temporary_and_explicit_child_calls_end_their_child_authority_on_normal
          }",
     )
     .expect("temporary replacement roots and explicit replacement children end after normal calls");
+}
+
+#[test]
+fn projected_child_call_transfer_preserves_exact_target_and_restoration() {
+    compile(
+        "record Token {} record Pair { left: Token, right: Token }\
+         fn sink(r: &mut Token) { let moved: Token = *r; *r = moved; }\
+         fn f(parent: &mut Pair) {\
+             sink(&mut *parent.left);\
+             { let right: &mut Token = &mut *parent.right; }\
+         }",
+    )
+    .expect("projected replacement call transfer must preserve the exact selected child target and return it restored");
 }
 
 #[test]
@@ -360,6 +501,28 @@ fn reference_replacement_rechecks_destination_after_rhs_effects() {
     .expect_err("RHS may not consume the destination carrier and then commit to a stale target");
     assert!(has_diagnostic(&errors, |kind| kind
         == DiagnosticKind::ReferenceReplacementUnavailable));
+}
+
+#[test]
+fn rejected_projected_replacement_rolls_back_speculative_rhs_reference_state() {
+    let errors = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn take_and_value(r: &mut I64, value: I64) -> I64 { return value; }\
+         fn f(parent: &mut Pair) {\
+             let child: &mut I64 = &mut *parent.left;\
+             *child = take_and_value(child, 1);\
+             *child = 2;\
+         }",
+    )
+    .expect_err("a rejected projected replacement must roll back speculative RHS carrier effects");
+    assert_eq!(
+        errors
+            .iter()
+            .filter(|error| error.kind == DiagnosticKind::ReferenceReplacementUnavailable)
+            .count(),
+        1,
+        "post-error use of the destination child should observe rolled-back reference state: {errors:?}"
+    );
 }
 
 #[test]

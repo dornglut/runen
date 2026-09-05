@@ -355,6 +355,150 @@ fn replacement_child_suspends_parent_reference_access() {
 }
 
 #[test]
+fn projected_replacement_root_authority_uses_exact_overlap() {
+    compile(
+        "record Token {}\
+         record Box { token: Token, count: I64 }\
+         fn f(seed: Box) {\
+             let mut root: Box = seed;\
+             let selected: &mut I64 = &mut root.count;\
+             let moved: Token = root.token;\
+         }",
+    )
+    .expect("projected replacement root must not block a disjoint sibling Move");
+
+    for source in [
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(seed: Pair) {\
+             let mut root: Pair = seed;\
+             let selected: &mut I64 = &mut root.left;\
+             let copied: I64 = root.left;\
+         }",
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(seed: Outer) {\
+             let mut root: Outer = seed;\
+             let selected: &mut I64 = &mut root.inner.value;\
+             let copied: Inner = root.inner;\
+         }",
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(seed: Outer) {\
+             let mut root: Outer = seed;\
+             let selected: &mut Inner = &mut root.inner;\
+             let copied: I64 = root.inner.value;\
+         }",
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(seed: Pair) {\
+             let mut root: Pair = seed;\
+             let selected: &mut I64 = &mut root.left;\
+             let copied: Pair = root;\
+         }",
+    ] {
+        let errors = compile(source)
+            .expect_err("equal, ancestor, and descendant direct access must overlap projected replacement authority");
+        assert!(
+            has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+            "missing projected replacement/direct-access conflict: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn projected_replacement_children_delegate_disjoint_siblings_independently() {
+    compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(r: &mut Pair) {\
+             let left: &mut I64 = &mut *r.left;\
+             let right: &mut I64 = &mut *r.right;\
+             let observed: I64 = *right;\
+         }",
+    )
+    .expect("disjoint projected replacement children must coexist under one parent");
+}
+
+#[test]
+fn projected_replacement_children_reject_equal_ancestor_and_descendant_overlap() {
+    for source in [
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(r: &mut Outer) {\
+             let first: &mut I64 = &mut *r.inner.value;\
+             let second: &mut I64 = &mut *r.inner.value;\
+         }",
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(r: &mut Outer) {\
+             let descendant: &mut I64 = &mut *r.inner.value;\
+             let ancestor: &mut Inner = &mut *r.inner;\
+         }",
+        "record copy Inner { value: I64 }\
+         record copy Outer { inner: Inner, other: I64 }\
+         fn f(r: &mut Outer) {\
+             let ancestor: &mut Inner = &mut *r.inner;\
+             let descendant: &mut I64 = &mut *r.inner.value;\
+         }",
+    ] {
+        let errors = compile(source)
+            .expect_err("overlapping projected replacement children must be rejected");
+        assert!(
+            has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+            "missing overlapping projected-child diagnostic: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn projected_replacement_child_blocks_complete_parent_operations() {
+    let dereference = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn f(r: &mut Pair) {\
+             let child: &mut I64 = &mut *r.left;\
+             let copied: Pair = *r;\
+         }",
+    )
+    .expect_err("descendant replacement child must block complete parent dereference");
+    assert!(
+        has_diagnostic(&dereference, DiagnosticKind::ReferencePermissionUnavailable),
+        "missing projected-child/complete-dereference conflict: {dereference:?}"
+    );
+
+    let call = compile(
+        "record copy Pair { left: I64, right: I64 }\
+         fn sink(r: &mut Pair) {}\
+         fn f(r: &mut Pair) {\
+             let child: &mut I64 = &mut *r.left;\
+             sink(r);\
+         }",
+    )
+    .expect_err("descendant replacement child must block complete parent call transfer");
+    assert!(
+        has_diagnostic(&call, DiagnosticKind::ReferencePermissionUnavailable),
+        "missing projected-child/complete-call conflict: {call:?}"
+    );
+}
+
+#[test]
+fn projected_child_cleanup_does_not_restore_consumed_structural_target() {
+    let errors = compile(
+        "record Token {}\
+         record Box { token: Token, count: I64 }\
+         fn f(r: &mut Box) {\
+             {\
+                 let child: &mut Token = &mut *r.token;\
+                 let moved: Token = *child;\
+             }\
+             let replacement: &mut Token = &mut *r.token;\
+         }",
+    )
+    .expect_err("ending a child carrier must not restore ownership consumed through the child");
+    assert!(
+        has_diagnostic(&errors, DiagnosticKind::ReferencePermissionUnavailable),
+        "missing consumed projected-target availability diagnostic: {errors:?}"
+    );
+}
+
+#[test]
 fn scoped_child_cleanup_restores_parent_for_break_and_continue_transfers() {
     compile(
         "fn break_case(flag: Bool, r: &mut I64) {\
