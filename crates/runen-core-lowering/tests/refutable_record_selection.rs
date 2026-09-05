@@ -4,8 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    IntrinsicType, LiteralValue, ModuleId, RecordPatternTransientCleanup, SourceUnit, Statement, Type,
-    build_typed_hir,
+    IntrinsicType, LiteralValue, ModuleId, RecordPatternTransientCleanup, SourceUnit, Statement,
+    Type, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -77,7 +77,11 @@ fn integer_tests_short_circuit_in_source_test_order_before_interleaved_binding_t
     );
     let f = function(lowered.as_program(), "f");
     let eqs = integer_eqs(f);
-    assert_eq!(eqs.len(), 2, "each retained integer test must emit one IntegerEq");
+    assert_eq!(
+        eqs.len(),
+        2,
+        "each retained integer test must emit one IntegerEq"
+    );
 
     let (first_block, first_eq) = eqs[0];
     let (second_block, second_eq) = eqs[1];
@@ -100,8 +104,14 @@ fn integer_tests_short_circuit_in_source_test_order_before_interleaved_binding_t
         unreachable!();
     };
     assert_eq!(first_type, second_type);
-    assert_eq!(direct_projection(first_left), Some(vec![Projection::Field(0)]));
-    assert_eq!(direct_projection(second_left), Some(vec![Projection::Field(1)]));
+    assert_eq!(
+        direct_projection(first_left),
+        Some(vec![Projection::Field(0)])
+    );
+    assert_eq!(
+        direct_projection(second_left),
+        Some(vec![Projection::Field(1)])
+    );
     assert_eq!(first_right, &Operand::Constant(CoreValue::I8(1)));
     assert_eq!(second_right, &Operand::Constant(CoreValue::I8(2)));
 
@@ -123,7 +133,10 @@ fn integer_tests_short_circuit_in_source_test_order_before_interleaved_binding_t
     else {
         panic!("second integer test must branch");
     };
-    assert_eq!(first_mismatch, second_mismatch, "first mismatch must skip every later test");
+    assert_eq!(
+        first_mismatch, second_mismatch,
+        "first mismatch must skip every later test"
+    );
 
     let kept_local = f
         .body
@@ -197,7 +210,11 @@ fn producer_call_is_evaluated_once_and_selects_distinct_success_and_mismatch_cle
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(calls.len(), 1, "producer-backed scrutinee must be evaluated exactly once");
+    assert_eq!(
+        calls.len(),
+        1,
+        "producer-backed scrutinee must be evaluated exactly once"
+    );
     let source = calls[0].local;
 
     let eqs = integer_eqs(f);
@@ -271,10 +288,12 @@ fn record_construction_scrutinee_is_materialized_once_before_testing() {
         .blocks
         .iter()
         .flat_map(|block| &block.statements)
-        .filter(|statement| matches!(
-            statement,
-            CoreStatement::Init { dst, .. } if dst.local == source
-        ))
+        .filter(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Init { dst, .. } if dst.local == source
+            )
+        })
         .count();
     assert_eq!(
         construction_writes, 3,
@@ -330,13 +349,15 @@ fn field_value_receiver_cleanup_precedes_the_distinct_pattern_transient() {
     let receiver_drop = block
         .statements
         .iter()
-        .position(|statement| matches!(
-            statement,
-            CoreStatement::Drop {
-                place: PlaceAccess::Direct(place),
-            } if place.local == call_destination
-                && place.projections == [Projection::Field(1)]
-        ))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Drop {
+                    place: PlaceAccess::Direct(place),
+                } if place.local == call_destination
+                    && place.projections == [Projection::Field(1)]
+            )
+        })
         .expect("consumed field receiver must clean its remaining Outer frontier");
     let test = block
         .statements
@@ -367,11 +388,9 @@ fn field_value_receiver_cleanup_precedes_the_distinct_pattern_transient() {
 
 #[test]
 fn lowering_rejects_literal_value_that_disagrees_with_retained_test_type() {
-    let mut compilation = hir(
-        "record R { value: I8 } fn f(root: R) { \
+    let mut compilation = hir("record R { value: I8 } fn f(root: R) { \
              if let R { value: 1 } = (root) {} else {} \
-         }",
-    );
+         }");
     let Statement::RefutableRecordSelection { tests, .. } = selection_mut(&mut compilation, "f")
     else {
         panic!("expected refutable record selection");
@@ -388,11 +407,9 @@ fn lowering_rejects_literal_value_that_disagrees_with_retained_test_type() {
 
 #[test]
 fn lowering_rejects_test_path_type_disagreement_without_reconstructing_source_semantics() {
-    let mut compilation = hir(
-        "record R { first: I8, second: U8 } fn f(root: R) { \
+    let mut compilation = hir("record R { first: I8, second: U8 } fn f(root: R) { \
              if let R { first: 1, second: kept } = (root) {} else {} \
-         }",
-    );
+         }");
     let Statement::RefutableRecordSelection { tests, .. } = selection_mut(&mut compilation, "f")
     else {
         panic!("expected refutable record selection");
@@ -409,11 +426,9 @@ fn lowering_rejects_test_path_type_disagreement_without_reconstructing_source_se
 
 #[test]
 fn lowering_rejects_direct_root_with_impossible_pattern_transient_mismatch_cleanup() {
-    let mut compilation = hir(
-        "record R { value: I8 } fn f(root: R) { \
+    let mut compilation = hir("record R { value: I8 } fn f(root: R) { \
              if let R { value: 1 } = (root) {} else {} \
-         }",
-    );
+         }");
     let Statement::RefutableRecordSelection {
         mismatch_cleanup, ..
     } = selection_mut(&mut compilation, "f")
