@@ -4188,13 +4188,9 @@ fn validate_value_inner(
                                 diagnostics,
                             );
                         };
-                        let Some((_, final_ty)) = resolve_field_path(
-                            header,
-                            selectors,
-                            binding.ty,
-                            context,
-                            diagnostics,
-                        ) else {
+                        let Some((_, final_ty)) =
+                            resolve_field_path(header, selectors, binding.ty, context, diagnostics)
+                        else {
                             return Invalid;
                         };
                         Exact(final_ty)
@@ -4353,7 +4349,9 @@ fn validate_value_inner(
                             .filter(|token| token.kind() == SyntaxKind::Ident)
                             .collect::<Vec<_>>();
                         let [_, pointer_token] = identifiers.as_slice() else {
-                            unreachable!("syntax-clean raw move has contextual move and pointer identifiers");
+                            unreachable!(
+                                "syntax-clean raw move has contextual move and pointer identifiers"
+                            );
                         };
                         let pointer_name = key(pointer_token);
                         let Some(binding) = state.bindings.get(&pointer_name) else {
