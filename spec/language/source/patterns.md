@@ -63,22 +63,22 @@ let dep::Outer {
 } = root;
 ```
 
-Every represented **record-pattern node** has:
+Every represented **irrefutable record-pattern node** has:
 
 - one explicit nominal record head, either unqualified or one represented two-part qualified module member;
 - one finite source-ordered sequence of zero or more explicit named fields;
 - for each explicit field, exactly one target that is either:
   - one binding leaf; or
-  - one nested record-pattern node; and
+  - one nested irrefutable record-pattern node; and
 - zero or one node-local rest marker that, when present, omits every declared field identity not selected by an explicit field in that node.
 
-A nested record-pattern node itself introduces no binding. Binding leaves are the only pattern elements that produce function-local bindings. The rest marker introduces no binding, structural path, value, type, safe-authority access, or runtime operation.
+A nested irrefutable record-pattern node itself introduces no binding. Binding leaves are the only pattern elements that produce function-local bindings. The rest marker introduces no binding, structural path, value, type, safe-authority access, or runtime operation.
 
 The complete tree is irrefutable because every pattern node requires exact nominal type equality and no represented node performs a runtime shape test. A node without rest is exhaustive exactly as before. A node with rest statically accepts its exact nominal record while selecting only its explicit fields and omitting the remainder. Successful pattern production has no mismatch outcome.
 
 ## Pattern-head selection
 
-Every record-pattern node head is either one unqualified `UserIdentifier` or one represented `QualifiedModuleMember` in the concrete form.
+Every represented irrefutable or refutable record-pattern node head is either one unqualified `UserIdentifier` or one represented `QualifiedModuleMember` in the concrete form.
 
 An **unqualified pattern head** resolves directly through the same-module declaration namespace owned by `names-modules.md` and MUST select one nominal record declaration. A selected function or another wrong-category declaration is invalid and MUST NOT be bypassed.
 
@@ -90,22 +90,22 @@ Qualification is source name resolution only. After a source-valid head has sele
 
 For the top pattern node, the selected record type is the exact required scrutinee type.
 
-For a nested pattern node selected as field target, its nominal record type MUST equal exactly the source type of that selected field. Equal field shape from another record does not satisfy this requirement.
+For a nested pattern node selected as an applicable field target, its nominal record type MUST equal exactly the source type of that selected field. Equal field shape from another record does not satisfy this requirement.
 
 ## Recursive field and rest structure
 
-For every record-pattern node with selected nominal record `R`:
+For every irrefutable record-pattern node with selected nominal record `R`:
 
 1. each explicit pattern field key MUST resolve to exactly one declared field identity of `R`;
 2. no declared field identity may occur in more than one explicit field;
 3. every explicit selected field MUST satisfy the direct record-field accessibility relation owned by `field-access.md` in the containing function;
-4. every explicit field target MUST satisfy the target relation below;
+4. every explicit field target MUST satisfy the irrefutable target relation below;
 5. the node contains at most one rest marker; and
 6. if the node has no rest marker, every declared field identity of `R` MUST occur exactly once as an explicit field, while if the node has a rest marker, every declared field identity not explicitly selected is omitted by that marker.
 
 A **binding target** contributes one binding leaf whose source type is exactly the selected field's source type.
 
-A **nested record-pattern target** is valid only when the selected field's source type is exactly the nested node's nominal record type. The nested node then recursively satisfies this same field/rest relation independently; a rest marker in one node does not omit fields of another node.
+A **nested irrefutable record-pattern target** is valid only when the selected field's source type is exactly the nested node's nominal record type. The nested node then recursively satisfies this same field/rest relation independently; a rest marker in one node does not omit fields of another node.
 
 An omitted field is not a selected pattern field. It contributes no target, binding leaf, structural path, field accessibility requirement, safe-authority compatibility requirement, ownership production, or source-order item merely because it exists in the nominal record.
 
@@ -136,7 +136,7 @@ Each binding leaf corresponds to exactly one complete structural source path fro
 
 The path is formed by appending each resolved explicit field identity traversed from the top pattern node to that leaf. Its final type is exactly the selected leaf field's source type under `structural-ownership.md` and `types.md`.
 
-An explicit field target is either a binding leaf or a nested record pattern, never both. Because no declared field may be explicitly selected twice, distinct binding-leaf paths in one valid pattern tree are pairwise structurally disjoint. Omitted fields and rest markers contribute no binding-leaf path.
+In the irrefutable declaration, an explicit field target is either a binding leaf or a nested irrefutable record pattern, never both. Because no declared field may be explicitly selected twice, distinct binding-leaf paths in one valid pattern tree are pairwise structurally disjoint. Omitted fields and rest markers contribute no binding-leaf path.
 
 Nested record-pattern nodes are static pattern structure, not independently produced values. Their intermediate paths are not automatically duplicated or consumed merely because pattern traversal enters them. A rest marker likewise creates no owned-value or safe-authority access operation.
 
@@ -383,7 +383,7 @@ Only after the applicable sequence completes may the next body statement begin.
 
 The represented refutable pattern operation is one recursive named-field record pattern consumed only by the bounded single-success selection statement from `control-flow.md` and `concrete-syntax.md`. It reuses the exact nominal head lookup, field identity/accessibility, node-local rest/omission, structural path, binding-leaf, scrutinee-category, producer transaction, and qualified-name relations above. It does not change the existing irrefutable declaration.
 
-A **refutable record-pattern node** has the same explicit nominal record head, explicit-field uniqueness/accessibility relation, and optional final rest marker as an irrefutable record-pattern node. Its explicit field target is exactly one of:
+A **refutable record-pattern node** has the same explicit nominal record head, explicit-field uniqueness/accessibility relation, no-rest exhaustiveness/rest-authorized omission relation, and optional final rest marker as an irrefutable record-pattern node. Its explicit field target is exactly one of:
 
 - one ordinary binding leaf with the same binding identity/type relation as above;
 - one nested refutable record-pattern node satisfying the same exact nominal field-type requirement as above; or
@@ -399,7 +399,7 @@ Every literal-test leaf corresponds to the complete resolved structural path for
 
 The selected field type supplies the literal's required type directly. This relation creates no default integer type, coercion, promotion, conversion, comparison-local type inference, or general pattern inference. The materialized literal is a static semantic constant with no ownership state and no runtime producer evaluation.
 
-Literal-test source order is depth-first traversal in explicit field order, independently of binding-leaf production order: visit explicit fields in written order, contribute a literal-test target immediately, recursively contribute tests from a nested refutable node before the next sibling, and contribute nothing for a binding target or rest marker. Binding-leaf order remains the existing depth-first binding-only order above.
+Literal-test source order is depth-first traversal in explicit field order, independently of binding-leaf production order: visit explicit fields in written order, contribute a literal-test target immediately, recursively contribute tests from a nested refutable node before the next sibling, and contribute nothing for a binding target or rest marker. Binding-leaf order remains the existing depth-first binding-only order above, with literal-test targets contributing no binding leaf or position to that binding order.
 
 ### Complete refutable-pattern validation before scrutinee effects
 
