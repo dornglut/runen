@@ -2,9 +2,9 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, non-replacing result storage for represented Core integer addition, subtraction, multiplication, exclusive-or, bitwise OR, and binary floating addition, subtraction, multiplication, and division, assignment, destruction domains, and cleanup.
+This document owns the currently defined Core semantics for values, local storage places, storage extent, dynamic local storage-instance identity, stored-value lifetime, initialization state, ownership transfer, assignment mutability, interior-mutability regions, non-replacing result storage for represented Core integer addition, subtraction, multiplication, exclusive-or, bitwise OR, fixed-width integer equality, and binary floating addition, subtraction, multiplication, and division, assignment, destruction domains, and cleanup.
 
-The shared/exclusive access authority required to reach storage while alias authorities are active is owned by [Core borrowing](borrowing.md). First-class safe-reference types/values, permission classes, reference-backed authority/carrier lifetime, and reference-relative access are owned by [Core references](references.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical value relations consumed by represented fixed-width integer addition, subtraction, multiplication, exclusive-or, and bitwise OR are owned by [Core integer semantics](numerics/integers.md). The numerical result relations, numeric-contract domain/default/refinement rules, and selected-contract numerical permissions consumed by represented binary floating addition, subtraction, multiplication, and division are owned by [Core floating-point semantics](numerics/floating-point.md).
+The shared/exclusive access authority required to reach storage while alias authorities are active is owned by [Core borrowing](borrowing.md). First-class safe-reference types/values, permission classes, reference-backed authority/carrier lifetime, and reference-relative access are owned by [Core references](references.md). Raw-pointer values and provenance formed from storage are owned by [Core pointers and provenance](pointers.md). Dynamic function-activation creation, caller suspension, and value transfer across direct calls are owned by [Core functions and direct calls](functions.md). Intra-activation basic-block transfer and cyclic control-flow divergence are owned by [Core control flow](control-flow.md). The exact mathematical value relations consumed by represented fixed-width integer addition, subtraction, multiplication, exclusive-or, bitwise OR, and equality are owned by [Core integer semantics](numerics/integers.md). The numerical result relations, numeric-contract domain/default/refinement rules, and selected-contract numerical permissions consumed by represented binary floating addition, subtraction, multiplication, and division are owned by [Core floating-point semantics](numerics/floating-point.md).
 
 ## Terms
 
@@ -124,7 +124,7 @@ A stored-value lifetime ends when the stored value is consumed by move, destroye
 
 `Read` and `Copy` do not end the source stored-value lifetime.
 
-`Init` and represented `IntegerAdd`/`IntegerSub`/`IntegerMul`/`IntegerXor`/`IntegerOr`/`FloatAdd`/`FloatSub`/`FloatMul`/`FloatDiv` result initialization may begin either the first stored-value lifetime or a later stored-value lifetime in vacant storage. Ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
+`Init` and represented `IntegerAdd`/`IntegerSub`/`IntegerMul`/`IntegerXor`/`IntegerOr`/`IntegerEq`/`FloatAdd`/`FloatSub`/`FloatMul`/`FloatDiv` result initialization may begin either the first stored-value lifetime or a later stored-value lifetime in vacant storage. Ordinary `Assign` and `InteriorAssign` may end old stored-value lifetimes and begin replacement lifetimes in the same storage extent and the same dynamic storage instance.
 
 The current revision defines stored-value lifetime at scalar storage leaves. Aggregate initialization and liveness are derived recursively from the states of those leaves; an aggregate does not acquire a separate hidden lifetime identity.
 
@@ -438,6 +438,60 @@ Because `dst` was wholly vacant at admission, the result write has an empty dest
 After both operand values have been produced, the bitwise-OR/result-write portion is finite, deterministic, non-faulting, and non-diverging under the represented Core semantics. The operation introduces no new borrow interval, reference value, pointer provenance, cleanup category, storage identity, assignment-mutability rule, interior-mutability rule, fault reason, control-flow edge, layout/ABI promise, numeric-contract fact, runtime flag, or backend-visible semantic fact.
 
 The operation consumes only the plain fixed-width integer bitwise-OR value relation from `numerics/integers.md`. It does not represent binary AND, an XOR/complement/arithmetic rewrite, shift, comparison, conversion, explicit overflow mode, source numeric-contract selection, constant-folding requirement, or a generic arithmetic/bitwise instruction family.
+
+## Plain fixed-width integer equality result initialization
+
+The represented Core proving relation contains one distinct fixed-width integer-equality operation, normatively written here as:
+
+```text
+IntegerEq {
+    dst: Place,
+    operand_type: exact Core type identity,
+    left: Operand,
+    right: Operand,
+}
+```
+
+This semantic spelling identifies the represented Core operation. It does not require one particular implementation enum, field name, integer-predicate family, instruction encoding, backend opcode, or physical machine instruction. The mandatory `operand_type` field denotes one exact per-program Core type identity under the type relation defined above; it is not an inferred scalar kind, a source type, a runtime value, or optional metadata.
+
+Let `B` be the exact Core type identity of `dst` and let `I` be the exact Core type identity carried by `operand_type`. A valid `IntegerEq` requires all of the following static type facts before execution:
+
+- `B` denotes a scalar type whose scalar kind is exactly `Bool`;
+- `I` denotes a scalar type whose scalar kind is exactly one of `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, or `U64`;
+- every place-derived left or right operand produces a value whose selected Core type identity is exactly `I`;
+- a constant operand is admitted only when its semantic value matches `I` under the existing type-table value-matching relation; and
+- no equality of scalar kind alone makes two distinct Core type identities interchangeable for an operand.
+
+The explicit operand type is semantically necessary because the Bool destination type `B` cannot supply the integer type required by the operands, while the current constant-value representation carries no independent exact type identity. Two constant operands are therefore admitted only relative to the explicit `I`; a place/constant or constant/place pair uses exactly the same required `I`. The operation does not infer `I` from the first place operand, from a constant's scalar variant, from `B`, or from implementation convenience.
+
+An `AddressOf` operand therefore cannot satisfy this operation's fixed-width integer operand requirement. Any applicable `Move`, `Copy`, `RawMove`, `ReferenceMove`, `ReferenceCopy`, or other represented operand form retains its own existing access, liveness, copyability, provenance, reference-authority, and ownership-transfer requirements while also producing the exact required type `I`. This operation introduces no conversion, promotion, coercion, widening, narrowing, defaulting, overload relation, generic numeric type, or operand-derived type inference.
+
+`IntegerEq` reuses the non-replacing destination lifecycle of `Init` and the existing represented result operations rather than defining another storage model. Before either operand is evaluated:
+
+1. resolve `dst` as direct storage under the existing place/type rules and establish exact destination type `B`;
+2. establish the explicit exact operand type identity `I` and require the static destination/operand type facts above;
+3. require the exclusive direct-storage authority that the existing non-replacing initialization/result operations require under `borrowing.md`; and
+4. require `dst` to be wholly vacant.
+
+These destination and exact-type preconditions are fixed at operation admission before left-operand evaluation. Operand evaluation cannot make an initially Live, insufficiently authorized, non-Bool, or otherwise invalid destination retrospectively admissible, and it cannot change the selected `I` for that same operation. Ordinary assignment mutability is not required, exactly as for the existing non-replacing result destinations.
+
+After destination admission, execution is exactly:
+
+1. evaluate `left` completely under its existing `Operand` semantics with required exact Core type identity `I`;
+2. preserve all state consequences of that operand evaluation;
+3. evaluate `right` completely under its existing `Operand` semantics with required exact Core type identity `I` in the resulting state;
+4. preserve all state consequences of that operand evaluation;
+5. consume the two produced semantic fixed-width integer operand values to compute the exact equality result owned by `numerics/integers.md` for the scalar kind of `I`;
+6. write exactly that one semantic Bool result into `dst`; and
+7. mark the written scalar destination Live, beginning a new stored-value lifetime there.
+
+The left operand is therefore evaluated before the right operand. `Move`, `Copy`, raw-pointer operand access, safe-reference operand access, and all other operand-local effects remain exactly those of the existing operand relation; `IntegerEq` does not duplicate or weaken them. A source place moved by the left operand is already Dead when the right operand is evaluated. A right operand cannot read, copy, or move such a place unless an independent represented operation has legally restored its value beforehand.
+
+Because `dst` was wholly vacant at admission, the result write has an empty destruction domain and performs no replacement destruction. The write has the same stored-value-lifetime and storage-instance consequences as successful non-replacing `Init` and the existing represented result operations: it begins the Bool destination stored-value lifetime without changing the destination storage extent or storage-instance identity.
+
+After both operand values have been produced, the equality/result-write portion is finite, deterministic, non-faulting, and non-diverging under the represented Core semantics. The operation introduces no new borrow interval, reference value, pointer provenance, cleanup category, storage identity, assignment-mutability rule, interior-mutability rule, fault reason, control-flow edge, overflow classification, numeric contract, layout/ABI promise, runtime flag, or backend-visible semantic fact.
+
+The operation consumes only the fixed-width same-type integer equality relation from `numerics/integers.md`. It is a value-producing statement, not a terminator or an alternate form of `Branch`. It does not represent integer inequality, ordering, three-way comparison, floating comparison, pointer/reference comparison, structural comparison, conversion, a generic comparison/predicate operation family, source operator syntax, or a constant-folding requirement.
 
 ## Binary floating addition result initialization
 
@@ -828,11 +882,11 @@ When [Core control flow](control-flow.md) selects a cyclic execution that diverg
 
 For a fixed validated Core program using only the semantics defined here, operation admission, operand sequencing, dynamic local storage-instance creation, stored-value lifetime transitions, interior-mutability capability, non-replacing result-write occurrence, destruction domains, and destruction order are deterministic.
 
-Represented integer-operation result values are determined by their separately owned integer relations. Represented `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` results are each determined by the operation occurrence's explicit selected numeric contract and the corresponding separately owned floating-addition, floating-subtraction, floating-multiplication, or floating-division relation. Those relations may explicitly permit multiple numerical outcomes, including NaN-member variation and `fast`-specific result latitude. Such permitted numerical variation is semantic latitude owned by `numerics/floating-point.md`; it is not hidden storage, explicit-loan, or reference-authority state and does not make host NaN propagation, backend behavior, physical encoding, scheduling, or container iteration order an additional semantic input.
+Represented integer-operation result values, including `IntegerEq`'s Bool result, are determined by their separately owned integer relations. Represented `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` results are each determined by the operation occurrence's explicit selected numeric contract and the corresponding separately owned floating-addition, floating-subtraction, floating-multiplication, or floating-division relation. Those relations may explicitly permit multiple numerical outcomes, including NaN-member variation and `fast`-specific result latitude. Such permitted numerical variation is semantic latitude owned by `numerics/floating-point.md`; it is not hidden storage, explicit-loan, or reference-authority state and does not make host NaN propagation, backend behavior, physical encoding, scheduling, or container iteration order an additional semantic input.
 
 The actual verification token chosen to represent a storage-instance identity is not program-observable. Semantics depend on instance distinction and stability, not on a particular integer assignment.
 
-The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state beyond the reference/explicit-loan authority already supplied by their canonical owners and no new storage path-state component beyond the storage transitions it already performs. `IntegerAdd`, `IntegerSub`, `IntegerMul`, `IntegerXor`, `IntegerOr`, `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` likewise introduce no hidden storage-state component beyond their operand consequences and one non-replacing result initialization. `FloatAdd.contract`, `FloatSub.contract`, `FloatMul.contract`, and `FloatDiv.contract` are explicit operation semantic facts, not mutable runtime state.
+The interior-mutability marker is static semantic type metadata. `InteriorAssign` introduces no hidden runtime borrow state beyond the reference/explicit-loan authority already supplied by their canonical owners and no new storage path-state component beyond the storage transitions it already performs. `IntegerAdd`, `IntegerSub`, `IntegerMul`, `IntegerXor`, `IntegerOr`, `IntegerEq`, `FloatAdd`, `FloatSub`, `FloatMul`, and `FloatDiv` likewise introduce no hidden storage-state component beyond their operand consequences and one non-replacing result initialization. `FloatAdd.contract`, `FloatSub.contract`, `FloatMul.contract`, and `FloatDiv.contract` are explicit operation semantic facts, not mutable runtime state.
 
 Reference-carrier transfer, duplication, removal, and authority termination are separately owned by [Core references](references.md). This storage owner fixes the deterministic value-lifecycle points at which those consequences occur; it does not derive authority identity from destruction order or storage-instance numbering.
 
@@ -840,7 +894,7 @@ The semantics defined here do not depend on physical addresses, host arithmetic/
 
 ## Separate semantic owners
 
-This document does not define heap or raw allocation, deallocation, borrowing duration or explicit-loan delegation, safe-reference permission/authority/reborrow semantics, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add, integer-subtract, integer-multiply, integer-exclusive-or, integer-bitwise-OR, and selected-contract floating-addition, floating-subtraction, floating-multiplication, and floating-division relations, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
+This document does not define heap or raw allocation, deallocation, borrowing duration or explicit-loan delegation, safe-reference permission/authority/reborrow semantics, raw-pointer dereference/access, numeric pointer addresses, pointer arithmetic, numeric operation value relations beyond consuming the separately owned integer-add, integer-subtract, integer-multiply, integer-exclusive-or, integer-bitwise-OR, integer-equality, and selected-contract floating-addition, floating-subtraction, floating-multiplication, and floating-division relations, pinning, atomics or concurrency, custom destructor bodies, panic catching, cancellation request or observation, cancellation propagation, asynchronous preemption beyond the cleanup consequence above, ABI/layout guarantees, or source grammar.
 
 First-class safe-reference types/values, reference-backed authority/carrier lifetime, reference formation/reborrow, reference access permissions, and safe-reference validity are owned by [Core references](references.md). This storage owner supplies the ordinary scalar/aggregate stored-value lifecycle and copyability relation that those reference-specific consequences consume.
 
