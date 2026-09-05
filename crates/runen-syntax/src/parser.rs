@@ -657,7 +657,8 @@ impl Parser<'_> {
                 ExpectedSyntax::Value
             };
             self.error_here(SyntaxErrorKind::Expected(expected));
-            if self.current().is_some()
+            if matches!(context, RecordPatternContext::Refutable)
+                && self.current().is_some()
                 && !self.at_any(&[SyntaxKind::Comma, SyntaxKind::RBrace])
             {
                 self.recover_one();
