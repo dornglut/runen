@@ -266,3 +266,9 @@ When such an operation is otherwise defined and its operation-specific semantics
 
 - for an unsigned result type, `lo = 0` and `hi = 2^N - 1`;
 - for a signed result type, `lo = -2^(N-1)` and `hi = 2^(N-1) - 1`.
+
+The Runen result is `lo` when `x < lo`, exactly `x` when `lo <= x <= hi`, and `hi` when `x > hi`. Lower and upper out-of-range exact results therefore clamp to the nearest destination bound.
+
+An out-of-range exact result of an explicit saturating operation does not by itself produce a defined fault and is not undefined behavior. Saturation is defined over the mathematical value interval and does not require a physical integer representation.
+
+This is an overflow-result rule, not an operation-domain or source-form rule. It does not define checked arithmetic, division-by-zero behavior, shift-count validity, conversions, source spelling, constant-evaluation diagnostics, which operations or widths exist, or a physical saturation instruction. A realization MUST NOT derive a different saturating result from host behavior, backend overflow metadata, optimizer assumptions, or physical representation.
