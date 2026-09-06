@@ -501,3 +501,52 @@ fn integer_lt_preserves_reference_copy_and_move_permission_semantics() {
         MirValidationErrorKind::ReferencePermissionRequired(ReferencePermission::Exclusive)
     );
 }
+
+#[test]
+fn shared_and_exclusive_reference_authorities_block_direct_lt_destination_first() {
+    for permission in [ReferencePermission::Shared, ReferencePermission::Exclusive] {
+        let mut types = TypeTable::new();
+        let i8_type = types.push(TypeDef::scalar("i8", ScalarType::I8));
+        let bool_type = types.push(TypeDef::scalar("bool", ScalarType::Bool));
+        let reference_type = types.push(TypeDef::reference("bool-ref", bool_type, permission));
+        let destination = Place::local(LocalId(0));
+        let missing = Place::local(LocalId(1));
+        let reference = Place::local(LocalId(2));
+        let program = one_block(
+            types,
+            vec![
+                LocalDecl::new("result", bool_type, false),
+                LocalDecl::new("missing", i8_type, false),
+                LocalDecl::new("reference", reference_type, false),
+            ],
+            vec![
+                Statement::Init {
+                    dst: destination.clone(),
+                    src: Operand::Constant(Value::Bool(false)),
+                },
+                Statement::Init {
+                    dst: reference,
+                    src: Operand::ReferenceRoot {
+                        permission,
+                        place: destination.clone(),
+                    },
+                },
+                ordering(
+                    destination.clone(),
+                    i8_type,
+                    Operand::Move(missing.clone().into()),
+                    Operand::Move(missing.into()),
+                ),
+            ],
+        );
+
+        let error = validate_program(program)
+            .expect_err("overlapping reference authority blocks direct ordering dst");
+        assert_eq!(
+            error.kind,
+            MirValidationErrorKind::DirectAccessConflictWithReferenceAuthority {
+                place: destination,
+            }
+        );
+    }
+}
