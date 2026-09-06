@@ -28,7 +28,7 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
 fn selection(
     statement: &Statement,
 ) -> (
-    &runen_hir::RecordPatternScrutinee,
+    &RecordPatternScrutinee,
     &[runen_hir::RecordPatternLiteralTest],
     &[runen_hir::RecordPatternBinding],
     Option<&RecordPatternTransientCleanup>,
