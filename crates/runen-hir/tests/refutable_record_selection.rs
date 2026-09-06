@@ -25,16 +25,16 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
-fn selection(
-    statement: &Statement,
-) -> (
-    &RecordPatternScrutinee,
-    &[runen_hir::RecordPatternLiteralTest],
-    &[runen_hir::RecordPatternBinding],
-    Option<&RecordPatternTransientCleanup>,
-    &runen_hir::Block,
-    Option<&runen_hir::Block>,
-) {
+type SelectionView<'a> = (
+    &'a RecordPatternScrutinee,
+    &'a [runen_hir::RecordPatternLiteralTest],
+    &'a [runen_hir::RecordPatternBinding],
+    Option<&'a RecordPatternTransientCleanup>,
+    &'a runen_hir::Block,
+    Option<&'a runen_hir::Block>,
+);
+
+fn selection(statement: &Statement) -> SelectionView<'_> {
     let Statement::RefutableRecordSelection {
         scrutinee,
         tests,
