@@ -728,6 +728,13 @@ pub enum Statement {
         left: Operand,
         right: Operand,
     },
+    /// Fixed-width integer strict less-than into wholly vacant direct Bool storage.
+    IntegerLt {
+        dst: Place,
+        operand_type: TypeId,
+        left: Operand,
+        right: Operand,
+    },
     /// Same-format binary floating addition under one explicit numeric contract.
     FloatAdd {
         dst: Place,

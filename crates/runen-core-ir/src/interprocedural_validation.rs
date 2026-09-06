@@ -105,6 +105,8 @@ pub enum MirValidationErrorKind {
     IntegerOrRequiresInteger(TypeId),
     IntegerEqRequiresBoolDestination(TypeId),
     IntegerEqRequiresIntegerOperands(TypeId),
+    IntegerLtRequiresBoolDestination(TypeId),
+    IntegerLtRequiresIntegerOperands(TypeId),
     FloatAddRequiresFloat(TypeId),
     FloatSubRequiresFloat(TypeId),
     FloatMulRequiresFloat(TypeId),
@@ -119,6 +121,7 @@ pub enum MirValidationErrorKind {
     IntegerXorRequiresVacant(Place),
     IntegerOrRequiresVacant(Place),
     IntegerEqRequiresVacant(Place),
+    IntegerLtRequiresVacant(Place),
     FloatAddRequiresVacant(Place),
     FloatSubRequiresVacant(Place),
     FloatMulRequiresVacant(Place),
@@ -738,6 +741,12 @@ fn validate_static_statement(
             left,
             right,
         } => validate_static_integer_eq(types, body, dst, *operand_type, left, right, point),
+        Statement::IntegerLt {
+            dst,
+            operand_type,
+            left,
+            right,
+        } => validate_static_integer_lt(types, body, dst, *operand_type, left, right, point),
         Statement::FloatAdd {
             dst, left, right, ..
         } => validate_static_binary_numeric(
@@ -911,6 +920,38 @@ fn validate_static_integer_eq(
         return Err(point_error(
             point,
             MirValidationErrorKind::IntegerEqRequiresIntegerOperands(operand_type),
+        ));
+    }
+    validate_operand_type(types, body, left, operand_type, point)?;
+    validate_operand_type(types, body, right, operand_type, point)
+}
+
+fn validate_static_integer_lt(
+    types: &TypeTable,
+    body: &Body,
+    dst: &Place,
+    operand_type: TypeId,
+    left: &Operand,
+    right: &Operand,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    let destination_type = place_type(types, body, dst, point)?;
+    if !is_bool_type(types, destination_type) {
+        return Err(point_error(
+            point,
+            MirValidationErrorKind::IntegerLtRequiresBoolDestination(destination_type),
+        ));
+    }
+    if types.get(operand_type).is_none() {
+        return Err(point_error(
+            point,
+            MirValidationErrorKind::UnknownType(operand_type),
+        ));
+    }
+    if !is_integer_type(types, operand_type) {
+        return Err(point_error(
+            point,
+            MirValidationErrorKind::IntegerLtRequiresIntegerOperands(operand_type),
         ));
     }
     validate_operand_type(types, body, left, operand_type, point)?;
@@ -1748,6 +1789,23 @@ fn validate_state_statement(
                     state,
                     (dst, left, right),
                     MirValidationErrorKind::IntegerEqRequiresVacant,
+                    point,
+                )?,
+                DefinedStep::NoDefinedContinuation
+            ) {
+                return Ok(DefinedStep::NoDefinedContinuation);
+            }
+        }
+        Statement::IntegerLt {
+            dst, left, right, ..
+        } => {
+            if matches!(
+                validate_state_binary_numeric(
+                    types,
+                    body,
+                    state,
+                    (dst, left, right),
+                    MirValidationErrorKind::IntegerLtRequiresVacant,
                     point,
                 )?,
                 DefinedStep::NoDefinedContinuation
