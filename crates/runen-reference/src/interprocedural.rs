@@ -281,6 +281,21 @@ impl RuntimeValue {
         Self::Bool(equal)
     }
 
+    fn integer_lt(left: Self, right: Self) -> Self {
+        let less = match (left, right) {
+            (Self::I8(left), Self::I8(right)) => left < right,
+            (Self::I16(left), Self::I16(right)) => left < right,
+            (Self::I32(left), Self::I32(right)) => left < right,
+            (Self::I64(left), Self::I64(right)) => left < right,
+            (Self::U8(left), Self::U8(right)) => left < right,
+            (Self::U16(left), Self::U16(right)) => left < right,
+            (Self::U32(left), Self::U32(right)) => left < right,
+            (Self::U64(left), Self::U64(right)) => left < right,
+            _ => unreachable!("validated IntegerLt has matching fixed-width integer operands"),
+        };
+        Self::Bool(less)
+    }
+
     fn floating_add(contract: NumericContract, left: Self, right: Self) -> Self {
         match contract {
             NumericContract::Standard | NumericContract::Reproducible | NumericContract::Fast => {
@@ -763,6 +778,16 @@ impl Machine {
                 right,
                 VerificationWriteKind::IntegerEq,
                 RuntimeValue::integer_eq,
+            ),
+            Statement::IntegerLt {
+                dst, left, right, ..
+            } => self.binary_write(
+                frame_index,
+                dst,
+                left,
+                right,
+                VerificationWriteKind::IntegerLt,
+                RuntimeValue::integer_lt,
             ),
             Statement::FloatAdd {
                 contract,
