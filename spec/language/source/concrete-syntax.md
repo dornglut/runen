@@ -763,6 +763,7 @@ ValueAtom            = Literal
                      | NumericContractSelectedValue
 SafeReferenceValue                    = "&" SafeReferenceAfterAmpersand
 SafeReferenceAfterAmpersand           = "mut" ReplacementReferenceAfterMut | SharedReferenceAfterAmpersand
+SharedReferenceAfterAmpersand         = SharedReferenceReborrowTarget | SharedReferenceRootTarget
 SharedReferenceReborrowTarget         = "*" UserIdentifier FieldSelector*
 SharedReferenceRootTarget             = UserIdentifier FieldSelector*
 ReplacementReferenceAfterMut          = ReplacementReferenceReborrowTarget | ReplacementReferenceRootTarget
