@@ -403,10 +403,7 @@ impl TypeMap {
         for (field_index, field) in fields.iter().enumerate().rev() {
             path.push(field_index);
             self.append_remaining_frontier_after_consumed_paths(
-                field.ty,
-                consumed,
-                path,
-                frontier,
+                field.ty, consumed, path, frontier,
             )?;
             path.pop();
         }
@@ -1373,9 +1370,10 @@ impl<'a> FunctionLowerer<'a> {
                         "producer-backed refutable selection success cleanup does not match canonical remaining frontier",
                     ));
                 }
-                let mismatch_cleanup = mismatch_cleanup.ok_or(LoweringError::InvalidHirInvariant(
-                    "producer-backed refutable selection lacks mismatch cleanup",
-                ))?;
+                let mismatch_cleanup =
+                    mismatch_cleanup.ok_or(LoweringError::InvalidHirInvariant(
+                        "producer-backed refutable selection lacks mismatch cleanup",
+                    ))?;
                 if mismatch_cleanup.paths.as_slice() != [Vec::<usize>::new()] {
                     return Err(LoweringError::InvalidHirInvariant(
                         "producer-backed refutable selection mismatch cleanup is not the complete transient root",
@@ -1412,7 +1410,10 @@ impl<'a> FunctionLowerer<'a> {
             let matched_target = self.new_block()?;
             let place = self.local_place(source_local, &test.fields)?;
             match (test.ty, test.value) {
-                (hir::Type::Intrinsic(hir::IntrinsicType::Bool), hir::LiteralValue::Bool(value)) => {
+                (
+                    hir::Type::Intrinsic(hir::IntrinsicType::Bool),
+                    hir::LiteralValue::Bool(value),
+                ) => {
                     let (true_target, false_target) = if value {
                         (matched_target, mismatch_target)
                     } else {
@@ -1427,13 +1428,13 @@ impl<'a> FunctionLowerer<'a> {
                 (
                     hir::Type::Intrinsic(
                         hir::IntrinsicType::I8
-                            | hir::IntrinsicType::I16
-                            | hir::IntrinsicType::I32
-                            | hir::IntrinsicType::I64
-                            | hir::IntrinsicType::U8
-                            | hir::IntrinsicType::U16
-                            | hir::IntrinsicType::U32
-                            | hir::IntrinsicType::U64,
+                        | hir::IntrinsicType::I16
+                        | hir::IntrinsicType::I32
+                        | hir::IntrinsicType::I64
+                        | hir::IntrinsicType::U8
+                        | hir::IntrinsicType::U16
+                        | hir::IntrinsicType::U32
+                        | hir::IntrinsicType::U64,
                     ),
                     literal,
                 ) => {
