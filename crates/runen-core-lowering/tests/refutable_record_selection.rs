@@ -446,3 +446,165 @@ fn lowering_rejects_direct_root_with_impossible_pattern_transient_mismatch_clean
         ))
     );
 }
+
+#[test]
+fn pattern_activity_is_reachable_only_after_successful_producer_call_continuation() {
+    let lowered = lower_source(
+        "record Ticket {} record R { tag: I8, ticket: Ticket, tail: U8 } \
+         fn make() -> R { return R { tag: 1, ticket: Ticket {}, tail: 2 }; } \
+         fn f() { \
+             if let R { tag: 1, ticket: moved, tail: copied } = (make()) { fault; } else { fault; } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let moved_local = f
+        .body
+        .locals
+        .iter()
+        .position(|local| local.name == "moved")
+        .expect("success binding local");
+    let copied_local = f
+        .body
+        .locals
+        .iter()
+        .position(|local| local.name == "copied")
+        .expect("success binding local");
+
+    let (producer_block, source, continuation) = f
+        .body
+        .blocks
+        .iter()
+        .enumerate()
+        .find_map(|(block, body)| match &body.terminator {
+            Terminator::Call {
+                destination: Some(destination),
+                target,
+                ..
+            } => Some((block, destination.local, *target)),
+            _ => None,
+        })
+        .expect("producer-backed scrutinee must lower through one result-bearing call");
+    let eqs = integer_eqs(f);
+    assert_eq!(eqs.len(), 1);
+    assert_eq!(
+        continuation.0 as usize, eqs[0].0,
+        "the first pattern test must begin only on the producer call's successful continuation"
+    );
+
+    assert!(
+        !f.body.blocks[producer_block]
+            .statements
+            .iter()
+            .any(|statement| matches!(statement, CoreStatement::IntegerEq { .. })),
+        "producer evaluation must not perform pattern tests before the call returns"
+    );
+    assert!(
+        !f.body.blocks[producer_block]
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Init { dst, .. }
+                    if dst.local.0 as usize == moved_local || dst.local.0 as usize == copied_local
+            )),
+        "producer evaluation must not establish success bindings before the call returns"
+    );
+    assert!(
+        !f.body.blocks[producer_block]
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Drop {
+                    place: PlaceAccess::Direct(place),
+                } if place.local == source
+            )),
+        "producer evaluation must not perform pattern-transient cleanup before the call returns"
+    );
+}
+
+#[test]
+fn success_body_starts_only_after_all_bindings_and_producer_cleanup() {
+    let lowered = lower_source(
+        "record Ticket {} record R { tag: I8, ticket: Ticket, count: U8 } \
+         fn sink_ticket(value: Ticket) {} fn sink_count(value: U8) {} \
+         fn make() -> R { return R { tag: 1, ticket: Ticket {}, count: 2 }; } \
+         fn f() { \
+             if let R { tag: 1, ticket: moved, count: copied } = (make()) { \
+                 sink_ticket(moved); sink_count(copied); \
+             } else { fault; } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let moved_local = f
+        .body
+        .locals
+        .iter()
+        .position(|local| local.name == "moved")
+        .expect("non-duplicable success binding local");
+    let copied_local = f
+        .body
+        .locals
+        .iter()
+        .position(|local| local.name == "copied")
+        .expect("duplicable success binding local");
+
+    let eqs = integer_eqs(f);
+    assert_eq!(eqs.len(), 1);
+    let (test_block, CoreStatement::IntegerEq { left, .. }) = eqs[0] else {
+        unreachable!();
+    };
+    let Operand::Copy(PlaceAccess::Direct(tested)) = left else {
+        panic!("integer test must read the producer-backed pattern transient");
+    };
+    let source = tested.local;
+    let Terminator::Branch { true_target, .. } = f.body.blocks[test_block].terminator else {
+        panic!("integer pattern test must branch to the full-match path");
+    };
+    let success_entry = &f.body.blocks[true_target.0 as usize];
+
+    let moved_init = success_entry
+        .statements
+        .iter()
+        .position(|statement| matches!(
+            statement,
+            CoreStatement::Init { dst, .. } if dst.local.0 as usize == moved_local
+        ))
+        .expect("full match must transfer the non-duplicable binding");
+    let copied_init = success_entry
+        .statements
+        .iter()
+        .position(|statement| matches!(
+            statement,
+            CoreStatement::Init { dst, .. } if dst.local.0 as usize == copied_local
+        ))
+        .expect("full match must produce the duplicable binding");
+    let source_drops = success_entry
+        .statements
+        .iter()
+        .enumerate()
+        .filter_map(|(index, statement)| match statement {
+            CoreStatement::Drop {
+                place: PlaceAccess::Direct(place),
+            } if place.local == source => Some((index, place.projections.clone())),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        source_drops
+            .iter()
+            .map(|(_, path)| path.clone())
+            .collect::<Vec<_>>(),
+        [vec![Projection::Field(2)], vec![Projection::Field(0)]],
+        "producer success must clean exactly the retained post-binding frontier"
+    );
+    let first_cleanup = source_drops[0].0;
+    assert!(moved_init < first_cleanup && copied_init < first_cleanup);
+    assert!(matches!(
+        success_entry.terminator,
+        Terminator::Call {
+            destination: None,
+            ..
+        }
+    ));
+}
