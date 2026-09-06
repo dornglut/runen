@@ -1,6 +1,7 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, LiteralValue, ModuleId, OwnedUse, RecordPatternScrutinee,
-    RecordPatternTransientCleanup, SourceUnit, Statement, Type, ValueKind, build_typed_hir,
+    DiagnosticKind, ImportTarget, IntrinsicType, LiteralValue, ModuleId, OwnedUse,
+    RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit, Statement, Type, ValueKind,
+    build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -328,4 +329,174 @@ fn returning_success_is_not_compared_with_sole_normal_mismatch_outcome() {
          }",
     )
     .expect("only the mismatch outcome continues normally");
+}
+
+#[test]
+fn qualified_foreign_and_nested_heads_preserve_field_accessibility() {
+    let dependency = parse(
+        "export record Inner { export flag: Bool, hidden: Bool } \
+         export record Outer { export inner: Inner }",
+    );
+    let accepted = parse(
+        "import dep; fn f(root: dep::Outer) { \
+             if let dep::Outer { inner: dep::Inner { flag: true, .. } } = (root) {} \
+         }",
+    );
+    assert!(dependency.errors().is_empty(), "{:?}", dependency.errors());
+    assert!(accepted.errors().is_empty(), "{:?}", accepted.errors());
+    let dep_module = ModuleId::new(1);
+    let main_module = ModuleId::new(2);
+    let imports = [ImportTarget::new("dep", dep_module).expect("accepted import alias")];
+    build_typed_hir(&[
+        SourceUnit::new(dep_module, &dependency, &[]),
+        SourceUnit::new(main_module, &accepted, &imports),
+    ])
+    .expect("qualified foreign and nested visible test fields must remain accessible");
+
+    let rejected = parse(
+        "import dep; fn f(root: dep::Outer) { \
+             if let dep::Outer { inner: dep::Inner { hidden: true, .. } } = (root) {} \
+         }",
+    );
+    assert!(rejected.errors().is_empty(), "{:?}", rejected.errors());
+    let errors = build_typed_hir(&[
+        SourceUnit::new(dep_module, &dependency, &[]),
+        SourceUnit::new(main_module, &rejected, &imports),
+    ])
+    .expect_err("qualified nested private test fields must remain inaccessible");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::InaccessibleRecordField
+    ));
+}
+
+#[test]
+fn direct_root_test_requires_the_selected_path_to_be_fully_available() {
+    let errors = build(
+        "record Ticket {} \
+         record Inner { flag: Bool, ticket: Ticket } \
+         record Outer { inner: Inner } \
+         fn take(value: Inner) {} \
+         fn f(root: Outer) { \
+             take(root.inner); \
+             if let Outer { inner: Inner { flag: true, .. } } = (root) {} \
+         }",
+    )
+    .expect_err("a consumed ancestor makes the selected literal-test path unavailable");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnavailableFieldValue
+    ));
+}
+
+#[test]
+fn direct_root_tests_require_shared_safe_authority_compatibility() {
+    let errors = build(
+        "record R { flag: Bool } \
+         fn f(seed: R) { \
+             let mut root: R = seed; \
+             let replacement: &mut R = &mut root; \
+             if let R { flag: true } = (root) {} \
+         }",
+    )
+    .expect_err("literal testing may not bypass overlapping replacement authority");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::ReferencePermissionUnavailable
+    ));
+}
+
+#[test]
+fn nonduplicable_success_binding_retains_exclusive_authority_requirement() {
+    let errors = build(
+        "record Ticket {} record R { flag: Bool, ticket: Ticket } \
+         fn f(root: R) { \
+             let shared: &Ticket = &root.ticket; \
+             if let R { flag: true, ticket: moved } = (root) { fault; } else { fault; } \
+         }",
+    )
+    .expect_err("non-duplicable binding transfer requires Exclusive-compatible access");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::ReferencePermissionUnavailable
+    ));
+}
+
+#[test]
+fn omitted_mismatch_is_the_sole_normal_outcome_when_success_faults() {
+    let hir = build(
+        "record R { flag: Bool, value: I8 } \
+         fn f(root: R) { \
+             if let R { flag: true, .. } = (root) { fault; } \
+             let observed: I8 = root.value; \
+         }",
+    )
+    .expect("omitted mismatch must carry the unchanged normal state without a synthetic scope");
+    let f = function(&hir, "f");
+    let (_, _, bindings, _, success, mismatch) = selection(&f.body.statements[0]);
+    assert!(bindings.is_empty());
+    assert!(!success.has_normal_continuation);
+    assert!(mismatch.is_none());
+    assert!(matches!(f.body.statements[1], Statement::Local { .. }));
+}
+
+#[test]
+fn restoring_success_consumption_allows_exact_two_normal_outcome_join() {
+    build(
+        "record Ticket {} record R { flag: Bool, ticket: Ticket } \
+         fn take(value: R) {} \
+         fn f(seed: R) { \
+             let mut root: R = seed; \
+             if let R { flag: true, ticket: moved } = (root) { root.ticket = moved; } \
+             take(root); \
+         }",
+    )
+    .expect("success may restore its consumed path so both normal outcomes become exactly equal");
+}
+
+#[test]
+fn exact_pointer_origin_and_external_referent_join_rules_are_reused() {
+    let pointer_errors = build(
+        "record Flag { flag: Bool } \
+         fn f(root: Flag, a: I64, b: I64) { \
+             let mut p: raw I64 = raw &a; \
+             if let Flag { flag: true } = (root) { p = raw &b; } else {} \
+         }",
+    )
+    .expect_err("two normal selection outcomes require exact equal raw-pointer origins");
+    assert!(has_diagnostic(
+        &pointer_errors,
+        DiagnosticKind::ConditionalPointerOriginMismatch
+    ));
+
+    build(
+        "record Flag { flag: Bool } \
+         fn f(root: Flag, a: I64, b: I64) { \
+             let mut p: raw I64 = raw &a; \
+             if let Flag { flag: true } = (root) { p = raw &b; p = raw &a; } else {} \
+         }",
+    )
+    .expect("restoring the raw-pointer origin must permit the two-normal selection join");
+
+    let reference_errors = build(
+        "record Ticket { value: I64 } record Flag { flag: Bool } \
+         fn f(root: Flag, r: &mut Ticket) { \
+             if let Flag { flag: true } = (root) { let moved: Ticket = *r; } else {} \
+         }",
+    )
+    .expect_err("two normal selection outcomes require exact equal external-referent state");
+    assert!(has_diagnostic(
+        &reference_errors,
+        DiagnosticKind::ConditionalReferenceStateMismatch
+    ));
+
+    build(
+        "record Ticket { value: I64 } record Flag { flag: Bool } \
+         fn f(root: Flag, r: &mut Ticket) { \
+             if let Flag { flag: true } = (root) { \
+                 let moved: Ticket = *r; *r = moved; \
+             } else {} \
+         }",
+    )
+    .expect("restoring the replacement referent must permit the two-normal selection join");
 }
