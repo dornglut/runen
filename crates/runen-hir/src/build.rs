@@ -4399,13 +4399,13 @@ fn validate_value_inner(
                     SyntaxKind::Star,
                     Type::Intrinsic(
                         IntrinsicType::I8
-                            | IntrinsicType::I16
-                            | IntrinsicType::I32
-                            | IntrinsicType::I64
-                            | IntrinsicType::U8
-                            | IntrinsicType::U16
-                            | IntrinsicType::U32
-                            | IntrinsicType::U64,
+                        | IntrinsicType::I16
+                        | IntrinsicType::I32
+                        | IntrinsicType::I64
+                        | IntrinsicType::U8
+                        | IntrinsicType::U16
+                        | IntrinsicType::U32
+                        | IntrinsicType::U64,
                     ),
                 ) => {
                     let mut operands = node.children().filter(|child| is_value_node(child.kind()));
@@ -4658,7 +4658,7 @@ fn validate_value_inner(
                     },
                     location: evidence_location,
                 });
-                EqualityOperandEvidence::Invalid
+                Invalid
             }
 
             fn classify_equality_operand(
