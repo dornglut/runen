@@ -47,10 +47,10 @@ fn integer_eqs(function: &CoreFunction) -> Vec<(usize, &CoreStatement)> {
         .collect()
 }
 
-fn selection_mut(
-    compilation: &mut runen_hir::TypedCompilation,
+fn selection_mut<'a>(
+    compilation: &'a mut runen_hir::TypedCompilation,
     function_name: &str,
-) -> &mut runen_hir::Statement {
+) -> &'a mut Statement {
     compilation
         .functions
         .iter_mut()
