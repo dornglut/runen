@@ -13,6 +13,7 @@ pub enum VerificationWriteKind {
     IntegerXor,
     IntegerOr,
     IntegerEq,
+    IntegerLt,
     FloatAdd,
     FloatSub,
     FloatMul,
