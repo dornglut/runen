@@ -181,7 +181,8 @@ fn integer_lt_uses_explicit_operand_type_for_constants_and_place_constant_pairs(
             ],
         );
 
-        validate_program(program).expect("place/constant ordering must use explicit operand TypeId");
+        validate_program(program)
+            .expect("place/constant ordering must use explicit operand TypeId");
     }
 }
 
