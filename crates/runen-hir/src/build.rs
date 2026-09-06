@@ -10,10 +10,10 @@ use crate::{
     BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
     LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
-    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
-    RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent, Return,
-    SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type, TypedCompilation,
-    Value, ValueKind, type_is_duplicable_in_records,
+    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternLiteralTest,
+    RecordPatternScrutinee, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
+    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type,
+    TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -1686,6 +1686,16 @@ fn validate_body_statement(
             next_binding,
             diagnostics,
         ),
+        SyntaxKind::RefutableRecordSelectionStatement => validate_refutable_record_selection(
+            header,
+            node,
+            context,
+            value_context,
+            state,
+            control,
+            next_binding,
+            diagnostics,
+        ),
         SyntaxKind::AssignmentStatement => {
             validate_assignment(header, node, context, value_context, state, diagnostics)
         }
@@ -1770,6 +1780,13 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
         } => else_block.as_ref().is_none_or(|else_block| {
             then_block.has_normal_continuation || else_block.has_normal_continuation
         }),
+        Statement::RefutableRecordSelection {
+            success_block,
+            mismatch_block,
+            ..
+        } => mismatch_block.as_ref().is_none_or(|mismatch_block| {
+            success_block.has_normal_continuation || mismatch_block.has_normal_continuation
+        }),
         Statement::While { .. }
         | Statement::Local { .. }
         | Statement::RecordDestructure { .. }
@@ -1794,9 +1811,35 @@ fn validate_block(
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Statement {
-    control.scopes.push(ScopeFrame {
-        direct_bindings: Vec::new(),
-    });
+    validate_block_with_direct_bindings(
+        header,
+        node,
+        context,
+        value_context,
+        state,
+        control,
+        next_binding,
+        Vec::new(),
+        diagnostics,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and semantic state explicitly"
+)]
+fn validate_block_with_direct_bindings(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
+    state: &mut SemanticState,
+    control: &mut ControlValidationContext,
+    next_binding: &mut usize,
+    direct_bindings: Vec<BindingId>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Statement {
+    control.scopes.push(ScopeFrame { direct_bindings });
     let mut statements = Vec::new();
     let mut terminal_return = None;
     let mut has_normal_continuation = true;
@@ -1861,6 +1904,7 @@ fn validate_block(
                 | Statement::Continue { .. }
                 | Statement::Block(_)
                 | Statement::If { .. }
+                | Statement::RefutableRecordSelection { .. }
                 | Statement::While { .. } => {}
             }
             has_normal_continuation = statement_has_normal_continuation(&statement);
@@ -2504,10 +2548,20 @@ struct ResolvedPatternBinding {
     location: SourceLocation,
 }
 
+#[derive(Debug, Clone)]
+struct ResolvedPatternLiteralTest {
+    fields: Vec<usize>,
+    ty: Type,
+    value: LiteralValue,
+    location: SourceLocation,
+}
+
 #[derive(Debug)]
 struct PatternValidation {
     valid: bool,
     bindings: Vec<ResolvedPatternBinding>,
+    tests: Vec<ResolvedPatternLiteralTest>,
+    literal_test_count: usize,
     seen_binding_names: BTreeSet<String>,
     active_binding_names: BTreeSet<String>,
 }
@@ -2517,6 +2571,8 @@ impl PatternValidation {
         Self {
             valid: true,
             bindings: Vec::new(),
+            tests: Vec::new(),
+            literal_test_count: 0,
             seen_binding_names: BTreeSet::new(),
             active_binding_names: active_bindings.keys().cloned().collect(),
         }
@@ -2669,6 +2725,248 @@ fn validate_record_pattern_node(
                 validation,
                 diagnostics,
             );
+        } else {
+            let identifiers = pattern_field
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .filter(|token| token.kind() == SyntaxKind::Ident)
+                .collect::<Vec<_>>();
+            let [_, binding_token] = identifiers.as_slice() else {
+                unreachable!("syntax-clean binding leaf has field and binding identifiers");
+            };
+            let binding_name = key(binding_token);
+            let binding_location = SourceLocation {
+                unit: header.unit,
+                range: binding_token.text_range(),
+            };
+            if !validation.seen_binding_names.insert(binding_name.clone()) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::DuplicatePatternBinding,
+                    location: binding_location,
+                });
+                validation.valid = false;
+            }
+            if validation.active_binding_names.contains(&binding_name) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::LocalShadowing,
+                    location: binding_location,
+                });
+                validation.valid = false;
+            }
+            validation.bindings.push(ResolvedPatternBinding {
+                fields: path.clone(),
+                name: binding_name,
+                ty: record_decl.fields[field].ty,
+                location: field_location,
+            });
+        }
+        path.pop();
+    }
+
+    if !has_rest && seen_fields.len() != record_decl.fields.len() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::MissingRecordPatternField,
+            location: location(header.unit, node),
+        });
+        validation.valid = false;
+    }
+
+    Some(record)
+}
+
+fn validate_refutable_record_pattern_node(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    expected: Option<Type>,
+    context: &BodyResolutionContext<'_>,
+    path: &mut Vec<usize>,
+    validation: &mut PatternValidation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<RecordId> {
+    debug_assert_eq!(node.kind(), SyntaxKind::RefutableRecordPattern);
+
+    let (record, head_location) = if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        let head_location = location(header.unit, &qualified);
+        let Some(entity) = resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        ) else {
+            validation.valid = false;
+            return None;
+        };
+        let record = match entity {
+            EntityId::Record(record) => record,
+            EntityId::Function(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRecordType,
+                    location: head_location,
+                });
+                validation.valid = false;
+                return None;
+            }
+        };
+        (record, head_location)
+    } else {
+        let head_token = direct_token(node, SyntaxKind::Ident);
+        let head_name = key(&head_token);
+        let head_location = SourceLocation {
+            unit: header.unit,
+            range: head_token.text_range(),
+        };
+        let record = match context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&head_name))
+            .copied()
+            .map(|entity| entity.entity)
+        {
+            Some(EntityId::Record(record)) => record,
+            Some(EntityId::Function(_)) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRecordType,
+                    location: head_location,
+                });
+                validation.valid = false;
+                return None;
+            }
+            None => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnresolvedName,
+                    location: head_location,
+                });
+                validation.valid = false;
+                return None;
+            }
+        };
+        (record, head_location)
+    };
+
+    let record_ty = Type::Record(record);
+    if let Some(expected) = expected
+        && expected != record_ty
+    {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected,
+                found: record_ty,
+            },
+            location: head_location,
+        });
+        validation.valid = false;
+    }
+
+    let record_decl = &context.records[record.0];
+    let has_rest = node
+        .children()
+        .any(|child| child.kind() == SyntaxKind::RecordPatternRest);
+    let mut seen_fields = BTreeSet::<usize>::new();
+    for pattern_field in node
+        .children()
+        .filter(|child| child.kind() == SyntaxKind::RefutableRecordPatternField)
+    {
+        let field_token = direct_token(&pattern_field, SyntaxKind::Ident);
+        let field_name = key(&field_token);
+        let field_location = SourceLocation {
+            unit: header.unit,
+            range: field_token.text_range(),
+        };
+
+        let Some(field) = record_decl
+            .fields
+            .iter()
+            .position(|field| field.name == field_name)
+        else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnknownRecordField,
+                location: field_location,
+            });
+            validation.valid = false;
+            continue;
+        };
+
+        if !seen_fields.insert(field) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicateRecordPatternField,
+                location: field_location,
+            });
+            validation.valid = false;
+        }
+
+        if !record_field_is_accessible(header.module, record_decl, field) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InaccessibleRecordField,
+                location: field_location,
+            });
+            validation.valid = false;
+        }
+
+        path.push(field);
+        if let Some(nested) = pattern_field
+            .children()
+            .find(|child| child.kind() == SyntaxKind::RefutableRecordPattern)
+        {
+            validate_refutable_record_pattern_node(
+                header,
+                &nested,
+                Some(record_decl.fields[field].ty),
+                context,
+                path,
+                validation,
+                diagnostics,
+            );
+        } else if let Some(literal_node) = pattern_field.children().find(|child| {
+            matches!(
+                child.kind(),
+                SyntaxKind::BooleanLiteral | SyntaxKind::DecimalIntegerLiteral
+            )
+        }) {
+            validation.literal_test_count += 1;
+            let ty = record_decl.fields[field].ty;
+            let literal_location = location(header.unit, &literal_node);
+            let value = match literal_node.kind() {
+                SyntaxKind::BooleanLiteral => {
+                    let found = Type::Intrinsic(IntrinsicType::Bool);
+                    if ty != found {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::TypeMismatch {
+                                expected: ty,
+                                found,
+                            },
+                            location: literal_location,
+                        });
+                        None
+                    } else {
+                        let token = literal_node
+                            .children_with_tokens()
+                            .filter_map(|element| element.into_token())
+                            .find(|token| {
+                                matches!(token.kind(), SyntaxKind::KwTrue | SyntaxKind::KwFalse)
+                            })
+                            .expect("syntax-clean Boolean pattern literal contains one token");
+                        Some(LiteralValue::Bool(token.kind() == SyntaxKind::KwTrue))
+                    }
+                }
+                SyntaxKind::DecimalIntegerLiteral => {
+                    materialize_integer_literal(&literal_node, ty, literal_location, diagnostics)
+                }
+                _ => unreachable!("refutable pattern literal has accepted syntax kind"),
+            };
+            if let Some(value) = value {
+                validation.tests.push(ResolvedPatternLiteralTest {
+                    fields: path.clone(),
+                    ty,
+                    value,
+                    location: field_location,
+                });
+            } else {
+                validation.valid = false;
+            }
         } else {
             let identifiers = pattern_field
                 .children_with_tokens()
@@ -2906,6 +3204,338 @@ fn validate_record_destructure(
         record,
         scrutinee,
         bindings: pattern_bindings,
+        location: location(header.unit, node),
+    })
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and semantic state explicitly"
+)]
+fn validate_refutable_record_selection(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    value_context: &ValueValidationContext,
+    state: &mut SemanticState,
+    control: &mut ControlValidationContext,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let pattern_node = direct_child(node, SyntaxKind::RefutableRecordPattern);
+    let producer_node = node.children().find(|child| {
+        matches!(
+            child.kind(),
+            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+        )
+    });
+    let direct_root_token = producer_node
+        .is_none()
+        .then(|| direct_token(node, SyntaxKind::Ident));
+
+    let mut validation = PatternValidation::new(&state.bindings);
+    let mut path = Vec::new();
+    let record = validate_refutable_record_pattern_node(
+        header,
+        &pattern_node,
+        None,
+        context,
+        &mut path,
+        &mut validation,
+        diagnostics,
+    )?;
+    if validation.literal_test_count == 0 {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::RefutableRecordPatternRequiresLiteralTest,
+            location: location(header.unit, &pattern_node),
+        });
+        validation.valid = false;
+    }
+
+    let direct_root = direct_root_token.map(|root_token| {
+        let root_name = key(&root_token);
+        let root_location = SourceLocation {
+            unit: header.unit,
+            range: root_token.text_range(),
+        };
+        (root_name, root_location)
+    });
+    let root_state = if let Some((root_name, root_location)) = &direct_root {
+        match state.bindings.get(root_name).cloned() {
+            Some(binding) => Some(binding),
+            None => {
+                let entity = context
+                    .modules
+                    .get(&header.module)
+                    .and_then(|module| module.namespace.get(root_name));
+                diagnostics.push(Diagnostic {
+                    kind: if entity.is_some() {
+                        DiagnosticKind::ExpectedValueBinding
+                    } else {
+                        DiagnosticKind::UnresolvedName
+                    },
+                    location: *root_location,
+                });
+                return None;
+            }
+        }
+    } else {
+        None
+    };
+
+    if let (Some(root_state), Some((_, root_location))) = (&root_state, &direct_root) {
+        if root_state.ty != Type::Record(record) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::TypeMismatch {
+                    expected: Type::Record(record),
+                    found: root_state.ty,
+                },
+                location: *root_location,
+            });
+            validation.valid = false;
+        } else {
+            for test in &validation.tests {
+                if root_state.ownership.path_availability(&test.fields)
+                    != PathAvailability::FullyAvailable
+                {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::UnavailableFieldValue,
+                        location: test.location,
+                    });
+                    validation.valid = false;
+                    continue;
+                }
+                let target = ReferenceTarget::local(root_state.id, &test.fields);
+                if !state.target_satisfies_shared_requirement(&target) {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::ReferencePermissionUnavailable,
+                        location: test.location,
+                    });
+                    validation.valid = false;
+                }
+            }
+            for leaf in &validation.bindings {
+                if root_state.ownership.path_availability(&leaf.fields)
+                    != PathAvailability::FullyAvailable
+                {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::UnavailableFieldValue,
+                        location: leaf.location,
+                    });
+                    validation.valid = false;
+                    continue;
+                }
+                let target = ReferenceTarget::local(root_state.id, &leaf.fields);
+                let compatible = if context.type_is_duplicable(leaf.ty) {
+                    state.target_satisfies_shared_requirement(&target)
+                } else {
+                    state.target_satisfies_exclusive_requirement(&target)
+                };
+                if !compatible {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::ReferencePermissionUnavailable,
+                        location: leaf.location,
+                    });
+                    validation.valid = false;
+                }
+            }
+        }
+    }
+
+    if !validation.valid {
+        return None;
+    }
+
+    let mut post_scrutinee = state.clone();
+    let (scrutinee, mismatch_cleanup) = if let Some(root_state) = root_state.as_ref() {
+        (RecordPatternScrutinee::DirectRoot(root_state.id), None)
+    } else {
+        let producer_node =
+            producer_node.expect("syntax-clean producer-backed refutable pattern has producer");
+        let value = validate_value(
+            header,
+            &producer_node,
+            Type::Record(record),
+            context,
+            value_context,
+            &mut post_scrutinee,
+            diagnostics,
+        )?
+        .value;
+
+        let mut transient = StructuralOwnershipState::default();
+        for leaf in &validation.bindings {
+            if !context.type_is_duplicable(leaf.ty) {
+                transient.consume_path(&leaf.fields);
+            }
+        }
+        let success_cleanup = RecordPatternTransientCleanup {
+            paths: remaining_ownership_frontier(Type::Record(record), &transient, context.records),
+        };
+        (
+            RecordPatternScrutinee::Producer {
+                value,
+                cleanup: success_cleanup,
+            },
+            Some(RecordPatternTransientCleanup {
+                paths: vec![Vec::new()],
+            }),
+        )
+    };
+
+    let tests = validation
+        .tests
+        .iter()
+        .map(|test| RecordPatternLiteralTest {
+            fields: test.fields.clone(),
+            ty: test.ty,
+            value: test.value,
+        })
+        .collect::<Vec<_>>();
+
+    let mut success_state = post_scrutinee.clone();
+    let mut mismatch_state = post_scrutinee.clone();
+    let mut pattern_bindings = Vec::with_capacity(validation.bindings.len());
+    for resolved in validation.bindings {
+        let ownership = if context.type_is_duplicable(resolved.ty) {
+            OwnedUse::Duplicate
+        } else {
+            if let Some((root_name, _)) = &direct_root {
+                success_state
+                    .bindings
+                    .get_mut(root_name)
+                    .expect("validated refutable pattern root remains in success state")
+                    .ownership
+                    .consume_path(&resolved.fields);
+            }
+            OwnedUse::Consume
+        };
+        let binding = BindingId(*next_binding);
+        *next_binding += 1;
+        pattern_bindings.push(RecordPatternBinding {
+            fields: resolved.fields,
+            binding,
+            name: resolved.name.clone(),
+            ty: resolved.ty,
+            ownership,
+        });
+        let previous = success_state.bindings.insert(
+            resolved.name,
+            BindingState {
+                id: binding,
+                ty: resolved.ty,
+                mutability: AssignmentMutability::Immutable,
+                source: BindingSource::Local,
+                ownership: StructuralOwnershipState::default(),
+                reference_authority: None,
+                pointer_origin: None,
+                raw_pointer_target_domain: None,
+            },
+        );
+        debug_assert!(previous.is_none());
+    }
+
+    let mut blocks = node
+        .children()
+        .filter(|child| child.kind() == SyntaxKind::BlockStatement);
+    let success_node = blocks
+        .next()
+        .expect("syntax-clean refutable selection contains a success block");
+    let mismatch_node = blocks.next();
+    debug_assert!(blocks.next().is_none());
+
+    let success_diagnostics = diagnostics.len();
+    let success_direct_bindings = pattern_bindings
+        .iter()
+        .map(|binding| binding.binding)
+        .collect::<Vec<_>>();
+    let success_statement = validate_block_with_direct_bindings(
+        header,
+        &success_node,
+        context,
+        value_context,
+        &mut success_state,
+        control,
+        next_binding,
+        success_direct_bindings,
+        diagnostics,
+    );
+    let success_valid = diagnostics.len() == success_diagnostics;
+    let Statement::Block(success_block) = success_statement else {
+        unreachable!("block validation returns one block statement");
+    };
+
+    let (mismatch_block, mismatch_valid) = if let Some(mismatch_node) = mismatch_node {
+        let mismatch_diagnostics = diagnostics.len();
+        let mismatch_statement = validate_block(
+            header,
+            &mismatch_node,
+            context,
+            value_context,
+            &mut mismatch_state,
+            control,
+            next_binding,
+            diagnostics,
+        );
+        let mismatch_valid = diagnostics.len() == mismatch_diagnostics;
+        let Statement::Block(mismatch_block) = mismatch_statement else {
+            unreachable!("block validation returns one block statement");
+        };
+        (Some(mismatch_block), mismatch_valid)
+    } else {
+        (None, true)
+    };
+
+    if !success_valid || !mismatch_valid {
+        return None;
+    }
+
+    let success_normal = success_block.has_normal_continuation;
+    let mismatch_normal = mismatch_block
+        .as_ref()
+        .is_none_or(|mismatch_block| mismatch_block.has_normal_continuation);
+    match (success_normal, mismatch_normal) {
+        (true, true) => {
+            let ownership_equal = binding_ownership_matches_target(&success_state, &mismatch_state);
+            let pointer_equal = pointer_origins_match_target(&success_state, &mismatch_state);
+            let reference_equal = reference_state_matches_target(&success_state, &mismatch_state);
+
+            if !ownership_equal {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ConditionalOwnershipMismatch,
+                    location: location(header.unit, node),
+                });
+            }
+            if !pointer_equal {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ConditionalPointerOriginMismatch,
+                    location: location(header.unit, node),
+                });
+            }
+            if !reference_equal {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ConditionalReferenceStateMismatch,
+                    location: location(header.unit, node),
+                });
+            }
+            if !ownership_equal || !pointer_equal || !reference_equal {
+                return None;
+            }
+            *state = success_state;
+        }
+        (true, false) => *state = success_state,
+        (false, true) => *state = mismatch_state,
+        (false, false) => {}
+    }
+
+    Some(Statement::RefutableRecordSelection {
+        record,
+        scrutinee,
+        tests,
+        bindings: pattern_bindings,
+        mismatch_cleanup,
+        success_block,
+        mismatch_block: mismatch_block.map(Box::new),
         location: location(header.unit, node),
     })
 }

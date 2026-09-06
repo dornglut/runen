@@ -351,6 +351,64 @@ impl TypeMap {
         }
         Ok(())
     }
+
+    fn remaining_frontier_after_consumed_paths(
+        &self,
+        root: core::TypeId,
+        consumed: &[Vec<usize>],
+    ) -> Result<Vec<Vec<usize>>, LoweringError> {
+        let mut frontier = Vec::new();
+        let mut path = Vec::new();
+        self.append_remaining_frontier_after_consumed_paths(
+            root,
+            consumed,
+            &mut path,
+            &mut frontier,
+        )?;
+        Ok(frontier)
+    }
+
+    fn append_remaining_frontier_after_consumed_paths(
+        &self,
+        ty: core::TypeId,
+        consumed: &[Vec<usize>],
+        path: &mut Vec<usize>,
+        frontier: &mut Vec<Vec<usize>>,
+    ) -> Result<(), LoweringError> {
+        if consumed
+            .iter()
+            .any(|consumed| consumed.as_slice() == path.as_slice())
+        {
+            return Ok(());
+        }
+        let has_consumed_descendant = consumed.iter().any(|consumed| {
+            consumed.len() > path.len() && consumed.as_slice().starts_with(path.as_slice())
+        });
+        if !has_consumed_descendant {
+            frontier.push(path.clone());
+            return Ok(());
+        }
+
+        let definition = self
+            .types
+            .get(ty)
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "lowered Core type is absent from the type table",
+            ))?;
+        let core::TypeKind::Struct(fields) = &definition.kind else {
+            return Err(LoweringError::InvalidHirInvariant(
+                "refutable record selection consumed path does not match lowered Core type shape",
+            ));
+        };
+        for (field_index, field) in fields.iter().enumerate().rev() {
+            path.push(field_index);
+            self.append_remaining_frontier_after_consumed_paths(
+                field.ty, consumed, path, frontier,
+            )?;
+            path.pop();
+        }
+        Ok(())
+    }
 }
 
 fn collect_used_safe_reference_types(
@@ -407,6 +465,16 @@ fn collect_statement_safe_reference_types(
                     collect_statement_safe_reference_types(&else_block.statements, references);
                 }
             }
+            hir::Statement::RefutableRecordSelection {
+                success_block,
+                mismatch_block,
+                ..
+            } => {
+                collect_statement_safe_reference_types(&success_block.statements, references);
+                if let Some(mismatch_block) = mismatch_block {
+                    collect_statement_safe_reference_types(&mismatch_block.statements, references);
+                }
+            }
             hir::Statement::While { body, .. } => {
                 collect_statement_safe_reference_types(&body.statements, references);
             }
@@ -454,6 +522,16 @@ fn collect_statement_raw_pointer_types(
                 collect_statement_raw_pointer_types(&then_block.statements, pointees);
                 if let Some(else_block) = else_block {
                     collect_statement_raw_pointer_types(&else_block.statements, pointees);
+                }
+            }
+            hir::Statement::RefutableRecordSelection {
+                success_block,
+                mismatch_block,
+                ..
+            } => {
+                collect_statement_raw_pointer_types(&success_block.statements, pointees);
+                if let Some(mismatch_block) = mismatch_block {
+                    collect_statement_raw_pointer_types(&mismatch_block.statements, pointees);
                 }
             }
             hir::Statement::While { body, .. } => {
@@ -603,6 +681,26 @@ impl<'a> FunctionLowerer<'a> {
                         }
                     }
                 }
+                hir::Statement::RefutableRecordSelection {
+                    bindings,
+                    success_block,
+                    mismatch_block,
+                    ..
+                } => {
+                    for binding in bindings {
+                        let local =
+                            self.push_source_local(binding.name.clone(), binding.ty, false)?;
+                        if self.bindings.insert(binding.binding, local).is_some() {
+                            return Err(LoweringError::InvalidHirInvariant(
+                                "duplicate HIR binding identity",
+                            ));
+                        }
+                    }
+                    self.register_source_locals(&success_block.statements)?;
+                    if let Some(mismatch_block) = mismatch_block {
+                        self.register_source_locals(&mismatch_block.statements)?;
+                    }
+                }
                 hir::Statement::Block(block) => self.register_source_locals(&block.statements)?,
                 hir::Statement::If {
                     then_block,
@@ -725,6 +823,24 @@ impl<'a> FunctionLowerer<'a> {
                     bindings,
                     ..
                 } => self.lower_record_destructure(*record, scrutinee, bindings)?,
+                hir::Statement::RefutableRecordSelection {
+                    record,
+                    scrutinee,
+                    tests,
+                    bindings,
+                    mismatch_cleanup,
+                    success_block,
+                    mismatch_block,
+                    ..
+                } => self.lower_refutable_record_selection(
+                    *record,
+                    scrutinee,
+                    tests,
+                    bindings,
+                    mismatch_cleanup.as_ref(),
+                    success_block,
+                    mismatch_block.as_deref(),
+                )?,
                 hir::Statement::Assignment {
                     target,
                     fields,
@@ -807,6 +923,13 @@ impl<'a> FunctionLowerer<'a> {
                 ..
             } => else_block.as_ref().is_none_or(|else_block| {
                 then_block.has_normal_continuation || else_block.has_normal_continuation
+            }),
+            hir::Statement::RefutableRecordSelection {
+                success_block,
+                mismatch_block,
+                ..
+            } => mismatch_block.as_ref().is_none_or(|mismatch_block| {
+                success_block.has_normal_continuation || mismatch_block.has_normal_continuation
             }),
             hir::Statement::While { .. }
             | hir::Statement::Local { .. }
@@ -1085,6 +1208,322 @@ impl<'a> FunctionLowerer<'a> {
                 self.current = else_target.0 as usize;
                 self.lower_block(else_block)?;
             }
+        }
+
+        Ok(())
+    }
+
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "refutable selection lowering consumes distinct retained semantic facts explicitly"
+    )]
+    fn lower_refutable_record_selection(
+        &mut self,
+        record: hir::RecordId,
+        scrutinee: &hir::RecordPatternScrutinee,
+        tests: &[hir::RecordPatternLiteralTest],
+        bindings: &[hir::RecordPatternBinding],
+        mismatch_cleanup: Option<&hir::RecordPatternTransientCleanup>,
+        success_block: &hir::Block,
+        mismatch_block: Option<&hir::Block>,
+    ) -> Result<(), LoweringError> {
+        if tests.is_empty() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "refutable record selection has no literal tests",
+            ));
+        }
+
+        let expected_ty = self.types.get(hir::Type::Record(record))?;
+        let mut seen_paths = Vec::<Vec<usize>>::new();
+        for test in tests {
+            if test.fields.is_empty() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record literal test has empty structural path",
+                ));
+            }
+            if seen_paths
+                .iter()
+                .any(|seen| test.fields.starts_with(seen) || seen.starts_with(&test.fields))
+            {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record selection leaf paths are not structurally disjoint",
+                ));
+            }
+            seen_paths.push(test.fields.clone());
+
+            let projections = test
+                .fields
+                .iter()
+                .map(|field| {
+                    index_u32(*field, "Core field projection").map(core::Projection::Field)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let projected_ty = self.types.project_type(expected_ty, &projections)?;
+            let retained_ty = self.types.get(test.ty)?;
+            if projected_ty != retained_ty {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record literal test type does not match projected field type",
+                ));
+            }
+            if !literal_matches_type(test.value, test.ty) {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record literal test value does not match retained test type",
+                ));
+            }
+            if !matches!(
+                test.ty,
+                hir::Type::Intrinsic(
+                    hir::IntrinsicType::Bool
+                        | hir::IntrinsicType::I8
+                        | hir::IntrinsicType::I16
+                        | hir::IntrinsicType::I32
+                        | hir::IntrinsicType::I64
+                        | hir::IntrinsicType::U8
+                        | hir::IntrinsicType::U16
+                        | hir::IntrinsicType::U32
+                        | hir::IntrinsicType::U64
+                )
+            ) {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record literal test type is not Bool or fixed-width integer",
+                ));
+            }
+        }
+
+        let mut consumed_paths = Vec::new();
+        for binding in bindings {
+            if binding.fields.is_empty() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record selection binding has empty structural path",
+                ));
+            }
+            if seen_paths
+                .iter()
+                .any(|seen| binding.fields.starts_with(seen) || seen.starts_with(&binding.fields))
+            {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record selection leaf paths are not structurally disjoint",
+                ));
+            }
+            seen_paths.push(binding.fields.clone());
+
+            let projections = binding
+                .fields
+                .iter()
+                .map(|field| {
+                    index_u32(*field, "Core field projection").map(core::Projection::Field)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            let projected_ty = self.types.project_type(expected_ty, &projections)?;
+            let retained_ty = self.types.get(binding.ty)?;
+            if projected_ty != retained_ty {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record selection retained binding type does not match projected field type",
+                ));
+            }
+            let destination = self.binding(binding.binding)?;
+            if self.local_type(destination)? != retained_ty {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record selection destination local type does not match retained binding type",
+                ));
+            }
+            let expected_ownership = if self.compilation.type_is_duplicable(binding.ty) {
+                hir::OwnedUse::Duplicate
+            } else {
+                hir::OwnedUse::Consume
+            };
+            if binding.ownership != expected_ownership {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record selection binding ownership disagrees with retained type duplicability",
+                ));
+            }
+            if binding.ownership == hir::OwnedUse::Consume {
+                consumed_paths.push(binding.fields.clone());
+            }
+        }
+
+        let expected_success_cleanup = self
+            .types
+            .remaining_frontier_after_consumed_paths(expected_ty, &consumed_paths)?;
+        match scrutinee {
+            hir::RecordPatternScrutinee::DirectRoot(_) => {
+                if mismatch_cleanup.is_some() {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "direct-root refutable selection retains producer mismatch cleanup",
+                    ));
+                }
+            }
+            hir::RecordPatternScrutinee::Producer { value, cleanup } => {
+                if value.ty != hir::Type::Record(record) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "producer-backed refutable selection value type does not match its record identity",
+                    ));
+                }
+                if !matches!(
+                    &value.kind,
+                    hir::ValueKind::DirectCall { .. }
+                        | hir::ValueKind::RecordConstruction { .. }
+                        | hir::ValueKind::FieldValueUse { .. }
+                ) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record selection producer has unrepresented producer category",
+                    ));
+                }
+                if cleanup.paths.as_slice() != expected_success_cleanup.as_slice() {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "producer-backed refutable selection success cleanup does not match canonical remaining frontier",
+                    ));
+                }
+                let mismatch_cleanup =
+                    mismatch_cleanup.ok_or(LoweringError::InvalidHirInvariant(
+                        "producer-backed refutable selection lacks mismatch cleanup",
+                    ))?;
+                if mismatch_cleanup.paths.as_slice() != [Vec::<usize>::new()] {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "producer-backed refutable selection mismatch cleanup is not the complete transient root",
+                    ));
+                }
+            }
+        }
+
+        let source_local = match scrutinee {
+            hir::RecordPatternScrutinee::DirectRoot(root) => {
+                let root_local = self.binding(*root)?;
+                if self.local_type(root_local)? != expected_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record selection root type does not match its record identity",
+                    ));
+                }
+                root_local
+            }
+            hir::RecordPatternScrutinee::Producer { value, .. } => {
+                let temporary = self.lower_value(value)?;
+                if self.local_type(temporary)? != expected_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "producer-backed refutable selection temporary type does not match its record identity",
+                    ));
+                }
+                temporary
+            }
+        };
+
+        let mismatch_target = self.new_block()?;
+        let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+        let core_bool_ty = self.types.get(bool_ty)?;
+        for test in tests {
+            let matched_target = self.new_block()?;
+            let place = self.local_place(source_local, &test.fields)?;
+            match (test.ty, test.value) {
+                (
+                    hir::Type::Intrinsic(hir::IntrinsicType::Bool),
+                    hir::LiteralValue::Bool(value),
+                ) => {
+                    let (true_target, false_target) = if value {
+                        (matched_target, mismatch_target)
+                    } else {
+                        (mismatch_target, matched_target)
+                    };
+                    self.terminate_current(core::Terminator::Branch {
+                        condition: core::Operand::Copy(place.into()),
+                        true_target,
+                        false_target,
+                    })?;
+                }
+                (
+                    hir::Type::Intrinsic(
+                        hir::IntrinsicType::I8
+                        | hir::IntrinsicType::I16
+                        | hir::IntrinsicType::I32
+                        | hir::IntrinsicType::I64
+                        | hir::IntrinsicType::U8
+                        | hir::IntrinsicType::U16
+                        | hir::IntrinsicType::U32
+                        | hir::IntrinsicType::U64,
+                    ),
+                    literal,
+                ) => {
+                    let result = self.push_core_temporary(core_bool_ty)?;
+                    self.push_statement(core::Statement::IntegerEq {
+                        dst: core::Place::local(result),
+                        operand_type: self.types.get(test.ty)?,
+                        left: core::Operand::Copy(place.into()),
+                        right: core::Operand::Constant(lower_literal(literal)),
+                    });
+                    self.terminate_current(core::Terminator::Branch {
+                        condition: core::Operand::Move(core::Place::local(result).into()),
+                        true_target: matched_target,
+                        false_target: mismatch_target,
+                    })?;
+                }
+                _ => {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record literal test escaped prior retained-type validation",
+                    ));
+                }
+            }
+            self.current = matched_target.0 as usize;
+        }
+
+        for binding in bindings {
+            let source = self.local_place(source_local, &binding.fields)?;
+            let destination = self.binding(binding.binding)?;
+            let operand = match binding.ownership {
+                hir::OwnedUse::Duplicate => core::Operand::Copy(source.into()),
+                hir::OwnedUse::Consume => core::Operand::Move(source.into()),
+            };
+            self.push_statement(core::Statement::Init {
+                dst: core::Place::local(destination),
+                src: operand,
+            });
+        }
+        if let hir::RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee {
+            self.lower_record_pattern_transient_cleanup(source_local, expected_ty, cleanup)?;
+        }
+        self.lower_block(success_block)?;
+        let success_end = if success_block.has_normal_continuation {
+            Some(core::BasicBlockId(index_u32(
+                self.current,
+                "Core basic block identity",
+            )?))
+        } else {
+            None
+        };
+
+        self.current = mismatch_target.0 as usize;
+        if let hir::RecordPatternScrutinee::Producer { .. } = scrutinee {
+            self.lower_record_pattern_transient_cleanup(
+                source_local,
+                expected_ty,
+                mismatch_cleanup.expect(
+                    "validated producer-backed refutable selection retains mismatch cleanup",
+                ),
+            )?;
+        }
+        if let Some(mismatch_block) = mismatch_block {
+            self.lower_block(mismatch_block)?;
+        }
+        let mismatch_normal = mismatch_block.is_none_or(|block| block.has_normal_continuation);
+        let mismatch_end = if mismatch_normal {
+            Some(core::BasicBlockId(index_u32(
+                self.current,
+                "Core basic block identity",
+            )?))
+        } else {
+            None
+        };
+
+        match (success_end, mismatch_end) {
+            (Some(success_end), Some(mismatch_end)) => {
+                let join_target = self.new_block()?;
+                self.current = success_end.0 as usize;
+                self.terminate_current(core::Terminator::Goto(join_target))?;
+                self.current = mismatch_end.0 as usize;
+                self.terminate_current(core::Terminator::Goto(join_target))?;
+                self.current = join_target.0 as usize;
+            }
+            (Some(success_end), None) => self.current = success_end.0 as usize,
+            (None, Some(mismatch_end)) => self.current = mismatch_end.0 as usize,
+            (None, None) => {}
         }
 
         Ok(())
@@ -2667,6 +3106,40 @@ impl<'a> FunctionLowerer<'a> {
         }
         Ok(())
     }
+}
+
+fn literal_matches_type(value: hir::LiteralValue, ty: hir::Type) -> bool {
+    matches!(
+        (value, ty),
+        (
+            hir::LiteralValue::Bool(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::Bool)
+        ) | (
+            hir::LiteralValue::I8(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::I8)
+        ) | (
+            hir::LiteralValue::I16(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::I16)
+        ) | (
+            hir::LiteralValue::I32(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::I32)
+        ) | (
+            hir::LiteralValue::I64(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::I64)
+        ) | (
+            hir::LiteralValue::U8(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::U8)
+        ) | (
+            hir::LiteralValue::U16(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::U16)
+        ) | (
+            hir::LiteralValue::U32(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::U32)
+        ) | (
+            hir::LiteralValue::U64(_),
+            hir::Type::Intrinsic(hir::IntrinsicType::U64)
+        )
+    )
 }
 
 fn lower_literal(value: hir::LiteralValue) -> core::Value {
