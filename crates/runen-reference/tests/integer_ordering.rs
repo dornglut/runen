@@ -4,8 +4,8 @@ use runen_core_ir::{
     Value, validate_program,
 };
 use runen_reference::{
-    ExecutionReport, Machine, ObservedValue, TerminalStatus, VerificationEventKind,
-    VerificationWriteKind,
+    ExecutionReport, Machine, ObservedValue, TerminalStatus, UndefinedBehaviorKind,
+    VerificationEventKind, VerificationWriteKind,
 };
 
 fn execute_integer_lt(scalar: ScalarType, left: Value, right: Value) -> ExecutionReport {
@@ -286,4 +286,66 @@ fn integer_lt_result_drives_existing_bool_branch_without_fused_predicate() {
         execute_branching_integer_lt(9, 9).result,
         Some(ObservedValue::Bool(false))
     );
+}
+
+#[test]
+fn integer_lt_raw_move_ub_produces_no_ordering_write() {
+    let mut types = TypeTable::new();
+    let i8_type = types.push(TypeDef::scalar("i8", ScalarType::I8));
+    let bool_type = types.push(TypeDef::scalar("bool", ScalarType::Bool));
+    let pointer_type = types.push(TypeDef::raw_pointer("i8-ptr", i8_type));
+    let target = Place::local(LocalId(0));
+    let pointer = Place::local(LocalId(1));
+    let result = Place::local(LocalId(2));
+    let function = Function {
+        name: "main".into(),
+        parameters: Vec::new(),
+        result: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
+        body: Body {
+            locals: vec![
+                LocalDecl::new("target", i8_type, false),
+                LocalDecl::new("pointer", pointer_type, false),
+                LocalDecl::new("result", bool_type, false),
+            ],
+            loans: Vec::new(),
+            entry: BasicBlockId(0),
+            blocks: vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: pointer.clone(),
+                        src: Operand::AddressOf(target.into()),
+                    },
+                    Statement::IntegerLt {
+                        dst: result.clone(),
+                        operand_type: i8_type,
+                        left: Operand::RawMove(pointer.into()),
+                        right: Operand::Constant(Value::I8(1)),
+                    },
+                ],
+                Terminator::Return(None),
+            )],
+        },
+    };
+    let validated = validate_program(Program {
+        types,
+        functions: vec![function],
+    })
+    .expect("raw-move UB path is statically valid and has no defined continuation");
+    let error = Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect_err("RawMove from never-initialized target is undefined behavior");
+
+    assert!(matches!(
+        error.kind,
+        UndefinedBehaviorKind::RawMoveTargetNotLive { .. }
+    ));
+    assert!(!error.verification_events.iter().any(|event| matches!(
+        &event.kind,
+        VerificationEventKind::Write {
+            place,
+            kind: VerificationWriteKind::IntegerLt,
+        } if *place == result
+    )));
 }
