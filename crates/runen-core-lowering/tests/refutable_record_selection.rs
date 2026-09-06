@@ -566,18 +566,22 @@ fn success_body_starts_only_after_all_bindings_and_producer_cleanup() {
     let moved_init = success_entry
         .statements
         .iter()
-        .position(|statement| matches!(
-            statement,
-            CoreStatement::Init { dst, .. } if dst.local.0 as usize == moved_local
-        ))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Init { dst, .. } if dst.local.0 as usize == moved_local
+            )
+        })
         .expect("full match must transfer the non-duplicable binding");
     let copied_init = success_entry
         .statements
         .iter()
-        .position(|statement| matches!(
-            statement,
-            CoreStatement::Init { dst, .. } if dst.local.0 as usize == copied_local
-        ))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Init { dst, .. } if dst.local.0 as usize == copied_local
+            )
+        })
         .expect("full match must produce the duplicable binding");
     let source_drops = success_entry
         .statements
