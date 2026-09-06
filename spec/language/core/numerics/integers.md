@@ -228,6 +228,36 @@ A conforming implementation MAY use a native equality primitive only when it pre
 
 This represented operation defines no integer inequality operation, ordering, three-way comparison, floating comparison, pointer/reference comparison, structural comparison, conversion, constant-evaluation rule, source operator family, generic predicate abstraction, or backend instruction requirement.
 
+## Plain fixed-width integer strict ordering
+
+This revision represents one concrete fixed-width integer ordering predicate: **strict less-than**.
+
+Its represented operand scalar kinds are exactly:
+
+- signed fixed-width integer kinds `I8`, `I16`, `I32`, and `I64`; and
+- unsigned fixed-width integer kinds `U8`, `U16`, `U32`, and `U64`.
+
+For one selected fixed-width integer kind, let `l` and `r` be two semantic integer values of that same kind. The successful **fixed-width integer strict-order result** is exactly the semantic Bool value
+
+```text
+true   when l < r as mathematical integer values
+false  otherwise
+```
+
+The strict-order relation is total over every pair of semantic values in one represented fixed-width integer domain. Signed values are ordered as their accepted signed mathematical integers and unsigned values as their accepted nonnegative mathematical integers. The relation does not order canonical width residues, physical bit patterns, sign-bit encodings, byte sequences, ABI representations, host integer representations, or backend predicate results.
+
+Within each represented fixed-width integer domain the relation is a strict total order: it is irreflexive and transitive, and for every pair `l`, `r`, exactly one of `l < r`, `l = r`, or `r < l` holds. The equality case is the mathematical relation already represented by fixed-width integer equality above; this ordering relation does not redefine equality or fuse the two predicates.
+
+Because both operands are already admitted values of the same selected fixed-width integer domain, strict ordering performs no overflow mapping and has no checked, wrapping, saturating, or other overflow classification. Once both operand values are available, the comparison step is finite, deterministic, non-faulting, and non-diverging.
+
+This numerical relation does not make distinct Core type identities interchangeable merely because they have the same scalar kind. The Core operation that consumes this relation owns the exact operand type identity independently of its Bool result destination and owns result storage. Source-language operand-type selection, ordering spelling, precedence, chaining, and Boolean-result consumption are owned by later source and Core consumers rather than by this numerical relation.
+
+The represented Core operation consuming this relation evaluates its two operands left-to-right and writes the resulting Bool value through the non-replacing destination relation owned by [Core value and storage semantics](../value-storage.md). Those exact operand-type, operand-access, destination-type, storage, lifetime, initialization, and borrowing rules are not duplicated here.
+
+A conforming implementation MAY use a native strict-order primitive only when it preserves exactly the semantic mathematical order above. Host-language `<`, backend comparison instructions, integer representation, instruction width, endianness, optimizer assumptions, and physical two's-complement storage are never semantic authority.
+
+This represented operation defines no non-strict less-than, greater-than, greater-than-or-equal, three-way comparison, range relation, floating comparison, pointer/reference comparison, structural comparison, conversion, constant-evaluation rule, source operator family, generic predicate abstraction, or backend instruction requirement.
+
 ## Explicit checked overflow
 
 An **explicit checked fixed-width integer arithmetic operation** is one whose applicable operation contract selects checked overflow behavior.
