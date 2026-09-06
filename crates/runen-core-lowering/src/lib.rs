@@ -1213,6 +1213,10 @@ impl<'a> FunctionLowerer<'a> {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "refutable selection lowering consumes distinct retained semantic facts explicitly"
+    )]
     fn lower_refutable_record_selection(
         &mut self,
         record: hir::RecordId,
