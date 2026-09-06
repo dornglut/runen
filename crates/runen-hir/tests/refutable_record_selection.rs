@@ -409,9 +409,9 @@ fn direct_root_tests_require_shared_safe_authority_compatibility() {
 #[test]
 fn nonduplicable_success_binding_retains_exclusive_authority_requirement() {
     let errors = build(
-        "record Ticket {} record R { flag: Bool, ticket: Ticket } \
+        "record Ticket { value: I64 } record R { flag: Bool, ticket: Ticket } \
          fn f(root: R) { \
-             let shared: &Ticket = &root.ticket; \
+             let shared: &I64 = &root.ticket.value; \
              if let R { flag: true, ticket: moved } = (root) { fault; } else { fault; } \
          }",
     )
