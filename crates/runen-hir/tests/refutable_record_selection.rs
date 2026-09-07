@@ -1,7 +1,7 @@
 use runen_hir::{
     DiagnosticKind, ImportTarget, IntrinsicType, LiteralValue, ModuleId, OwnedUse,
-    RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit, Statement, Type, ValueKind,
-    build_typed_hir,
+    RecordPatternScrutinee, RecordPatternTestKind, RecordPatternTransientCleanup, SourceUnit,
+    Statement, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -28,7 +28,7 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
 
 type SelectionView<'a> = (
     &'a RecordPatternScrutinee,
-    &'a [runen_hir::RecordPatternLiteralTest],
+    &'a [runen_hir::RecordPatternTest],
     &'a [runen_hir::RecordPatternBinding],
     Option<&'a RecordPatternTransientCleanup>,
     &'a runen_hir::Block,
@@ -64,7 +64,7 @@ fn retains_independent_test_and_binding_orders_with_exact_materialized_values() 
         "record Mixed { flag: Bool, left: I8, count: I8, right: U8 } \
          fn sink_i8(value: I8) {} fn sink_u8(value: U8) {} \
          fn f(root: Mixed) { \
-             if let Mixed { flag: false, left: a, count: -1, right: b } = (root) { \
+             if let Mixed { flag: false, left: a, count: < -1, right: b } = (root) { \
                  sink_i8(a); sink_u8(b); \
              } else {} \
          }",
@@ -80,9 +80,11 @@ fn retains_independent_test_and_binding_orders_with_exact_materialized_values() 
     assert!(mismatch_cleanup.is_none());
     assert_eq!(tests.len(), 2);
     assert_eq!(tests[0].fields, [0]);
+    assert_eq!(tests[0].kind, RecordPatternTestKind::Equality);
     assert_eq!(tests[0].ty, Type::Intrinsic(IntrinsicType::Bool));
     assert_eq!(tests[0].value, LiteralValue::Bool(false));
     assert_eq!(tests[1].fields, [2]);
+    assert_eq!(tests[1].kind, RecordPatternTestKind::StrictUpperBound);
     assert_eq!(tests[1].ty, Type::Intrinsic(IntrinsicType::I8));
     assert_eq!(tests[1].value, LiteralValue::I8(-1));
 
@@ -103,7 +105,7 @@ fn nested_tests_rest_and_bindings_retain_complete_depth_first_paths() {
          fn sink(value: U8) {} \
          fn f(root: Outer) { \
              if let Outer { \
-                 leaf: Leaf { value: -7, flag: true, spare: kept }, \
+                 leaf: Leaf { value: < -7, flag: true, spare: kept }, \
                  tail: tail, \
                  .., \
              } = (root) { sink(kept); sink(tail); } \
@@ -121,7 +123,9 @@ fn nested_tests_rest_and_bindings_retain_complete_depth_first_paths() {
             .collect::<Vec<_>>(),
         [vec![1, 1], vec![1, 0]]
     );
+    assert_eq!(tests[0].kind, RecordPatternTestKind::StrictUpperBound);
     assert_eq!(tests[0].value, LiteralValue::I16(-7));
+    assert_eq!(tests[1].kind, RecordPatternTestKind::Equality);
     assert_eq!(tests[1].value, LiteralValue::Bool(true));
     assert_eq!(
         bindings
@@ -130,6 +134,26 @@ fn nested_tests_rest_and_bindings_retain_complete_depth_first_paths() {
             .collect::<Vec<_>>(),
         [vec![1, 2], vec![2]]
     );
+}
+
+#[test]
+fn strict_upper_bounds_retain_exact_signed_and_unsigned_types_and_values() {
+    let hir = build(
+        "record R { signed: I8, unsigned: U8 } \
+         fn f(root: R) { if let R { signed: < -1, unsigned: < 200 } = (root) {} }",
+    )
+    .expect("signed and unsigned strict upper bounds must build");
+    let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    assert!(bindings.is_empty());
+    assert_eq!(tests.len(), 2);
+    assert_eq!(tests[0].kind, RecordPatternTestKind::StrictUpperBound);
+    assert_eq!(tests[0].fields, [0]);
+    assert_eq!(tests[0].ty, Type::Intrinsic(IntrinsicType::I8));
+    assert_eq!(tests[0].value, LiteralValue::I8(-1));
+    assert_eq!(tests[1].kind, RecordPatternTestKind::StrictUpperBound);
+    assert_eq!(tests[1].fields, [1]);
+    assert_eq!(tests[1].ty, Type::Intrinsic(IntrinsicType::U8));
+    assert_eq!(tests[1].value, LiteralValue::U8(200));
 }
 
 #[test]
@@ -146,6 +170,7 @@ fn producer_retains_success_frontier_and_distinct_complete_root_mismatch_cleanup
     let (scrutinee, tests, bindings, mismatch_cleanup, _, mismatch_block) =
         selection(&function(&hir, "f").body.statements[0]);
     assert_eq!(tests.len(), 1);
+    assert_eq!(tests[0].kind, RecordPatternTestKind::Equality);
     assert_eq!(bindings.len(), 2);
     assert_eq!(bindings[0].ownership, OwnedUse::Consume);
     assert_eq!(bindings[1].ownership, OwnedUse::Duplicate);
@@ -175,6 +200,7 @@ fn test_only_producer_keeps_complete_root_on_success_and_mismatch() {
     let (scrutinee, tests, bindings, mismatch_cleanup, _, _) =
         selection(&function(&hir, "f").body.statements[0]);
     assert_eq!(tests.len(), 1);
+    assert_eq!(tests[0].kind, RecordPatternTestKind::Equality);
     assert!(bindings.is_empty());
     assert!(matches!(
         scrutinee,
@@ -192,15 +218,26 @@ fn test_only_producer_keeps_complete_root_on_success_and_mismatch() {
 }
 
 #[test]
-fn zero_literal_pattern_is_semantically_rejected() {
+fn ordering_only_pattern_satisfies_refutability_requirement() {
+    let hir = build("record R { value: I8 } fn f(root: R) { if let R { value: < 3 } = (root) {} }")
+        .expect("one strict-upper-bound test is refutable without equality");
+    let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    assert_eq!(tests.len(), 1);
+    assert_eq!(tests[0].kind, RecordPatternTestKind::StrictUpperBound);
+    assert_eq!(tests[0].value, LiteralValue::I8(3));
+    assert!(bindings.is_empty());
+}
+
+#[test]
+fn zero_test_pattern_is_semantically_rejected() {
     let errors = build(
         "record Pair { left: I8, right: U8 } \
          fn f(root: Pair) { if let Pair { left: a, right: b } = (root) {} }",
     )
-    .expect_err("refutable pattern must contain at least one literal test");
+    .expect_err("refutable pattern must contain at least one refutable test");
     assert!(has_diagnostic(
         &errors,
-        DiagnosticKind::RefutableRecordPatternRequiresLiteralTest
+        DiagnosticKind::RefutableRecordPatternRequiresRefutableTest
     ));
 }
 
@@ -229,17 +266,52 @@ fn literal_tests_require_the_exact_resolved_field_type() {
 }
 
 #[test]
-fn out_of_range_test_rejects_before_producer_argument_consumption_can_commit() {
+fn strict_upper_bounds_require_fixed_width_integer_fields() {
+    for (source, operand_type) in [
+        (
+            "record R { value: Bool } fn f(root: R) { if let R { value: < 1 } = (root) {} }",
+            Type::Intrinsic(IntrinsicType::Bool),
+        ),
+        (
+            "record R { value: F32 } fn f(root: R) { if let R { value: < 1 } = (root) {} }",
+            Type::Intrinsic(IntrinsicType::F32),
+        ),
+    ] {
+        let errors =
+            build(source).expect_err("strict upper bound requires fixed-width integer field");
+        assert!(has_diagnostic(
+            &errors,
+            DiagnosticKind::IntegerOrderingRequiresInteger { operand_type }
+        ));
+    }
+
+    let record_errors = build(
+        "record Inner {} record R { value: Inner } \
+         fn f(root: R) { if let R { value: < 1 } = (root) {} }",
+    )
+    .expect_err("record field may not carry strict upper-bound test");
+    assert!(record_errors.iter().any(|error| {
+        matches!(
+            error.kind,
+            DiagnosticKind::IntegerOrderingRequiresInteger {
+                operand_type: Type::Record(_)
+            }
+        )
+    }));
+}
+
+#[test]
+fn out_of_range_strict_bound_rejects_before_producer_argument_consumption_can_commit() {
     let errors = build(
         "record Ticket {} record R { value: I8 } \
          fn make(ticket: Ticket) -> R { return R { value: 1 }; } \
          fn sink(ticket: Ticket) {} \
          fn f(ticket: Ticket) { \
-             if let R { value: 128 } = (make(ticket)) {} \
+             if let R { value: < 128 } = (make(ticket)) {} \
              sink(ticket); \
          }",
     )
-    .expect_err("out-of-range test must reject statically");
+    .expect_err("out-of-range strict bound must reject statically");
     assert!(has_diagnostic(
         &errors,
         DiagnosticKind::IntegerLiteralOutOfRange {
@@ -390,6 +462,25 @@ fn direct_root_test_requires_the_selected_path_to_be_fully_available() {
 }
 
 #[test]
+fn direct_root_strict_upper_bound_test_requires_the_selected_path_to_be_fully_available() {
+    let errors = build(
+        "record Ticket {} \
+         record Inner { value: I8, ticket: Ticket } \
+         record Outer { inner: Inner } \
+         fn take(value: Inner) {} \
+         fn f(root: Outer) { \
+             take(root.inner); \
+             if let Outer { inner: Inner { value: < 3, .. } } = (root) {} \
+         }",
+    )
+    .expect_err("a consumed ancestor makes the selected strict-bound test path unavailable");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnavailableFieldValue
+    ));
+}
+
+#[test]
 fn direct_root_tests_require_shared_safe_authority_compatibility() {
     let errors = build(
         "record R { flag: Bool } \
@@ -400,6 +491,23 @@ fn direct_root_tests_require_shared_safe_authority_compatibility() {
          }",
     )
     .expect_err("literal testing may not bypass overlapping replacement authority");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::ReferencePermissionUnavailable
+    ));
+}
+
+#[test]
+fn direct_root_strict_upper_bound_tests_require_shared_safe_authority_compatibility() {
+    let errors = build(
+        "record R { value: I8 } \
+         fn f(seed: R) { \
+             let mut root: R = seed; \
+             let replacement: &mut R = &mut root; \
+             if let R { value: < 3 } = (root) {} \
+         }",
+    )
+    .expect_err("strict-bound testing may not bypass overlapping replacement authority");
     assert!(has_diagnostic(
         &errors,
         DiagnosticKind::ReferencePermissionUnavailable

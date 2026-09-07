@@ -12,6 +12,15 @@ fn count(parsed: &runen_syntax::Parse, kind: SyntaxKind) -> usize {
         .count()
 }
 
+fn token_count(parsed: &runen_syntax::Parse, kind: SyntaxKind) -> usize {
+    parsed
+        .syntax()
+        .descendants_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == kind)
+        .count()
+}
+
 #[test]
 fn parses_parenthesized_direct_root_and_record_construction_scrutinees() {
     let source = "record R { tag: Bool } fn f(root: R) { if let R { tag: true } = (root) {} else {} if let R { tag: false } = (R { tag: true }) {} }";
@@ -42,6 +51,66 @@ fn parses_nested_refutable_patterns_rest_and_signed_integer_tests() {
     assert_eq!(count(&parsed, SyntaxKind::RecordPatternRest), 1);
     assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 1);
     assert_eq!(count(&parsed, SyntaxKind::BooleanLiteral), 1);
+}
+
+#[test]
+fn parses_strict_upper_bounds_with_existing_less_token_and_integer_literal_nodes() {
+    let source = "record R { signed: I8, unsigned: U8, spare: Bool } fn f(root: R) { if let R { signed: < - 1, unsigned: < 10, .. } = (root) {} }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert_eq!(count(&parsed, SyntaxKind::RefutableRecordPatternField), 2);
+    assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 2);
+    assert_eq!(count(&parsed, SyntaxKind::RecordPatternRest), 1);
+    assert_eq!(token_count(&parsed, SyntaxKind::Less), 2);
+    assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 0);
+
+    for field in parsed
+        .syntax()
+        .descendants()
+        .filter(|node| node.kind() == SyntaxKind::RefutableRecordPatternField)
+    {
+        assert!(field.children_with_tokens().any(|element| {
+            element
+                .into_token()
+                .is_some_and(|token| token.kind() == SyntaxKind::Less)
+        }));
+    }
+}
+
+#[test]
+fn rejects_wider_or_malformed_strict_upper_bound_targets() {
+    for source in [
+        "record R { value: I8 } fn f(root: R) { if let R { value: < 1.0 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: < bound } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: <= 1 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: < 1..2 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: 1 < 2 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { let R { value: < 1 } = root; }",
+    ] {
+        let parsed = parse(source);
+        assert_eq!(parsed.text(), source);
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly parsed: {source}"
+        );
+    }
+}
+
+#[test]
+fn ordinary_less_than_remains_a_comparison_value_not_a_pattern_test() {
+    let source = "fn f(value: I8) -> Bool { return value < 10; }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 1);
+    assert_eq!(
+        count(&parsed, SyntaxKind::RefutableRecordSelectionStatement),
+        0
+    );
+    assert_eq!(token_count(&parsed, SyntaxKind::Less), 1);
 }
 
 #[test]

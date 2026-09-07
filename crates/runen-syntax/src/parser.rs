@@ -647,6 +647,8 @@ impl Parser<'_> {
                 }
                 _ => self.bump(),
             }
+        } else if matches!(context, RecordPatternContext::Refutable) && self.at(SyntaxKind::Less) {
+            self.parse_refutable_record_strict_upper_bound_test();
         } else if matches!(context, RecordPatternContext::Refutable)
             && self.parse_refutable_record_literal_test()
         {
@@ -667,6 +669,17 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
+    fn parse_refutable_record_strict_upper_bound_test(&mut self) {
+        debug_assert!(self.at(SyntaxKind::Less));
+        self.bump();
+        if !self.parse_refutable_record_integer_literal_test() {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::DecimalMagnitude));
+            if self.current().is_some() && !self.at_any(&[SyntaxKind::Comma, SyntaxKind::RBrace]) {
+                self.recover_one();
+            }
+        }
+    }
+
     fn parse_refutable_record_literal_test(&mut self) -> bool {
         match self.current() {
             Some(SyntaxKind::KwTrue | SyntaxKind::KwFalse) => {
@@ -675,6 +688,12 @@ impl Parser<'_> {
                 self.builder.finish_node();
                 true
             }
+            _ => self.parse_refutable_record_integer_literal_test(),
+        }
+    }
+
+    fn parse_refutable_record_integer_literal_test(&mut self) -> bool {
+        match self.current() {
             Some(SyntaxKind::DecimalMagnitude) => {
                 self.builder
                     .start_node(SyntaxKind::DecimalIntegerLiteral.into());
