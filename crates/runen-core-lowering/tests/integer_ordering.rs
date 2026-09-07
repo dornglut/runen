@@ -79,7 +79,11 @@ fn integer_strict_order_lowers_to_exactly_one_typed_integer_lt_for_every_width()
         let f = function(lowered.as_program(), "f");
         let statements = integer_lt_statements(f);
         assert_eq!(statements.len(), 1, "{source_type} must emit one IntegerLt");
-        assert_eq!(integer_eq_count(f), 0, "strict order must not refine through equality");
+        assert_eq!(
+            integer_eq_count(f),
+            0,
+            "strict order must not refine through equality"
+        );
         let CoreStatement::IntegerLt {
             dst,
             operand_type,
@@ -225,7 +229,9 @@ fn lowering_rejects_ordering_operand_type_disagreement_without_repair() {
     let mut compilation = hir("fn f(left: I32, right: I32) -> Bool { return left < right; }");
     let value = returned_value_mut(&mut compilation, "f");
     let ValueKind::IntegerLt {
-        operand_type, right, ..
+        operand_type,
+        right,
+        ..
     } = &mut value.kind
     else {
         panic!("expected integer strict-order HIR");
