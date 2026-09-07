@@ -1234,22 +1234,22 @@ impl<'a> FunctionLowerer<'a> {
         }
 
         let expected_ty = self.types.get(hir::Type::Record(record))?;
-        let mut seen_paths = Vec::<Vec<usize>>::new();
+        let mut test_paths = Vec::<Vec<usize>>::new();
         for test in tests {
             if test.fields.is_empty() {
                 return Err(LoweringError::InvalidHirInvariant(
                     "refutable record test has empty structural path",
                 ));
             }
-            if seen_paths
+            if test_paths
                 .iter()
                 .any(|seen| test.fields.starts_with(seen) || seen.starts_with(&test.fields))
             {
                 return Err(LoweringError::InvalidHirInvariant(
-                    "refutable record selection leaf paths are not structurally disjoint",
+                    "refutable record selection test paths are not structurally disjoint",
                 ));
             }
-            seen_paths.push(test.fields.clone());
+            test_paths.push(test.fields.clone());
 
             let projections = test
                 .fields
@@ -1314,21 +1314,66 @@ impl<'a> FunctionLowerer<'a> {
         }
 
         let mut consumed_paths = Vec::new();
+        let mut binding_paths = Vec::<Vec<usize>>::new();
+        let mut claimed_composite_tests = BTreeSet::<usize>::new();
         for binding in bindings {
             if binding.fields.is_empty() {
                 return Err(LoweringError::InvalidHirInvariant(
                     "refutable record selection binding has empty structural path",
                 ));
             }
-            if seen_paths
+
+            if let Some(test_index) = binding.composite_test {
+                let test = tests.get(test_index).ok_or(LoweringError::InvalidHirInvariant(
+                    "refutable record selection composite test index is out of range",
+                ))?;
+                if !claimed_composite_tests.insert(test_index) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record selection retained test has multiple composite bindings",
+                    ));
+                }
+                if binding.fields != test.fields {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record selection composite binding path does not match associated test path",
+                    ));
+                }
+                if binding.ty != test.ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record selection composite binding type does not match associated test type",
+                    ));
+                }
+                if binding.ownership != hir::OwnedUse::Duplicate {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record selection composite binding is not a source duplication",
+                    ));
+                }
+                if test_paths.iter().enumerate().any(|(index, path)| {
+                    index != test_index
+                        && (binding.fields.starts_with(path)
+                            || path.starts_with(&binding.fields))
+                }) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "refutable record selection composite binding overlaps an independent test",
+                    ));
+                }
+            } else if test_paths
+                .iter()
+                .any(|path| binding.fields.starts_with(path) || path.starts_with(&binding.fields))
+            {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "refutable record selection ordinary binding overlaps a retained test",
+                ));
+            }
+
+            if binding_paths
                 .iter()
                 .any(|seen| binding.fields.starts_with(seen) || seen.starts_with(&binding.fields))
             {
                 return Err(LoweringError::InvalidHirInvariant(
-                    "refutable record selection leaf paths are not structurally disjoint",
+                    "refutable record selection binding paths are not structurally disjoint",
                 ));
             }
-            seen_paths.push(binding.fields.clone());
+            binding_paths.push(binding.fields.clone());
 
             let projections = binding
                 .fields
@@ -1668,6 +1713,11 @@ impl<'a> FunctionLowerer<'a> {
 
         let mut seen_paths = Vec::<Vec<usize>>::new();
         for binding in bindings {
+            if binding.composite_test.is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "record destructuring binding retains a refutable composite association",
+                ));
+            }
             if binding.fields.is_empty() {
                 return Err(LoweringError::InvalidHirInvariant(
                     "record destructuring binding has empty structural path",
