@@ -4753,7 +4753,8 @@ fn validate_value_inner(
                         if operator != SyntaxKind::Less {
                             return Exact(Type::Intrinsic(IntrinsicType::Bool));
                         }
-                        let mut operands = node.children().filter(|child| is_value_node(child.kind()));
+                        let mut operands =
+                            node.children().filter(|child| is_value_node(child.kind()));
                         let left_node = operands
                             .next()
                             .expect("syntax-clean ordering contains a left operand");
