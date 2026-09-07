@@ -1,11 +1,11 @@
 use runen_core_ir::{
     Function as CoreFunction, Operand, PlaceAccess, Projection, Statement as CoreStatement,
-    Terminator, ValidatedProgram, Value as CoreValue,
+    Terminator, TypeKind, ValidatedProgram, Value as CoreValue,
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    IntrinsicType, LiteralValue, ModuleId, RecordPatternTransientCleanup, SourceUnit, Statement,
-    Type, build_typed_hir,
+    IntrinsicType, LiteralValue, ModuleId, RecordPatternTestKind, RecordPatternTransientCleanup,
+    SourceUnit, Statement, Type, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -42,6 +42,21 @@ fn integer_eqs(function: &CoreFunction) -> Vec<(usize, &CoreStatement)> {
             body.statements
                 .iter()
                 .filter(|statement| matches!(statement, CoreStatement::IntegerEq { .. }))
+                .map(move |statement| (block, statement))
+        })
+        .collect()
+}
+
+fn integer_lts(function: &CoreFunction) -> Vec<(usize, &CoreStatement)> {
+    function
+        .body
+        .blocks
+        .iter()
+        .enumerate()
+        .flat_map(|(block, body)| {
+            body.statements
+                .iter()
+                .filter(|statement| matches!(statement, CoreStatement::IntegerLt { .. }))
                 .map(move |statement| (block, statement))
         })
         .collect()
@@ -168,6 +183,125 @@ fn integer_tests_short_circuit_in_source_test_order_before_interleaved_binding_t
 }
 
 #[test]
+fn mixed_equality_and_strict_upper_bound_tests_preserve_source_order_and_short_circuit() {
+    let lowered = lower_source(
+        "record R { first: I8, second: U8, kept: U8 } \
+         fn sink(value: U8) {} \
+         fn f(root: R) { \
+             if let R { first: 1, kept: kept, second: < 200 } = (root) { sink(kept); } else {} \
+         }",
+    );
+    let program = lowered.as_program();
+    let f = function(program, "f");
+    let eqs = integer_eqs(f);
+    let lts = integer_lts(f);
+    assert_eq!(eqs.len(), 1);
+    assert_eq!(lts.len(), 1);
+
+    let (eq_block, CoreStatement::IntegerEq { left: eq_left, right: eq_right, .. }) = eqs[0] else {
+        unreachable!();
+    };
+    let (lt_block, CoreStatement::IntegerLt { operand_type, left: lt_left, right: lt_right, .. }) =
+        lts[0]
+    else {
+        unreachable!();
+    };
+    assert_eq!(direct_projection(eq_left), Some(vec![Projection::Field(0)]));
+    assert_eq!(eq_right, &Operand::Constant(CoreValue::I8(1)));
+    assert_eq!(direct_projection(lt_left), Some(vec![Projection::Field(1)]));
+    assert_eq!(lt_right, &Operand::Constant(CoreValue::U8(200)));
+
+    let root_ty = f.body.locals[f.parameters[0].0 as usize].ty;
+    let root_def = program.types.get(root_ty).expect("record parameter type");
+    let TypeKind::Struct(fields) = &root_def.kind else {
+        panic!("record parameter must lower to a Core struct");
+    };
+    assert_eq!(*operand_type, fields[1].ty);
+
+    let Terminator::Branch {
+        true_target: after_eq,
+        false_target: eq_mismatch,
+        ..
+    } = f.body.blocks[eq_block].terminator
+    else {
+        panic!("equality test must branch");
+    };
+    assert_eq!(after_eq.0 as usize, lt_block);
+    let Terminator::Branch {
+        true_target: after_lt,
+        false_target: lt_mismatch,
+        ..
+    } = f.body.blocks[lt_block].terminator
+    else {
+        panic!("strict-upper-bound test must branch");
+    };
+    assert_eq!(eq_mismatch, lt_mismatch, "first mismatch must skip the later strict-bound test");
+
+    let kept_local = f
+        .body
+        .locals
+        .iter()
+        .position(|local| local.name == "kept")
+        .expect("success binding local");
+    assert!(f.body.blocks[after_lt.0 as usize].statements.iter().any(|statement| matches!(
+        statement,
+        CoreStatement::Init { dst, .. } if dst.local.0 as usize == kept_local
+    )));
+    assert!(!f.body.blocks[eq_block]
+        .statements
+        .iter()
+        .chain(f.body.blocks[lt_block].statements.iter())
+        .any(|statement| matches!(
+            statement,
+            CoreStatement::Init { dst, .. } if dst.local.0 as usize == kept_local
+        )));
+}
+
+#[test]
+fn strict_upper_bounds_retain_exact_signed_and_unsigned_field_types() {
+    let lowered = lower_source(
+        "record R { signed: I8, unsigned: U8 } \
+         fn f(root: R) { if let R { signed: < -1, unsigned: < 200 } = (root) {} }",
+    );
+    let program = lowered.as_program();
+    let f = function(program, "f");
+    assert!(integer_eqs(f).is_empty());
+    let lts = integer_lts(f);
+    assert_eq!(lts.len(), 2);
+
+    let root_ty = f.body.locals[f.parameters[0].0 as usize].ty;
+    let root_def = program.types.get(root_ty).expect("record parameter type");
+    let TypeKind::Struct(fields) = &root_def.kind else {
+        panic!("record parameter must lower to a Core struct");
+    };
+
+    let (_, CoreStatement::IntegerLt {
+        operand_type: signed_type,
+        left: signed_left,
+        right: signed_right,
+        ..
+    }) = lts[0]
+    else {
+        unreachable!();
+    };
+    let (_, CoreStatement::IntegerLt {
+        operand_type: unsigned_type,
+        left: unsigned_left,
+        right: unsigned_right,
+        ..
+    }) = lts[1]
+    else {
+        unreachable!();
+    };
+    assert_eq!(*signed_type, fields[0].ty);
+    assert_eq!(*unsigned_type, fields[1].ty);
+    assert_eq!(direct_projection(signed_left), Some(vec![Projection::Field(0)]));
+    assert_eq!(direct_projection(unsigned_left), Some(vec![Projection::Field(1)]));
+    assert_eq!(signed_right, &Operand::Constant(CoreValue::I8(-1)));
+    assert_eq!(unsigned_right, &Operand::Constant(CoreValue::U8(200)));
+}
+
+#[test]
 fn boolean_literal_test_uses_branch_refinement_without_integer_eq() {
     let lowered = lower_source(
         "record R { flag: Bool, kept: U8 } \
@@ -260,6 +394,71 @@ fn producer_call_is_evaluated_once_and_selects_distinct_success_and_mismatch_cle
         [vec![Projection::Field(2)], vec![Projection::Field(0)]],
         "success must clean only the retained post-binding frontier"
     );
+}
+
+#[test]
+fn strict_upper_bound_producer_is_evaluated_once_with_unchanged_cleanup_topology() {
+    let lowered = lower_source(
+        "record Ticket {} record R { tag: I8, ticket: Ticket, tail: U8 } \
+         fn make() -> R { return R { tag: 1, ticket: Ticket {}, tail: 2 }; } \
+         fn f() { \
+             if let R { tag: < 5, ticket: moved, tail: copied } = (make()) { fault; } else { fault; } \
+         }",
+    );
+    let f = function(lowered.as_program(), "f");
+    let calls = f
+        .body
+        .blocks
+        .iter()
+        .filter_map(|block| match &block.terminator {
+            Terminator::Call {
+                destination: Some(destination),
+                ..
+            } => Some(destination.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(calls.len(), 1);
+    let source = calls[0].local;
+    assert!(integer_eqs(f).is_empty());
+    let lts = integer_lts(f);
+    assert_eq!(lts.len(), 1);
+    let (test_block, CoreStatement::IntegerLt { left, right, .. }) = lts[0] else {
+        unreachable!();
+    };
+    assert_eq!(direct_projection(left), Some(vec![Projection::Field(0)]));
+    assert_eq!(right, &Operand::Constant(CoreValue::I8(5)));
+
+    let Terminator::Branch {
+        true_target,
+        false_target,
+        ..
+    } = f.body.blocks[test_block].terminator
+    else {
+        panic!("strict-upper-bound test must branch to success or mismatch");
+    };
+    let mismatch_drops = f.body.blocks[false_target.0 as usize]
+        .statements
+        .iter()
+        .filter_map(|statement| match statement {
+            CoreStatement::Drop {
+                place: PlaceAccess::Direct(place),
+            } if place.local == source => Some(place.projections.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(mismatch_drops, [Vec::<Projection>::new()]);
+    let success_drops = f.body.blocks[true_target.0 as usize]
+        .statements
+        .iter()
+        .filter_map(|statement| match statement {
+            CoreStatement::Drop {
+                place: PlaceAccess::Direct(place),
+            } if place.local == source => Some(place.projections.clone()),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(success_drops, [vec![Projection::Field(2)], vec![Projection::Field(0)]]);
 }
 
 #[test]
@@ -400,7 +599,7 @@ fn lowering_rejects_literal_value_that_disagrees_with_retained_test_type() {
     assert_eq!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
-            "refutable record literal test value does not match retained test type"
+            "refutable record test value does not match retained test type"
         ))
     );
 }
@@ -419,7 +618,45 @@ fn lowering_rejects_test_path_type_disagreement_without_reconstructing_source_se
     assert_eq!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
-            "refutable record literal test type does not match projected field type"
+            "refutable record test type does not match projected field type"
+        ))
+    );
+}
+
+#[test]
+fn lowering_rejects_strict_upper_bound_kind_with_bool_retained_type() {
+    let mut compilation = hir(
+        "record R { flag: Bool } fn f(root: R) { if let R { flag: true } = (root) {} else {} }",
+    );
+    let Statement::RefutableRecordSelection { tests, .. } = selection_mut(&mut compilation, "f")
+    else {
+        panic!("expected refutable record selection");
+    };
+    tests[0].kind = RecordPatternTestKind::StrictUpperBound;
+
+    assert_eq!(
+        lower(&compilation),
+        Err(LoweringError::InvalidHirInvariant(
+            "refutable record strict-upper-bound test type is not a fixed-width integer"
+        ))
+    );
+}
+
+#[test]
+fn lowering_rejects_strict_upper_bound_value_that_disagrees_with_retained_type() {
+    let mut compilation = hir(
+        "record R { value: I8 } fn f(root: R) { if let R { value: < 3 } = (root) {} else {} }",
+    );
+    let Statement::RefutableRecordSelection { tests, .. } = selection_mut(&mut compilation, "f")
+    else {
+        panic!("expected refutable record selection");
+    };
+    tests[0].value = LiteralValue::Bool(true);
+
+    assert_eq!(
+        lower(&compilation),
+        Err(LoweringError::InvalidHirInvariant(
+            "refutable record test value does not match retained test type"
         ))
     );
 }
