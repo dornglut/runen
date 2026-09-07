@@ -80,6 +80,46 @@ fn parses_strict_upper_bounds_with_existing_less_token_and_integer_literal_nodes
 }
 
 #[test]
+fn parses_same_path_bind_and_test_targets_with_existing_tokens_and_literal_nodes() {
+    let source = "record R { flag: Bool, signed: I8, unsigned: U8 } fn f(root: R) { if let R { flag: ready == true, signed: exact == - 1, unsigned: below < 200 } = (root) {} }";
+    let parsed = parse(source);
+
+    assert_eq!(parsed.text(), source);
+    assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+    assert_eq!(count(&parsed, SyntaxKind::RefutableRecordPatternField), 3);
+    assert_eq!(count(&parsed, SyntaxKind::BooleanLiteral), 1);
+    assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 2);
+    assert_eq!(token_count(&parsed, SyntaxKind::EqEq), 2);
+    assert_eq!(token_count(&parsed, SyntaxKind::Less), 1);
+    assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 0);
+}
+
+#[test]
+fn rejects_wider_or_malformed_same_path_bind_and_test_targets() {
+    for source in [
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound <= 1 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound > 1 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound >= 1 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound == 1.0 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound == other } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound < other } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound < 1.0 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound == (1) } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound < (1) } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound == 1 < 2 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: bound < 1 == 1 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { let R { value: bound == 1 } = root; }",
+    ] {
+        let parsed = parse(source);
+        assert_eq!(parsed.text(), source);
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly parsed: {source}"
+        );
+    }
+}
+
+#[test]
 fn rejects_wider_or_malformed_strict_upper_bound_targets() {
     for source in [
         "record R { value: I8 } fn f(root: R) { if let R { value: < 1.0 } = (root) {} }",

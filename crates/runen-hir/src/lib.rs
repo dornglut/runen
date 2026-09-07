@@ -309,6 +309,9 @@ pub struct RecordFieldValue {
 pub struct RecordPatternBinding {
     /// Complete resolved structural field path from the top pattern root.
     pub fields: Vec<usize>,
+    /// Explicit retained refutable-test index for one source-selected same-path
+    /// bind-and-test target. Ordinary and irrefutable bindings retain `None`.
+    pub composite_test: Option<usize>,
     pub binding: BindingId,
     pub name: String,
     pub ty: Type,

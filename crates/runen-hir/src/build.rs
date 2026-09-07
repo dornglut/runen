@@ -2543,6 +2543,7 @@ fn pointer_origin_for_value(
 #[derive(Debug, Clone)]
 struct ResolvedPatternBinding {
     fields: Vec<usize>,
+    composite_test: Option<usize>,
     name: String,
     ty: Type,
     location: SourceLocation,
@@ -2756,6 +2757,7 @@ fn validate_record_pattern_node(
             }
             validation.bindings.push(ResolvedPatternBinding {
                 fields: path.clone(),
+                composite_test: None,
                 name: binding_name,
                 ty: record_decl.fields[field].ty,
                 location: field_location,
@@ -2939,6 +2941,40 @@ fn validate_refutable_record_pattern_node(
             } else {
                 RecordPatternTestKind::Equality
             };
+            let identifiers = pattern_field
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .filter(|token| token.kind() == SyntaxKind::Ident)
+                .collect::<Vec<_>>();
+            let composite_binding = match identifiers.as_slice() {
+                [_] => None,
+                [_, binding_token] => {
+                    let binding_name = key(binding_token);
+                    let binding_location = SourceLocation {
+                        unit: header.unit,
+                        range: binding_token.text_range(),
+                    };
+                    if !validation.seen_binding_names.insert(binding_name.clone()) {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::DuplicatePatternBinding,
+                            location: binding_location,
+                        });
+                        validation.valid = false;
+                    }
+                    if validation.active_binding_names.contains(&binding_name) {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::LocalShadowing,
+                            location: binding_location,
+                        });
+                        validation.valid = false;
+                    }
+                    Some(binding_name)
+                }
+                _ => unreachable!(
+                    "syntax-clean refutable literal target has field and optional binding identifiers"
+                ),
+            };
+            let test_index = validation.tests.len();
             let value = match (kind, literal_node.kind()) {
                 (RecordPatternTestKind::Equality, SyntaxKind::BooleanLiteral) => {
                     let found = Type::Intrinsic(IntrinsicType::Bool);
@@ -3008,6 +3044,15 @@ fn validate_refutable_record_pattern_node(
                     value,
                     location: field_location,
                 });
+                if let Some(binding_name) = composite_binding {
+                    validation.bindings.push(ResolvedPatternBinding {
+                        fields: path.clone(),
+                        composite_test: Some(test_index),
+                        name: binding_name,
+                        ty,
+                        location: field_location,
+                    });
+                }
             } else {
                 validation.valid = false;
             }
@@ -3041,6 +3086,7 @@ fn validate_refutable_record_pattern_node(
             }
             validation.bindings.push(ResolvedPatternBinding {
                 fields: path.clone(),
+                composite_test: None,
                 name: binding_name,
                 ty: record_decl.fields[field].ty,
                 location: field_location,
@@ -3219,6 +3265,7 @@ fn validate_record_destructure(
         *next_binding += 1;
         pattern_bindings.push(RecordPatternBinding {
             fields: resolved.fields,
+            composite_test: None,
             binding,
             name: resolved.name.clone(),
             ty: resolved.ty,
@@ -3359,6 +3406,9 @@ fn validate_refutable_record_selection(
                 }
             }
             for leaf in &validation.bindings {
+                if leaf.composite_test.is_some() {
+                    continue;
+                }
                 if root_state.ownership.path_availability(&leaf.fields)
                     != PathAvailability::FullyAvailable
                 {
@@ -3459,6 +3509,7 @@ fn validate_refutable_record_selection(
         *next_binding += 1;
         pattern_bindings.push(RecordPatternBinding {
             fields: resolved.fields,
+            composite_test: resolved.composite_test,
             binding,
             name: resolved.name.clone(),
             ty: resolved.ty,

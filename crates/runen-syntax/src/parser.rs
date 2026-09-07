@@ -645,6 +645,22 @@ impl Parser<'_> {
                 {
                     self.parse_record_pattern_in(context);
                 }
+                Some(SyntaxKind::EqEq) if matches!(context, RecordPatternContext::Refutable) => {
+                    self.bump();
+                    self.bump();
+                    if !self.parse_refutable_record_literal_test() {
+                        self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
+                        if self.current().is_some()
+                            && !self.at_any(&[SyntaxKind::Comma, SyntaxKind::RBrace])
+                        {
+                            self.recover_one();
+                        }
+                    }
+                }
+                Some(SyntaxKind::Less) if matches!(context, RecordPatternContext::Refutable) => {
+                    self.bump();
+                    self.parse_refutable_record_strict_upper_bound_test();
+                }
                 _ => self.bump(),
             }
         } else if matches!(context, RecordPatternContext::Refutable) && self.at(SyntaxKind::Less) {
