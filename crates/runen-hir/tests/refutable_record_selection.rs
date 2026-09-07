@@ -291,9 +291,6 @@ fn strict_upper_bounds_require_fixed_width_integer_fields() {
          fn f(root: R) { if let R { value: < 1 } = (root) {} }",
     )
     .expect_err("record field may not carry strict upper-bound test");
-    let inner = Type::Record(
-        build("record Inner {} fn f() {}").expect("helper HIR builds").records[0].id,
-    );
     assert!(record_errors.iter().any(|error| {
         matches!(
             error.kind,
@@ -302,7 +299,6 @@ fn strict_upper_bounds_require_fixed_width_integer_fields() {
             }
         )
     }));
-    let _ = inner;
 }
 
 #[test]
@@ -451,6 +447,25 @@ fn qualified_foreign_and_nested_heads_preserve_field_accessibility() {
 fn direct_root_test_requires_the_selected_path_to_be_fully_available() {
     let errors = build(
         "record Ticket {} \
+         record Inner { flag: Bool, ticket: Ticket } \
+         record Outer { inner: Inner } \
+         fn take(value: Inner) {} \
+         fn f(root: Outer) { \
+             take(root.inner); \
+             if let Outer { inner: Inner { flag: true, .. } } = (root) {} \
+         }",
+    )
+    .expect_err("a consumed ancestor makes the selected literal-test path unavailable");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnavailableFieldValue
+    ));
+}
+
+#[test]
+fn direct_root_strict_upper_bound_test_requires_the_selected_path_to_be_fully_available() {
+    let errors = build(
+        "record Ticket {} \
          record Inner { value: I8, ticket: Ticket } \
          record Outer { inner: Inner } \
          fn take(value: Inner) {} \
@@ -468,6 +483,23 @@ fn direct_root_test_requires_the_selected_path_to_be_fully_available() {
 
 #[test]
 fn direct_root_tests_require_shared_safe_authority_compatibility() {
+    let errors = build(
+        "record R { flag: Bool } \
+         fn f(seed: R) { \
+             let mut root: R = seed; \
+             let replacement: &mut R = &mut root; \
+             if let R { flag: true } = (root) {} \
+         }",
+    )
+    .expect_err("literal testing may not bypass overlapping replacement authority");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::ReferencePermissionUnavailable
+    ));
+}
+
+#[test]
+fn direct_root_strict_upper_bound_tests_require_shared_safe_authority_compatibility() {
     let errors = build(
         "record R { value: I8 } \
          fn f(seed: R) { \
