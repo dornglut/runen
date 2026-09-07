@@ -1221,7 +1221,7 @@ impl<'a> FunctionLowerer<'a> {
         &mut self,
         record: hir::RecordId,
         scrutinee: &hir::RecordPatternScrutinee,
-        tests: &[hir::RecordPatternLiteralTest],
+        tests: &[hir::RecordPatternTest],
         bindings: &[hir::RecordPatternBinding],
         mismatch_cleanup: Option<&hir::RecordPatternTransientCleanup>,
         success_block: &hir::Block,
@@ -1229,7 +1229,7 @@ impl<'a> FunctionLowerer<'a> {
     ) -> Result<(), LoweringError> {
         if tests.is_empty() {
             return Err(LoweringError::InvalidHirInvariant(
-                "refutable record selection has no literal tests",
+                "refutable record selection has no refutable tests",
             ));
         }
 
@@ -1238,7 +1238,7 @@ impl<'a> FunctionLowerer<'a> {
         for test in tests {
             if test.fields.is_empty() {
                 return Err(LoweringError::InvalidHirInvariant(
-                    "refutable record literal test has empty structural path",
+                    "refutable record test has empty structural path",
                 ));
             }
             if seen_paths
@@ -1262,31 +1262,54 @@ impl<'a> FunctionLowerer<'a> {
             let retained_ty = self.types.get(test.ty)?;
             if projected_ty != retained_ty {
                 return Err(LoweringError::InvalidHirInvariant(
-                    "refutable record literal test type does not match projected field type",
+                    "refutable record test type does not match projected field type",
                 ));
             }
             if !literal_matches_type(test.value, test.ty) {
                 return Err(LoweringError::InvalidHirInvariant(
-                    "refutable record literal test value does not match retained test type",
+                    "refutable record test value does not match retained test type",
                 ));
             }
-            if !matches!(
-                test.ty,
-                hir::Type::Intrinsic(
-                    hir::IntrinsicType::Bool
-                        | hir::IntrinsicType::I8
-                        | hir::IntrinsicType::I16
-                        | hir::IntrinsicType::I32
-                        | hir::IntrinsicType::I64
-                        | hir::IntrinsicType::U8
-                        | hir::IntrinsicType::U16
-                        | hir::IntrinsicType::U32
-                        | hir::IntrinsicType::U64
-                )
-            ) {
-                return Err(LoweringError::InvalidHirInvariant(
-                    "refutable record literal test type is not Bool or fixed-width integer",
-                ));
+            match test.kind {
+                hir::RecordPatternTestKind::Equality => {
+                    if !matches!(
+                        test.ty,
+                        hir::Type::Intrinsic(
+                            hir::IntrinsicType::Bool
+                                | hir::IntrinsicType::I8
+                                | hir::IntrinsicType::I16
+                                | hir::IntrinsicType::I32
+                                | hir::IntrinsicType::I64
+                                | hir::IntrinsicType::U8
+                                | hir::IntrinsicType::U16
+                                | hir::IntrinsicType::U32
+                                | hir::IntrinsicType::U64
+                        )
+                    ) {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "refutable record equality test type is not Bool or fixed-width integer",
+                        ));
+                    }
+                }
+                hir::RecordPatternTestKind::StrictUpperBound => {
+                    if !matches!(
+                        test.ty,
+                        hir::Type::Intrinsic(
+                            hir::IntrinsicType::I8
+                                | hir::IntrinsicType::I16
+                                | hir::IntrinsicType::I32
+                                | hir::IntrinsicType::I64
+                                | hir::IntrinsicType::U8
+                                | hir::IntrinsicType::U16
+                                | hir::IntrinsicType::U32
+                                | hir::IntrinsicType::U64
+                        )
+                    ) {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "refutable record strict-upper-bound test type is not a fixed-width integer",
+                        ));
+                    }
+                }
             }
         }
 
@@ -1413,8 +1436,9 @@ impl<'a> FunctionLowerer<'a> {
         for test in tests {
             let matched_target = self.new_block()?;
             let place = self.local_place(source_local, &test.fields)?;
-            match (test.ty, test.value) {
+            match (test.kind, test.ty, test.value) {
                 (
+                    hir::RecordPatternTestKind::Equality,
                     hir::Type::Intrinsic(hir::IntrinsicType::Bool),
                     hir::LiteralValue::Bool(value),
                 ) => {
@@ -1430,6 +1454,7 @@ impl<'a> FunctionLowerer<'a> {
                     })?;
                 }
                 (
+                    hir::RecordPatternTestKind::Equality,
                     hir::Type::Intrinsic(
                         hir::IntrinsicType::I8
                         | hir::IntrinsicType::I16
@@ -1455,9 +1480,36 @@ impl<'a> FunctionLowerer<'a> {
                         false_target: mismatch_target,
                     })?;
                 }
+                (
+                    hir::RecordPatternTestKind::StrictUpperBound,
+                    hir::Type::Intrinsic(
+                        hir::IntrinsicType::I8
+                        | hir::IntrinsicType::I16
+                        | hir::IntrinsicType::I32
+                        | hir::IntrinsicType::I64
+                        | hir::IntrinsicType::U8
+                        | hir::IntrinsicType::U16
+                        | hir::IntrinsicType::U32
+                        | hir::IntrinsicType::U64,
+                    ),
+                    literal,
+                ) => {
+                    let result = self.push_core_temporary(core_bool_ty)?;
+                    self.push_statement(core::Statement::IntegerLt {
+                        dst: core::Place::local(result),
+                        operand_type: self.types.get(test.ty)?,
+                        left: core::Operand::Copy(place.into()),
+                        right: core::Operand::Constant(lower_literal(literal)),
+                    });
+                    self.terminate_current(core::Terminator::Branch {
+                        condition: core::Operand::Move(core::Place::local(result).into()),
+                        true_target: matched_target,
+                        false_target: mismatch_target,
+                    })?;
+                }
                 _ => {
                     return Err(LoweringError::InvalidHirInvariant(
-                        "refutable record literal test escaped prior retained-type validation",
+                        "refutable record test escaped prior retained-kind/type validation",
                     ));
                 }
             }
