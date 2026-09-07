@@ -1324,9 +1324,11 @@ impl<'a> FunctionLowerer<'a> {
             }
 
             if let Some(test_index) = binding.composite_test {
-                let test = tests.get(test_index).ok_or(LoweringError::InvalidHirInvariant(
-                    "refutable record selection composite test index is out of range",
-                ))?;
+                let test = tests
+                    .get(test_index)
+                    .ok_or(LoweringError::InvalidHirInvariant(
+                        "refutable record selection composite test index is out of range",
+                    ))?;
                 if !claimed_composite_tests.insert(test_index) {
                     return Err(LoweringError::InvalidHirInvariant(
                         "refutable record selection retained test has multiple composite bindings",
@@ -1349,8 +1351,7 @@ impl<'a> FunctionLowerer<'a> {
                 }
                 if test_paths.iter().enumerate().any(|(index, path)| {
                     index != test_index
-                        && (binding.fields.starts_with(path)
-                            || path.starts_with(&binding.fields))
+                        && (binding.fields.starts_with(path) || path.starts_with(&binding.fields))
                 }) {
                     return Err(LoweringError::InvalidHirInvariant(
                         "refutable record selection composite binding overlaps an independent test",
