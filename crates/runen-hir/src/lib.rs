@@ -315,14 +315,23 @@ pub struct RecordPatternBinding {
     pub ownership: OwnedUse,
 }
 
-/// One resolved refutable record-pattern literal test in depth-first source order.
+/// Exact accepted refutable record-pattern test relation retained for lowering.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecordPatternTestKind {
+    Equality,
+    StrictUpperBound,
+}
+
+/// One resolved refutable record-pattern test in depth-first source order.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct RecordPatternLiteralTest {
+pub struct RecordPatternTest {
     /// Complete resolved structural field path from the top pattern root.
     pub fields: Vec<usize>,
+    /// Accepted source-semantic test relation for this leaf.
+    pub kind: RecordPatternTestKind,
     /// Exact scalar source type selected from the resolved field declaration.
     pub ty: Type,
-    /// Materialized semantic literal value under `ty`.
+    /// Materialized semantic equality literal or strict-upper-bound value under `ty`.
     pub value: LiteralValue,
 }
 
@@ -544,7 +553,7 @@ pub enum Statement {
     RefutableRecordSelection {
         record: RecordId,
         scrutinee: RecordPatternScrutinee,
-        tests: Vec<RecordPatternLiteralTest>,
+        tests: Vec<RecordPatternTest>,
         bindings: Vec<RecordPatternBinding>,
         /// Producer-backed mismatch cleanup for the complete pattern transient.
         /// Direct-root selections retain `None` because no pattern transient exists.
@@ -779,7 +788,7 @@ pub enum DiagnosticKind {
     DuplicateRecordPatternField,
     MissingRecordPatternField,
     DuplicatePatternBinding,
-    RefutableRecordPatternRequiresLiteralTest,
+    RefutableRecordPatternRequiresRefutableTest,
     ExpectedRecordForFieldAccess,
     InaccessibleRecordField,
     UnavailableFieldValue,
