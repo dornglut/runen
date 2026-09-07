@@ -85,6 +85,8 @@ fn rejects_wider_or_malformed_strict_upper_bound_targets() {
         "record R { value: I8 } fn f(root: R) { if let R { value: < 1.0 } = (root) {} }",
         "record R { value: I8 } fn f(root: R) { if let R { value: < bound } = (root) {} }",
         "record R { value: I8 } fn f(root: R) { if let R { value: <= 1 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: < 1..2 } = (root) {} }",
+        "record R { value: I8 } fn f(root: R) { if let R { value: 1 < 2 } = (root) {} }",
         "record R { value: I8 } fn f(root: R) { let R { value: < 1 } = root; }",
     ] {
         let parsed = parse(source);
