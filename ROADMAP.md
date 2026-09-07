@@ -64,6 +64,10 @@ The represented source-reference and unsafe foundation closes the P0-D reference
 
 This closure applies only to the represented reference/raw-pointer/unsafe relations. Named or non-lexical lifetime systems, plain-Exclusive source references, reference-containing aggregates, broader result origins or replacement-capable results, generalized reference-relative places, unsafe-callable/caller-proof systems, cross-activation raw pointers, and pointer arithmetic/conversion/layout/address-stability/pinning/ABI/FFI mechanisms remain future extensions requiring separately accepted consumers or design work. This closure does not change a normative document's status or define an open specification item.
 
+The represented lexical, concrete-grammar, scope, and module foundation closes the P0-D grammar/name-resolution obligation required by the current gate: the accepted UTF-8/Unicode-17 lexical identity profile and bounded concrete grammar, opaque compilation-context modules with order-independent declaration namespaces and private/exported accessibility, source-unit-local aliases with exact one-hop qualified lookup, and the represented function-local scope/value-binding relation with no-overlap shadowing and local-before-module lookup.
+
+This closure applies only to the represented lexical/grammar/name-resolution relations. Nested module paths, source-visible module locators, selective/glob imports, re-exports, preludes, separate namespaces or overload/member lookup, package/filesystem discovery and interface serialization, future generic/lifetime/capture/label name domains, identifier escaping, broader identifier/reserved-key policies, and additional token/literal/comment classes remain future extensions requiring separately accepted consumers or design work. This closure does not change a normative document's status or define an open specification item.
+
 **Gate:** an independent frontend can validate and lower source without inventing language rules.
 
 ## P0-E — Model completion
