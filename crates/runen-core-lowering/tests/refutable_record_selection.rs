@@ -906,10 +906,26 @@ fn composite_integer_tests_lower_before_projected_binding_copies() {
     assert_eq!(eqs.len(), 1);
     assert_eq!(lts.len(), 1);
 
-    let (eq_block, CoreStatement::IntegerEq { left: eq_left, right: eq_right, .. }) = eqs[0] else {
+    let (
+        eq_block,
+        CoreStatement::IntegerEq {
+            left: eq_left,
+            right: eq_right,
+            ..
+        },
+    ) = eqs[0]
+    else {
         unreachable!();
     };
-    let (lt_block, CoreStatement::IntegerLt { left: lt_left, right: lt_right, .. }) = lts[0] else {
+    let (
+        lt_block,
+        CoreStatement::IntegerLt {
+            left: lt_left,
+            right: lt_right,
+            ..
+        },
+    ) = lts[0]
+    else {
         unreachable!();
     };
     assert_eq!(direct_projection(eq_left), Some(vec![Projection::Field(0)]));
@@ -943,16 +959,21 @@ fn composite_integer_tests_lower_before_projected_binding_copies() {
             .iter()
             .position(|local| local.name == name)
             .expect("composite success binding local");
-        assert!(f.body.blocks[after_lt.0 as usize].statements.iter().any(|statement| {
-            matches!(
-                statement,
-                CoreStatement::Init {
-                    dst,
-                    src: Operand::Copy(PlaceAccess::Direct(source)),
-                } if dst.local.0 as usize == local
-                    && source.projections == [Projection::Field(projection)]
-            )
-        }));
+        assert!(
+            f.body.blocks[after_lt.0 as usize]
+                .statements
+                .iter()
+                .any(|statement| {
+                    matches!(
+                        statement,
+                        CoreStatement::Init {
+                            dst,
+                            src: Operand::Copy(PlaceAccess::Direct(source)),
+                        } if dst.local.0 as usize == local
+                            && source.projections == [Projection::Field(projection)]
+                    )
+                })
+        );
     }
 }
 
@@ -1004,56 +1025,65 @@ fn producer_composite_binds_after_test_and_preserves_tested_path_for_success_cle
     let observed_init = success
         .statements
         .iter()
-        .position(|statement| matches!(
-            statement,
-            CoreStatement::Init {
-                dst,
-                src: Operand::Copy(PlaceAccess::Direct(place)),
-            } if dst.local.0 as usize == observed
-                && place.local == source
-                && place.projections == [Projection::Field(0)]
-        ))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Init {
+                    dst,
+                    src: Operand::Copy(PlaceAccess::Direct(place)),
+                } if dst.local.0 as usize == observed
+                    && place.local == source
+                    && place.projections == [Projection::Field(0)]
+            )
+        })
         .expect("composite binding must copy its tested field");
     let moved_init = success
         .statements
         .iter()
-        .position(|statement| matches!(
-            statement,
-            CoreStatement::Init {
-                dst,
-                src: Operand::Move(PlaceAccess::Direct(place)),
-            } if dst.local.0 as usize == moved
-                && place.local == source
-                && place.projections == [Projection::Field(1)]
-        ))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Init {
+                    dst,
+                    src: Operand::Move(PlaceAccess::Direct(place)),
+                } if dst.local.0 as usize == moved
+                    && place.local == source
+                    && place.projections == [Projection::Field(1)]
+            )
+        })
         .expect("ordinary binding must move its nonduplicable field");
     let tested_cleanup = success
         .statements
         .iter()
-        .position(|statement| matches!(
-            statement,
-            CoreStatement::Drop {
-                place: PlaceAccess::Direct(place),
-            } if place.local == source && place.projections == [Projection::Field(0)]
-        ))
+        .position(|statement| {
+            matches!(
+                statement,
+                CoreStatement::Drop {
+                    place: PlaceAccess::Direct(place),
+                } if place.local == source && place.projections == [Projection::Field(0)]
+            )
+        })
         .expect("success cleanup retains duplicated composite path");
     assert!(observed_init < tested_cleanup && moved_init < tested_cleanup);
 
-    assert!(f.body.blocks[false_target.0 as usize].statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::Drop {
-            place: PlaceAccess::Direct(place),
-        } if place.local == source && place.projections.is_empty()
-    )));
+    assert!(
+        f.body.blocks[false_target.0 as usize]
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Drop {
+                    place: PlaceAccess::Direct(place),
+                } if place.local == source && place.projections.is_empty()
+            ))
+    );
 }
 
 #[test]
 fn lowering_rejects_equal_test_binding_overlap_without_explicit_composite_association() {
-    let mut compilation = hir(
-        "record R { first: I8, second: I8 } fn f(root: R) { \
+    let mut compilation = hir("record R { first: I8, second: I8 } fn f(root: R) { \
              if let R { first: 1, second: bound } = (root) {} else {} \
-         }",
-    );
+         }");
     let Statement::RefutableRecordSelection { bindings, .. } = selection_mut(&mut compilation, "f")
     else {
         panic!("expected refutable record selection");
@@ -1090,11 +1120,9 @@ fn lowering_rejects_out_of_range_composite_test_index() {
 
 #[test]
 fn lowering_rejects_composite_associated_path_mismatch() {
-    let mut compilation = hir(
-        "record R { first: I8, second: I8 } fn f(root: R) { \
+    let mut compilation = hir("record R { first: I8, second: I8 } fn f(root: R) { \
              if let R { first: bound == 1, second: 2 } = (root) {} else {} \
-         }",
-    );
+         }");
     let Statement::RefutableRecordSelection { bindings, .. } = selection_mut(&mut compilation, "f")
     else {
         panic!("expected refutable record selection");
@@ -1149,11 +1177,9 @@ fn lowering_rejects_consume_ownership_on_composite_binding() {
 
 #[test]
 fn lowering_rejects_duplicate_bindings_claiming_one_composite_test() {
-    let mut compilation = hir(
-        "record R { first: I8, second: I8 } fn f(root: R) { \
+    let mut compilation = hir("record R { first: I8, second: I8 } fn f(root: R) { \
              if let R { first: a == 1, second: b == 2 } = (root) {} else {} \
-         }",
-    );
+         }");
     let Statement::RefutableRecordSelection { bindings, .. } = selection_mut(&mut compilation, "f")
     else {
         panic!("expected refutable record selection");
@@ -1170,10 +1196,10 @@ fn lowering_rejects_duplicate_bindings_claiming_one_composite_test() {
 
 #[test]
 fn lowering_rejects_composite_association_on_irrefutable_destructuring() {
-    let mut compilation = hir(
-        "record R { value: I8 } fn f(root: R) { let R { value: bound } = root; }",
-    );
-    let Statement::RecordDestructure { bindings, .. } = &mut compilation.functions[0].body.statements[0]
+    let mut compilation =
+        hir("record R { value: I8 } fn f(root: R) { let R { value: bound } = root; }");
+    let Statement::RecordDestructure { bindings, .. } =
+        &mut compilation.functions[0].body.statements[0]
     else {
         panic!("expected irrefutable record destructuring");
     };
