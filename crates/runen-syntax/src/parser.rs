@@ -645,9 +645,7 @@ impl Parser<'_> {
                 {
                     self.parse_record_pattern_in(context);
                 }
-                Some(SyntaxKind::EqEq)
-                    if matches!(context, RecordPatternContext::Refutable) =>
-                {
+                Some(SyntaxKind::EqEq) if matches!(context, RecordPatternContext::Refutable) => {
                     self.bump();
                     self.bump();
                     if !self.parse_refutable_record_literal_test() {
@@ -659,9 +657,7 @@ impl Parser<'_> {
                         }
                     }
                 }
-                Some(SyntaxKind::Less)
-                    if matches!(context, RecordPatternContext::Refutable) =>
-                {
+                Some(SyntaxKind::Less) if matches!(context, RecordPatternContext::Refutable) => {
                     self.bump();
                     self.parse_refutable_record_strict_upper_bound_test();
                 }
