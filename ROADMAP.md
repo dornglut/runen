@@ -60,6 +60,10 @@ The represented source-pattern foundation closes the P0-D pattern obligation req
 
 This pattern closure applies only to represented pattern forms. It does not make multi-arm `match`/`case` selection, alternatives/or-patterns or generalized exhaustiveness, guards, lower-bound/non-strict/two-sided range relations or multiple tests on one field, wildcard/ignore/shorthand bindings, tuple/array/enum/variant patterns, reference/borrow/mutable binding modes, destructuring assignment, general scrutinee or pattern-expression widening, or non-duplicable/broader same-path composites P0-D baseline requirements. Those remain future extensions requiring separately accepted consumers or design work. This closure does not change a normative document's status or define an open specification item.
 
+The represented source-reference and unsafe foundation closes the P0-D reference/lifetime, source-level unsafe, and concrete safe-public-contract obligations required by the current gate: bounded Shared and replacement-capable references with accepted root/field formation, reborrow, complete-referent use/replacement, lexical authority/carrier validity and Shared result contracts; plus activation-local raw pointers, lexical unsafe admission, and static discharge of every represented unsafe Core precondition.
+
+This closure applies only to the represented reference/raw-pointer/unsafe relations. Named or non-lexical lifetime systems, plain-Exclusive source references, reference-containing aggregates, broader result origins or replacement-capable results, generalized reference-relative places, unsafe-callable/caller-proof systems, cross-activation raw pointers, and pointer arithmetic/conversion/layout/address-stability/pinning/ABI/FFI mechanisms remain future extensions requiring separately accepted consumers or design work. This closure does not change a normative document's status or define an open specification item.
+
 **Gate:** an independent frontend can validate and lower source without inventing language rules.
 
 ## P0-E — Model completion
