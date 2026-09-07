@@ -629,7 +629,10 @@ fn composite_targets_retain_explicit_test_identity_and_independent_depth_first_o
     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
 
     assert_eq!(
-        tests.iter().map(|test| test.fields.clone()).collect::<Vec<_>>(),
+        tests
+            .iter()
+            .map(|test| test.fields.clone())
+            .collect::<Vec<_>>(),
         [vec![0, 0], vec![0, 1], vec![1]]
     );
     assert_eq!(tests[0].kind, RecordPatternTestKind::Equality);
@@ -654,7 +657,11 @@ fn composite_targets_retain_explicit_test_identity_and_independent_depth_first_o
             (vec![1], Some(2)),
         ]
     );
-    assert!(bindings.iter().all(|binding| binding.ownership == OwnedUse::Duplicate));
+    assert!(
+        bindings
+            .iter()
+            .all(|binding| binding.ownership == OwnedUse::Duplicate)
+    );
 }
 
 #[test]
