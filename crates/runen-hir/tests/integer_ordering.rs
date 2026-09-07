@@ -85,11 +85,17 @@ fn exact_and_contextual_selection_is_symmetric_and_materializes_i32_literals() {
     let (operand_type, left, right) = integer_lt(returned(&hir, "right_literal"));
     assert_eq!(operand_type, Type::Intrinsic(IntrinsicType::I32));
     assert_eq!(left.ty, operand_type);
-    assert!(matches!(right.kind, ValueKind::Literal(LiteralValue::I32(1))));
+    assert!(matches!(
+        right.kind,
+        ValueKind::Literal(LiteralValue::I32(1))
+    ));
 
     let (operand_type, left, right) = integer_lt(returned(&hir, "left_literal"));
     assert_eq!(operand_type, Type::Intrinsic(IntrinsicType::I32));
-    assert!(matches!(left.kind, ValueKind::Literal(LiteralValue::I32(1))));
+    assert!(matches!(
+        left.kind,
+        ValueKind::Literal(LiteralValue::I32(1))
+    ));
     assert_eq!(right.ty, operand_type);
 }
 
@@ -217,10 +223,9 @@ fn invalid_grouped_inner_ordering_cannot_be_repaired_by_outer_bool_anchor() {
             .any(|error| error.kind == DiagnosticKind::IntegerOrderingOperandsUnanchored)
     );
 
-    let inadmissible = build(
-        "fn f(left: F32, right: F32, flag: Bool) -> Bool { return flag == (left < right); }",
-    )
-    .expect_err("outer Bool evidence must not repair non-integer inner ordering");
+    let inadmissible =
+        build("fn f(left: F32, right: F32, flag: Bool) -> Bool { return flag == (left < right); }")
+            .expect_err("outer Bool evidence must not repair non-integer inner ordering");
     assert!(inadmissible.iter().any(|error| matches!(
         error.kind,
         DiagnosticKind::IntegerOrderingRequiresInteger {
