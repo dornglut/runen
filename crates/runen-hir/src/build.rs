@@ -10,10 +10,10 @@ use crate::{
     BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
     LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
-    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternLiteralTest,
-    RecordPatternScrutinee, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
-    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type,
-    TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
+    RecordPatternTest, RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission,
+    ReferenceReferent, Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement,
+    Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -2549,8 +2549,9 @@ struct ResolvedPatternBinding {
 }
 
 #[derive(Debug, Clone)]
-struct ResolvedPatternLiteralTest {
+struct ResolvedPatternTest {
     fields: Vec<usize>,
+    kind: RecordPatternTestKind,
     ty: Type,
     value: LiteralValue,
     location: SourceLocation,
@@ -2560,8 +2561,8 @@ struct ResolvedPatternLiteralTest {
 struct PatternValidation {
     valid: bool,
     bindings: Vec<ResolvedPatternBinding>,
-    tests: Vec<ResolvedPatternLiteralTest>,
-    literal_test_count: usize,
+    tests: Vec<ResolvedPatternTest>,
+    test_count: usize,
     seen_binding_names: BTreeSet<String>,
     active_binding_names: BTreeSet<String>,
 }
@@ -2572,7 +2573,7 @@ impl PatternValidation {
             valid: true,
             bindings: Vec::new(),
             tests: Vec::new(),
-            literal_test_count: 0,
+            test_count: 0,
             seen_binding_names: BTreeSet::new(),
             active_binding_names: active_bindings.keys().cloned().collect(),
         }
@@ -2926,11 +2927,20 @@ fn validate_refutable_record_pattern_node(
                 SyntaxKind::BooleanLiteral | SyntaxKind::DecimalIntegerLiteral
             )
         }) {
-            validation.literal_test_count += 1;
+            validation.test_count += 1;
             let ty = record_decl.fields[field].ty;
             let literal_location = location(header.unit, &literal_node);
-            let value = match literal_node.kind() {
-                SyntaxKind::BooleanLiteral => {
+            let kind = if pattern_field
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .any(|token| token.kind() == SyntaxKind::Less)
+            {
+                RecordPatternTestKind::StrictUpperBound
+            } else {
+                RecordPatternTestKind::Equality
+            };
+            let value = match (kind, literal_node.kind()) {
+                (RecordPatternTestKind::Equality, SyntaxKind::BooleanLiteral) => {
                     let found = Type::Intrinsic(IntrinsicType::Bool);
                     if ty != found {
                         diagnostics.push(Diagnostic {
@@ -2952,14 +2962,43 @@ fn validate_refutable_record_pattern_node(
                         Some(LiteralValue::Bool(token.kind() == SyntaxKind::KwTrue))
                     }
                 }
-                SyntaxKind::DecimalIntegerLiteral => {
+                (RecordPatternTestKind::Equality, SyntaxKind::DecimalIntegerLiteral) => {
                     materialize_integer_literal(&literal_node, ty, literal_location, diagnostics)
                 }
-                _ => unreachable!("refutable pattern literal has accepted syntax kind"),
+                (RecordPatternTestKind::StrictUpperBound, SyntaxKind::DecimalIntegerLiteral) => {
+                    if !matches!(
+                        ty,
+                        Type::Intrinsic(
+                            IntrinsicType::I8
+                                | IntrinsicType::I16
+                                | IntrinsicType::I32
+                                | IntrinsicType::I64
+                                | IntrinsicType::U8
+                                | IntrinsicType::U16
+                                | IntrinsicType::U32
+                                | IntrinsicType::U64
+                        )
+                    ) {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::IntegerOrderingRequiresInteger {
+                                operand_type: ty,
+                            },
+                            location: field_location,
+                        });
+                        None
+                    } else {
+                        materialize_integer_literal(&literal_node, ty, literal_location, diagnostics)
+                    }
+                }
+                (RecordPatternTestKind::StrictUpperBound, SyntaxKind::BooleanLiteral) => {
+                    unreachable!("syntax-clean strict-upper-bound pattern test has integer bound")
+                }
+                _ => unreachable!("refutable pattern test has accepted syntax kind"),
             };
             if let Some(value) = value {
-                validation.tests.push(ResolvedPatternLiteralTest {
+                validation.tests.push(ResolvedPatternTest {
                     fields: path.clone(),
+                    kind,
                     ty,
                     value,
                     location: field_location,
@@ -3244,9 +3283,9 @@ fn validate_refutable_record_selection(
         &mut validation,
         diagnostics,
     )?;
-    if validation.literal_test_count == 0 {
+    if validation.test_count == 0 {
         diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::RefutableRecordPatternRequiresLiteralTest,
+            kind: DiagnosticKind::RefutableRecordPatternRequiresRefutableTest,
             location: location(header.unit, &pattern_node),
         });
         validation.valid = false;
@@ -3386,8 +3425,9 @@ fn validate_refutable_record_selection(
     let tests = validation
         .tests
         .iter()
-        .map(|test| RecordPatternLiteralTest {
+        .map(|test| RecordPatternTest {
             fields: test.fields.clone(),
+            kind: test.kind,
             ty: test.ty,
             value: test.value,
         })
