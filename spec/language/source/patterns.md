@@ -2,9 +2,9 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for recursive named-field record patterns: the existing irrefutable record-destructuring declaration with bounded node-local rest/omission, and one bounded single-success refutable record-selection pattern with exact `Bool`/fixed-width-integer literal-test leaves. It owns unqualified same-module and qualified cross-module nominal pattern-head selection, recursive field/rest structure, binding-leaf and literal-test order, scrutinee-category selection, direct binding-root ownership consequences, producer-backed pattern-scrutinee transient ownership/cleanup, and the pattern-local success/mismatch relation before control-flow arm execution.
+This document owns the represented source semantics for recursive named-field record patterns: the existing irrefutable record-destructuring declaration with bounded node-local rest/omission, and one bounded single-success refutable record-selection pattern with exact `Bool`/fixed-width-integer equality literal-test leaves plus fixed-width-integer strict-upper-bound test leaves. It owns unqualified same-module and qualified cross-module nominal pattern-head selection, recursive field/rest structure, binding-leaf and refutable-test order, scrutinee-category selection, direct binding-root ownership consequences, producer-backed pattern-scrutinee transient ownership/cleanup, and the pattern-local success/mismatch relation before control-flow arm execution.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup and qualified cross-module lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), Boolean and decimal-integer literal materialization from [Source literal semantics](literals.md), exact Boolean and fixed-width integer equality value relations from [Source operator semantics](operators.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), the canonical direct safe-authority compatibility relation from [Source safe references](references.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, record-construction completion, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration/pattern-transient completion from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup and qualified cross-module lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), Boolean and decimal-integer literal materialization from [Source literal semantics](literals.md), exact Boolean and fixed-width integer equality value relations plus the fixed-width integer strict-less-than value relation from [Source operator semantics](operators.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), the canonical direct safe-authority compatibility relation from [Source safe references](references.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, record-construction completion, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration/pattern-transient completion from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The represented concrete pattern, rest-marker, scrutinee, and bounded `if let` spellings are owned by [Source concrete syntax](concrete-syntax.md). Success/mismatch arm execution and definite normal-successor composition are owned by [Source control flow](control-flow.md).
 
@@ -386,20 +386,33 @@ The represented refutable pattern operation is one recursive named-field record 
 A **refutable record-pattern node** has the same explicit nominal record head, explicit-field uniqueness/accessibility relation, no-rest exhaustiveness/rest-authorized omission relation, and optional final rest marker as an irrefutable record-pattern node. Its explicit field target is exactly one of:
 
 - one ordinary binding leaf with the same binding identity/type relation as above;
-- one nested refutable record-pattern node satisfying the same exact nominal field-type requirement as above; or
-- one **literal-test leaf**.
+- one nested refutable record-pattern node satisfying the same exact nominal field-type requirement as above;
+- one **equality literal-test leaf**; or
+- one **strict-upper-bound test leaf**.
 
-A literal-test leaf is exactly one represented Boolean literal or one represented decimal integer literal. It introduces no binding. No one field target both binds and tests the same path in this revision. A source-valid refutable pattern MUST contain at least one literal-test leaf somewhere in the complete recursive tree; a zero-test tree is rejected in this operation rather than becoming an always-success selector for capability already owned by irrefutable destructuring.
+An equality literal-test leaf is exactly one represented Boolean literal or one represented decimal integer literal. Its semantics are unchanged from the previously represented literal-test relation.
 
-Every literal-test leaf corresponds to the complete resolved structural path formed by its explicit field ancestry. Let `T` be that path's exact selected field type.
+A strict-upper-bound test leaf contains exactly one represented decimal integer literal bound. It denotes only the pattern-local relation `selected_field_value < materialized_bound` through the accepted plain fixed-width integer strict-less-than value relation from `operators.md`. It is not a general comparison `Value`, contains no producer operand, and introduces no binding.
+
+Neither test category introduces a binding. No one field target both binds and tests the same path in this revision. A source-valid refutable pattern MUST contain at least one **refutable-test leaf** somewhere in the complete recursive tree, where an equality literal-test leaf or a strict-upper-bound test leaf each satisfies that requirement. A zero-test tree is rejected in this operation rather than becoming an always-success selector for capability already owned by irrefutable destructuring.
+
+Every refutable-test leaf corresponds to the complete resolved structural path formed by its explicit field ancestry. Let `T` be that path's exact selected field type.
+
+For an equality literal-test leaf:
 
 - a Boolean literal test is valid exactly when `T` is intrinsic `Bool`;
-- a decimal integer literal test is valid exactly when `T` is one of `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, or `U64` and `literals.md` successfully materializes that literal under exact required type `T`;
-- every other field type rejects the test leaf.
+- a decimal integer literal test is valid exactly when `T` is one of `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, or `U64` and `literals.md` successfully materializes that literal under exact required type `T`; and
+- every other field type rejects the equality literal-test leaf.
 
-The selected field type supplies the literal's required type directly. This relation creates no default integer type, coercion, promotion, conversion, comparison-local type inference, or general pattern inference. The materialized literal is a static semantic constant with no ownership state and no runtime producer evaluation.
+For a strict-upper-bound test leaf:
 
-Literal-test source order is depth-first traversal in explicit field order, independently of binding-leaf production order: visit explicit fields in written order, contribute a literal-test target immediately, recursively contribute tests from a nested refutable node before the next sibling, and contribute nothing for a binding target or rest marker. Binding-leaf order remains the existing depth-first binding-only order above, with literal-test targets contributing no binding leaf or position to that binding order.
+- `T` MUST be exactly one of `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32`, or `U64`;
+- `literals.md` MUST successfully materialize the bound's existing decimal integer literal under exact required type `T`; and
+- every other field type, or a bound that cannot materialize under `T`, rejects the strict-upper-bound test leaf.
+
+The selected field declaration supplies the exact required type directly for either test category. This relation creates no default integer type, coercion, promotion, conversion, comparison-local operand evidence, general comparison inference, or general pattern inference. In particular, the ordinary comparison-local evidence relation from `function-execution.md` is neither invoked nor widened by a strict-upper-bound pattern test. The materialized literal or bound is a static semantic constant with no ownership state and no runtime producer evaluation.
+
+**Refutable-test source order** is depth-first traversal in explicit field order, independently of binding-leaf production order: visit explicit fields in written order, contribute an equality literal-test or strict-upper-bound target immediately, recursively contribute refutable tests from a nested refutable node before the next sibling, and contribute nothing for a binding target or rest marker. Binding-leaf order remains the existing depth-first binding-only order above, with either test category contributing no binding leaf or position to that binding order.
 
 ### Complete refutable-pattern validation before scrutinee effects
 
@@ -410,36 +423,39 @@ Validation establishes at least:
 1. every head lookup/category/accessibility and exact top/nested nominal record relation;
 2. every explicit field identity, uniqueness fact, direct accessibility fact, and no-rest exhaustiveness or rest-authorized omission relation;
 3. every binding leaf path/type/key, complete binding-leaf order, lexical-key uniqueness, and shadowing fact;
-4. every literal-test path, exact field type, admitted literal category, successful static literal materialization, and complete literal-test order; and
-5. presence of at least one literal-test leaf.
+4. every refutable-test path, exact selected field type, exact test category, successful applicable static literal/bound materialization, and complete refutable-test order; and
+5. presence of at least one refutable-test leaf.
 
-A static pattern or literal failure commits no scrutinee producer-validation state and establishes no binding. Once the tree is valid, the top nominal record type supplies the exact complete producer result type exactly as for the irrefutable producer-backed pattern relation.
+A static pattern, test-category, field-type, or literal/bound-materialization failure commits no scrutinee producer-validation state and establishes no binding. Once the tree is valid, the top nominal record type supplies the exact complete producer result type exactly as for the irrefutable producer-backed pattern relation.
 
-For a direct-root refutable selection, every explicit binding-leaf path retains the existing fully-available plus Shared/Exclusive compatibility requirement above. Every literal-test path additionally MUST be fully available and satisfy the canonical **Shared requirement** from `references.md`, all against the same pre-selection structural/authority state. Testing reads one duplicable intrinsic scalar and therefore does not consume the selected path. Nested static pattern nodes and omitted fields add no independent availability/authority requirement merely because traversal enters or omits them.
+For a direct-root refutable selection, every explicit binding-leaf path retains the existing fully-available plus Shared/Exclusive compatibility requirement above. Every refutable-test path additionally MUST be fully available and satisfy the canonical **Shared requirement** from `references.md`, all against the same pre-selection structural/authority state. Testing reads one duplicable intrinsic scalar and therefore does not consume the selected path. Nested static pattern nodes and omitted fields add no independent availability/authority requirement merely because traversal enters or omits them.
 
-All direct-root binding and test path preconditions are discharged before the first dynamic literal test or binding transfer. Because the complete valid tree cannot select the same field identity twice at one node and nested targets remain structurally inside their selected field, a literal-test path cannot also be a binding path or contain a nested binding target beneath the same tested scalar. Distinct ownership-producing/test leaves are therefore structurally disjoint where simultaneous path operations exist.
+All direct-root binding and refutable-test path preconditions are discharged before the first dynamic refutable test or binding transfer. Because the complete valid tree cannot select the same field identity twice at one node and nested targets remain structurally inside their selected field, a refutable-test path cannot also be a binding path or contain a nested binding target beneath the same tested scalar. Distinct ownership-producing/test leaves are therefore structurally disjoint where simultaneous path operations exist.
 
 ### Two-phase match execution and no rollback
 
 After successful complete scrutinee acquisition, execute the refutable pattern in exactly two pattern-local phases.
 
-**Phase 1 — literal tests only.** Process literal-test leaves in retained literal-test source order. For each test path:
+**Phase 1 — refutable tests only.** Process refutable-test leaves in retained refutable-test source order. For each test path:
 
 1. obtain one non-consuming duplicate of the exact `Bool` or fixed-width-integer path value;
-2. compare it with the statically materialized literal through the accepted exact Boolean or fixed-width integer equality value relation;
-3. leave the scrutinee structural ownership state unchanged;
-4. if the values differ, select mismatch immediately and perform no later literal test or binding production;
-5. if they are equal, continue to the next literal test.
+2. for an equality literal-test leaf, compare that duplicate with the statically materialized literal through the accepted exact Boolean or fixed-width integer equality value relation, and regard the test as successful exactly when the values are equal;
+3. for a strict-upper-bound test leaf, apply the accepted plain fixed-width integer strict-less-than value relation with the duplicated path value as the left semantic operand and the statically materialized same-`T` bound as the right semantic operand, and regard the test as successful exactly when that result is `true`;
+4. leave the scrutinee structural ownership state unchanged;
+5. if the selected test is unsuccessful, select mismatch immediately and perform no later refutable test or binding production; and
+6. if it succeeds, continue to the next refutable test.
 
-After the complete scrutinee exists, each bounded literal test is finite, non-faulting, non-diverging, and ownership-neutral. A mismatch therefore occurs before any pattern binding value has been duplicated or transferred.
+The statically materialized equality literal or strict bound has no producer evaluation or independently addressable source ownership state. The ordering relation is never operand-reversed: strict-upper-bound success is exactly `path_value < bound`.
 
-**Phase 2 — binding production after full match only.** Only when every literal test succeeds, process ordinary binding leaves in the existing binding-leaf source order and apply exactly the existing direct-root or producer-transient duplicate-versus-consume relation above. No second testing pass occurs.
+After the complete scrutinee exists, each bounded refutable test is finite, non-faulting, non-diverging, and ownership-neutral. A mismatch therefore occurs before any pattern binding value has been duplicated or transferred.
+
+**Phase 2 — binding production after full match only.** Only when every refutable test succeeds, process ordinary binding leaves in the existing binding-leaf source order and apply exactly the existing direct-root or producer-transient duplicate-versus-consume relation above. No second testing pass occurs.
 
 This ordering is the canonical no-rollback boundary. Mismatch never undoes a binding transfer, recreates consumed structural ownership, copies a non-duplicable value, or creates a runtime moved-state/drop-flag mechanism.
 
 ### Refutable direct-root success and mismatch
 
-For a direct-root scrutinee, literal testing performs only non-consuming duplicates under the prevalidated Shared requirements.
+For a direct-root scrutinee, refutable testing performs only non-consuming duplicates under the prevalidated Shared requirements.
 
 On mismatch:
 
@@ -454,9 +470,9 @@ On full match, binding leaves are produced through the existing direct-root rela
 
 A producer-backed refutable selection reuses exactly the existing producer-backed scrutinee categories and evaluates the selected complete producer exactly once. Any producer-internal field-receiver transient finishes before the resulting record enters the distinct pattern scrutinee transient, exactly as above.
 
-If complete producer evaluation faults or diverges before the pattern transient exists, the existing producer fault/divergence relation applies: no literal test, binding production, selection arm, or pattern-transient cleanup begins merely because this is a refutable receiving position.
+If complete producer evaluation faults or diverges before the pattern transient exists, the existing producer fault/divergence relation applies: no refutable test, binding production, selection arm, or pattern-transient cleanup begins merely because this is a refutable receiving position.
 
-After successful producer completion, the pattern transient begins fully owned. Literal tests are non-consuming duplicates from that transient.
+After successful producer completion, the pattern transient begins fully owned. Refutable tests are non-consuming duplicates from that transient.
 
 On mismatch, no binding transfer has occurred, so the transient still has its initial empty consumed-path set. Its remaining frontier is therefore exactly the complete root. `function-execution.md` ends that transient exactly once before mismatch control begins.
 
@@ -466,7 +482,7 @@ Producer effects completed before the pattern transient exists remain effective 
 
 ### Refutable binding scope and pattern-local completion
 
-All success binding identities are statically established during pattern validation, but none enters lexical scope during scrutinee evaluation or literal testing. After full match, all binding-leaf values are produced, applicable producer-transient cleanup completes, and then all success bindings enter scope together for exactly the success child block owned by `control-flow.md`/`local-bindings.md`.
+All success binding identities are statically established during pattern validation, but none enters lexical scope during scrutinee evaluation or refutable testing. After full match, all binding-leaf values are produced, applicable producer-transient cleanup completes, and then all success bindings enter scope together for exactly the success child block owned by `control-flow.md`/`local-bindings.md`.
 
 Mismatch establishes no success binding. An explicit mismatch block is a sibling child scope and cannot resolve a success-only binding merely because its static identity was known during validation. With omitted mismatch, no synthetic binding scope exists.
 
@@ -502,23 +518,23 @@ No Core semantic change is required by this pattern relation. Existing structura
 
 Direct-root lowering can remain direct from the mapped source binding with no whole-record pattern temporary and emits projected source operations only for retained explicit binding leaves. Producer-backed lowering can reuse the existing complete producer result temporary as the pattern transient refinement; it does not need a source-visible synthetic binding. When the complete producer is a producer-backed field-value use, its receiver temporary and source-selected receiver cleanup finish first, and only its preserved selected result transfers into the separate pattern-scrutinee temporary/state. Producer-backed lowering then refines the already retained remaining cleanup frontier, including any omitted paths, through existing destruction.
 
-For bounded refutable selection, typed HIR additionally MUST retain every literal-test leaf in literal-test source order with its complete resolved path, exact admitted scalar type, and statically materialized semantic literal value; whether the pattern has the bounded refutable-selection category; and enough producer-transient cleanup facts to distinguish complete-root mismatch cleanup from post-binding success cleanup. Source validation MUST discharge every direct-root literal-test Shared requirement before lowering.
+For bounded refutable selection, typed HIR additionally MUST retain every refutable-test leaf in refutable-test source order with its complete resolved path, exact admitted scalar type, exact test category (equality literal or strict upper bound), and statically materialized semantic literal/bound value; whether the pattern has the bounded refutable-selection category; and enough producer-transient cleanup facts to distinguish complete-root mismatch cleanup from post-binding success cleanup. Source validation MUST discharge every direct-root refutable-test Shared requirement before lowering.
 
-A faithful bounded-refutable lowering performs all retained literal tests before emitting any retained binding-leaf `Copy`/`Move`. Fixed-width integer tests refine through an applicable projected/direct scalar `Copy`, exactly one accepted typed Core `IntegerEq`, and existing Bool `Branch`/`Goto` control flow. Boolean tests may refine through the existing Bool equality/branch relation without a new predicate operation. Producer mismatch cleanup uses the complete transient frontier; producer success cleanup uses the retained post-binding frontier. No Core `Match`, switch, generic predicate, pattern-test operation, `IntegerNe`, rollback operation, runtime discriminant object, or source state lattice is required.
+A faithful bounded-refutable lowering performs all retained refutable tests before emitting any retained binding-leaf `Copy`/`Move`. Fixed-width integer equality tests refine through an applicable projected/direct scalar `Copy`, exactly one accepted typed Core `IntegerEq`, and existing Bool `Branch`/`Goto` control flow. Boolean equality tests may refine through the existing Bool equality/branch relation without a new predicate operation. A strict-upper-bound test refines through the applicable projected/direct scalar operand, exactly one accepted typed Core `IntegerLt` of the retained exact integer type with the field value as left operand and the retained bound as right operand, followed by existing Bool `Branch`/`Goto` control flow. Producer mismatch cleanup uses the complete transient frontier; producer success cleanup uses the retained post-binding frontier. No Core `Match`, switch, range primitive, generic predicate, pattern-test operation, `IntegerNe`, Boolean-complement synthesis, compare-and-branch fusion requirement, rollback operation, runtime discriminant object, runtime helper, host comparison, or source state lattice is required.
 
-Lowering MUST NOT reconstruct pattern-head lookup/accessibility, whether a source node used rest, omitted field identities, no-rest exhaustiveness, binding-leaf order, literal-test order/type/value, source duplicability, path availability, consumed paths, direct safe-authority compatibility, field-receiver frontier membership, pattern-transient remaining-frontier membership, or match/mismatch cleanup selection from Core liveness/copyability/alias state. Zero-leaf source cleanup may refine to no Core `Drop` where the lower destruction domain is empty.
+Lowering MUST NOT reconstruct pattern-head lookup/accessibility, whether a source node used rest, omitted field identities, no-rest exhaustiveness, binding-leaf order, refutable-test order/kind/type/value, source duplicability, path availability, consumed paths, direct safe-authority compatibility, field-receiver frontier membership, pattern-transient remaining-frontier membership, or match/mismatch cleanup selection from Core liveness/copyability/alias state. Zero-leaf source cleanup may refine to no Core `Drop` where the lower destruction domain is empty.
 
 ## Future compatibility boundary
 
 The explicit field-target form permits later pattern categories to extend the right side of a field entry without changing the accepted binding-leaf or nested-record spellings. The bounded rest marker occupies only the node-level omission role defined here and does not become a field target.
 
-This revision does not define shorthand field binding, `_` wildcard/ignore bindings, tuple/array/enum patterns, top-level scalar patterns, floating literal tests, alternatives, guards, multi-arm `match`/`case`, reference/borrow binding modes, mutable pattern bindings, destructuring assignment, arbitrary pattern scrutinees, general expressions/grouping, qualified binding leaves, qualified field names, nested module paths beyond the represented alias/member pair, pattern-specific visibility modifiers, ranges, constructor spread/update, or general spread syntax.
+This revision does not define shorthand field binding, `_` wildcard/ignore bindings, tuple/array/enum patterns, top-level scalar patterns, floating literal tests, alternatives, guards, multi-arm `match`/`case`, reference/borrow binding modes, mutable pattern bindings, destructuring assignment, arbitrary pattern scrutinees, general expressions/grouping, qualified binding leaves, qualified field names, nested module paths beyond the represented alias/member pair, pattern-specific visibility modifiers, ranges, lower-bound tests, `<=`/`>`/`>=` pattern relations, constructor spread/update, or general spread syntax.
 
 Later pattern features must extend rather than reinterpret the direct-root and producer-backed recursive semantics accepted here. A future variant/range/multi-arm pattern feature must preserve the exact nominal and qualified-lookup semantics of represented record heads and the accepted no-rollback ownership boundary rather than silently replacing them with structural/runtime member lookup or maybe-owned state. A future wildcard or spread feature must not reinterpret this node-local rest marker as a produced value or binding.
 
 ## Source/Core separation
 
-Pattern ownership is source semantics over nominal record/field identities, structural paths, source type duplicability, binding identity, binding/test source order, node-local omission, direct safe-authority compatibility, literal-test equality, match/mismatch state, and pattern-transient ownership.
+Pattern ownership is source semantics over nominal record/field identities, structural paths, source type duplicability, binding identity, binding/refutable-test source order, node-local omission, direct safe-authority compatibility, equality/strict-upper-bound test relations, match/mismatch state, and pattern-transient ownership.
 
 A field-receiver transient used internally by a producer-backed field-value scrutinee is owned by the field-value operation, not by pattern semantics. Only the completed selected record result crosses into the pattern ownership relation.
 
