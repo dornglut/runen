@@ -219,10 +219,8 @@ fn test_only_producer_keeps_complete_root_on_success_and_mismatch() {
 
 #[test]
 fn ordering_only_pattern_satisfies_refutability_requirement() {
-    let hir = build(
-        "record R { value: I8 } fn f(root: R) { if let R { value: < 3 } = (root) {} }",
-    )
-    .expect("one strict-upper-bound test is refutable without equality");
+    let hir = build("record R { value: I8 } fn f(root: R) { if let R { value: < 3 } = (root) {} }")
+        .expect("one strict-upper-bound test is refutable without equality");
     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
     assert_eq!(tests.len(), 1);
     assert_eq!(tests[0].kind, RecordPatternTestKind::StrictUpperBound);
@@ -279,7 +277,8 @@ fn strict_upper_bounds_require_fixed_width_integer_fields() {
             Type::Intrinsic(IntrinsicType::F32),
         ),
     ] {
-        let errors = build(source).expect_err("strict upper bound requires fixed-width integer field");
+        let errors =
+            build(source).expect_err("strict upper bound requires fixed-width integer field");
         assert!(has_diagnostic(
             &errors,
             DiagnosticKind::IntegerOrderingRequiresInteger { operand_type }

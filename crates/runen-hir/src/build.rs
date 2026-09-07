@@ -2987,7 +2987,12 @@ fn validate_refutable_record_pattern_node(
                         });
                         None
                     } else {
-                        materialize_integer_literal(&literal_node, ty, literal_location, diagnostics)
+                        materialize_integer_literal(
+                            &literal_node,
+                            ty,
+                            literal_location,
+                            diagnostics,
+                        )
                     }
                 }
                 (RecordPatternTestKind::StrictUpperBound, SyntaxKind::BooleanLiteral) => {

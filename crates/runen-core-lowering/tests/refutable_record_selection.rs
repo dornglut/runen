@@ -198,11 +198,26 @@ fn mixed_equality_and_strict_upper_bound_tests_preserve_source_order_and_short_c
     assert_eq!(eqs.len(), 1);
     assert_eq!(lts.len(), 1);
 
-    let (eq_block, CoreStatement::IntegerEq { left: eq_left, right: eq_right, .. }) = eqs[0] else {
+    let (
+        eq_block,
+        CoreStatement::IntegerEq {
+            left: eq_left,
+            right: eq_right,
+            ..
+        },
+    ) = eqs[0]
+    else {
         unreachable!();
     };
-    let (lt_block, CoreStatement::IntegerLt { operand_type, left: lt_left, right: lt_right, .. }) =
-        lts[0]
+    let (
+        lt_block,
+        CoreStatement::IntegerLt {
+            operand_type,
+            left: lt_left,
+            right: lt_right,
+            ..
+        },
+    ) = lts[0]
     else {
         unreachable!();
     };
@@ -235,7 +250,10 @@ fn mixed_equality_and_strict_upper_bound_tests_preserve_source_order_and_short_c
     else {
         panic!("strict-upper-bound test must branch");
     };
-    assert_eq!(eq_mismatch, lt_mismatch, "first mismatch must skip the later strict-bound test");
+    assert_eq!(
+        eq_mismatch, lt_mismatch,
+        "first mismatch must skip the later strict-bound test"
+    );
 
     let kept_local = f
         .body
@@ -243,18 +261,25 @@ fn mixed_equality_and_strict_upper_bound_tests_preserve_source_order_and_short_c
         .iter()
         .position(|local| local.name == "kept")
         .expect("success binding local");
-    assert!(f.body.blocks[after_lt.0 as usize].statements.iter().any(|statement| matches!(
-        statement,
-        CoreStatement::Init { dst, .. } if dst.local.0 as usize == kept_local
-    )));
-    assert!(!f.body.blocks[eq_block]
-        .statements
-        .iter()
-        .chain(f.body.blocks[lt_block].statements.iter())
-        .any(|statement| matches!(
-            statement,
-            CoreStatement::Init { dst, .. } if dst.local.0 as usize == kept_local
-        )));
+    assert!(
+        f.body.blocks[after_lt.0 as usize]
+            .statements
+            .iter()
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Init { dst, .. } if dst.local.0 as usize == kept_local
+            ))
+    );
+    assert!(
+        !f.body.blocks[eq_block]
+            .statements
+            .iter()
+            .chain(f.body.blocks[lt_block].statements.iter())
+            .any(|statement| matches!(
+                statement,
+                CoreStatement::Init { dst, .. } if dst.local.0 as usize == kept_local
+            ))
+    );
 }
 
 #[test]
@@ -275,28 +300,40 @@ fn strict_upper_bounds_retain_exact_signed_and_unsigned_field_types() {
         panic!("record parameter must lower to a Core struct");
     };
 
-    let (_, CoreStatement::IntegerLt {
-        operand_type: signed_type,
-        left: signed_left,
-        right: signed_right,
-        ..
-    }) = lts[0]
+    let (
+        _,
+        CoreStatement::IntegerLt {
+            operand_type: signed_type,
+            left: signed_left,
+            right: signed_right,
+            ..
+        },
+    ) = lts[0]
     else {
         unreachable!();
     };
-    let (_, CoreStatement::IntegerLt {
-        operand_type: unsigned_type,
-        left: unsigned_left,
-        right: unsigned_right,
-        ..
-    }) = lts[1]
+    let (
+        _,
+        CoreStatement::IntegerLt {
+            operand_type: unsigned_type,
+            left: unsigned_left,
+            right: unsigned_right,
+            ..
+        },
+    ) = lts[1]
     else {
         unreachable!();
     };
     assert_eq!(*signed_type, fields[0].ty);
     assert_eq!(*unsigned_type, fields[1].ty);
-    assert_eq!(direct_projection(signed_left), Some(vec![Projection::Field(0)]));
-    assert_eq!(direct_projection(unsigned_left), Some(vec![Projection::Field(1)]));
+    assert_eq!(
+        direct_projection(signed_left),
+        Some(vec![Projection::Field(0)])
+    );
+    assert_eq!(
+        direct_projection(unsigned_left),
+        Some(vec![Projection::Field(1)])
+    );
     assert_eq!(signed_right, &Operand::Constant(CoreValue::I8(-1)));
     assert_eq!(unsigned_right, &Operand::Constant(CoreValue::U8(200)));
 }
@@ -458,7 +495,10 @@ fn strict_upper_bound_producer_is_evaluated_once_with_unchanged_cleanup_topology
             _ => None,
         })
         .collect::<Vec<_>>();
-    assert_eq!(success_drops, [vec![Projection::Field(2)], vec![Projection::Field(0)]]);
+    assert_eq!(
+        success_drops,
+        [vec![Projection::Field(2)], vec![Projection::Field(0)]]
+    );
 }
 
 #[test]
@@ -644,9 +684,8 @@ fn lowering_rejects_strict_upper_bound_kind_with_bool_retained_type() {
 
 #[test]
 fn lowering_rejects_strict_upper_bound_value_that_disagrees_with_retained_type() {
-    let mut compilation = hir(
-        "record R { value: I8 } fn f(root: R) { if let R { value: < 3 } = (root) {} else {} }",
-    );
+    let mut compilation =
+        hir("record R { value: I8 } fn f(root: R) { if let R { value: < 3 } = (root) {} else {} }");
     let Statement::RefutableRecordSelection { tests, .. } = selection_mut(&mut compilation, "f")
     else {
         panic!("expected refutable record selection");

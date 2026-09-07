@@ -91,7 +91,10 @@ fn rejects_wider_or_malformed_strict_upper_bound_targets() {
     ] {
         let parsed = parse(source);
         assert_eq!(parsed.text(), source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly parsed: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly parsed: {source}"
+        );
     }
 }
 

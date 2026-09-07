@@ -674,9 +674,7 @@ impl Parser<'_> {
         self.bump();
         if !self.parse_refutable_record_integer_literal_test() {
             self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::DecimalMagnitude));
-            if self.current().is_some()
-                && !self.at_any(&[SyntaxKind::Comma, SyntaxKind::RBrace])
-            {
+            if self.current().is_some() && !self.at_any(&[SyntaxKind::Comma, SyntaxKind::RBrace]) {
                 self.recover_one();
             }
         }
