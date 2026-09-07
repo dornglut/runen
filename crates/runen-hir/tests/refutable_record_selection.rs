@@ -608,3 +608,181 @@ fn exact_pointer_origin_and_external_referent_join_rules_are_reused() {
     )
     .expect("restoring the replacement referent must permit the two-normal selection join");
 }
+
+#[test]
+fn composite_targets_retain_explicit_test_identity_and_independent_depth_first_orders() {
+    let hir = build(
+        "record Inner { flag: Bool, signed: I8 } \
+         record Outer { inner: Inner, unsigned: U8, plain: U8 } \
+         fn sink_bool(value: Bool) {} fn sink_i8(value: I8) {} fn sink_u8(value: U8) {} \
+         fn f(root: Outer) { \
+             if let Outer { \
+                 inner: Inner { flag: ready == true, signed: exact == -1 }, \
+                 plain: plain, \
+                 unsigned: below < 200 \
+             } = (root) { \
+                 sink_bool(ready); sink_i8(exact); sink_u8(plain); sink_u8(below); \
+             } else {} \
+         }",
+    )
+    .expect("bounded same-path composites must build");
+    let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+
+    assert_eq!(
+        tests.iter().map(|test| test.fields.clone()).collect::<Vec<_>>(),
+        [vec![0, 0], vec![0, 1], vec![1]]
+    );
+    assert_eq!(tests[0].kind, RecordPatternTestKind::Equality);
+    assert_eq!(tests[0].ty, Type::Intrinsic(IntrinsicType::Bool));
+    assert_eq!(tests[0].value, LiteralValue::Bool(true));
+    assert_eq!(tests[1].kind, RecordPatternTestKind::Equality);
+    assert_eq!(tests[1].ty, Type::Intrinsic(IntrinsicType::I8));
+    assert_eq!(tests[1].value, LiteralValue::I8(-1));
+    assert_eq!(tests[2].kind, RecordPatternTestKind::StrictUpperBound);
+    assert_eq!(tests[2].ty, Type::Intrinsic(IntrinsicType::U8));
+    assert_eq!(tests[2].value, LiteralValue::U8(200));
+
+    assert_eq!(
+        bindings
+            .iter()
+            .map(|binding| (binding.fields.clone(), binding.composite_test))
+            .collect::<Vec<_>>(),
+        [
+            (vec![0, 0], Some(0)),
+            (vec![0, 1], Some(1)),
+            (vec![2], None),
+            (vec![1], Some(2)),
+        ]
+    );
+    assert!(bindings.iter().all(|binding| binding.ownership == OwnedUse::Duplicate));
+}
+
+#[test]
+fn producer_composite_keeps_tested_path_for_success_cleanup_and_binding_is_success_only() {
+    let hir = build(
+        "record Ticket {} record R { tag: I8, ticket: Ticket } \
+         fn make() -> R { return R { tag: 1, ticket: Ticket {} }; } \
+         fn sink(value: I8) {} \
+         fn f() { \
+             if let R { tag: observed == 1, ticket: moved } = (make()) { \
+                 sink(observed); \
+             } else { \
+                 let observed: I8 = 0; sink(observed); \
+             } \
+         }",
+    )
+    .expect("producer composite must duplicate only on success");
+    let (scrutinee, tests, bindings, mismatch_cleanup, success, mismatch) =
+        selection(&function(&hir, "f").body.statements[0]);
+
+    assert_eq!(tests.len(), 1);
+    assert_eq!(bindings.len(), 2);
+    assert_eq!(bindings[0].name, "observed");
+    assert_eq!(bindings[0].composite_test, Some(0));
+    assert_eq!(bindings[0].ownership, OwnedUse::Duplicate);
+    assert_eq!(bindings[1].name, "moved");
+    assert_eq!(bindings[1].composite_test, None);
+    assert_eq!(bindings[1].ownership, OwnedUse::Consume);
+    assert!(matches!(success.statements[0], Statement::Call { .. }));
+
+    let RecordPatternScrutinee::Producer { cleanup, .. } = scrutinee else {
+        panic!("expected producer-backed composite scrutinee");
+    };
+    assert_eq!(cleanup.paths, [vec![0]]);
+    assert_eq!(
+        mismatch_cleanup,
+        Some(&RecordPatternTransientCleanup {
+            paths: vec![Vec::new()],
+        })
+    );
+    let mismatch = mismatch.expect("explicit mismatch block");
+    assert!(matches!(mismatch.statements[0], Statement::Local { .. }));
+}
+
+#[test]
+fn invalid_composite_materialization_and_binding_name_checks_finish_before_producer_effects() {
+    let errors = build(
+        "record Ticket {} record R { value: I8 } \
+         fn make(ticket: Ticket) -> R { return R { value: 1 }; } \
+         fn sink_ticket(ticket: Ticket) {} \
+         fn f(ticket: Ticket) { \
+             let selected: I8 = 0; \
+             if let R { value: selected == 128 } = (make(ticket)) {} \
+             sink_ticket(ticket); \
+         }",
+    )
+    .expect_err("invalid composite must reject before evaluating its producer");
+
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::IntegerLiteralOutOfRange {
+            required: Type::Intrinsic(IntrinsicType::I8),
+        }
+    ));
+    assert!(has_diagnostic(&errors, DiagnosticKind::LocalShadowing));
+    assert!(
+        !has_diagnostic(&errors, DiagnosticKind::UnavailableBinding),
+        "producer argument ownership must not commit after invalid composite prevalidation"
+    );
+
+    let duplicate = build(
+        "record R { first: I8, second: I8 } \
+         fn f(root: R) { if let R { first: same == 1, second: same } = (root) {} }",
+    )
+    .expect_err("composite binding names participate in duplicate-pattern validation");
+    assert!(has_diagnostic(
+        &duplicate,
+        DiagnosticKind::DuplicatePatternBinding
+    ));
+}
+
+#[test]
+fn direct_root_composite_reuses_one_test_side_availability_and_shared_authority_check() {
+    let unavailable = build(
+        "record Ticket {} record Inner { value: I8, ticket: Ticket } record Outer { inner: Inner } \
+         fn take(value: Inner) {} \
+         fn f(root: Outer) { \
+             take(root.inner); \
+             if let Outer { inner: Inner { value: observed == 1, .. } } = (root) {} \
+         }",
+    )
+    .expect_err("composite test path must be fully available");
+    assert_eq!(
+        unavailable
+            .iter()
+            .filter(|error| error.kind == DiagnosticKind::UnavailableFieldValue)
+            .count(),
+        1,
+        "composite path availability must not be diagnosed twice"
+    );
+
+    let authority = build(
+        "record R { value: I8 } \
+         fn f(seed: R) { \
+             let mut root: R = seed; \
+             let replacement: &mut R = &mut root; \
+             if let R { value: observed == 1 } = (root) {} \
+         }",
+    )
+    .expect_err("composite duplicate may not bypass overlapping replacement authority");
+    assert_eq!(
+        authority
+            .iter()
+            .filter(|error| error.kind == DiagnosticKind::ReferencePermissionUnavailable)
+            .count(),
+        1,
+        "composite Shared compatibility must be checked exactly once"
+    );
+}
+
+#[test]
+fn direct_root_composite_preserves_root_ownership_across_success_and_mismatch() {
+    build(
+        "record R { value: I8 } fn sink(value: I8) {} \
+         fn f(root: R) { \
+             if let R { value: observed == 1 } = (root) { sink(observed); } else {} \
+             sink(root.value); \
+         }",
+    )
+    .expect("composite binding duplicates and must not consume direct-root ownership");
+}
