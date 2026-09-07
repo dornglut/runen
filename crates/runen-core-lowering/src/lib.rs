@@ -2280,6 +2280,11 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(result)
             }
+            hir::ValueKind::IntegerLt {
+                operand_type,
+                left,
+                right,
+            } => self.lower_integer_ordering(value.ty, *operand_type, left, right),
             hir::ValueKind::IntegerEq {
                 operand_type,
                 left,
@@ -2857,6 +2862,72 @@ impl<'a> FunctionLowerer<'a> {
                 Ok(temporary)
             }
         }
+    }
+
+    fn lower_integer_ordering(
+        &mut self,
+        result_type: hir::Type,
+        operand_type: hir::Type,
+        left: &hir::Value,
+        right: &hir::Value,
+    ) -> Result<core::LocalId, LoweringError> {
+        let bool_ty = hir::Type::Intrinsic(hir::IntrinsicType::Bool);
+        if result_type != bool_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-ordering result type is not Bool",
+            ));
+        }
+        if !matches!(
+            operand_type,
+            hir::Type::Intrinsic(
+                hir::IntrinsicType::I8
+                    | hir::IntrinsicType::I16
+                    | hir::IntrinsicType::I32
+                    | hir::IntrinsicType::I64
+                    | hir::IntrinsicType::U8
+                    | hir::IntrinsicType::U16
+                    | hir::IntrinsicType::U32
+                    | hir::IntrinsicType::U64
+            )
+        ) {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-ordering operand type is not a fixed-width integer",
+            ));
+        }
+        if left.ty != operand_type {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-ordering left operand type does not match retained operand type",
+            ));
+        }
+        if right.ty != operand_type {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Integer-ordering right operand type does not match retained operand type",
+            ));
+        }
+
+        let core_integer_ty = self.types.get(operand_type)?;
+        let left_local = self.lower_value(left)?;
+        if self.local_type(left_local)? != core_integer_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "lowered Integer-ordering left operand temporary type does not match retained operand type",
+            ));
+        }
+
+        let right_local = self.lower_value(right)?;
+        if self.local_type(right_local)? != core_integer_ty {
+            return Err(LoweringError::InvalidHirInvariant(
+                "lowered Integer-ordering right operand temporary type does not match retained operand type",
+            ));
+        }
+
+        let result = self.push_temporary(bool_ty)?;
+        self.push_statement(core::Statement::IntegerLt {
+            dst: core::Place::local(result),
+            operand_type: core_integer_ty,
+            left: core::Operand::Move(core::Place::local(left_local).into()),
+            right: core::Operand::Move(core::Place::local(right_local).into()),
+        });
+        Ok(result)
     }
 
     fn lower_integer_equality(

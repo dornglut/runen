@@ -4633,10 +4633,76 @@ fn validate_value_inner(
         }
         SyntaxKind::BooleanEqualityValue => {
             #[derive(Clone, Copy)]
-            enum EqualityOperandEvidence {
+            enum ComparisonOperandEvidence {
                 Exact(Type),
                 Contextual,
                 Invalid,
+            }
+
+            fn comparison_operator(node: &SyntaxNode) -> SyntaxKind {
+                node.children_with_tokens()
+                    .filter_map(|element| element.into_token())
+                    .find(|token| {
+                        matches!(
+                            token.kind(),
+                            SyntaxKind::EqEq | SyntaxKind::BangEq | SyntaxKind::Less
+                        )
+                    })
+                    .expect("syntax-clean comparison contains one operator token")
+                    .kind()
+            }
+
+            fn is_fixed_width_integer(ty: Type) -> bool {
+                matches!(
+                    ty,
+                    Type::Intrinsic(
+                        IntrinsicType::I8
+                            | IntrinsicType::I16
+                            | IntrinsicType::I32
+                            | IntrinsicType::I64
+                            | IntrinsicType::U8
+                            | IntrinsicType::U16
+                            | IntrinsicType::U32
+                            | IntrinsicType::U64
+                    )
+                )
+            }
+
+            fn selected_comparison_operand_type(
+                operator: SyntaxKind,
+                left_evidence: ComparisonOperandEvidence,
+                right_evidence: ComparisonOperandEvidence,
+                comparison_location: SourceLocation,
+                diagnostics: &mut Vec<Diagnostic>,
+            ) -> Option<Type> {
+                use ComparisonOperandEvidence::{Contextual, Exact, Invalid};
+                match (left_evidence, right_evidence) {
+                    (Invalid, _) | (_, Invalid) => None,
+                    (Contextual, Contextual) => {
+                        diagnostics.push(Diagnostic {
+                            kind: if operator == SyntaxKind::Less {
+                                DiagnosticKind::IntegerOrderingOperandsUnanchored
+                            } else {
+                                DiagnosticKind::EqualityOperandsUnanchored
+                            },
+                            location: comparison_location,
+                        });
+                        None
+                    }
+                    (Exact(ty), Contextual) | (Contextual, Exact(ty)) => Some(ty),
+                    (Exact(left), Exact(right)) if left == right => Some(left),
+                    (Exact(left), Exact(right)) => {
+                        diagnostics.push(Diagnostic {
+                            kind: if operator == SyntaxKind::Less {
+                                DiagnosticKind::IntegerOrderingOperandTypeConflict { left, right }
+                            } else {
+                                DiagnosticKind::EqualityOperandTypeConflict { left, right }
+                            },
+                            location: comparison_location,
+                        });
+                        None
+                    }
+                }
             }
 
             fn missing_binding_evidence(
@@ -4645,7 +4711,7 @@ fn validate_value_inner(
                 evidence_location: SourceLocation,
                 context: &BodyResolutionContext<'_>,
                 diagnostics: &mut Vec<Diagnostic>,
-            ) -> EqualityOperandEvidence {
+            ) -> ComparisonOperandEvidence {
                 let entity = context
                     .modules
                     .get(&header.module)
@@ -4658,21 +4724,21 @@ fn validate_value_inner(
                     },
                     location: evidence_location,
                 });
-                Invalid
+                ComparisonOperandEvidence::Invalid
             }
 
-            fn classify_equality_operand(
+            fn classify_comparison_operand(
                 header: &FunctionHeader,
                 node: &SyntaxNode,
                 context: &BodyResolutionContext<'_>,
                 state: &SemanticState,
                 diagnostics: &mut Vec<Diagnostic>,
-            ) -> EqualityOperandEvidence {
-                use EqualityOperandEvidence::{Contextual, Exact, Invalid};
+            ) -> ComparisonOperandEvidence {
+                use ComparisonOperandEvidence::{Contextual, Exact, Invalid};
 
                 let evidence_location = location(header.unit, node);
                 match node.kind() {
-                    SyntaxKind::GroupedValue => classify_equality_operand(
+                    SyntaxKind::GroupedValue => classify_comparison_operand(
                         header,
                         &value_child(node),
                         context,
@@ -4681,8 +4747,53 @@ fn validate_value_inner(
                     ),
                     SyntaxKind::BooleanLiteral
                     | SyntaxKind::BooleanNotValue
-                    | SyntaxKind::BooleanAndValue
-                    | SyntaxKind::BooleanEqualityValue => {
+                    | SyntaxKind::BooleanAndValue => Exact(Type::Intrinsic(IntrinsicType::Bool)),
+                    SyntaxKind::BooleanEqualityValue => {
+                        let operator = comparison_operator(node);
+                        if operator != SyntaxKind::Less {
+                            return Exact(Type::Intrinsic(IntrinsicType::Bool));
+                        }
+                        let mut operands =
+                            node.children().filter(|child| is_value_node(child.kind()));
+                        let left_node = operands
+                            .next()
+                            .expect("syntax-clean ordering contains a left operand");
+                        let right_node = operands
+                            .next()
+                            .expect("syntax-clean ordering contains a right operand");
+                        debug_assert!(operands.next().is_none());
+                        let left_evidence = classify_comparison_operand(
+                            header,
+                            &left_node,
+                            context,
+                            state,
+                            diagnostics,
+                        );
+                        let right_evidence = classify_comparison_operand(
+                            header,
+                            &right_node,
+                            context,
+                            state,
+                            diagnostics,
+                        );
+                        let Some(operand_type) = selected_comparison_operand_type(
+                            operator,
+                            left_evidence,
+                            right_evidence,
+                            evidence_location,
+                            diagnostics,
+                        ) else {
+                            return Invalid;
+                        };
+                        if !is_fixed_width_integer(operand_type) {
+                            diagnostics.push(Diagnostic {
+                                kind: DiagnosticKind::IntegerOrderingRequiresInteger {
+                                    operand_type,
+                                },
+                                location: evidence_location,
+                            });
+                            return Invalid;
+                        }
                         Exact(Type::Intrinsic(IntrinsicType::Bool))
                     }
                     SyntaxKind::DecimalIntegerLiteral
@@ -5008,7 +5119,7 @@ fn validate_value_inner(
                         };
                         Exact(pointee.ty())
                     }
-                    _ => unreachable!("syntax-clean equality operand has represented value kind"),
+                    _ => unreachable!("syntax-clean comparison operand has represented value kind"),
                 }
             }
 
@@ -5024,47 +5135,37 @@ fn validate_value_inner(
                 return None;
             }
 
-            let operator = node
-                .children_with_tokens()
-                .filter_map(|element| element.into_token())
-                .find(|token| matches!(token.kind(), SyntaxKind::EqEq | SyntaxKind::BangEq))
-                .expect("syntax-clean equality contains one operator token")
-                .kind();
+            let operator = comparison_operator(node);
             let mut operands = node.children().filter(|child| is_value_node(child.kind()));
             let left_node = operands
                 .next()
-                .expect("syntax-clean equality contains a left operand");
+                .expect("syntax-clean comparison contains a left operand");
             let right_node = operands
                 .next()
-                .expect("syntax-clean equality contains a right operand");
+                .expect("syntax-clean comparison contains a right operand");
             debug_assert!(operands.next().is_none());
 
             let left_evidence =
-                classify_equality_operand(header, &left_node, context, state, diagnostics);
+                classify_comparison_operand(header, &left_node, context, state, diagnostics);
             let right_evidence =
-                classify_equality_operand(header, &right_node, context, state, diagnostics);
-            use EqualityOperandEvidence::{Contextual, Exact, Invalid};
-            let operand_type = match (left_evidence, right_evidence) {
-                (Invalid, _) | (_, Invalid) => return None,
-                (Contextual, Contextual) => {
-                    diagnostics.push(Diagnostic {
-                        kind: DiagnosticKind::EqualityOperandsUnanchored,
-                        location: value_location,
-                    });
-                    return None;
-                }
-                (Exact(ty), Contextual) | (Contextual, Exact(ty)) => ty,
-                (Exact(left), Exact(right)) if left == right => left,
-                (Exact(left), Exact(right)) => {
-                    diagnostics.push(Diagnostic {
-                        kind: DiagnosticKind::EqualityOperandTypeConflict { left, right },
-                        location: value_location,
-                    });
-                    return None;
-                }
-            };
+                classify_comparison_operand(header, &right_node, context, state, diagnostics);
+            let operand_type = selected_comparison_operand_type(
+                operator,
+                left_evidence,
+                right_evidence,
+                value_location,
+                diagnostics,
+            )?;
 
-            if !matches!(
+            if operator == SyntaxKind::Less {
+                if !is_fixed_width_integer(operand_type) {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::IntegerOrderingRequiresInteger { operand_type },
+                        location: value_location,
+                    });
+                    return None;
+                }
+            } else if !matches!(
                 operand_type,
                 Type::Intrinsic(
                     IntrinsicType::Bool
@@ -5106,31 +5207,35 @@ fn validate_value_inner(
             )?
             .value;
 
-            let kind = if operand_type == found {
-                let relation = match operator {
-                    SyntaxKind::EqEq => BooleanEqualityRelation::Equal,
-                    SyntaxKind::BangEq => BooleanEqualityRelation::NotEqual,
-                    _ => unreachable!("equality operator token has accepted equality kind"),
-                };
-                ValueKind::BooleanEquality {
-                    relation,
+            let kind = match operator {
+                SyntaxKind::Less => ValueKind::IntegerLt {
+                    operand_type,
                     left: Box::new(left),
                     right: Box::new(right),
-                }
-            } else {
-                match operator {
-                    SyntaxKind::EqEq => ValueKind::IntegerEq {
-                        operand_type,
+                },
+                SyntaxKind::EqEq | SyntaxKind::BangEq if operand_type == found => {
+                    let relation = match operator {
+                        SyntaxKind::EqEq => BooleanEqualityRelation::Equal,
+                        SyntaxKind::BangEq => BooleanEqualityRelation::NotEqual,
+                        _ => unreachable!(),
+                    };
+                    ValueKind::BooleanEquality {
+                        relation,
                         left: Box::new(left),
                         right: Box::new(right),
-                    },
-                    SyntaxKind::BangEq => ValueKind::IntegerNe {
-                        operand_type,
-                        left: Box::new(left),
-                        right: Box::new(right),
-                    },
-                    _ => unreachable!("equality operator token has accepted equality kind"),
+                    }
                 }
+                SyntaxKind::EqEq => ValueKind::IntegerEq {
+                    operand_type,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                SyntaxKind::BangEq => ValueKind::IntegerNe {
+                    operand_type,
+                    left: Box::new(left),
+                    right: Box::new(right),
+                },
+                _ => unreachable!("comparison operator token has accepted comparison kind"),
             };
 
             Some(ProducedValue::ordinary(Value {

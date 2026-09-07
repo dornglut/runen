@@ -142,6 +142,7 @@ pub enum SyntaxKind {
     RefutableRecordSelectionStatement,
     RefutableRecordPattern,
     RefutableRecordPatternField,
+    Less,
 }
 
 impl SyntaxKind {
@@ -302,6 +303,7 @@ impl Language for RunenLanguage {
             117 => SyntaxKind::RefutableRecordSelectionStatement,
             118 => SyntaxKind::RefutableRecordPattern,
             119 => SyntaxKind::RefutableRecordPatternField,
+            120 => SyntaxKind::Less,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

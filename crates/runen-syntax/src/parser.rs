@@ -859,20 +859,20 @@ impl Parser<'_> {
 
     fn parse_logical_and_value(&mut self, context: ValueContext) {
         let checkpoint = self.builder.checkpoint();
-        self.parse_equality_value(context);
+        self.parse_comparison_value(context);
         if self.at(SyntaxKind::AmpAmp) {
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::BooleanAndValue.into());
             self.bump();
-            self.parse_equality_value(context);
+            self.parse_comparison_value(context);
             self.builder.finish_node();
         }
     }
 
-    fn parse_equality_value(&mut self, context: ValueContext) {
+    fn parse_comparison_value(&mut self, context: ValueContext) {
         let checkpoint = self.builder.checkpoint();
         self.parse_or_value(context);
-        if self.at(SyntaxKind::EqEq) || self.at(SyntaxKind::BangEq) {
+        if self.at(SyntaxKind::EqEq) || self.at(SyntaxKind::BangEq) || self.at(SyntaxKind::Less) {
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::BooleanEqualityValue.into());
             self.bump();
