@@ -22,37 +22,45 @@ pub fn lower(compilation: &hir::TypedCompilation) -> Result<core::ValidatedProgr
     Lowerer::new(compilation)?.lower()
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+struct SpecializationKey {
+    function: hir::FunctionId,
+    type_arguments: Vec<hir::Type>,
+}
+
 struct Lowerer<'a> {
     compilation: &'a hir::TypedCompilation,
     types: TypeMap,
-    functions: BTreeMap<hir::FunctionId, core::FunctionId>,
+    specializations: Vec<SpecializationKey>,
+    functions: BTreeMap<SpecializationKey, core::FunctionId>,
 }
 
 impl<'a> Lowerer<'a> {
     fn new(compilation: &'a hir::TypedCompilation) -> Result<Self, LoweringError> {
+        validate_function_declarations(compilation)?;
         let types = TypeMap::new(compilation)?;
-        let mut functions = BTreeMap::new();
-        for (index, function) in compilation.functions.iter().enumerate() {
-            let id = core::FunctionId(index_u32(index, "Core function identity")?);
-            if functions.insert(function.id, id).is_some() {
-                return Err(LoweringError::InvalidHirInvariant(
-                    "duplicate HIR function identity",
-                ));
-            }
-        }
+        let (specializations, functions) = discover_specializations(compilation)?;
         Ok(Self {
             compilation,
             types,
+            specializations,
             functions,
         })
     }
 
     fn lower(self) -> Result<core::ValidatedProgram, LoweringError> {
-        let mut functions = Vec::with_capacity(self.compilation.functions.len());
-        for function in &self.compilation.functions {
+        let mut functions = Vec::with_capacity(self.specializations.len());
+        for specialization in &self.specializations {
+            let function = find_function(self.compilation, specialization.function)?;
             functions.push(
-                FunctionLowerer::new(self.compilation, &self.types, &self.functions, function)?
-                    .lower()?,
+                FunctionLowerer::new(
+                    self.compilation,
+                    &self.types,
+                    &self.functions,
+                    function,
+                    specialization,
+                )?
+                .lower()?,
             );
         }
 
@@ -62,6 +70,408 @@ impl<'a> Lowerer<'a> {
         };
         core::validate_program(program).map_err(LoweringError::CoreValidation)
     }
+}
+
+fn validate_function_declarations(
+    compilation: &hir::TypedCompilation,
+) -> Result<(), LoweringError> {
+    let mut functions = BTreeSet::new();
+    for function in &compilation.functions {
+        if !functions.insert(function.id) {
+            return Err(LoweringError::InvalidHirInvariant(
+                "duplicate HIR function identity",
+            ));
+        }
+        for (index, parameter) in function.type_parameters.iter().enumerate() {
+            if parameter.id.function != function.id {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "HIR type-parameter identity belongs to another function",
+                ));
+            }
+            if parameter.id.index != index {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "HIR type-parameter identity does not match declaration order",
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn find_function(
+    compilation: &hir::TypedCompilation,
+    id: hir::FunctionId,
+) -> Result<&hir::Function, LoweringError> {
+    compilation
+        .functions
+        .iter()
+        .find(|function| function.id == id)
+        .ok_or(LoweringError::InvalidHirInvariant(
+            "HIR function identity is absent from the compilation",
+        ))
+}
+
+fn validate_specialization_key(
+    compilation: &hir::TypedCompilation,
+    specialization: &SpecializationKey,
+) -> Result<(), LoweringError> {
+    let function = find_function(compilation, specialization.function)?;
+    if specialization.type_arguments.len() != function.type_parameters.len() {
+        return Err(LoweringError::InvalidHirInvariant(
+            "HIR specialization type-argument arity does not match its function declaration",
+        ));
+    }
+    if specialization.type_arguments.iter().any(|argument| {
+        !matches!(argument, hir::Type::Intrinsic(_) | hir::Type::Record(_))
+    }) {
+        return Err(LoweringError::InvalidHirInvariant(
+            "HIR specialization tuple contains a non-concrete type",
+        ));
+    }
+    Ok(())
+}
+
+fn substitute_specialization_type(
+    specialization: &SpecializationKey,
+    ty: hir::Type,
+) -> Result<hir::Type, LoweringError> {
+    let hir::Type::Parameter(parameter) = ty else {
+        return Ok(ty);
+    };
+    if parameter.function != specialization.function {
+        return Err(LoweringError::InvalidHirInvariant(
+            "HIR type-parameter use belongs to another function",
+        ));
+    }
+    specialization
+        .type_arguments
+        .get(parameter.index)
+        .copied()
+        .ok_or(LoweringError::InvalidHirInvariant(
+            "HIR type-parameter use is outside the current specialization tuple",
+        ))
+}
+
+fn specialization_key_for_call(
+    compilation: &hir::TypedCompilation,
+    caller: &SpecializationKey,
+    function: hir::FunctionId,
+    type_arguments: &[hir::Type],
+) -> Result<SpecializationKey, LoweringError> {
+    let target = find_function(compilation, function)?;
+    if type_arguments.len() != target.type_parameters.len() {
+        return Err(LoweringError::InvalidHirInvariant(
+            "HIR call type-argument arity does not match its target declaration",
+        ));
+    }
+
+    let mut concrete_arguments = Vec::with_capacity(type_arguments.len());
+    for argument in type_arguments {
+        let argument = substitute_specialization_type(caller, *argument)?;
+        if !matches!(argument, hir::Type::Intrinsic(_) | hir::Type::Record(_)) {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR call specialization contains a non-concrete type argument",
+            ));
+        }
+        concrete_arguments.push(argument);
+    }
+    Ok(SpecializationKey {
+        function,
+        type_arguments: concrete_arguments,
+    })
+}
+
+fn discover_specializations(
+    compilation: &hir::TypedCompilation,
+) -> Result<
+    (
+        Vec<SpecializationKey>,
+        BTreeMap<SpecializationKey, core::FunctionId>,
+    ),
+    LoweringError,
+> {
+    let mut specializations = Vec::new();
+    let mut functions = BTreeMap::new();
+
+    for function in &compilation.functions {
+        if function.type_parameters.is_empty() {
+            let specialization = SpecializationKey {
+                function: function.id,
+                type_arguments: Vec::new(),
+            };
+            let id = core::FunctionId(index_u32(
+                specializations.len(),
+                "Core function identity",
+            )?);
+            if functions.insert(specialization.clone(), id).is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "duplicate root HIR specialization identity",
+                ));
+            }
+            specializations.push(specialization);
+        }
+    }
+
+    let mut cursor = 0;
+    while cursor < specializations.len() {
+        let specialization = specializations[cursor].clone();
+        validate_specialization_key(compilation, &specialization)?;
+        let function = find_function(compilation, specialization.function)?;
+        let mut discovered = Vec::new();
+        collect_body_specializations(
+            compilation,
+            &specialization,
+            &function.body,
+            &mut discovered,
+        )?;
+        for target in discovered {
+            if functions.contains_key(&target) {
+                continue;
+            }
+            let id = core::FunctionId(index_u32(
+                specializations.len(),
+                "Core function identity",
+            )?);
+            functions.insert(target.clone(), id);
+            specializations.push(target);
+        }
+        cursor += 1;
+    }
+
+    Ok((specializations, functions))
+}
+
+fn collect_body_specializations(
+    compilation: &hir::TypedCompilation,
+    current: &SpecializationKey,
+    body: &hir::Body,
+    specializations: &mut Vec<SpecializationKey>,
+) -> Result<(), LoweringError> {
+    collect_statement_specializations(
+        compilation,
+        current,
+        &body.statements,
+        specializations,
+    )?;
+    if let Some(returned) = body.terminal_return.as_ref()
+        && let Some(value) = returned.value.as_ref()
+    {
+        collect_value_specializations(compilation, current, value, specializations)?;
+    }
+    Ok(())
+}
+
+fn collect_block_specializations(
+    compilation: &hir::TypedCompilation,
+    current: &SpecializationKey,
+    block: &hir::Block,
+    specializations: &mut Vec<SpecializationKey>,
+) -> Result<(), LoweringError> {
+    collect_statement_specializations(
+        compilation,
+        current,
+        &block.statements,
+        specializations,
+    )?;
+    if let Some(returned) = block.terminal_return.as_ref()
+        && let Some(value) = returned.value.as_ref()
+    {
+        collect_value_specializations(compilation, current, value, specializations)?;
+    }
+    Ok(())
+}
+
+fn collect_statement_specializations(
+    compilation: &hir::TypedCompilation,
+    current: &SpecializationKey,
+    statements: &[hir::Statement],
+    specializations: &mut Vec<SpecializationKey>,
+) -> Result<(), LoweringError> {
+    for statement in statements {
+        match statement {
+            hir::Statement::Local { initializer, .. } => {
+                collect_value_specializations(compilation, current, initializer, specializations)?;
+            }
+            hir::Statement::RecordDestructure { scrutinee, .. } => {
+                collect_record_scrutinee_specializations(
+                    compilation,
+                    current,
+                    scrutinee,
+                    specializations,
+                )?;
+            }
+            hir::Statement::RefutableRecordSelection {
+                scrutinee,
+                success_block,
+                mismatch_block,
+                ..
+            } => {
+                collect_record_scrutinee_specializations(
+                    compilation,
+                    current,
+                    scrutinee,
+                    specializations,
+                )?;
+                collect_block_specializations(
+                    compilation,
+                    current,
+                    success_block,
+                    specializations,
+                )?;
+                if let Some(mismatch_block) = mismatch_block {
+                    collect_block_specializations(
+                        compilation,
+                        current,
+                        mismatch_block,
+                        specializations,
+                    )?;
+                }
+            }
+            hir::Statement::Assignment { value, .. }
+            | hir::Statement::ReferenceAssign { value, .. }
+            | hir::Statement::RawAssign { value, .. } => {
+                collect_value_specializations(compilation, current, value, specializations)?;
+            }
+            hir::Statement::Call {
+                function,
+                type_arguments,
+                arguments,
+                ..
+            } => {
+                specializations.push(specialization_key_for_call(
+                    compilation,
+                    current,
+                    *function,
+                    type_arguments,
+                )?);
+                for argument in arguments {
+                    collect_value_specializations(
+                        compilation,
+                        current,
+                        argument,
+                        specializations,
+                    )?;
+                }
+            }
+            hir::Statement::Block(block) => {
+                collect_block_specializations(compilation, current, block, specializations)?;
+            }
+            hir::Statement::If {
+                condition,
+                then_block,
+                else_block,
+                ..
+            } => {
+                collect_value_specializations(compilation, current, condition, specializations)?;
+                collect_block_specializations(
+                    compilation,
+                    current,
+                    then_block,
+                    specializations,
+                )?;
+                if let Some(else_block) = else_block {
+                    collect_block_specializations(
+                        compilation,
+                        current,
+                        else_block,
+                        specializations,
+                    )?;
+                }
+            }
+            hir::Statement::While {
+                condition, body, ..
+            } => {
+                collect_value_specializations(compilation, current, condition, specializations)?;
+                collect_block_specializations(compilation, current, body, specializations)?;
+            }
+            hir::Statement::Fault { .. }
+            | hir::Statement::Break { .. }
+            | hir::Statement::Continue { .. } => {}
+        }
+    }
+    Ok(())
+}
+
+fn collect_record_scrutinee_specializations(
+    compilation: &hir::TypedCompilation,
+    current: &SpecializationKey,
+    scrutinee: &hir::RecordPatternScrutinee,
+    specializations: &mut Vec<SpecializationKey>,
+) -> Result<(), LoweringError> {
+    if let hir::RecordPatternScrutinee::Producer { value, .. } = scrutinee {
+        collect_value_specializations(compilation, current, value, specializations)?;
+    }
+    Ok(())
+}
+
+fn collect_value_specializations(
+    compilation: &hir::TypedCompilation,
+    current: &SpecializationKey,
+    value: &hir::Value,
+    specializations: &mut Vec<SpecializationKey>,
+) -> Result<(), LoweringError> {
+    match &value.kind {
+        hir::ValueKind::BooleanNot { operand }
+        | hir::ValueKind::IntegerNeg { operand }
+        | hir::ValueKind::IntegerComplement { operand } => {
+            collect_value_specializations(compilation, current, operand, specializations)?;
+        }
+        hir::ValueKind::IntegerAdd { left, right }
+        | hir::ValueKind::FloatAdd { left, right, .. }
+        | hir::ValueKind::IntegerSub { left, right }
+        | hir::ValueKind::FloatSub { left, right, .. }
+        | hir::ValueKind::IntegerMul { left, right }
+        | hir::ValueKind::FloatMul { left, right, .. }
+        | hir::ValueKind::FloatDiv { left, right, .. }
+        | hir::ValueKind::IntegerXor { left, right }
+        | hir::ValueKind::IntegerOr { left, right }
+        | hir::ValueKind::BooleanEquality { left, right, .. }
+        | hir::ValueKind::IntegerEq { left, right, .. }
+        | hir::ValueKind::IntegerNe { left, right, .. }
+        | hir::ValueKind::IntegerLt { left, right, .. }
+        | hir::ValueKind::BooleanAnd { left, right } => {
+            collect_value_specializations(compilation, current, left, specializations)?;
+            collect_value_specializations(compilation, current, right, specializations)?;
+        }
+        hir::ValueKind::DirectCall {
+            function,
+            type_arguments,
+            arguments,
+        } => {
+            specializations.push(specialization_key_for_call(
+                compilation,
+                current,
+                *function,
+                type_arguments,
+            )?);
+            for argument in arguments {
+                collect_value_specializations(compilation, current, argument, specializations)?;
+            }
+        }
+        hir::ValueKind::RecordConstruction { fields, .. } => {
+            for field in fields {
+                collect_value_specializations(
+                    compilation,
+                    current,
+                    &field.value,
+                    specializations,
+                )?;
+            }
+        }
+        hir::ValueKind::FieldValueUse { receiver, .. } => {
+            if let hir::FieldValueReceiver::Producer { value, .. } = receiver {
+                collect_value_specializations(compilation, current, value, specializations)?;
+            }
+        }
+        hir::ValueKind::Literal(_)
+        | hir::ValueKind::ReferenceRoot { .. }
+        | hir::ValueKind::ReferenceReborrow { .. }
+        | hir::ValueKind::ReferenceDereference { .. }
+        | hir::ValueKind::RawAddressRoot { .. }
+        | hir::ValueKind::RawMove { .. }
+        | hir::ValueKind::BindingUse { .. } => {}
+    }
+    Ok(())
 }
 
 struct TypeMap {
@@ -134,6 +544,11 @@ impl TypeMap {
                         "represented intrinsic type is not mapped",
                     ))?,
                 hir::Type::Record(record) => self.lower_record(compilation, record, visiting)?,
+                hir::Type::Parameter(_) => {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "HIR record field contains an abstract type parameter",
+                    ));
+                }
                 hir::Type::SafeReference { .. } => {
                     return Err(LoweringError::InvalidHirInvariant(
                         "HIR record field contains a safe-reference type",
@@ -411,6 +826,50 @@ impl TypeMap {
     }
 }
 
+struct FunctionTypeMap<'a> {
+    base: &'a TypeMap,
+    specialization: &'a SpecializationKey,
+}
+
+impl FunctionTypeMap<'_> {
+    fn get(&self, ty: hir::Type) -> Result<core::TypeId, LoweringError> {
+        self.base
+            .get(substitute_specialization_type(self.specialization, ty)?)
+    }
+
+    fn raw_pointer_pointee(&self, ty: core::TypeId) -> Result<core::TypeId, LoweringError> {
+        self.base.raw_pointer_pointee(ty)
+    }
+
+    fn project_type(
+        &self,
+        root: core::TypeId,
+        projections: &[core::Projection],
+    ) -> Result<core::TypeId, LoweringError> {
+        self.base.project_type(root, projections)
+    }
+
+    fn has_scalar_leaf(&self, ty: core::TypeId) -> Result<bool, LoweringError> {
+        self.base.has_scalar_leaf(ty)
+    }
+
+    fn remaining_frontier_after_consumed_path(
+        &self,
+        root: core::TypeId,
+        consumed: &[usize],
+    ) -> Result<Vec<Vec<usize>>, LoweringError> {
+        self.base.remaining_frontier_after_consumed_path(root, consumed)
+    }
+
+    fn remaining_frontier_after_consumed_paths(
+        &self,
+        root: core::TypeId,
+        consumed: &[Vec<usize>],
+    ) -> Result<Vec<Vec<usize>>, LoweringError> {
+        self.base.remaining_frontier_after_consumed_paths(root, consumed)
+    }
+}
+
 fn collect_used_safe_reference_types(
     compilation: &hir::TypedCompilation,
 ) -> BTreeSet<(hir::ReferenceReferent, hir::ReferencePermission)> {
@@ -580,8 +1039,8 @@ struct LoopLoweringTarget {
 
 struct FunctionLowerer<'a> {
     compilation: &'a hir::TypedCompilation,
-    types: &'a TypeMap,
-    functions: &'a BTreeMap<hir::FunctionId, core::FunctionId>,
+    types: FunctionTypeMap<'a>,
+    functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
     function: &'a hir::Function,
     locals: Vec<core::LocalDecl>,
     bindings: BTreeMap<hir::BindingId, core::LocalId>,
@@ -596,9 +1055,16 @@ impl<'a> FunctionLowerer<'a> {
     fn new(
         compilation: &'a hir::TypedCompilation,
         types: &'a TypeMap,
-        functions: &'a BTreeMap<hir::FunctionId, core::FunctionId>,
+        functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
         function: &'a hir::Function,
+        specialization: &'a SpecializationKey,
     ) -> Result<Self, LoweringError> {
+        validate_specialization_key(compilation, specialization)?;
+        if specialization.function != function.id {
+            return Err(LoweringError::InvalidHirInvariant(
+                "Core lowering specialization does not match its HIR function",
+            ));
+        }
         if function
             .parameters
             .iter()
@@ -619,7 +1085,10 @@ impl<'a> FunctionLowerer<'a> {
 
         let mut lowerer = Self {
             compilation,
-            types,
+            types: FunctionTypeMap {
+                base: types,
+                specialization,
+            },
             functions,
             function,
             locals: Vec::new(),
@@ -878,10 +1347,11 @@ impl<'a> FunctionLowerer<'a> {
                 }
                 hir::Statement::Call {
                     function,
+                    type_arguments,
                     arguments,
                     ..
                 } => {
-                    self.lower_call(*function, arguments, None)?;
+                    self.lower_call(*function, type_arguments, arguments, None)?;
                 }
                 hir::Statement::Fault { .. } => {
                     self.terminate_current(core::Terminator::Fault(core::Fault::new(
@@ -1017,7 +1487,7 @@ impl<'a> FunctionLowerer<'a> {
     ) -> Result<(), LoweringError> {
         let reference_local = self.binding(reference)?;
         let reference_ty = self.local_type(reference_local)?;
-        let Some((referent_ty, permission)) = self.types.types.reference(reference_ty) else {
+        let Some((referent_ty, permission)) = self.types.base.types.reference(reference_ty) else {
             return Err(LoweringError::InvalidHirInvariant(
                 "reference assignment destination is not a safe-reference binding",
             ));
@@ -2632,7 +3102,7 @@ impl<'a> FunctionLowerer<'a> {
                 let source = self.binding(*reference)?;
                 let source_ty = self.local_type(source)?;
                 let Some((parent_referent, parent_permission)) =
-                    self.types.types.reference(source_ty)
+                    self.types.base.types.reference(source_ty)
                 else {
                     return Err(LoweringError::InvalidHirInvariant(
                         "reference-reborrow source is not a safe-reference binding",
@@ -2675,6 +3145,11 @@ impl<'a> FunctionLowerer<'a> {
                 let referent = match value.ty {
                     hir::Type::Intrinsic(intrinsic) => hir::ReferenceReferent::Intrinsic(intrinsic),
                     hir::Type::Record(record) => hir::ReferenceReferent::Record(record),
+                    hir::Type::Parameter(_) => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "reference-dereference HIR value has an abstract result type",
+                        ));
+                    }
                     hir::Type::SafeReference { .. } => {
                         return Err(LoweringError::InvalidHirInvariant(
                             "reference-dereference HIR value has a nested-reference result type",
@@ -2690,7 +3165,7 @@ impl<'a> FunctionLowerer<'a> {
                 let source = self.binding(*reference)?;
                 let source_ty = self.local_type(source)?;
                 let Some((source_referent, source_permission)) =
-                    self.types.types.reference(source_ty)
+                    self.types.base.types.reference(source_ty)
                 else {
                     return Err(LoweringError::InvalidHirInvariant(
                         "reference-dereference source is not a safe-reference binding",
@@ -2816,11 +3291,17 @@ impl<'a> FunctionLowerer<'a> {
             }
             hir::ValueKind::DirectCall {
                 function,
+                type_arguments,
                 arguments,
             } => {
                 let arguments = self.lower_arguments(arguments)?;
                 let result = self.push_temporary(value.ty)?;
-                self.emit_call(*function, arguments, Some(core::Place::local(result)))?;
+                self.emit_call(
+                    *function,
+                    type_arguments,
+                    arguments,
+                    Some(core::Place::local(result)),
+                )?;
                 Ok(result)
             }
             hir::ValueKind::RecordConstruction { record, fields } => {
@@ -3142,11 +3623,12 @@ impl<'a> FunctionLowerer<'a> {
     fn lower_call(
         &mut self,
         function: hir::FunctionId,
+        type_arguments: &[hir::Type],
         arguments: &[hir::Value],
         destination: Option<core::Place>,
     ) -> Result<(), LoweringError> {
         let arguments = self.lower_arguments(arguments)?;
-        self.emit_call(function, arguments, destination)
+        self.emit_call(function, type_arguments, arguments, destination)
     }
 
     fn lower_arguments(
@@ -3164,15 +3646,22 @@ impl<'a> FunctionLowerer<'a> {
     fn emit_call(
         &mut self,
         function: hir::FunctionId,
+        type_arguments: &[hir::Type],
         arguments: Vec<core::Operand>,
         destination: Option<core::Place>,
     ) -> Result<(), LoweringError> {
+        let target = specialization_key_for_call(
+            self.compilation,
+            self.types.specialization,
+            function,
+            type_arguments,
+        )?;
         let target_function =
             self.functions
-                .get(&function)
+                .get(&target)
                 .copied()
                 .ok_or(LoweringError::InvalidHirInvariant(
-                    "HIR call target is absent from function map",
+                    "reachable HIR specialization is absent from function map",
                 ))?;
         let continuation = self.new_block()?;
         self.terminate_current(core::Terminator::Call {
