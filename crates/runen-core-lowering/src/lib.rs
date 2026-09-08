@@ -193,7 +193,7 @@ fn discover_specializations(
     LoweringError,
 > {
     let mut specializations = Vec::new();
-    let mut functions = BTreeMap::new();
+    let mut seen = BTreeSet::new();
 
     for function in &compilation.functions {
         if function.type_parameters.is_empty() {
@@ -201,8 +201,7 @@ fn discover_specializations(
                 function: function.id,
                 type_arguments: Vec::new(),
             };
-            let id = core::FunctionId(index_u32(specializations.len(), "Core function identity")?);
-            if functions.insert(specialization.clone(), id).is_some() {
+            if !seen.insert(specialization.clone()) {
                 return Err(LoweringError::InvalidHirInvariant(
                     "duplicate root HIR specialization identity",
                 ));
@@ -224,14 +223,22 @@ fn discover_specializations(
             &mut discovered,
         )?;
         for target in discovered {
-            if functions.contains_key(&target) {
+            if !seen.insert(target.clone()) {
                 continue;
             }
-            let id = core::FunctionId(index_u32(specializations.len(), "Core function identity")?);
-            functions.insert(target.clone(), id);
             specializations.push(target);
         }
         cursor += 1;
+    }
+
+    let mut functions = BTreeMap::new();
+    for (index, specialization) in specializations.iter().cloned().enumerate() {
+        let id = core::FunctionId(index_u32(index, "Core function identity")?);
+        if functions.insert(specialization, id).is_some() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "duplicate HIR specialization identity",
+            ));
+        }
     }
 
     Ok((specializations, functions))
