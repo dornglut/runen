@@ -85,10 +85,7 @@ fn reachable_generic_application_materializes_one_exact_concrete_specialization(
     let ids = functions_named(program, "id");
 
     assert_eq!(ids.len(), 1);
-    assert_eq!(
-        scalar_parameter(program, ids[0], 0),
-        Some(ScalarType::I64)
-    );
+    assert_eq!(scalar_parameter(program, ids[0], 0), Some(ScalarType::I64));
     assert_eq!(
         ids[0]
             .result
