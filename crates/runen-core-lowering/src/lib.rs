@@ -121,9 +121,11 @@ fn validate_specialization_key(
             "HIR specialization type-argument arity does not match its function declaration",
         ));
     }
-    if specialization.type_arguments.iter().any(|argument| {
-        !matches!(argument, hir::Type::Intrinsic(_) | hir::Type::Record(_))
-    }) {
+    if specialization
+        .type_arguments
+        .iter()
+        .any(|argument| !matches!(argument, hir::Type::Intrinsic(_) | hir::Type::Record(_)))
+    {
         return Err(LoweringError::InvalidHirInvariant(
             "HIR specialization tuple contains a non-concrete type",
         ));
@@ -199,10 +201,7 @@ fn discover_specializations(
                 function: function.id,
                 type_arguments: Vec::new(),
             };
-            let id = core::FunctionId(index_u32(
-                specializations.len(),
-                "Core function identity",
-            )?);
+            let id = core::FunctionId(index_u32(specializations.len(), "Core function identity")?);
             if functions.insert(specialization.clone(), id).is_some() {
                 return Err(LoweringError::InvalidHirInvariant(
                     "duplicate root HIR specialization identity",
@@ -228,10 +227,7 @@ fn discover_specializations(
             if functions.contains_key(&target) {
                 continue;
             }
-            let id = core::FunctionId(index_u32(
-                specializations.len(),
-                "Core function identity",
-            )?);
+            let id = core::FunctionId(index_u32(specializations.len(), "Core function identity")?);
             functions.insert(target.clone(), id);
             specializations.push(target);
         }
@@ -247,12 +243,7 @@ fn collect_body_specializations(
     body: &hir::Body,
     specializations: &mut Vec<SpecializationKey>,
 ) -> Result<(), LoweringError> {
-    collect_statement_specializations(
-        compilation,
-        current,
-        &body.statements,
-        specializations,
-    )?;
+    collect_statement_specializations(compilation, current, &body.statements, specializations)?;
     if let Some(returned) = body.terminal_return.as_ref()
         && let Some(value) = returned.value.as_ref()
     {
@@ -267,12 +258,7 @@ fn collect_block_specializations(
     block: &hir::Block,
     specializations: &mut Vec<SpecializationKey>,
 ) -> Result<(), LoweringError> {
-    collect_statement_specializations(
-        compilation,
-        current,
-        &block.statements,
-        specializations,
-    )?;
+    collect_statement_specializations(compilation, current, &block.statements, specializations)?;
     if let Some(returned) = block.terminal_return.as_ref()
         && let Some(value) = returned.value.as_ref()
     {
@@ -345,12 +331,7 @@ fn collect_statement_specializations(
                     type_arguments,
                 )?);
                 for argument in arguments {
-                    collect_value_specializations(
-                        compilation,
-                        current,
-                        argument,
-                        specializations,
-                    )?;
+                    collect_value_specializations(compilation, current, argument, specializations)?;
                 }
             }
             hir::Statement::Block(block) => {
@@ -363,12 +344,7 @@ fn collect_statement_specializations(
                 ..
             } => {
                 collect_value_specializations(compilation, current, condition, specializations)?;
-                collect_block_specializations(
-                    compilation,
-                    current,
-                    then_block,
-                    specializations,
-                )?;
+                collect_block_specializations(compilation, current, then_block, specializations)?;
                 if let Some(else_block) = else_block {
                     collect_block_specializations(
                         compilation,
@@ -450,12 +426,7 @@ fn collect_value_specializations(
         }
         hir::ValueKind::RecordConstruction { fields, .. } => {
             for field in fields {
-                collect_value_specializations(
-                    compilation,
-                    current,
-                    &field.value,
-                    specializations,
-                )?;
+                collect_value_specializations(compilation, current, &field.value, specializations)?;
             }
         }
         hir::ValueKind::FieldValueUse { receiver, .. } => {
@@ -858,7 +829,8 @@ impl FunctionTypeMap<'_> {
         root: core::TypeId,
         consumed: &[usize],
     ) -> Result<Vec<Vec<usize>>, LoweringError> {
-        self.base.remaining_frontier_after_consumed_path(root, consumed)
+        self.base
+            .remaining_frontier_after_consumed_path(root, consumed)
     }
 
     fn remaining_frontier_after_consumed_paths(
@@ -866,7 +838,8 @@ impl FunctionTypeMap<'_> {
         root: core::TypeId,
         consumed: &[Vec<usize>],
     ) -> Result<Vec<Vec<usize>>, LoweringError> {
-        self.base.remaining_frontier_after_consumed_paths(root, consumed)
+        self.base
+            .remaining_frontier_after_consumed_paths(root, consumed)
     }
 }
 
