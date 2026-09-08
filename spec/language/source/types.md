@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented intrinsic scalar source type identities, represented source type equality, nominal record declaration/type identity, record field structure, direct record-containment rule, and represented owned-value duplicability classification. Safe-reference type constructors are owned canonically by [Source safe references](references.md), and the first represented raw-pointer type constructor is owned canonically by [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); this type foundation integrates those constructors into source type equality, duplicability, and contextual record-shape boundaries without redefining reference authority/lifetime or raw-pointer provenance/unsafe semantics.
+This document owns the represented intrinsic scalar source type identities, represented source type equality, nominal record declaration/type identity, record field structure, direct record-containment rule, and represented owned-value duplicability classification. Safe-reference type constructors are owned canonically by [Source safe references](references.md), and the first represented raw-pointer type constructor is owned canonically by [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); this type foundation integrates those constructors into source type equality, duplicability, and contextual record-shape boundaries without redefining reference authority/lifetime or raw-pointer provenance/unsafe semantics. The first function-local abstract parametric type expressions and their generic-validation equality/substitution relation are owned by [Source generics](generics.md); they do not enlarge the concrete represented source type identities owned here.
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module/binding/lookup relations from [Source names and modules](names-modules.md), numeric semantics from [Core integer semantics](../core/numerics/integers.md) and [Core floating-point semantics](../core/numerics/floating-point.md), applicable structural value/storage behavior from [Core value and storage semantics](../core/value-storage.md), safe-reference type/referent admission from [Source safe references](references.md), and first-slice raw-pointer type/pointee/contextual admission from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
 
@@ -100,7 +100,9 @@ Lifetime, dynamic reference target/authority identity, raw-pointer target/origin
 
 This relation does not define subtyping, coercion, conversion, layout compatibility, ABI compatibility, trait conformance, or representation equivalence.
 
-Recursive record patterns consume this relation directly:
+The abstract parametric type expressions admitted inside first-slice generic functions are not additional concrete source type identities under this section. [Source generics](generics.md) owns their semantic slot identity, exact abstract equality during generic validation, and exact substitution into the concrete type identities defined here. In particular, an abstract type parameter is not equal to a concrete type merely because one later application substitutes that concrete type, and two distinct abstract slots remain unequal during generic-body validation even when one application maps both to the same concrete type.
+
+Recursive record patterns consume the concrete relation above directly:
 
 - a direct-root binding or producer result must have exactly the nominal record type selected by the top pattern head; and
 - every nested record-pattern head must have exactly the nominal record type of the field in which that nested pattern occurs.
@@ -135,7 +137,7 @@ For this revision, a **record-field-admissible source type** is exactly either:
 - one intrinsic scalar source type defined here; or
 - one nominal record source type whose record binding is legally resolvable for the declaring source unit under same-module or qualified cross-module lookup from `names-modules.md`.
 
-`SharedRef(T)`, `ExclusiveReplaceRef(T)`, and `RawPtr(T)` are represented source value types but are deliberately not record-field-admissible in these indirection slices. Consequently a nominal record cannot yet store a safe reference or raw-pointer value, and record construction/pattern/field-value owners require no reference-carrier or pointer-provenance aggregate semantics.
+`SharedRef(T)`, `ExclusiveReplaceRef(T)`, and `RawPtr(T)` are represented source value types but are deliberately not record-field-admissible in these indirection slices. Consequently a nominal record cannot yet store a safe reference or raw-pointer value, and record construction/pattern/field-value owners require no reference-carrier or pointer-provenance aggregate semantics. Function type parameters are likewise not record-field-admissible; their first-slice type-position boundary is owned by `generics.md` and no generic record declaration exists.
 
 The ordered field sequence is semantic structural order for the source record value shape. It MAY be consumed where another accepted owner needs structural order. It does not define physical field order, byte offsets, padding, alignment, ABI layout, stable representation, or address arithmetic.
 
@@ -199,7 +201,7 @@ Safe references and raw pointers are not record fields, so nominal-record duplic
 
 This section does not define other expression contexts, field assignment or partial reinitialization, parameter passing, result transfer, calls, pattern syntax, or any explicit cloning/copy-construction operation.
 
-Duplicability is source semantics independent of any future `Copy`-like trait spelling. A later trait/generic mechanism may expose/derive/constrain this capability only if its canonical semantics preserve this classification; this revision introduces no trait membership.
+Duplicability is source semantics independent of trait spelling. [Source generics](generics.md) consumes this concrete classification while defining that an unconstrained abstract type parameter has no positive duplicability evidence during generic-body validation; later concrete substitution MUST NOT rewrite a generic-body Move into Copy. A future trait mechanism may expose, derive, or constrain this capability only if its canonical semantics preserve this classification; this revision introduces no trait membership.
 
 No custom destructor semantics are defined. A later custom-destruction owner must explicitly define compatibility with duplicability and partial structural ownership rather than silently changing either property.
 
@@ -217,11 +219,11 @@ Those omissions do not prohibit a later accepted operation from defining an expl
 
 ## Callable and declaration boundary
 
-This document defines represented source type identity and the nominal record-type declaration/binding. Source function entities/callable signatures and contextual admission of safe-reference parameter/result types are owned by [Source callables](callables.md). Raw-pointer contextual exclusion from callable parameters/results is owned by `raw-pointers-unsafe.md` and consumed by `callables.md`. Safe-reference value/lifetime semantics remain owned by `references.md`, and raw-pointer provenance/unsafe semantics remain owned by `raw-pointers-unsafe.md`.
+This document defines represented concrete source type identity and the nominal record-type declaration/binding. Source function entities/callable signatures and contextual admission of safe-reference parameter/result types are owned by [Source callables](callables.md). First-slice function type parameters, abstract parametric type expressions, exact substitution, and generic-body capability facts are owned by [Source generics](generics.md). Raw-pointer contextual exclusion from callable parameters/results is owned by `raw-pointers-unsafe.md` and consumed by `callables.md`. Safe-reference value/lifetime semantics remain owned by `references.md`, and raw-pointer provenance/unsafe semantics remain owned by `raw-pointers-unsafe.md`.
 
-This document does not define constants, statics, variables, type aliases, opaque types, traits, or another module-level declaration category beyond records.
+This document does not define constants, statics, variables, type aliases, opaque types, traits, or another module-level declaration category beyond records. The accepted generic relation adds function-local type-parameter binders to existing function entities; it does not add a module-level generic declaration category here.
 
-Those declarations require independently owned source semantics rather than inference from current proving MIR.
+Those absent declarations require independently owned source semantics rather than inference from current proving MIR.
 
 ## Structural ownership, bindings, field access, patterns, references, and raw pointers
 
@@ -237,7 +239,7 @@ Those declarations require independently owned source semantics rather than infe
 
 `raw-pointers-unsafe.md` owns raw-pointer target/origin provenance, lexical pointer validity, raw address formation, raw ownership move/replacement, unsafe admission, represented unsafe-precondition discharge, and source-to-Core raw refinement.
 
-This type owner supplies intrinsic/nominal type identities plus integration of canonically owned safe-reference/raw-pointer constructors into represented type equality and duplicability, nominal record/field identity, field types, source type equality, structural field order, and owned-value duplicability only.
+This type owner supplies intrinsic/nominal type identities plus integration of canonically owned safe-reference/raw-pointer constructors into represented type equality and duplicability, nominal record/field identity, field types, source type equality, structural field order, and owned-value duplicability only. `generics.md` separately consumes those concrete facts for abstract function-local generic validation.
 
 The represented type identity, record shape, and duplicability classification do not by themselves determine:
 
@@ -255,8 +257,8 @@ Proving-kernel copyability, path state, scalar liveness, reference-authority ide
 
 ## Further boundaries
 
-The concrete intrinsic/record/safe-reference/raw-pointer forms do not themselves define literal semantics, additional refutable/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, generics, traits/coherence, const/static semantics, unsafe callable contracts, plain-Exclusive source references, named lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation.
+The concrete intrinsic/record/safe-reference/raw-pointer forms do not themselves define literal semantics, additional refutable/shorthand/wildcard/literal/guard pattern categories, record construction, field-value access, closures/captures, traits/coherence, const/static semantics, unsafe callable contracts, plain-Exclusive source references, named lifetime syntax, ABI/layout/FFI/linkage, package/filesystem mapping, parser/lossless syntax/HIR, Core MIR lowering, or backend representation. The first function-only explicit generic relation is owned separately by `generics.md`; broader generic forms remain outside this type foundation.
 
-Represented boolean, decimal integer, and decimal floating literal semantics are owned by `literals.md`; safe-reference semantics by `references.md`; raw-pointer and unsafe-admission semantics by `raw-pointers-unsafe.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; and recursive record destructuring with bounded node-local omission by `patterns.md`.
+Represented boolean, decimal integer, and decimal floating literal semantics are owned by `literals.md`; safe-reference semantics by `references.md`; raw-pointer and unsafe-admission semantics by `raw-pointers-unsafe.md`; structural ownership by `structural-ownership.md`; field-value access and direct record-field accessibility by `field-access.md`; recursive record destructuring with bounded node-local omission by `patterns.md`; and first-slice function generics by `generics.md`.
 
 Additional type/declaration spellings require an accepted concrete-syntax owner and must preserve the type identities/relations defined here.
