@@ -13,7 +13,8 @@ use crate::{
     Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
     RecordPatternTest, RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission,
     ReferenceReferent, Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement,
-    Type, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    Type, TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
+    type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -65,6 +66,7 @@ struct FunctionHeader {
     unit: usize,
     name: String,
     accessibility: Accessibility,
+    type_parameters: Vec<TypeParameter>,
     parameters: Vec<Parameter>,
     result: Option<Type>,
     safe_reference_result_contract: SafeReferenceResultContract,
@@ -599,6 +601,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             module: header.module,
             name: header.name.clone(),
             accessibility: header.accessibility,
+            type_parameters: header.type_parameters.clone(),
             parameters: header.parameters.clone(),
             result: header.result,
             safe_reference_result_contract: header.safe_reference_result_contract,
@@ -889,6 +892,7 @@ fn resolve_records(
                 &type_node,
                 modules,
                 imports,
+                &[],
                 diagnostics,
             ) {
                 validate_exported_field_type(
@@ -959,6 +963,38 @@ fn resolve_function_headers(
 ) -> Vec<FunctionHeader> {
     let mut headers = Vec::with_capacity(syntax.len());
     for function in syntax {
+        let mut type_parameter_names = BTreeSet::new();
+        let type_parameters = function
+            .node
+            .children()
+            .find(|node| node.kind() == SyntaxKind::GenericTypeParameterList)
+            .map(|list| {
+                list.children()
+                    .filter(|node| node.kind() == SyntaxKind::GenericTypeParameter)
+                    .enumerate()
+                    .map(|(index, node)| {
+                        let name_token = direct_token(&node, SyntaxKind::Ident);
+                        let name = key(&name_token);
+                        let parameter_location = location(function.unit, &node);
+                        if !type_parameter_names.insert(name.clone()) {
+                            diagnostics.push(Diagnostic {
+                                kind: DiagnosticKind::DuplicateTypeParameter,
+                                location: parameter_location,
+                            });
+                        }
+                        TypeParameter {
+                            id: TypeParameterId {
+                                function: function.id,
+                                index,
+                            },
+                            name,
+                            location: parameter_location,
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
         let parameter_list = direct_child(&function.node, SyntaxKind::ParameterList);
         let mut parameter_names = BTreeSet::new();
         let mut parameters = Vec::new();
@@ -982,6 +1018,7 @@ fn resolve_function_headers(
                 &type_node,
                 modules,
                 imports,
+                &type_parameters,
                 diagnostics,
             ) {
                 if matches!(ty, Type::RawPointer(_)) {
@@ -1031,6 +1068,7 @@ fn resolve_function_headers(
                     &type_node,
                     modules,
                     imports,
+                    &type_parameters,
                     diagnostics,
                 )?;
                 if matches!(ty, Type::RawPointer(_)) {
@@ -1124,6 +1162,7 @@ fn resolve_function_headers(
             unit: function.unit,
             name: function.name.clone(),
             accessibility: function.accessibility,
+            type_parameters,
             parameters,
             result,
             safe_reference_result_contract,
@@ -1153,6 +1192,7 @@ fn validate_exported_signature_type(
         }
         | Type::RawPointer(RawPointerPointee::Record(record)) => record,
         Type::Intrinsic(_)
+        | Type::Parameter(_)
         | Type::SafeReference {
             referent: ReferenceReferent::Intrinsic(_),
             ..
@@ -1177,7 +1217,7 @@ fn type_contains_reference_or_pointer_inner(
     visiting: &mut BTreeSet<RecordId>,
 ) -> bool {
     match ty {
-        Type::Intrinsic(_) => false,
+        Type::Intrinsic(_) | Type::Parameter(_) => false,
         Type::Record(record) => {
             if !visiting.insert(record) {
                 return false;
@@ -1232,7 +1272,7 @@ fn raw_pointer_pointee_type_is_valid(ty: Type, records: &[Record]) -> bool {
             .fields
             .iter()
             .all(|field| raw_pointer_pointee_type_is_valid(field.ty, records)),
-        Type::SafeReference { .. } | Type::RawPointer(_) => false,
+        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => false,
     }
 }
 
@@ -1280,12 +1320,31 @@ fn type_ref_is_raw_pointer(node: &SyntaxNode) -> bool {
         .any(|token| token.kind() == SyntaxKind::KwRaw)
 }
 
+fn intrinsic_type(kind: SyntaxKind) -> Option<IntrinsicType> {
+    match kind {
+        SyntaxKind::TyBool => Some(IntrinsicType::Bool),
+        SyntaxKind::TyI8 => Some(IntrinsicType::I8),
+        SyntaxKind::TyI16 => Some(IntrinsicType::I16),
+        SyntaxKind::TyI32 => Some(IntrinsicType::I32),
+        SyntaxKind::TyI64 => Some(IntrinsicType::I64),
+        SyntaxKind::TyU8 => Some(IntrinsicType::U8),
+        SyntaxKind::TyU16 => Some(IntrinsicType::U16),
+        SyntaxKind::TyU32 => Some(IntrinsicType::U32),
+        SyntaxKind::TyU64 => Some(IntrinsicType::U64),
+        SyntaxKind::TyF16 => Some(IntrinsicType::F16),
+        SyntaxKind::TyF32 => Some(IntrinsicType::F32),
+        SyntaxKind::TyF64 => Some(IntrinsicType::F64),
+        _ => None,
+    }
+}
+
 fn resolve_type(
     module: ModuleId,
     unit: usize,
     node: &SyntaxNode,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
     imports: &[UnitImports],
+    type_parameters: &[TypeParameter],
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
     let reference_permission = type_ref_reference_permission(node);
@@ -1317,22 +1376,7 @@ fn resolve_type(
                     )
             })
             .expect("syntax-clean type reference contains one referent token");
-        let intrinsic = match token.kind() {
-            SyntaxKind::TyBool => Some(IntrinsicType::Bool),
-            SyntaxKind::TyI8 => Some(IntrinsicType::I8),
-            SyntaxKind::TyI16 => Some(IntrinsicType::I16),
-            SyntaxKind::TyI32 => Some(IntrinsicType::I32),
-            SyntaxKind::TyI64 => Some(IntrinsicType::I64),
-            SyntaxKind::TyU8 => Some(IntrinsicType::U8),
-            SyntaxKind::TyU16 => Some(IntrinsicType::U16),
-            SyntaxKind::TyU32 => Some(IntrinsicType::U32),
-            SyntaxKind::TyU64 => Some(IntrinsicType::U64),
-            SyntaxKind::TyF16 => Some(IntrinsicType::F16),
-            SyntaxKind::TyF32 => Some(IntrinsicType::F32),
-            SyntaxKind::TyF64 => Some(IntrinsicType::F64),
-            _ => None,
-        };
-        if let Some(intrinsic) = intrinsic {
+        if let Some(intrinsic) = intrinsic_type(token.kind()) {
             Type::Intrinsic(intrinsic)
         } else {
             debug_assert_eq!(token.kind(), SyntaxKind::Ident);
@@ -1341,26 +1385,38 @@ fn resolve_type(
                 unit,
                 range: token.text_range(),
             };
-            match modules
-                .get(&module)
-                .and_then(|module| module.namespace.get(&name))
-                .copied()
-                .map(|entity| entity.entity)
+            if let Some(parameter) = type_parameters.iter().find(|parameter| parameter.name == name)
             {
-                Some(EntityId::Record(id)) => Type::Record(id),
-                Some(EntityId::Function(_)) => {
+                if reference_permission.is_some() || raw {
                     diagnostics.push(Diagnostic {
-                        kind: DiagnosticKind::ExpectedRecordType,
+                        kind: DiagnosticKind::InvalidGenericTypeParameterPosition,
                         location: token_location,
                     });
                     return None;
                 }
-                None => {
-                    diagnostics.push(Diagnostic {
-                        kind: DiagnosticKind::UnresolvedName,
-                        location: token_location,
-                    });
-                    return None;
+                Type::Parameter(parameter.id)
+            } else {
+                match modules
+                    .get(&module)
+                    .and_then(|module| module.namespace.get(&name))
+                    .copied()
+                    .map(|entity| entity.entity)
+                {
+                    Some(EntityId::Record(id)) => Type::Record(id),
+                    Some(EntityId::Function(_)) => {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::ExpectedRecordType,
+                            location: token_location,
+                        });
+                        return None;
+                    }
+                    None => {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::UnresolvedName,
+                            location: token_location,
+                        });
+                        return None;
+                    }
                 }
             }
         }
@@ -1370,8 +1426,8 @@ fn resolve_type(
         let referent = match ordinary {
             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
             Type::Record(record) => ReferenceReferent::Record(record),
-            Type::SafeReference { .. } | Type::RawPointer(_) => {
-                unreachable!("source reference type syntax is non-recursive")
+            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+                unreachable!("source reference type syntax is non-recursive and abstract referents reject before wrapping")
             }
         };
         Some(Type::SafeReference {
@@ -1382,8 +1438,8 @@ fn resolve_type(
         let pointee = match ordinary {
             Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
             Type::Record(record) => RawPointerPointee::Record(record),
-            Type::SafeReference { .. } | Type::RawPointer(_) => {
-                unreachable!("source raw-pointer type syntax is non-recursive")
+            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+                unreachable!("source raw-pointer type syntax is non-recursive and abstract pointees reject before wrapping")
             }
         };
         Some(Type::RawPointer(pointee))
@@ -1524,7 +1580,7 @@ fn record_duplicability_is_valid(
     let duplicable = records[id.0].fields.iter().all(|field| match field.ty {
         Type::Intrinsic(_) => true,
         Type::Record(target) => record_duplicability_is_valid(target, records, resolved),
-        Type::SafeReference { .. } | Type::RawPointer(_) => false,
+        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => false,
     });
     resolved[id.0] = Some(duplicable);
     duplicable
@@ -2411,6 +2467,7 @@ fn validate_local(
         &type_node,
         context.modules,
         context.imports,
+        &header.type_parameters,
         diagnostics,
     )
     .and_then(|ty| {
@@ -4039,6 +4096,7 @@ fn validate_call_statement(
     *state = candidate;
     Some(Statement::Call {
         function: validated.function,
+        type_arguments: validated.type_arguments,
         arguments: validated.arguments,
         location: location(header.unit, node),
     })
@@ -4922,7 +4980,7 @@ fn validate_value_inner(
                         )
                     }
                     SyntaxKind::DirectCall => {
-                        let Some(function) = resolve_call_target(
+                        let Some(application) = resolve_call_application(
                             header,
                             node,
                             context,
@@ -4931,7 +4989,7 @@ fn validate_value_inner(
                         ) else {
                             return Invalid;
                         };
-                        let Some(result) = context.headers[function.0].result else {
+                        let Some(result) = application.result else {
                             diagnostics.push(Diagnostic {
                                 kind: DiagnosticKind::NoResultCallUsedAsValue,
                                 location: evidence_location,
@@ -4964,7 +5022,7 @@ fn validate_value_inner(
                         if let Some(producer_node) = producer_node {
                             let receiver_ty = match producer_node.kind() {
                                 SyntaxKind::DirectCall => {
-                                    let Some(function) = resolve_call_target(
+                                    let Some(application) = resolve_call_application(
                                         header,
                                         &producer_node,
                                         context,
@@ -4973,7 +5031,7 @@ fn validate_value_inner(
                                     ) else {
                                         return Invalid;
                                     };
-                                    let Some(result) = context.headers[function.0].result else {
+                                    let Some(result) = application.result else {
                                         diagnostics.push(Diagnostic {
                                             kind: DiagnosticKind::NoResultCallUsedAsValue,
                                             location: location(header.unit, &producer_node),
@@ -5112,7 +5170,7 @@ fn validate_value_inner(
                         let referent = match selected_ty {
                             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
                             Type::Record(record) => ReferenceReferent::Record(record),
-                            Type::SafeReference { .. } | Type::RawPointer(_) => {
+                            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidSafeReferenceReferent {
                                         referent: selected_ty,
@@ -5167,7 +5225,7 @@ fn validate_value_inner(
                         let pointee = match binding.ty {
                             Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
                             Type::Record(record) => RawPointerPointee::Record(record),
-                            Type::SafeReference { .. } | Type::RawPointer(_) => {
+                            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidRawPointerPointee {
                                         pointee: binding.ty,
@@ -5439,6 +5497,7 @@ fn validate_value_inner(
                     ty,
                     kind: ValueKind::DirectCall {
                         function: validated.function,
+                        type_arguments: validated.type_arguments,
                         arguments: validated.arguments,
                     },
                     location: value_location,
@@ -5653,7 +5712,7 @@ fn validate_reference_root(
     let referent = match selected_ty {
         Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
         Type::Record(record) => ReferenceReferent::Record(record),
-        Type::SafeReference { .. } | Type::RawPointer(_) => {
+        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSafeReferenceReferent {
                     referent: selected_ty,
@@ -5807,7 +5866,7 @@ fn validate_reference_reborrow(
     let referent = match selected_ty {
         Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
         Type::Record(record) => ReferenceReferent::Record(record),
-        Type::SafeReference { .. } | Type::RawPointer(_) => {
+        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSafeReferenceReferent {
                     referent: selected_ty,
@@ -5993,7 +6052,7 @@ fn validate_raw_address(
     let pointee = match binding.ty {
         Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
         Type::Record(record) => RawPointerPointee::Record(record),
-        Type::SafeReference { .. } | Type::RawPointer(_) => {
+        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidRawPointerPointee {
                     pointee: binding.ty,
@@ -6478,14 +6537,14 @@ fn validate_field_value_use(
         debug_assert!(!identifiers.is_empty());
         let receiver_ty = match producer_node.kind() {
             SyntaxKind::DirectCall => {
-                let function = resolve_call_target(
+                let application = resolve_call_application(
                     header,
                     &producer_node,
                     context,
                     &state.bindings,
                     diagnostics,
                 )?;
-                let Some(result) = context.headers[function.0].result else {
+                let Some(result) = application.result else {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::NoResultCallUsedAsValue,
                         location: location(header.unit, &producer_node),
@@ -7371,8 +7430,179 @@ fn resolve_call_target(
     }
 }
 
+fn resolve_generic_type_argument(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Type> {
+    debug_assert_eq!(node.kind(), SyntaxKind::GenericTypeArgument);
+    if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        return match resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )? {
+            EntityId::Record(record) => Some(Type::Record(record)),
+            EntityId::Function(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedRecordType,
+                    location: location(header.unit, &qualified),
+                });
+                None
+            }
+        };
+    }
+
+    let token = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .find(|token| !token.kind().is_trivia())
+        .expect("syntax-clean generic type argument contains one direct type token");
+    if let Some(intrinsic) = intrinsic_type(token.kind()) {
+        return Some(Type::Intrinsic(intrinsic));
+    }
+
+    debug_assert_eq!(token.kind(), SyntaxKind::Ident);
+    let name = key(&token);
+    if let Some(parameter) = header
+        .type_parameters
+        .iter()
+        .find(|parameter| parameter.name == name)
+    {
+        return Some(Type::Parameter(parameter.id));
+    }
+
+    let argument_location = SourceLocation {
+        unit: header.unit,
+        range: token.text_range(),
+    };
+    match context
+        .modules
+        .get(&header.module)
+        .and_then(|module| module.namespace.get(&name))
+        .copied()
+        .map(|entity| entity.entity)
+    {
+        Some(EntityId::Record(record)) => Some(Type::Record(record)),
+        Some(EntityId::Function(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedRecordType,
+                location: argument_location,
+            });
+            None
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: argument_location,
+            });
+            None
+        }
+    }
+}
+
+fn instantiate_call_type(ty: Type, target: &FunctionHeader, type_arguments: &[Type]) -> Type {
+    match ty {
+        Type::Parameter(parameter) => {
+            debug_assert_eq!(parameter.function, target.id);
+            *type_arguments
+                .get(parameter.index)
+                .expect("validated generic target parameter names one supplied type argument")
+        }
+        concrete => concrete,
+    }
+}
+
+struct ResolvedCallApplication {
+    function: FunctionId,
+    type_arguments: Vec<Type>,
+    parameter_types: Vec<Type>,
+    result: Option<Type>,
+}
+
+fn resolve_call_application(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    bindings: &BTreeMap<String, BindingState>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ResolvedCallApplication> {
+    let function = resolve_call_target(header, node, context, bindings, diagnostics)?;
+    let target = &context.headers[function.0];
+    let type_argument_list = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::GenericTypeArgumentList);
+
+    let type_arguments = match (target.type_parameters.is_empty(), type_argument_list) {
+        (false, None) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::MissingGenericTypeArguments,
+                location: location(header.unit, node),
+            });
+            return None;
+        }
+        (true, Some(list)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnexpectedGenericTypeArguments,
+                location: location(header.unit, &list),
+            });
+            return None;
+        }
+        (true, None) => Vec::new(),
+        (false, Some(list)) => {
+            let arguments = list
+                .children()
+                .filter(|child| child.kind() == SyntaxKind::GenericTypeArgument)
+                .collect::<Vec<_>>();
+            if arguments.len() != target.type_parameters.len() {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::GenericTypeArgumentCount {
+                        expected: target.type_parameters.len(),
+                        found: arguments.len(),
+                    },
+                    location: location(header.unit, &list),
+                });
+                return None;
+            }
+            let mut resolved = Vec::with_capacity(arguments.len());
+            for argument in arguments {
+                resolved.push(resolve_generic_type_argument(
+                    header,
+                    &argument,
+                    context,
+                    diagnostics,
+                )?);
+            }
+            resolved
+        }
+    };
+
+    let parameter_types = target
+        .parameters
+        .iter()
+        .map(|parameter| instantiate_call_type(parameter.ty, target, &type_arguments))
+        .collect::<Vec<_>>();
+    let result = target
+        .result
+        .map(|result| instantiate_call_type(result, target, &type_arguments));
+
+    Some(ResolvedCallApplication {
+        function,
+        type_arguments,
+        parameter_types,
+        result,
+    })
+}
+
 struct ValidatedCall {
     function: FunctionId,
+    type_arguments: Vec<Type>,
     arguments: Vec<Value>,
     result: Option<Type>,
     result_reference_authority: Option<ReferenceAuthorityId>,
@@ -7407,18 +7637,19 @@ fn validate_call_inner(
     state: &mut SemanticState,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ValidatedCall> {
-    let function = resolve_call_target(header, node, context, &state.bindings, diagnostics)?;
-    let target = &context.headers[function.0];
+    let application =
+        resolve_call_application(header, node, context, &state.bindings, diagnostics)?;
+    let target = &context.headers[application.function.0];
     let argument_list = direct_child(node, SyntaxKind::ArgumentList);
     let argument_nodes = argument_list
         .children()
         .filter(|child| is_value_node(child.kind()))
         .collect::<Vec<_>>();
 
-    if argument_nodes.len() != target.parameters.len() {
+    if argument_nodes.len() != application.parameter_types.len() {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::ArgumentCount {
-                expected: target.parameters.len(),
+                expected: application.parameter_types.len(),
                 found: argument_nodes.len(),
             },
             location: location(header.unit, node),
@@ -7428,11 +7659,14 @@ fn validate_call_inner(
 
     let mut arguments = Vec::with_capacity(argument_nodes.len());
     let mut authorities = Vec::with_capacity(argument_nodes.len());
-    for (argument_node, parameter) in argument_nodes.into_iter().zip(&target.parameters) {
+    for (argument_node, parameter_ty) in argument_nodes
+        .into_iter()
+        .zip(application.parameter_types.iter().copied())
+    {
         let argument = validate_value(
             header,
             &argument_node,
-            parameter.ty,
+            parameter_ty,
             context,
             value_context,
             state,
@@ -7442,8 +7676,13 @@ fn validate_call_inner(
         arguments.push(argument.value);
     }
 
-    for (parameter, authority) in target.parameters.iter().zip(&authorities) {
-        let Type::SafeReference { permission, .. } = parameter.ty else {
+    for (parameter_ty, authority) in application
+        .parameter_types
+        .iter()
+        .copied()
+        .zip(&authorities)
+    {
+        let Type::SafeReference { permission, .. } = parameter_ty else {
             debug_assert!(authority.is_none());
             continue;
         };
@@ -7484,9 +7723,10 @@ fn validate_call_inner(
     }
 
     Some(ValidatedCall {
-        function,
+        function: application.function,
+        type_arguments: application.type_arguments,
         arguments,
-        result: target.result,
+        result: application.result,
         result_reference_authority,
     })
 }
