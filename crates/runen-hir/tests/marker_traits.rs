@@ -68,7 +68,10 @@ fn trait_declarations_share_the_existing_module_namespace() {
         "trait Name; trait Name;",
     ] {
         let errors = build(source).expect_err("duplicate module binding must be rejected");
-        assert!(has_diagnostic(&errors, DiagnosticKind::DuplicateModuleBinding));
+        assert!(has_diagnostic(
+            &errors,
+            DiagnosticKind::DuplicateModuleBinding
+        ));
     }
 }
 
@@ -99,9 +102,8 @@ fn marker_reference_lookup_uses_module_domain_not_generic_slot_domain() {
     assert!(f.type_parameters[0].requirements.contains(&marker));
     assert_eq!(f.parameters[0].ty, Type::Parameter(f.type_parameters[0].id));
 
-    let errors = build("record R {} fn f[T: R](value: T) {}").expect_err(
-        "wrong-category module binding selected for marker reference is final",
-    );
+    let errors = build("record R {} fn f[T: R](value: T) {}")
+        .expect_err("wrong-category module binding selected for marker reference is final");
     assert!(has_diagnostic(&errors, DiagnosticKind::ExpectedMarkerTrait));
     assert!(!has_diagnostic(&errors, DiagnosticKind::UnresolvedName));
 }
@@ -130,7 +132,10 @@ fn duplicate_resolved_marker_requirement_is_rejected_independent_of_spelling() {
 #[test]
 fn exported_generic_rejects_private_marker_requirement_but_private_function_allows_it() {
     let private = build("trait Marker; fn f[T: Marker](value: T) {}");
-    assert!(private.is_ok(), "private signature may mention private marker");
+    assert!(
+        private.is_ok(),
+        "private signature may mention private marker"
+    );
 
     let errors = build("trait Marker; export fn f[T: Marker](value: T) {}")
         .expect_err("exported signature may not expose private marker");
@@ -289,10 +294,8 @@ fn marker_obligation_failure_precedes_and_does_not_commit_argument_producer_effe
 
 #[test]
 fn marker_requirement_does_not_widen_generic_body_operational_capabilities() {
-    let hir = build(
-        "trait Marker; fn id[T: Marker](value: T) -> T { return value; }",
-    )
-    .expect("opaque marker-bounded body may transport its complete value");
+    let hir = build("trait Marker; fn id[T: Marker](value: T) -> T { return value; }")
+        .expect("opaque marker-bounded body may transport its complete value");
     let id = function(&hir, "id");
     let returned = id
         .body
@@ -305,10 +308,9 @@ fn marker_requirement_does_not_widen_generic_body_operational_capabilities() {
     };
     assert_eq!(ownership, OwnedUse::Consume);
 
-    let errors = build(
-        "trait Marker; fn bad[T: Marker](left: T, right: T) -> T { return left + right; }",
-    )
-    .expect_err("arbitrary marker does not grant scalar addition");
+    let errors =
+        build("trait Marker; fn bad[T: Marker](left: T, right: T) -> T { return left + right; }")
+            .expect_err("arbitrary marker does not grant scalar addition");
     assert!(errors.iter().any(|error| matches!(
         error.kind,
         DiagnosticKind::AdditionRequiresIntegerOrFloating {
