@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for function-local binding identity, lexical scope and lookup precedence, binding assignment mutability, binding lifecycle, ordinary whole-binding owned-value use, whole-binding assignment legality, bounded binding-root field assignment/reinitialization legality, safe-reference/raw-pointer local contextual integration, and the points at which a binding's structural ownership state begins, persists, resets, or ends.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), source value types and owned-value duplicability from [Source type foundation](types.md), structural paths, structural ownership state, path availability, consumption, remaining-ownership frontiers, complete-root replacement reset, and bounded non-empty subpath installation from [Source structural ownership](structural-ownership.md), callable parameter-slot types from [Source callables](callables.md), safe-reference target/authority/carrier/lifetime and direct safe-authority compatibility rules from [Source safe references](references.md), and raw-pointer contextual admission, pointer-origin provenance, lexical target validity, and raw pointee operations from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), concrete source value types and owned-value duplicability from [Source type foundation](types.md), first-slice abstract type-parameter expressions and their capability-conservative whole-value use rule from [Source generics](generics.md), structural paths, structural ownership state, path availability, consumption, remaining-ownership frontiers, complete-root replacement reset, bounded non-empty subpath installation, and opaque abstract roots from [Source structural ownership](structural-ownership.md), callable parameter-slot type expressions from [Source callables](callables.md), safe-reference target/authority/carrier/lifetime and direct safe-authority compatibility rules from [Source safe references](references.md), and raw-pointer contextual admission, pointer-origin provenance, lexical target validity, and raw pointee operations from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
 
-Represented binding-rooted field-path selection, direct field accessibility, final-field duplicate-or-consume value production, and bounded assignment-target field-path resolution/accessibility are owned by [Source field-value access](field-access.md). Represented recursive record-pattern selection, including bounded node-local rest/omission, and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer including safe-reference carriers and replacement-capable external referents, local initialization, whole-binding and bounded field-assignment replacement ordering, reference-relative replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, defined-fault propagation, and raw-operation execution ordering are owned by [Source function execution](function-execution.md). Represented conditional selection, zero/one/two normal-outcome composition, bounded `while` condition/body selection, structural-state joins/backedges including external referent roots, and raw-pointer-origin joins/backedges are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/while/return/reference/raw-pointer/unsafe spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented binding-rooted field-path selection, direct field accessibility, final-field duplicate-or-consume value production, and bounded assignment-target field-path resolution/accessibility are owned by [Source field-value access](field-access.md). Represented recursive record-pattern selection, including bounded node-local rest/omission, and pattern-specific binding production are owned by [Source patterns](patterns.md). Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer including safe-reference carriers and replacement-capable external referents, local initialization, whole-binding and bounded field-assignment replacement ordering, reference-relative replacement ordering, normal-continuation presence, lexical-scope and activation cleanup, return, recursion, divergence, defined-fault propagation, and raw-operation execution ordering are owned by [Source function execution](function-execution.md). Generic application, exact substitution, and the non-observable generic activation substitution context are owned separately by [Source generics](generics.md); the ordinary execution relation consumes the instantiated type facts supplied by that owner. Represented conditional selection, zero/one/two normal-outcome composition, bounded `while` condition/body selection, structural-state joins/backedges including external referent roots, and raw-pointer-origin joins/backedges are owned by [Source control flow](control-flow.md). Concrete parameter/local/pattern/value/call/field-value/assignment/block/conditional/while/return/reference/raw-pointer/unsafe/generic spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define structural ownership mathematics, safe-reference formation/dereference/reborrow/replacement/authority semantics, raw-pointer formation/pointee access/unsafe admission semantics, normal-continuation presence, conditional or loop selection/successor composition, field lookup/accessibility, pattern structure, general expression evaluation, traits, ABI, Core liveness, or an implementation representation.
+This document does not define structural ownership mathematics, generic parameter identity/substitution/capability semantics, safe-reference formation/dereference/reborrow/replacement/authority semantics, raw-pointer formation/pointee access/unsafe admission semantics, normal-continuation presence, conditional or loop selection/successor composition, field lookup/accessibility, pattern structure, general expression evaluation, traits, ABI, Core liveness, or an implementation representation.
 
 ## Function-local binding identity
 
@@ -16,20 +16,20 @@ When a represented source function entity has a body under `function-execution.m
 
 Each parameter binding has:
 
-- exactly the source value type of its corresponding signature parameter slot;
+- exactly the source parameter type expression of its corresponding signature parameter slot, which may be one admitted abstract type parameter inside a generic function;
 - one lexical identifier key governed by `lexical.md`;
 - one stable source-semantic binding identity; and
 - one assignment-mutability classification defined below.
 
 Parameter lexical keys MUST be unique within one function body.
 
-Parameter lexical keys, binding identities, and assignment-mutability classifications are body-local facts. They are not callable-signature identity or equality dimensions.
+Parameter lexical keys, binding identities, and assignment-mutability classifications are body-local value facts. They are not callable-signature identity or equality dimensions and are distinct from generic type-parameter slot identities/keys under `generics.md`.
 
 Parameter bindings and every represented function-local binding occupy one **function-local value-binding domain**.
 
-A represented binding identity is independent of original identifier spelling, token/source offset, parser node, physical address, compiler collection index, HIR/Core identifier choice, runtime storage identity, source safe-reference authority identity, or source raw-pointer origin provenance.
+A represented binding identity is independent of original identifier spelling, token/source offset, parser node, physical address, compiler collection index, HIR/Core identifier choice, runtime storage identity, generic type-parameter identity, source safe-reference authority identity, or source raw-pointer origin provenance.
 
-For the function form represented by `concrete-syntax.md`, concrete parameter source order maps to callable parameter-slot order and each parameter identifier supplies the lexical key for its corresponding parameter binding. Every represented concrete parameter binding is immutable for assignment purposes, including parameters whose types are `SharedRef(T)` or `ExclusiveReplaceRef(T)`. `RawPtr(T)` is not parameter-admissible under `callables.md` in this slice.
+For the function form represented by `concrete-syntax.md`, concrete parameter source order maps to callable parameter-slot order and each parameter identifier supplies the lexical key for its corresponding parameter binding. Every represented concrete parameter binding is immutable for assignment purposes, including parameters whose concrete types are `SharedRef(T)` or `ExclusiveReplaceRef(T)` and parameters whose declared type expression is an abstract generic type parameter. `RawPtr(T)` is not parameter-admissible under `callables.md` in this slice.
 
 A replacement-capable reference parameter's binding mutability remains immutable even though its reference permission permits complete-referent replacement. Parameter binding assignment and referent replacement are distinct semantic operations.
 
@@ -39,15 +39,17 @@ A represented ordinary local declaration:
 
 - belongs to exactly one lexical scope;
 - introduces exactly one lexical identifier key and one stable local binding identity;
-- has exactly one represented source value type;
+- has exactly one admitted declared source type expression;
 - has exactly one initializer; and
 - classifies the binding as immutable or mutable for assignment purposes.
+
+An admitted declared source type expression is either one existing concrete local-admissible source value type under the applicable type/reference/raw-pointer owners or, inside a generic function, one bare in-scope abstract type parameter admitted by `generics.md`.
 
 Uninitialized ordinary local declarations are not represented.
 
 The initializer is resolved and typed in the lexical environment that exists before the new binding is introduced. `function-execution.md` owns initializer evaluation and transfer. The binding enters scope only after successful initialization completes and therefore cannot be selected by lookup from its own initializer.
 
-The concrete forms in `concrete-syntax.md` establish immutable `let name: Type = Value;` and mutable `let mut name: Type = Value;` bindings. This revision defines no inferred local type or uninitialized local form.
+The concrete forms in `concrete-syntax.md` establish immutable `let name: Type = Value;` and mutable `let mut name: Type = Value;` bindings. In a generic function an admitted bare type-parameter key may fill that declared `Type` position according to `generics.md`; this remains an explicit declared type and does not introduce inference. This revision defines no inferred local type or uninitialized local form.
 
 Safe-reference local admission is deliberately immutable-only:
 
@@ -56,7 +58,7 @@ Safe-reference local admission is deliberately immutable-only:
 - `let mut name: &T = Value;` is source-invalid; and
 - `let mut name: &mut T = Value;` is source-invalid.
 
-This immutable-only rule is a source reference-lifetime/authority boundary. It does not redefine the general assignment-mutability classification of non-reference locals and does not imply a hidden `const` or type-level mutability dimension. In particular, `&mut T` denotes replacement capability over the referent, not mutability/rebinding of the reference local that stores the carrier.
+This immutable-only rule is a source reference-lifetime/authority boundary. It does not redefine the general assignment-mutability classification of non-reference locals and does not imply a hidden `const` or type-level mutability dimension. In particular, `&mut T` denotes replacement capability over the referent, not mutability/rebinding of the reference local that stores the carrier. An abstract type parameter is not a safe-reference type expression in this slice, so an ordinary local declared with that abstract type may use either ordinary assignment-mutability class.
 
 For represented raw-pointer types, both ordinary local mutability classes are admitted when `RawPtr(T)` is valid under `raw-pointers-unsafe.md`:
 
@@ -65,7 +67,7 @@ For represented raw-pointer types, both ordinary local mutability classes are ad
 
 Raw-pointer local mutability applies only to the stored pointer value. It does not grant pointee mutation authority. Every raw-pointer initializer additionally MUST satisfy the pointer-origin lexical target-validity relation from `raw-pointers-unsafe.md` for the complete static extent of the receiving local.
 
-After successful initializer transfer, the new local begins with one complete structural owned-value root of its declared type and the initial empty consumed-path state from `structural-ownership.md`. When the initialized value is a safe reference, the local additionally stores the produced reference carrier whose authority/lifetime consequence is owned by `references.md`; when it is a raw pointer, source validation additionally retains the exact pointer-origin provenance owned by `raw-pointers-unsafe.md`. Neither relation introduces a second structural ownership state for the reference or pointer binding itself.
+After successful initializer transfer, the new local begins with one complete structural owned-value root of its declared type expression and the initial empty consumed-path state from `structural-ownership.md`. For an abstract type parameter that root is the opaque complete root defined by `structural-ownership.md` while consuming `generics.md`. When the initialized value is a safe reference, the local additionally stores the produced reference carrier whose authority/lifetime consequence is owned by `references.md`; when it is a raw pointer, source validation additionally retains the exact pointer-origin provenance owned by `raw-pointers-unsafe.md`. Neither relation introduces a second structural ownership state for the reference or pointer binding itself.
 
 A replacement-capable reference value may also target a structural root external to the current activation. That external referent root is separate non-binding validation state owned by `references.md`; it is not the structural ownership state of the parameter/local binding that stores the reference carrier.
 
@@ -97,7 +99,7 @@ The binding-leaf source order defined by `patterns.md` is the declaration order 
 
 Each successfully established pattern binding begins with one complete structural owned-value root of its exact binding type and the initial empty consumed-path state from `structural-ownership.md`.
 
-Represented nominal record fields cannot have `SharedRef(T)`, `ExclusiveReplaceRef(T)`, or `RawPtr(T)` type, so the represented record pattern relation cannot introduce a safe-reference or raw-pointer binding in this slice. No borrow-binding or pointer-binding pattern mode is implied.
+Represented nominal record fields cannot have `SharedRef(T)`, `ExclusiveReplaceRef(T)`, `RawPtr(T)`, or abstract function type-parameter type, so the represented record pattern relation cannot introduce a safe-reference, raw-pointer, or abstract-generic binding in this slice. No borrow-binding, pointer-binding, or generic-pattern binding mode is implied.
 
 A pattern with no binding leaves introduces no function-local binding and therefore does not change the lookup environment by itself.
 
@@ -115,7 +117,7 @@ A parameter binding belongs to the function root scope and is in scope throughou
 
 An ordinary local or pattern-introduced local binding is in scope from immediately after its successful declaration/initialization boundary through the end of its containing lexical scope, including descendant lexical scopes while execution remains in that activation. A return terminates the activation under `function-execution.md` rather than creating a later point in the ended scope.
 
-These existing containment/cleanup relations are consumed by `references.md` to prove the represented implicit lexical safe-reference lifetime and by `raw-pointers-unsafe.md` to require that every pointer local's target extent contain that pointer local's complete extent. Child safe-reference locals end before their earlier parent/reference target extent. This binding owner does not add lifetime names, authority sets, pointer-origin sets, or a second scope tree.
+These existing containment/cleanup relations are consumed by `references.md` to prove the represented implicit lexical safe-reference lifetime and by `raw-pointers-unsafe.md` to require that every pointer local's target extent contain that pointer local's complete extent. Child safe-reference locals end before their earlier parent/reference target extent. This binding owner does not add lifetime names, authority sets, pointer-origin sets, generic type-parameter scopes, or a second scope tree; generic type-parameter scope is owned separately by `generics.md`.
 
 ## Function-local shadowing and key reuse
 
@@ -133,7 +135,7 @@ Consequently:
 - two bindings introduced by one pattern cannot share a key; and
 - disjoint sibling lexical scopes, including explicit sibling conditional arms, MAY independently introduce the same key because their binding scopes do not overlap.
 
-This prohibition applies only inside the function-local value-binding domain. A function-local binding key MAY equal a module-level declaration key.
+This prohibition applies only inside the function-local value-binding domain. A function-local binding key MAY equal a module-level declaration key and MAY equal an in-scope generic type-parameter key. The latter is not value-binding shadowing: generic type parameters participate only in the distinct type-position lookup domain owned by `generics.md`.
 
 ## Function-local lookup precedence
 
@@ -149,17 +151,19 @@ The concrete whole-binding value use, binding-rooted `FieldValueUse` root, direc
 
 For a bounded binding-root field assignment target, the first identifier resolves through this relation to one parameter/local binding; `field-access.md` then resolves the one-or-more field selectors from that binding's declared type. The selected binding still MUST satisfy the assignment-mutability rule below. No module-level fallback, qualified assignment root, arbitrary receiver, or general lvalue lookup is introduced.
 
-For Shared root `&x` or `&x.field...`, `references.md` additionally requires the root identifier to resolve to one active parameter or ordinary local binding and owns selection of the complete root or bounded structural field path plus the exact Shared referent/accessibility/availability requirements. For replacement-capable root `&mut x` or `&mut x.field...`, that owner additionally requires the root identifier to resolve to one active mutable ordinary local binding and owns selection of the complete root or bounded structural field path plus the exact replacement-referent/accessibility/availability and Exclusive-authority requirements.
+For Shared root `&x` or `&x.field...`, `references.md` additionally requires the root identifier to resolve to one active parameter or ordinary local binding and owns selection of the complete root or bounded structural field path plus the exact Shared referent/accessibility/availability requirements. For replacement-capable root `&mut x` or `&mut x.field...`, that owner additionally requires the root identifier to resolve to one active mutable ordinary local binding and owns selection of the complete root or bounded structural field path plus the exact replacement-referent/accessibility/availability and Exclusive-authority requirements. Because `generics.md` does not admit an abstract type parameter as a safe-reference referent, these forms cannot acquire reference authority over an abstract-typed binding merely from later substitution.
 
 For `*r`, `&*r`, `&mut *r`, and the destination reference binding in `*r = Value;`, `references.md` additionally requires the resolved entity to be one active safe-reference parameter/local binding with the exact permission/referent required by that operation. These bounded forms do not perform a general dereference-place or arbitrary-value lookup.
 
-For raw address formation, `raw-pointers-unsafe.md` additionally requires the resolved target to be one active parameter or ordinary local binding of a first-slice raw-pointee-admissible type and selects only its complete root. For raw move/assign, that owner requires the pointer operand binding to have exact type `RawPtr(T)` and consumes its retained exact pointer origin.
+For raw address formation, `raw-pointers-unsafe.md` additionally requires the resolved target to be one active parameter or ordinary local binding of a first-slice raw-pointee-admissible type and selects only its complete root. For raw move/assign, that owner requires the pointer operand binding to have exact type `RawPtr(T)` and consumes its retained exact pointer origin. An abstract type parameter is not a first-slice raw pointee under `generics.md`/`raw-pointers-unsafe.md`.
 
 A nominal record-pattern head is not a function-local value-binding lookup. `patterns.md` defines each represented record-pattern head through same-module nominal-record declaration lookup independently of active local bindings with equal keys.
 
 Source-unit module aliases remain the distinct qualified-lookup mechanism owned by `names-modules.md`. The concrete `alias::member` direct-call target resolves through that mechanism rather than this unqualified lookup.
 
-Beyond the represented two-part module alias/member qualification, operation-specific field selectors, bounded record-pattern field selection, bounded binding-root field assignment, bounded safe-reference root/dereference/reborrow/replacement lookup, and bounded raw-pointer root/pointer-operand lookup above, this revision defines no arbitrary member lookup, nested module paths, labels, generic parameters, lifetime names, methods, associated items, or another future name domain.
+Generic type-parameter lookup is also distinct from this value-binding precedence. `generics.md` owns bare type-position lookup and consults its in-scope type-parameter keys before same-module nominal-type lookup; it does not consult or shadow this function-local value-binding domain.
+
+Beyond the represented two-part module alias/member qualification, operation-specific field selectors, bounded record-pattern field selection, bounded binding-root field assignment, bounded safe-reference root/dereference/reborrow/replacement lookup, bounded raw-pointer root/pointer-operand lookup, and the distinct generic type-position lookup above, this revision defines no arbitrary member lookup, nested module paths, labels, lifetime names, methods, associated items, or another future name domain.
 
 ## Binding assignment mutability
 
@@ -168,15 +172,15 @@ Every represented parameter/local binding is exactly one of:
 - **immutable**; or
 - **mutable**.
 
-Assignment mutability is a binding property independent of source type identity, structural ownership state, source owned-value duplicability, callable-signature identity/equality, safe-reference alias authority/permission, and raw-pointer origin provenance.
+Assignment mutability is a binding property independent of concrete source type identity, abstract generic type-parameter identity, structural ownership state, source owned-value duplicability, callable-signature identity/equality, safe-reference alias authority/permission, and raw-pointer origin provenance.
 
 Consuming an owned value from an immutable binding, including a represented structural subvalue when `field-access.md` or `patterns.md` permits that consumption, is valid when the applicable safe-authority compatibility requirement is also satisfied. Immutability restricts ordinary whole-binding and binding-root field assignment/reinitialization; it does not require the binding to retain ownership of every subvalue and it is not raw target-access authority.
 
 Represented parameters are immutable. Ordinary locals are immutable unless their concrete declaration carries `mut`. Every binding introduced by the represented record pattern is immutable. No parameter-mutability or pattern-binding-mutability form is represented. Therefore the current concrete bounded field-assignment form can successfully target only a mutable ordinary local, although the semantic lookup relation remains parameter/local and rejects an immutable parameter through the ordinary mutability rule.
 
-Every represented local whose declared type is `SharedRef(T)` or `ExclusiveReplaceRef(T)` MUST be immutable; the otherwise represented mutable-local form is invalid for either safe-reference type.
+Every represented local whose declared concrete type is `SharedRef(T)` or `ExclusiveReplaceRef(T)` MUST be immutable; the otherwise represented mutable-local form is invalid for either safe-reference type.
 
-A local whose declared type is `RawPtr(T)` MAY be immutable or mutable. A mutable raw-pointer local may be ordinarily assigned another exact `RawPtr(T)` value only when the incoming pointer origin satisfies the lexical target-validity rule from `raw-pointers-unsafe.md` for the complete receiving-local extent.
+A local whose declared concrete type is `RawPtr(T)` MAY be immutable or mutable. A mutable raw-pointer local may be ordinarily assigned another exact `RawPtr(T)` value only when the incoming pointer origin satisfies the lexical target-validity rule from `raw-pointers-unsafe.md` for the complete receiving-local extent.
 
 Assignment to any immutable binding is source-invalid regardless of whether its complete structural root or a selected structural subpath is fully available, partially available, or unavailable.
 
@@ -184,7 +188,7 @@ Binding mutability does not itself replace a value or restore ownership. Replace
 
 ## Binding structural ownership state
 
-Every in-scope represented parameter/local binding owns exactly one structural owned-value root under `structural-ownership.md` whose root type is the binding's declared source type.
+Every in-scope represented parameter/local binding owns exactly one structural owned-value root under `structural-ownership.md` whose root type expression is the binding's declared source type expression. For a binding declared with one abstract type parameter, `structural-ownership.md` provides exactly the opaque complete root consumed by `generics.md`; no represented non-empty structural path exists through that abstract root.
 
 This document owns only the binding lifecycle around that structural state:
 
@@ -196,11 +200,11 @@ This document owns only the binding lifecycle around that structural state:
 - successful bounded binding-root field assignment applies the canonical non-empty subpath-installation transition from `structural-ownership.md` to the binding's existing root state; and
 - lexical/activation termination ends whatever binding ownership remains according to `function-execution.md`.
 
-Safe-reference authority/carrier state, replacement-capable external referent structural state, and raw-pointer origin provenance are deliberately distinct facts. `references.md` owns safe authority and external-referent state; `raw-pointers-unsafe.md` owns pointer origin. Root safe-reference formation and raw address formation leave the target binding's structural ownership state unchanged. Dereference Move through a replacement-capable reference updates the actual local-root structural state at the reference's exact selected target path when the reference targets a local binding. Raw ownership move and raw replacement likewise alter the target structural state only through the explicit transitions consumed by their canonical owners.
+Safe-reference authority/carrier state, replacement-capable external referent structural state, generic activation substitution context, and raw-pointer origin provenance are deliberately distinct facts. `references.md` owns safe authority and external-referent state; `generics.md` owns generic substitution context; `raw-pointers-unsafe.md` owns pointer origin. Root safe-reference formation and raw address formation leave the target binding's structural ownership state unchanged. Dereference Move through a replacement-capable reference updates the actual local-root structural state at the reference's exact selected target path when the reference targets a local binding. Raw ownership move and raw replacement likewise alter the target structural state only through the explicit transitions consumed by their canonical owners.
 
-Entering or normally exiting a child lexical scope does not itself change the structural ownership state, external-referent state, safe authority, or pointer-origin provenance of an ancestor/enclosing domain. Valid ownership transitions, reference child lifecycle, pointer retargeting, or assignment affecting an enclosing domain inside the child remain in force at the following parent-scope program point when the applicable control-flow relation admits that normal continuation. Child reference-local cleanup may end a child authority and thereby restore parent reference-relative authority before the enclosing normal outcome is formed.
+Entering or normally exiting a child lexical scope does not itself change the structural ownership state, external-referent state, safe authority, generic substitution context, or pointer-origin provenance of an ancestor/enclosing domain. Valid ownership transitions, reference child lifecycle, pointer retargeting, or assignment affecting an enclosing domain inside the child remain in force at the following parent-scope program point when the applicable control-flow relation admits that normal continuation. Child reference-local cleanup may end a child authority and thereby restore parent reference-relative authority before the enclosing normal outcome is formed.
 
-Structural source paths, prefix-free consumed-path state, fully/partially/unavailable classification, path consumption, bounded subpath-installation state, and recursive remaining-frontier selection are defined only by `structural-ownership.md`. They are not redefined here.
+Structural source paths, prefix-free consumed-path state, fully/partially/unavailable classification, path consumption, bounded subpath-installation state, recursive remaining-frontier selection, and the opaque-root structural boundary for abstract generic values are defined only by `structural-ownership.md`. They are not redefined here.
 
 For represented statement-level conditionals, `control-flow.md` owns normal-continuation composition for enclosing binding states and replacement-capable external referent states:
 
@@ -223,6 +227,8 @@ Safe-reference authority/delegation state does not introduce a general control-f
 
 Raw-pointer origin is an additional exact provenance fact, not a structural ownership path set. The raw-pointer/control-flow relation likewise adds no origin union, set, maybe-origin state, widening, fixed point, or NLL lattice.
 
+Generic activation substitution context is fixed for one activation under `generics.md`; it is not a branch-varying ownership fact and therefore adds no conditional/loop join lattice.
+
 This binding owner does not derive a successor or backedge state by union, intersection, normalization, widening, lower Core path state, fixed-point iteration, or another merge rule.
 
 Future refutable matches, catch/recovery forms, additional loop forms, or other control-flow forms require their own accepted definite-state relations; this document adds none beyond the represented conditional/while relations owned by `control-flow.md`.
@@ -233,25 +239,33 @@ A represented **ordinary whole-binding owned-value use** applies to the empty st
 
 The complete root path MUST be fully available under `structural-ownership.md` immediately before the use.
 
-If the binding's source type is duplicable under `types.md`:
+If the binding's declared type expression is one abstract type parameter under `generics.md`:
+
+1. require the canonical Exclusive safe-authority compatibility relation for direct access to that complete binding root;
+2. produce the complete owned value through the capability-conservative consuming transfer/Move selected by `generics.md`; and
+3. apply the canonical successful-consumption transition from `structural-ownership.md`.
+
+This abstract branch is not a classification of the later substituted concrete type as non-duplicable. Generic-body validation lacks positive duplicability evidence, and every concrete realization MUST preserve the selected Move even when the activation substitution supplies a concrete duplicable type.
+
+Otherwise, if the binding's concrete source type is duplicable under `types.md`:
 
 1. require the canonical Shared safe-authority compatibility relation for direct access to that binding root;
 2. produce another owned source value of that complete type through the accepted duplicability capability; and
 3. leave the binding's structural ownership state unchanged.
 
-If the binding's source type is non-duplicable:
+Otherwise the binding's concrete source type is non-duplicable, and ordinary use:
 
-1. require the canonical Exclusive safe-authority compatibility relation for direct access to that binding root;
-2. transfer/consume the complete owned value through the empty structural path; and
-3. apply the canonical successful-consumption transition from `structural-ownership.md`.
+1. requires the canonical Exclusive safe-authority compatibility relation for direct access to that binding root;
+2. transfers/consumes the complete owned value through the empty structural path; and
+3. applies the canonical successful-consumption transition from `structural-ownership.md`.
 
-The safe-authority check concerns authorities targeting the binding being used. Moving or copying a safe-reference **carrier binding** is not direct access to that carrier's referent and does not conflict with the authority carried by its own value merely because that reference is active.
+The safe-authority check concerns authorities targeting the binding being used. Moving or copying a safe-reference **carrier binding** is not direct access to that carrier's referent and does not conflict with the authority carried by its own value merely because that reference is active. First-slice generic abstract roots cannot themselves be safe-reference targets because `generics.md` does not admit abstract referent types; the Exclusive requirement on an abstract Move nevertheless preserves the canonical direct-access rule rather than creating an exception.
 
-For a binding of exact type `SharedRef(T)`, the type is duplicable. The successful duplicate therefore has the carrier consequence owned by `references.md`: it creates another carrier naming the same Shared authority/target while retaining the stored source carrier. This is not a reborrow or new root authority.
+For a binding of exact concrete type `SharedRef(T)`, the type is duplicable. The successful duplicate therefore has the carrier consequence owned by `references.md`: it creates another carrier naming the same Shared authority/target while retaining the stored source carrier. This is not a reborrow or new root authority.
 
-For a binding of exact type `ExclusiveReplaceRef(T)`, the type is non-duplicable. Successful ordinary use moves the one stored carrier into the produced value and consumes the reference binding root, without copying the carrier, ending the authority when an active descendant still keeps it alive, or accessing the referent.
+For a binding of exact concrete type `ExclusiveReplaceRef(T)`, the type is non-duplicable. Successful ordinary use moves the one stored carrier into the produced value and consumes the reference binding root, without copying the carrier, ending the authority when an active descendant still keeps it alive, or accessing the referent.
 
-For a binding of exact type `RawPtr(T)`, the type is duplicable. The successful duplicate preserves the exact raw-pointer value and `PointerOrigin(binding)` provenance owned by `raw-pointers-unsafe.md`; it does not access the pointee or create any reference authority.
+For a binding of exact concrete type `RawPtr(T)`, the type is duplicable. The successful duplicate preserves the exact raw-pointer value and `PointerOrigin(binding)` provenance owned by `raw-pointers-unsafe.md`; it does not access the pointee or create any reference authority.
 
 Ordinary whole-binding use of a partially available or unavailable complete root is source-invalid, not a defined runtime moved-state fault.
 
@@ -265,11 +279,11 @@ A represented whole-binding assignment target MUST resolve through the function-
 
 Before RHS consequences can commit, the target must satisfy the canonical Exclusive safe-authority compatibility requirement from `references.md`: no active overlapping safe authority may target that complete root.
 
-The RHS MUST produce exactly one owned source value whose type is exactly equal under `types.md` to the target binding's declared source type.
+The RHS MUST produce exactly one owned source value whose type expression is exactly equal to the target binding's declared source type expression under the applicable concrete equality from `types.md` or abstract generic equality from `generics.md`.
 
-When the target binding has type `RawPtr(T)`, the produced RHS raw-pointer value additionally MUST carry an exact pointer origin whose target binding extent contains the complete receiving pointer-local extent under `raw-pointers-unsafe.md`. This source validity requirement applies before the new pointer value/origin becomes the target binding's continuing state.
+When the target binding has concrete type `RawPtr(T)`, the produced RHS raw-pointer value additionally MUST carry an exact pointer origin whose target binding extent contains the complete receiving pointer-local extent under `raw-pointers-unsafe.md`. This source validity requirement applies before the new pointer value/origin becomes the target binding's continuing state.
 
-The target may have a fully available, partially available, or unavailable complete structural root when assignment begins. Successful assignment always replaces/reinitializes the complete binding value. Safe authority is a separate rejection condition even when the current structural root would otherwise be replaceable.
+The target may have a fully available, partially available, or unavailable complete structural root when assignment begins. An abstract generic root can only be fully available or unavailable because it has no represented non-empty path. Successful assignment always replaces/reinitializes the complete binding value. Safe authority is a separate rejection condition even when the current structural root would otherwise be replaceable.
 
 The target remains in scope during RHS evaluation. Every RHS use observes the target's current structural ownership and safe-authority state. A consuming RHS may therefore change structural ownership state before replacement completes. A safe authority established or retained during RHS evaluation likewise remains controlling at the replacement point. For a raw-pointer assignment, RHS production similarly determines the exact incoming pointer origin before replacement commits.
 
@@ -295,7 +309,7 @@ A represented **bounded binding-root field assignment** targets one non-empty st
 
 The root identifier MUST resolve through the same function-local lookup relation as whole-binding assignment and MUST denote one represented parameter/local binding. The binding MUST be mutable. Because represented parameters are immutable in the current concrete subset, a successful concrete field assignment currently targets a mutable ordinary local.
 
-`field-access.md` resolves the one-or-more field selectors from the binding's exact declared type, requires every selector step to select one declared nominal-record field with the existing direct accessibility, and supplies the exact non-empty structural path `p` and final type `type(p)`. This operation does not first produce, duplicate, consume, or otherwise evaluate an intermediate field value merely to select the target.
+`field-access.md` resolves the one-or-more field selectors from the binding's exact declared concrete type, requires every selector step to select one declared nominal-record field with the existing direct accessibility, and supplies the exact non-empty structural path `p` and final type `type(p)`. An abstract generic binding exposes no non-empty structural path under `generics.md`/`structural-ownership.md` and therefore cannot satisfy this operation. This operation does not first produce, duplicate, consume, or otherwise evaluate an intermediate field value merely to select the target.
 
 The RHS MUST produce exactly one owned source value whose type is exactly equal under `types.md` to `type(p)`. No conversion, coercion, inferred target type, structural record equivalence, method/property setter, or independently mutable field relation is introduced.
 
@@ -328,7 +342,7 @@ This relation introduces no qualified assignment root, arbitrary receiver, gener
 
 ## Binding cleanup and discard boundary
 
-When represented execution ends a binding's ownership, its remaining owned source subvalues are exactly the complete-root remaining ownership frontier selected by `structural-ownership.md` from the binding's then-current state.
+When represented execution ends a binding's ownership, its remaining owned source subvalues are exactly the complete-root remaining ownership frontier selected by `structural-ownership.md` from the binding's then-current state. For an abstract generic binding this frontier is either its one complete opaque root while still owned or empty after that root has been consumed.
 
 `function-execution.md` owns when that frontier is selected and the ordering between bindings, scopes, parameters, activations, whole-binding assignment replacement, bounded binding-root field replacement, safe-reference referent replacement, raw replacement, normal return, and defined-fault cleanup.
 
@@ -338,15 +352,17 @@ When a binding's remaining owned value is a raw pointer, ending that value has n
 
 The existing reverse local/declaration and activation cleanup ordering is part of the represented lexical lifetime proof in `references.md` and lexical pointer-target validity in `raw-pointers-unsafe.md`: reference/pointer locals and child reference carriers end before the earlier or ancestor target/source extents whose validity their initialization/derivation consumed.
 
-A binding is not source-invalid solely because one or more remaining owned subvalues are non-duplicable when its scope or activation terminates. This revision defines no source `drop` ability, must-consume classification, custom destructor, or unused-value prohibition.
+A binding is not source-invalid solely because one or more remaining owned subvalues are non-duplicable or because an abstract generic complete value remains owned when its scope or activation terminates. This revision defines no source `drop` ability, must-consume classification, custom destructor, or unused-value prohibition.
 
 Zero-field and recursively zero-leaf frontier members remain source-owned values even when faithful Core refinement emits no scalar destruction operation.
 
 ## Function, call, assignment, pattern, control-flow, reference, raw-pointer, and fault boundary
 
-This document defines body-local binding identity, scope, lookup, assignment mutability, binding lifecycle around structural ownership, safe-reference/raw-pointer local integration, ordinary whole-binding use, whole-binding assignment legality/reset, and bounded binding-root field assignment legality/reset.
+This document defines body-local value-binding identity, scope, lookup, assignment mutability, binding lifecycle around structural ownership, safe-reference/raw-pointer local integration, ordinary whole-binding use, whole-binding assignment legality/reset, and bounded binding-root field assignment legality/reset. It consumes rather than owns the generic type-parameter identity/capability/substitution relation from `generics.md`.
 
-It does not redefine the execution relation owned by `function-execution.md`, including:
+It does not redefine generic application, exact substitution, or the generic activation substitution context owned by `generics.md`.
+
+It does not redefine the ordinary execution relation owned by `function-execution.md`, including:
 
 - function body execution and normal-continuation presence;
 - direct-call argument evaluation and parameter transfer;
@@ -365,18 +381,18 @@ It does not redefine raw address formation, raw pointee move/replacement, unsafe
 
 It does not redefine represented conditional or bounded-`while` condition/body selection, normal-successor composition, binding/external-referent structural-state equality, raw-pointer-origin equality, or loop backedge/transfer admission from `control-flow.md`.
 
-It likewise does not redefine field identity/path resolution or accessibility from `field-access.md`, field-value production from that owner, pattern structure/ownership from `patterns.md`, or structural ownership mathematics from `structural-ownership.md`.
+It likewise does not redefine field identity/path resolution or accessibility from `field-access.md`, field-value production from that owner, pattern structure/ownership from `patterns.md`, structural ownership mathematics from `structural-ownership.md`, or generic parameter/substitution semantics from `generics.md`.
 
 Indirect calls, function values, closures, plain-Exclusive source references, reference pass modes, lifetime names, unsafe callable contracts, broader panic/catch forms, and other future execution relations remain outside this owner.
 
 ## Implementation boundary
 
-This revision does not add or require parser, lossless-syntax, HIR, Core MIR production, runtime, or backend representation.
+This revision does not add or require a particular parser, lossless-syntax, HIR, Core MIR production, runtime, or backend representation.
 
-A faithful implementation MAY retain structural ownership for bindings/external referents using resolved field indices or another implementation identity after source field resolution, but those representations are not source semantic identity. It MAY separately retain safe-reference authority/provenance and exact raw-pointer origin facts as required by their owners. Core path state, scalar liveness, Core reference-authority IDs, Core external regions, Core pointer-target metadata, or runtime storage identities MUST NOT become the source binding/external-referent ownership, reference-origin, or pointer-origin authority, including when a represented conditional establishes a normal successor or a represented `while` validates one transfer/backedge.
+A faithful implementation MAY retain structural ownership for bindings/external referents using resolved field indices or another implementation identity after source field resolution, but those representations are not source semantic identity. It MAY separately retain safe-reference authority/provenance, generic type-parameter/substitution facts, and exact raw-pointer origin facts as required by their owners. Core path state, scalar liveness, Core reference-authority IDs, Core external regions, Core pointer-target metadata, physical specialized-function identity, or runtime storage identities MUST NOT become the source binding/external-referent ownership, generic binder, reference-origin, or pointer-origin authority, including when a represented conditional establishes a normal successor or a represented `while` validates one transfer/backedge.
 
 ## Further boundaries
 
-Beyond the represented concrete subset, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, arbitrary member/method lookup beyond the bounded assignment-target field path and existing field-value/reference selectors, additional refutable/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, additional loop forms or general loop fixed-point inference, catch/recovery joins, plain-Exclusive source references, reference targets beyond the bounded Shared and replacement-capable binding-root/field-path forms plus the bounded child forms owned by `references.md`, reference-containing aggregates/results beyond the existing bounded Shared result, lifetime names/parameters/non-lexical shortening, raw-pointer call transfer or pointer-containing aggregates, unsafe callable contracts, closures/captures, generics, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, structural state splitting beneath a consumed ancestor, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
+Beyond the represented concrete subset and the accepted first function-only generic type-parameter relation, this revision does not define type inference, assignment expressions, uninitialized locals, precedence/general expressions, arbitrary member/method lookup beyond the bounded assignment-target field path and existing field-value/reference selectors, additional refutable/shorthand pattern forms, unequal-state/path-dependent ownership after a two-normal-outcome conditional join, additional loop forms or general loop fixed-point inference, catch/recovery joins, plain-Exclusive source references, reference targets beyond the bounded Shared and replacement-capable binding-root/field-path forms plus the bounded child forms owned by `references.md`, reference-containing aggregates/results beyond the existing bounded Shared result, lifetime names/parameters/non-lexical shortening, raw-pointer call transfer or pointer-containing aggregates, unsafe callable contracts, closures/captures, generic bounds/inference/records/reference constructors, traits/coherence, methods/overloads, explicit clone/copy operators, custom destructors, must-consume/drop abilities, structural state splitting beneath a consumed ancestor, const/static semantics, ABI/FFI/linkage, package/filesystem mapping, parser/HIR/Core MIR production code, or backend behavior.
 
 Activation-local raw pointers and lexical unsafe admission are represented by `raw-pointers-unsafe.md`; their existence does not create the excluded broader pointer/call/unsafe relations here.

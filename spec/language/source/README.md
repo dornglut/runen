@@ -9,6 +9,7 @@
 - [Literal semantics](literals.md)
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
+- [Generics](generics.md)
 - [Structural ownership](structural-ownership.md)
 - [Function-local bindings](local-bindings.md)
 - [Field-value access](field-access.md)
