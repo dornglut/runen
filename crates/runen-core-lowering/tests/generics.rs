@@ -103,7 +103,9 @@ fn reachable_no_result_generic_call_statement_materializes_and_targets_exact_spe
     );
     let program = lowered.as_program();
     let sink_id = function_id(program, "sink");
-    let sink = program.function(sink_id).expect("sink specialization exists");
+    let sink = program
+        .function(sink_id)
+        .expect("sink specialization exists");
     assert_eq!(scalar_parameter(program, sink, 0), Some(ScalarType::I64));
 
     let root_id = function_id(program, "root");
