@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source module identity, module binding, module alias, visibility, and qualified cross-module lookup relations. It consumes lexical identifier keys from [Source lexical foundation](lexical.md) and does not redefine identifier formation or equivalence.
 
-Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). The represented concrete record/function accessibility, module-import alias, and two-part qualified module-member forms, including their use as record-pattern heads, are owned by [Source concrete syntax](concrete-syntax.md). This document does not define member lookup, overload resolution, package discovery, or an implementation representation.
+Function-local lexical scopes, local binding identity, local lookup precedence, and local shadowing are owned by [Source function-local bindings](local-bindings.md). The represented concrete record/function/marker-trait accessibility, module-import alias, and two-part qualified module-member forms, including their use as record-pattern heads and marker references, are owned by [Source concrete syntax](concrete-syntax.md). Marker trait entity/category semantics, unnamed implementation propositions, and coherence are owned by [Source marker traits](traits.md). This document does not define member lookup, overload resolution, package discovery, marker implementation selection, or an implementation representation.
 
 ## Source modules
 
@@ -30,15 +30,19 @@ When an accepted source-language rule establishes that a declaration introduces 
 
 The represented record and function definitions in `concrete-syntax.md` each establish their accepted record/function declaration and therefore contribute one module binding through this relation.
 
+The represented marker trait declaration owned semantically by `traits.md` and spelled by `concrete-syntax.md` likewise contributes one ordinary module binding through this relation. Record, function, and marker trait bindings share this one declaration namespace and the same duplicate-key prohibition.
+
+A represented marker implementation declaration contributes **no module binding**. After its trait/type operands resolve through the applicable relations here, it establishes only the unnamed implementation proposition owned by `traits.md`.
+
 Two distinct module-level bindings in the same source module MUST NOT have the same lexical identifier key.
 
 Module-level bindings are available to module-level name resolution independently of source-unit presentation order and textual declaration order. Reordering directly supplied source units or reordering module-level declarations MUST NOT change which module-level binding a given lexical identifier key denotes.
 
 A module-level binding is identified by its source module and binding identity, not by the original source spelling of its identifier. The namespace key is the lexical identifier key defined by `lexical.md`.
 
-For this foundation, name resolution first identifies one binding/entity. A consuming source-language rule then determines whether that resolved entity category is valid for the applicable type, value, declaration, call, pattern-head, or other semantic context. This document does not define separate module-level type and value namespaces or context-dependent searches across such namespaces.
+For this foundation, name resolution first identifies one binding/entity. A consuming source-language rule then determines whether that resolved entity category is valid for the applicable type, value, declaration, call, pattern-head, marker-reference, or other semantic context. This document does not define separate module-level type, value, and trait namespaces or context-dependent searches across such namespaces.
 
-Function-local parameter/local bindings are owned by `local-bindings.md` and do not become members of this module declaration namespace. This section also does not define fields, methods, associated items, generic parameters, pattern bindings, lifetime names, labels, macros, or overload sets. A later rule that permits one source name to denote an overload set or another multi-entity binding MUST define that binding relation explicitly; duplicate module-level binding keys do not become an overload set merely because the declarations have different signatures or categories.
+Function-local parameter/local bindings are owned by `local-bindings.md` and do not become members of this module declaration namespace. This section also does not define fields, methods, associated items, generic parameters, pattern bindings, lifetime names, labels, macros, overload sets, or marker implementation names. Top-level marker trait declarations are ordinary module bindings; trait member/associated lookup remains unrepresented. A later rule that permits one source name to denote an overload set or another multi-entity binding MUST define that binding relation explicitly; duplicate module-level binding keys do not become an overload set merely because the declarations have different signatures or categories.
 
 ## Module binding accessibility
 
@@ -49,7 +53,9 @@ Each module-level binding represented by this document has one of two accessibil
 
 Accessibility is a source semantic fact. It is not inferred from identifier case, original spelling, physical symbol visibility, linkage, ABI export status, file placement, or build-system metadata unless a source-language rule explicitly establishes such a source relation.
 
-For the represented record and function definitions in `concrete-syntax.md`, absence of the concrete `export` modifier establishes module-private accessibility and presence of that modifier establishes exported accessibility. The concrete modifier changes only this source accessibility fact; it does not establish ABI export, linkage, FFI visibility, runtime publication, or realization behavior.
+For the represented record, function, and marker trait declarations in `concrete-syntax.md`, absence of the concrete `export` modifier establishes module-private accessibility and presence of that modifier establishes exported accessibility. The concrete modifier changes only this source accessibility fact; it does not establish ABI export, linkage, FFI visibility, runtime publication, or realization behavior.
+
+Marker implementation declarations have no independent binding accessibility because they introduce no module binding. Their resolved propositions participate in the compilation-global relation owned by `traits.md` rather than this lookup namespace.
 
 This revision does not define package-scoped, friend, subtree-restricted, protected, FFI-linkage, or other accessibility classes.
 
@@ -62,6 +68,8 @@ If that namespace contains the binding keyed by `k`, module-scope lookup resolve
 If the namespace contains no binding keyed by `k`, this module-scope lookup does not resolve a binding. This rule does not cause imported modules, future preludes, member scopes, or another namespace to be searched implicitly.
 
 Within represented function bodies, `local-bindings.md` owns when active function-local bindings are consulted before this same-module relation. The consuming source form validates the category of the selected entity; same-module lookup does not skip bindings based on the category desired by that context. Explicit unqualified record-construction targets and unqualified record-pattern heads consume same-module declaration lookup directly under their own owners without introducing local-binding participation.
+
+A bare marker trait reference likewise consumes same-module declaration lookup directly under `traits.md`; function-local generic type-parameter lookup does not participate in that marker-reference domain. The selected binding must then satisfy the marker-trait category requirement under `traits.md`; this lookup does not bypass a wrong-category binding.
 
 ## Source-unit module aliases
 
@@ -112,11 +120,15 @@ When those conditions hold, the qualified lookup resolves to that target binding
 
 An unqualified lookup MUST NOT search imported modules merely because they are aliased in the source unit. This revision defines no selective direct imports, wildcard or glob imports, dot imports, re-exports, implicit preludes, transitive import visibility, or imported-member precedence rules.
 
-The concrete `a::m` form in `concrete-syntax.md` maps exactly to this lookup relation. `::` does not by itself define arbitrary member access, nested module paths, associated-item lookup, or another name-resolution domain. The consuming concrete type, direct-call, record-construction-target, or record-pattern-head context validates the category of the resolved binding after this lookup; qualified lookup does not skip an inaccessible or wrong-category binding.
+The concrete `a::m` form in `concrete-syntax.md` maps exactly to this lookup relation. `::` does not by itself define arbitrary member access, nested module paths, associated-item lookup, or another name-resolution domain. The consuming concrete type, direct-call, record-construction-target, record-pattern-head, marker-reference, or implementation-target context validates the category of the resolved binding after this lookup; qualified lookup does not skip an inaccessible or wrong-category binding.
 
-A qualified record-pattern head therefore consumes the same lookup relation as the already represented qualified type/call/construction contexts. The lookup establishes only the exported target module binding; `patterns.md` separately requires the resolved binding to denote one nominal record and applies direct record-field accessibility through `field-access.md` to the fields explicitly opened by the pattern. This document does not create pattern-field lookup or a second visibility relation.
+A qualified marker trait reference therefore consumes the same one-hop exported-binding relation as the already represented qualified type/call/construction/pattern contexts. `traits.md` separately requires the selected binding to denote one marker trait entity. A qualified nominal implementation target likewise consumes this relation and is then required by `traits.md` to denote one nominal record type.
+
+A qualified record-pattern head consumes the same lookup relation as the already represented qualified type/call/construction contexts. The lookup establishes only the exported target module binding; `patterns.md` separately requires the resolved binding to denote one nominal record and applies direct record-field accessibility through `field-access.md` to the fields explicitly opened by the pattern. This document does not create pattern-field lookup or a second visibility relation.
 
 Module aliases themselves are not exported module-level bindings under this revision and therefore do not re-export their target modules or target bindings.
+
+A marker implementation proposition is not a module alias/member and is not imported through this qualified relation. Once an implementation declaration has resolved its operands and established a valid proposition under `traits.md`, that proposition is compilation-global evidence under that owner rather than a name exposed by module lookup.
 
 ## Cyclic module-import relations
 
@@ -128,18 +140,20 @@ This permission concerns source name resolution only. A later const/static initi
 
 ## Deliberate boundaries
 
-This revision defines module declaration namespaces, binding accessibility, same-module lookup, source-unit module-alias scopes, and qualified cross-module lookup. Represented function-local value-binding scopes and precedence are owned by `local-bindings.md`. The current concrete record/function/import/export/qualification forms are owned by `concrete-syntax.md`.
+This revision defines module declaration namespaces, binding accessibility, same-module lookup, source-unit module-alias scopes, and qualified cross-module lookup. Represented function-local value-binding scopes and precedence are owned by `local-bindings.md`. The current concrete record/function/marker-trait/import/export/qualification forms are owned by `concrete-syntax.md`.
 
 This document does not define:
 
 - additional local binding classes such as pattern bindings, closure captures, generic parameters, lifetime names, or labels;
 - nested or parent/child module hierarchy, module path segments beyond the represented alias/member pair, `self`/`super`-like relations, or a source-visible canonical module name;
-- fields, methods, associated items, extension lookup, trait lookup, overload resolution, argument-dependent lookup, or member precedence;
+- fields, trait member lookup, methods, associated items, extension lookup, supertrait lookup, implementation selection by name, overload resolution, argument-dependent lookup, or member precedence;
 - implicit/predeclared names or a standard-library prelude;
 - dependency-locator syntax, selective direct imports, wildcard/glob imports, dot imports, re-exports, or transitive import visibility;
-- package management, dependency solving, filesystem layout, source discovery, or interface serialization;
+- package management, dependency solving, filesystem layout, source discovery, interface serialization, or a module/package orphan policy for marker implementations;
 - const/static initialization order or runtime module initialization;
 - ABI, linkage, FFI export/import, or physical symbol visibility;
 - parser, lossless syntax, HIR, Core MIR lowering, backend, or another implementation representation.
+
+Top-level marker trait bindings use the ordinary declaration lookup represented above. Exact marker implementation/coherence and compilation-global evidence are owned by `traits.md` and introduce no lookup namespace.
 
 Those concerns require their own canonical owners when their first concrete consumers are accepted.
