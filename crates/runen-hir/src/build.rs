@@ -9,18 +9,19 @@ use crate::{
     Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
     BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
     FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
-    LiteralValue, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
-    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
-    RecordPatternTest, RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission,
-    ReferenceReferent, Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement,
-    Type, TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
-    type_is_duplicable_in_records,
+    LiteralValue, MarkerImplementation, MarkerImplementationTarget, MarkerTrait, MarkerTraitId,
+    Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee, Record,
+    RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTest,
+    RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
+    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type, TypeParameter,
+    TypeParameterId, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
 enum EntityId {
     Record(RecordId),
     Function(FunctionId),
+    MarkerTrait(MarkerTraitId),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -34,6 +35,7 @@ struct ModuleBuild {
     namespace: BTreeMap<String, ModuleEntity>,
     records: Vec<RecordId>,
     functions: Vec<FunctionId>,
+    marker_traits: Vec<MarkerTraitId>,
 }
 
 #[derive(Debug, Clone)]
@@ -55,6 +57,14 @@ struct FunctionSyntax {
     unit: usize,
     name: String,
     accessibility: Accessibility,
+    node: SyntaxNode,
+    location: SourceLocation,
+}
+
+#[derive(Debug, Clone)]
+struct MarkerImplementationSyntax {
+    module: ModuleId,
+    unit: usize,
     node: SyntaxNode,
     location: SourceLocation,
 }
@@ -506,12 +516,14 @@ impl StructuralOwnershipState {
 }
 
 type UnitImports = BTreeMap<String, ModuleId>;
+type MarkerImplementationRelation = BTreeSet<(MarkerTraitId, MarkerImplementationTarget)>;
 
 struct BodyResolutionContext<'a> {
     modules: &'a BTreeMap<ModuleId, ModuleBuild>,
     imports: &'a [UnitImports],
     records: &'a [Record],
     headers: &'a [FunctionHeader],
+    marker_implementations: &'a MarkerImplementationRelation,
     safe_reference_result_origin_authority: Option<ReferenceAuthorityId>,
 }
 
@@ -550,8 +562,13 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         return Err(diagnostics);
     }
 
-    let (mut modules, record_syntax, function_syntax) =
-        collect_declarations(units, &mut diagnostics);
+    let (
+        mut modules,
+        record_syntax,
+        function_syntax,
+        marker_traits,
+        marker_implementation_syntax,
+    ) = collect_declarations(units, &mut diagnostics);
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
@@ -562,12 +579,23 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
     }
 
     let records = resolve_records(&record_syntax, &modules, &imports, &mut diagnostics);
+    let marker_implementations = resolve_marker_implementations(
+        &marker_implementation_syntax,
+        &modules,
+        &imports,
+        &mut diagnostics,
+    );
+    let marker_implementation_relation = marker_implementations
+        .iter()
+        .map(|implementation| (implementation.trait_id, implementation.target))
+        .collect::<MarkerImplementationRelation>();
     let mut next_binding = 0_usize;
     let headers = resolve_function_headers(
         &function_syntax,
         &modules,
         &imports,
         &records,
+        &marker_traits,
         &mut next_binding,
         &mut diagnostics,
     );
@@ -593,6 +621,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             &imports,
             &records,
             &headers,
+            &marker_implementation_relation,
             &mut next_binding,
             &mut diagnostics,
         );
@@ -619,6 +648,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             id: *id,
             records: std::mem::take(&mut module.records),
             functions: std::mem::take(&mut module.functions),
+            marker_traits: std::mem::take(&mut module.marker_traits),
         })
         .collect();
 
@@ -626,6 +656,8 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         modules,
         records,
         functions,
+        marker_traits,
+        marker_implementations,
     })
 }
 
@@ -652,10 +684,14 @@ fn collect_declarations(
     BTreeMap<ModuleId, ModuleBuild>,
     Vec<RecordSyntax>,
     Vec<FunctionSyntax>,
+    Vec<MarkerTrait>,
+    Vec<MarkerImplementationSyntax>,
 ) {
     let mut modules = BTreeMap::<ModuleId, ModuleBuild>::new();
     let mut records = Vec::new();
     let mut functions = Vec::new();
+    let mut marker_traits = Vec::new();
+    let mut marker_implementations = Vec::new();
 
     for (unit_index, unit) in units.iter().enumerate() {
         modules.entry(unit.module).or_default();
@@ -740,6 +776,57 @@ fn collect_declarations(
                         location,
                     });
                 }
+                SyntaxKind::TraitDeclaration => {
+                    let id = MarkerTraitId(marker_traits.len());
+                    let mut identifiers = item
+                        .children_with_tokens()
+                        .filter_map(|element| element.into_token())
+                        .filter(|token| token.kind() == SyntaxKind::Ident);
+                    let introducer = identifiers
+                        .next()
+                        .expect("syntax-clean trait declaration has contextual introducer");
+                    debug_assert_eq!(key(&introducer), "trait");
+                    let name_token = identifiers
+                        .next()
+                        .expect("syntax-clean trait declaration has one declaration name");
+                    debug_assert!(identifiers.next().is_none());
+                    let name = key(&name_token);
+                    let accessibility = declaration_accessibility(&item);
+                    let location = location(unit_index, &item);
+                    if insert_entity(
+                        &mut modules,
+                        unit.module,
+                        &name,
+                        EntityId::MarkerTrait(id),
+                        accessibility,
+                    ) {
+                        modules
+                            .get_mut(&unit.module)
+                            .expect("module inserted")
+                            .marker_traits
+                            .push(id);
+                    } else {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::DuplicateModuleBinding,
+                            location,
+                        });
+                    }
+                    marker_traits.push(MarkerTrait {
+                        id,
+                        module: unit.module,
+                        name,
+                        accessibility,
+                        location,
+                    });
+                }
+                SyntaxKind::TraitImplementation => {
+                    marker_implementations.push(MarkerImplementationSyntax {
+                        module: unit.module,
+                        unit: unit_index,
+                        location: location(unit_index, &item),
+                        node: item,
+                    });
+                }
                 _ => unreachable!(
                     "syntax-clean source unit contains only imports and represented items"
                 ),
@@ -747,7 +834,13 @@ fn collect_declarations(
         }
     }
 
-    (modules, records, functions)
+    (
+        modules,
+        records,
+        functions,
+        marker_traits,
+        marker_implementations,
+    )
 }
 
 fn insert_entity(
@@ -844,6 +937,175 @@ fn collect_imports(
     }
 
     result
+}
+
+fn resolve_marker_trait_reference(
+    module: ModuleId,
+    unit: usize,
+    node: &SyntaxNode,
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<MarkerTraitId> {
+    debug_assert_eq!(node.kind(), SyntaxKind::TraitReference);
+    if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        return match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
+            EntityId::MarkerTrait(id) => Some(id),
+            EntityId::Record(_) | EntityId::Function(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedMarkerTrait,
+                    location: location(unit, &qualified),
+                });
+                None
+            }
+        };
+    }
+
+    let token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&token);
+    let trait_location = SourceLocation {
+        unit,
+        range: token.text_range(),
+    };
+    match modules
+        .get(&module)
+        .and_then(|module| module.namespace.get(&name))
+        .copied()
+        .map(|entity| entity.entity)
+    {
+        Some(EntityId::MarkerTrait(id)) => Some(id),
+        Some(EntityId::Record(_) | EntityId::Function(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedMarkerTrait,
+                location: trait_location,
+            });
+            None
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: trait_location,
+            });
+            None
+        }
+    }
+}
+
+fn resolve_marker_implementation_target(
+    implementation: &MarkerImplementationSyntax,
+    node: &SyntaxNode,
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<MarkerImplementationTarget> {
+    debug_assert_eq!(node.kind(), SyntaxKind::ImplementationTarget);
+    if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        return match resolve_qualified_entity(
+            implementation.unit,
+            &qualified,
+            modules,
+            imports,
+            diagnostics,
+        )? {
+            EntityId::Record(record) => Some(MarkerImplementationTarget::Record(record)),
+            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::InvalidMarkerImplementationTarget,
+                    location: location(implementation.unit, &qualified),
+                });
+                None
+            }
+        };
+    }
+
+    let token = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .find(|token| !token.kind().is_trivia())
+        .expect("syntax-clean implementation target has one direct type token");
+    if let Some(intrinsic) = intrinsic_type(token.kind()) {
+        return Some(MarkerImplementationTarget::Intrinsic(intrinsic));
+    }
+
+    debug_assert_eq!(token.kind(), SyntaxKind::Ident);
+    let name = key(&token);
+    let target_location = SourceLocation {
+        unit: implementation.unit,
+        range: token.text_range(),
+    };
+    match modules
+        .get(&implementation.module)
+        .and_then(|module| module.namespace.get(&name))
+        .copied()
+        .map(|entity| entity.entity)
+    {
+        Some(EntityId::Record(record)) => Some(MarkerImplementationTarget::Record(record)),
+        Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidMarkerImplementationTarget,
+                location: target_location,
+            });
+            None
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: target_location,
+            });
+            None
+        }
+    }
+}
+
+fn resolve_marker_implementations(
+    syntax: &[MarkerImplementationSyntax],
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Vec<MarkerImplementation> {
+    let mut implementations = Vec::with_capacity(syntax.len());
+    let mut seen = MarkerImplementationRelation::new();
+    for implementation in syntax {
+        let target_node = direct_child(&implementation.node, SyntaxKind::ImplementationTarget);
+        let trait_node = direct_child(&implementation.node, SyntaxKind::TraitReference);
+        let target = resolve_marker_implementation_target(
+            implementation,
+            &target_node,
+            modules,
+            imports,
+            diagnostics,
+        );
+        let trait_id = resolve_marker_trait_reference(
+            implementation.module,
+            implementation.unit,
+            &trait_node,
+            modules,
+            imports,
+            diagnostics,
+        );
+        let (Some(target), Some(trait_id)) = (target, trait_id) else {
+            continue;
+        };
+        if !seen.insert((trait_id, target)) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicateMarkerImplementation,
+                location: implementation.location,
+            });
+            continue;
+        }
+        implementations.push(MarkerImplementation {
+            trait_id,
+            target,
+            location: implementation.location,
+        });
+    }
+    implementations
 }
 
 fn resolve_records(
@@ -958,6 +1220,7 @@ fn resolve_function_headers(
     modules: &BTreeMap<ModuleId, ModuleBuild>,
     imports: &[UnitImports],
     records: &[Record],
+    marker_traits: &[MarkerTrait],
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Vec<FunctionHeader> {
@@ -982,12 +1245,49 @@ fn resolve_function_headers(
                                 location: parameter_location,
                             });
                         }
+                        let mut requirements = BTreeSet::new();
+                        if let Some(clause) = node
+                            .children()
+                            .find(|child| child.kind() == SyntaxKind::TraitRequirementClause)
+                        {
+                            for requirement in clause
+                                .children()
+                                .filter(|child| child.kind() == SyntaxKind::TraitReference)
+                            {
+                                let Some(trait_id) = resolve_marker_trait_reference(
+                                    function.module,
+                                    function.unit,
+                                    &requirement,
+                                    modules,
+                                    imports,
+                                    diagnostics,
+                                ) else {
+                                    continue;
+                                };
+                                if !requirements.insert(trait_id) {
+                                    diagnostics.push(Diagnostic {
+                                        kind: DiagnosticKind::DuplicateMarkerRequirement,
+                                        location: location(function.unit, &requirement),
+                                    });
+                                }
+                                if function.accessibility == Accessibility::Exported
+                                    && marker_traits[trait_id.0].accessibility
+                                        != Accessibility::Exported
+                                {
+                                    diagnostics.push(Diagnostic {
+                                        kind: DiagnosticKind::PrivateMarkerTraitInExportedSignature,
+                                        location: location(function.unit, &requirement),
+                                    });
+                                }
+                            }
+                        }
                         TypeParameter {
                             id: TypeParameterId {
                                 function: function.id,
                                 index,
                             },
                             name,
+                            requirements,
                             location: parameter_location,
                         }
                     })
@@ -1356,7 +1656,7 @@ fn resolve_type(
     {
         match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
             EntityId::Record(id) => Type::Record(id),
-            EntityId::Function(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(unit, &qualified),
@@ -1405,7 +1705,7 @@ fn resolve_type(
                     .map(|entity| entity.entity)
                 {
                     Some(EntityId::Record(id)) => Type::Record(id),
-                    Some(EntityId::Function(_)) => {
+                    Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
                         diagnostics.push(Diagnostic {
                             kind: DiagnosticKind::ExpectedRecordType,
                             location: token_location,
@@ -1598,6 +1898,7 @@ fn validate_body(
     imports: &[UnitImports],
     records: &[Record],
     headers: &[FunctionHeader],
+    marker_implementations: &MarkerImplementationRelation,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Body {
@@ -1651,6 +1952,7 @@ fn validate_body(
         imports,
         records,
         headers,
+        marker_implementations,
         safe_reference_result_origin_authority,
     };
     let mut control = ControlValidationContext::default();
@@ -2672,7 +2974,7 @@ fn validate_record_pattern_node(
         };
         let record = match entity {
             EntityId::Record(record) => record,
-            EntityId::Function(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -2697,7 +2999,7 @@ fn validate_record_pattern_node(
             .map(|entity| entity.entity)
         {
             Some(EntityId::Record(record)) => record,
-            Some(EntityId::Function(_)) => {
+            Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -2868,7 +3170,7 @@ fn validate_refutable_record_pattern_node(
         };
         let record = match entity {
             EntityId::Record(record) => record,
-            EntityId::Function(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -2893,7 +3195,7 @@ fn validate_refutable_record_pattern_node(
             .map(|entity| entity.entity)
         {
             Some(EntityId::Record(record)) => record,
-            Some(EntityId::Function(_)) => {
+            Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -6798,7 +7100,7 @@ fn resolve_record_construction_target(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(record),
-            EntityId::Function(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(header.unit, &qualified),
@@ -6823,7 +7125,7 @@ fn resolve_record_construction_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(record),
-        Some(EntityId::Function(_)) => {
+        Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedRecordType,
                 location: target_location,
@@ -7390,7 +7692,7 @@ fn resolve_call_target(
             diagnostics,
         )? {
             EntityId::Function(id) => Some(id),
-            EntityId::Record(_) => {
+            EntityId::Record(_) | EntityId::MarkerTrait(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedFunction,
                     location: location(header.unit, &qualified),
@@ -7423,7 +7725,7 @@ fn resolve_call_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Function(id)) => Some(id),
-        Some(EntityId::Record(_)) => {
+        Some(EntityId::Record(_) | EntityId::MarkerTrait(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedFunction,
                 location: name_location,
@@ -7459,7 +7761,7 @@ fn resolve_generic_type_argument(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(Type::Record(record)),
-            EntityId::Function(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(header.unit, &qualified),
@@ -7500,7 +7802,7 @@ fn resolve_generic_type_argument(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(Type::Record(record)),
-        Some(EntityId::Function(_)) => {
+        Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedRecordType,
                 location: argument_location,
@@ -7526,6 +7828,33 @@ fn instantiate_call_type(ty: Type, target: &FunctionHeader, type_arguments: &[Ty
                 .expect("validated generic target parameter names one supplied type argument")
         }
         concrete => concrete,
+    }
+}
+
+fn type_argument_satisfies_marker_requirement(
+    header: &FunctionHeader,
+    argument: Type,
+    required: MarkerTraitId,
+    context: &BodyResolutionContext<'_>,
+) -> bool {
+    match argument {
+        Type::Intrinsic(intrinsic) => context.marker_implementations.contains(&(
+            required,
+            MarkerImplementationTarget::Intrinsic(intrinsic),
+        )),
+        Type::Record(record) => context
+            .marker_implementations
+            .contains(&(required, MarkerImplementationTarget::Record(record))),
+        Type::Parameter(parameter) => {
+            debug_assert_eq!(parameter.function, header.id);
+            header
+                .type_parameters
+                .get(parameter.index)
+                .is_some_and(|candidate| {
+                    candidate.id == parameter && candidate.requirements.contains(&required)
+                })
+        }
+        Type::SafeReference { .. } | Type::RawPointer(_) => false,
     }
 }
 
@@ -7592,6 +7921,25 @@ fn resolve_call_application(
             resolved
         }
     };
+
+    for (parameter, argument) in target
+        .type_parameters
+        .iter()
+        .zip(type_arguments.iter().copied())
+    {
+        for required in &parameter.requirements {
+            if !type_argument_satisfies_marker_requirement(header, argument, *required, context) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnsatisfiedMarkerRequirement {
+                        required: *required,
+                        argument,
+                    },
+                    location: location(header.unit, node),
+                });
+                return None;
+            }
+        }
+    }
 
     let parameter_types = target
         .parameters
