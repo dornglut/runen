@@ -334,8 +334,9 @@ fn direct_and_mutual_generic_recursion_retain_explicit_abstract_applications() {
 
 #[test]
 fn abstract_parameters_do_not_widen_safe_reference_result_origin_derivation() {
-    let hir = build("fn id[T](value: T, reference: &I64) -> &I64 { return reference; }")
-        .expect("concrete Shared-reference result contract remains valid beside an abstract parameter");
+    let hir = build("fn id[T](value: T, reference: &I64) -> &I64 { return reference; }").expect(
+        "concrete Shared-reference result contract remains valid beside an abstract parameter",
+    );
     assert_eq!(
         function(&hir, "id").safe_reference_result_contract,
         SafeReferenceResultContract::SharedIdentity { origin: 1 }
