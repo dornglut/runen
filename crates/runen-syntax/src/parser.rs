@@ -154,6 +154,9 @@ impl Parser<'_> {
         }
         self.expect(SyntaxKind::KwFn, ExpectedSyntax::Item);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        if self.at(SyntaxKind::LBracket) {
+            self.parse_generic_type_parameter_list();
+        }
         self.parse_parameter_list();
 
         if self.at(SyntaxKind::Arrow) {
@@ -164,6 +167,76 @@ impl Parser<'_> {
         }
 
         self.parse_body();
+        self.builder.finish_node();
+    }
+
+    fn parse_generic_type_parameter_list(&mut self) {
+        debug_assert!(self.at(SyntaxKind::LBracket));
+        self.builder
+            .start_node(SyntaxKind::GenericTypeParameterList.into());
+        self.bump();
+        self.bump_trivia();
+
+        if self.at(SyntaxKind::RBracket) {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+            self.bump();
+            self.builder.finish_node();
+            return;
+        }
+
+        let mut missing_close = false;
+        while !self.at(SyntaxKind::RBracket) && self.current().is_some() {
+            if self.at(SyntaxKind::LParen) || self.at_any(TOP_LEVEL_STARTERS) {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBracket));
+                missing_close = true;
+                break;
+            }
+
+            if self.at(SyntaxKind::Ident) {
+                self.builder
+                    .start_node(SyntaxKind::GenericTypeParameter.into());
+                self.bump();
+                self.builder.finish_node();
+
+                if self.eat(SyntaxKind::Comma) {
+                    self.bump_trivia();
+                    continue;
+                }
+                if !self.at(SyntaxKind::RBracket) {
+                    self.error_here(SyntaxErrorKind::Expected(
+                        ExpectedSyntax::CommaOrRightBracket,
+                    ));
+                    self.recover_until(&[
+                        SyntaxKind::Comma,
+                        SyntaxKind::RBracket,
+                        SyntaxKind::LParen,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
+                        SyntaxKind::KwFn,
+                        SyntaxKind::KwRecord,
+                    ]);
+                    self.eat(SyntaxKind::Comma);
+                }
+            } else {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+                self.recover_until(&[
+                    SyntaxKind::Ident,
+                    SyntaxKind::Comma,
+                    SyntaxKind::RBracket,
+                    SyntaxKind::LParen,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
+                    SyntaxKind::KwFn,
+                    SyntaxKind::KwRecord,
+                ]);
+                self.eat(SyntaxKind::Comma);
+            }
+            self.bump_trivia();
+        }
+
+        if !missing_close {
+            self.expect(SyntaxKind::RBracket, ExpectedSyntax::RightBracket);
+        }
         self.builder.finish_node();
     }
 
@@ -742,7 +815,9 @@ impl Parser<'_> {
 
         match self.peek_nontrivia(1) {
             Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
-            Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
+            Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
+                self.parse_direct_call_or_field_value_use();
+            }
             Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
                 Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
                 _ => self.parse_direct_call_or_field_value_use(),
@@ -755,7 +830,9 @@ impl Parser<'_> {
     fn parse_identifier_statement(&mut self) {
         match self.peek_nontrivia(1) {
             Some(SyntaxKind::Eq | SyntaxKind::Dot) => self.parse_assignment_statement(),
-            Some(SyntaxKind::LParen | SyntaxKind::ColonColon) => self.parse_call_statement(),
+            Some(SyntaxKind::LParen | SyntaxKind::LBracket | SyntaxKind::ColonColon) => {
+                self.parse_call_statement();
+            }
             _ => {
                 self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Statement));
                 self.recover_until(&[
@@ -994,7 +1071,9 @@ impl Parser<'_> {
             Some(SyntaxKind::Ident) => match context {
                 ValueContext::Ordinary => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
-                    Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
+                    Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
+                        self.parse_direct_call_or_field_value_use();
+                    }
                     Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
                         Some(SyntaxKind::LBrace) => {
                             self.parse_record_construction_or_field_value_use();
@@ -1009,9 +1088,13 @@ impl Parser<'_> {
                     }
                 },
                 ValueContext::Conditional => match self.peek_nontrivia(1) {
-                    Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
+                    Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
+                        self.parse_direct_call_or_field_value_use();
+                    }
                     Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
-                        Some(SyntaxKind::LParen) => self.parse_direct_call_or_field_value_use(),
+                        Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
+                            self.parse_direct_call_or_field_value_use();
+                        }
                         Some(SyntaxKind::LBrace)
                             if self.record_construction_followed_by_selector() =>
                         {
@@ -1440,6 +1523,10 @@ impl Parser<'_> {
             self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         }
 
+        if self.at(SyntaxKind::LBracket) {
+            self.parse_generic_type_argument_list();
+        }
+
         self.builder.start_node(SyntaxKind::ArgumentList.into());
         if !self.expect(SyntaxKind::LParen, ExpectedSyntax::LeftParen) {
             self.builder.finish_node();
@@ -1507,6 +1594,95 @@ impl Parser<'_> {
             self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
         }
         self.builder.finish_node();
+        self.builder.finish_node();
+    }
+
+    fn parse_generic_type_argument_list(&mut self) {
+        debug_assert!(self.at(SyntaxKind::LBracket));
+        self.builder
+            .start_node(SyntaxKind::GenericTypeArgumentList.into());
+        self.bump();
+        self.bump_trivia();
+
+        if self.at(SyntaxKind::RBracket) {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Type));
+            self.bump();
+            self.builder.finish_node();
+            return;
+        }
+
+        let mut missing_close = false;
+        while !self.at(SyntaxKind::RBracket) && self.current().is_some() {
+            if self.at(SyntaxKind::LParen)
+                || self.at(SyntaxKind::Semicolon)
+                || self.at(SyntaxKind::RParen)
+                || self.at(SyntaxKind::RBrace)
+                || self.at(SyntaxKind::LBrace)
+                || self.at_any(TOP_LEVEL_STARTERS)
+            {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBracket));
+                missing_close = true;
+                break;
+            }
+
+            if self.current().is_some_and(is_generic_type_argument_start) {
+                self.builder
+                    .start_node(SyntaxKind::GenericTypeArgument.into());
+                if self.at(SyntaxKind::Ident)
+                    && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon)
+                {
+                    self.parse_qualified_module_member();
+                } else {
+                    self.bump();
+                }
+                self.builder.finish_node();
+
+                if self.eat(SyntaxKind::Comma) {
+                    self.bump_trivia();
+                    continue;
+                }
+                if !self.at(SyntaxKind::RBracket) {
+                    self.error_here(SyntaxErrorKind::Expected(
+                        ExpectedSyntax::CommaOrRightBracket,
+                    ));
+                    self.recover_until(&[
+                        SyntaxKind::Comma,
+                        SyntaxKind::RBracket,
+                        SyntaxKind::LParen,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::RParen,
+                        SyntaxKind::RBrace,
+                        SyntaxKind::LBrace,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
+                        SyntaxKind::KwFn,
+                        SyntaxKind::KwRecord,
+                    ]);
+                    self.eat(SyntaxKind::Comma);
+                }
+            } else {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Type));
+                self.recover_until(&[
+                    SyntaxKind::Comma,
+                    SyntaxKind::RBracket,
+                    SyntaxKind::LParen,
+                    SyntaxKind::Semicolon,
+                    SyntaxKind::RParen,
+                    SyntaxKind::RBrace,
+                    SyntaxKind::LBrace,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
+                    SyntaxKind::KwFn,
+                    SyntaxKind::KwRecord,
+                ]);
+                self.eat(SyntaxKind::Comma);
+            }
+            self.bump_trivia();
+        }
+
+        if !missing_close {
+            self.expect(SyntaxKind::RBracket, ExpectedSyntax::RightBracket);
+        }
         self.builder.finish_node();
     }
 
@@ -1644,6 +1820,10 @@ const fn is_reference_referent_type_start(kind: SyntaxKind) -> bool {
             | SyntaxKind::TyF32
             | SyntaxKind::TyF64
     )
+}
+
+const fn is_generic_type_argument_start(kind: SyntaxKind) -> bool {
+    is_reference_referent_type_start(kind)
 }
 
 const fn value_start_in(kind: SyntaxKind, context: ValueContext) -> bool {
