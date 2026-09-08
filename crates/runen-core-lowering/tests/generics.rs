@@ -51,7 +51,7 @@ fn scalar_parameter(
     let ty = function.parameter_type(slot)?;
     match &program.types.get(ty)?.kind {
         TypeKind::Scalar(scalar) => Some(*scalar),
-        TypeKind::Struct(_) | TypeKind::Reference { .. } | TypeKind::RawPointer(_) => None,
+        TypeKind::Struct(_) => None,
     }
 }
 
@@ -85,7 +85,10 @@ fn reachable_generic_application_materializes_one_exact_concrete_specialization(
     let ids = functions_named(program, "id");
 
     assert_eq!(ids.len(), 1);
-    assert_eq!(scalar_parameter(program, ids[0], 0), Some(ScalarType::I64));
+    assert_eq!(
+        scalar_parameter(program, ids[0], 0),
+        Some(ScalarType::I64)
+    );
     assert_eq!(
         ids[0]
             .result
@@ -120,7 +123,10 @@ fn distinct_concrete_applications_materialize_distinct_specializations() {
     );
     assert!(ids.iter().any(|function| {
         let ty = function.parameter_type(0).expect("id has one parameter");
-        matches!(program.types.get(ty).map(|ty| &ty.kind), Some(TypeKind::Struct(_)))
+        matches!(
+            program.types.get(ty).map(|ty| &ty.kind),
+            Some(TypeKind::Struct(_))
+        )
     }));
 }
 
@@ -160,7 +166,10 @@ fn generic_to_generic_type_argument_composes_before_specialization_lookup() {
     let program = lowered.as_program();
     let outer = functions_named(program, "outer");
     assert_eq!(outer.len(), 1);
-    assert_eq!(scalar_parameter(program, outer[0], 0), Some(ScalarType::I64));
+    assert_eq!(
+        scalar_parameter(program, outer[0], 0),
+        Some(ScalarType::I64)
+    );
 
     let Terminator::Call { function, .. } = &outer[0].body.blocks[0].terminator else {
         panic!("outer specialization must call the concrete id specialization");
@@ -183,10 +192,10 @@ fn direct_and_mutual_generic_recursion_use_preallocated_specialization_ids() {
     let recursive = direct_program
         .function(recursive_id)
         .expect("recursive specialization exists");
-    let Terminator::Call { function, .. } = recursive.body.blocks[0].terminator else {
+    let Terminator::Call { function, .. } = &recursive.body.blocks[0].terminator else {
         panic!("recursive specialization must call itself");
     };
-    assert_eq!(function, recursive_id);
+    assert_eq!(*function, recursive_id);
 
     let mutual = lower_source(
         "fn left[T](value: T) -> T { return right[T](value); } \
@@ -201,27 +210,25 @@ fn direct_and_mutual_generic_recursion_use_preallocated_specialization_ids() {
     let Terminator::Call {
         function: left_target,
         ..
-    } = left.body.blocks[0].terminator
+    } = &left.body.blocks[0].terminator
     else {
         panic!("left must call right");
     };
     let Terminator::Call {
         function: right_target,
         ..
-    } = right.body.blocks[0].terminator
+    } = &right.body.blocks[0].terminator
     else {
         panic!("right must call left");
     };
-    assert_eq!(left_target, right_id);
-    assert_eq!(right_target, left_id);
+    assert_eq!(*left_target, right_id);
+    assert_eq!(*right_target, left_id);
 }
 
 #[test]
 fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
-    let mut invalid_slot = hir(
-        "fn id[T](value: T) -> T { return value; } \
-         fn root(value: I64) -> I64 { return id[I64](value); }",
-    );
+    let mut invalid_slot = hir("fn id[T](value: T) -> T { return value; } \
+         fn root(value: I64) -> I64 { return id[I64](value); }");
     let root_id = invalid_slot
         .functions
         .iter()
@@ -241,10 +248,8 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         Err(LoweringError::InvalidHirInvariant(_))
     ));
 
-    let mut invalid_arity = hir(
-        "fn id[T](value: T) -> T { return value; } \
-         fn root(value: I64) -> I64 { return id[I64](value); }",
-    );
+    let mut invalid_arity = hir("fn id[T](value: T) -> T { return value; } \
+         fn root(value: I64) -> I64 { return id[I64](value); }");
     let root = invalid_arity
         .functions
         .iter_mut()
@@ -265,10 +270,8 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         Err(LoweringError::InvalidHirInvariant(_))
     ));
 
-    let mut unresolved_abstract = hir(
-        "fn generic[T](value: T) {} \
-         fn root(value: I64) {}",
-    );
+    let mut unresolved_abstract = hir("fn generic[T](value: T) {} \
+         fn root(value: I64) {}");
     let slot = unresolved_abstract
         .functions
         .iter()
@@ -288,10 +291,8 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         Err(LoweringError::InvalidHirInvariant(_))
     ));
 
-    let mut non_concrete_tuple = hir(
-        "fn id[T](value: T) -> T { return value; } \
-         fn root(value: I64) -> I64 { return id[I64](value); }",
-    );
+    let mut non_concrete_tuple = hir("fn id[T](value: T) -> T { return value; } \
+         fn root(value: I64) -> I64 { return id[I64](value); }");
     let root = non_concrete_tuple
         .functions
         .iter_mut()
