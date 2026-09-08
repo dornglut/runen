@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Statement, Type,
-    TypeParameterId, TypedCompilation, ValueKind, build_typed_hir,
+    DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse, SafeReferenceResultContract,
+    SourceUnit, Statement, Type, TypeParameterId, TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -56,7 +56,10 @@ fn retains_ordered_function_type_parameter_identity_and_abstract_signature() {
         choose.parameters[1].ty,
         Type::Parameter(choose.type_parameters[1].id)
     );
-    assert_eq!(choose.result, Some(Type::Parameter(choose.type_parameters[0].id)));
+    assert_eq!(
+        choose.result,
+        Some(Type::Parameter(choose.type_parameters[0].id))
+    );
 }
 
 #[test]
@@ -102,6 +105,16 @@ fn abstract_whole_binding_use_is_consuming_even_when_a_call_substitutes_i64() {
 }
 
 #[test]
+fn second_abstract_use_is_rejected_after_the_first_consuming_call_argument() {
+    let errors = build(
+        "fn sink[T](value: T) {} \
+         fn bad[T](value: T) { sink[T](value); sink[T](value); }",
+    )
+    .expect_err("the first abstract call argument consumes the complete binding root");
+    assert!(has_diagnostic(&errors, DiagnosticKind::UnavailableBinding));
+}
+
+#[test]
 fn generic_call_composes_an_enclosing_abstract_slot_without_reidentifying_it() {
     let hir = build(
         "fn id[T](value: T) -> T { return value; } \
@@ -133,19 +146,27 @@ fn generic_call_composes_an_enclosing_abstract_slot_without_reidentifying_it() {
 }
 
 #[test]
-fn bare_type_parameter_shadows_same_named_nominal_only_in_type_position() {
-    let hir = build("record T {} fn f[T](value: T) -> T { return value; }")
-        .expect("type parameter shadows same-module record in bare type positions");
+fn bare_type_parameter_shadows_same_named_nominal_in_signature_and_local_type_positions() {
+    let hir = build(
+        "record T {} \
+         fn f[T](value: T) -> T { let local: T = value; return local; }",
+    )
+    .expect("type parameter shadows same-module record in bare admitted type positions");
     let f = function(&hir, "f");
     let slot = f.type_parameters[0].id;
     assert_eq!(f.parameters[0].ty, Type::Parameter(slot));
     assert_eq!(f.result, Some(Type::Parameter(slot)));
+    let [Statement::Local { ty, .. }] = f.body.statements.as_slice() else {
+        panic!("expected one ordinary local declaration");
+    };
+    assert_eq!(*ty, Type::Parameter(slot));
 }
 
 #[test]
 fn inadmissible_reference_or_raw_parameter_position_does_not_fall_back_to_nominal() {
     for source in [
         "record T {} fn f[T](value: &T) {}",
+        "record T {} fn f[T](value: &mut T) {}",
         "record T {} fn f[T](value: raw T) {}",
     ] {
         let errors = build(source).expect_err("abstract referent/pointee position is invalid");
@@ -154,6 +175,39 @@ fn inadmissible_reference_or_raw_parameter_position_does_not_fall_back_to_nomina
             DiagnosticKind::InvalidGenericTypeParameterPosition
         ));
     }
+}
+
+#[test]
+fn qualified_type_positions_and_arguments_never_select_a_local_type_parameter() {
+    let dependency = parse("export record T {}");
+    let caller = parse(
+        "import dep; \
+         fn id[U](value: U) -> U { return value; } \
+         fn f[T](value: dep::T) -> dep::T { return id[dep::T](value); }",
+    );
+    assert!(dependency.errors().is_empty(), "{:?}", dependency.errors());
+    assert!(caller.errors().is_empty(), "{:?}", caller.errors());
+    let imports = [ImportTarget::new("dep", ModuleId::new(2)).expect("valid import alias")];
+    let hir = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+        SourceUnit::new(ModuleId::new(2), &dependency, &[]),
+    ])
+    .expect("qualified type lookup remains in the module domain");
+
+    let dep_t = hir.records[0].id;
+    let f = function(&hir, "f");
+    assert_eq!(f.parameters[0].ty, Type::Record(dep_t));
+    assert_eq!(f.result, Some(Type::Record(dep_t)));
+    let call = f
+        .body
+        .terminal_return
+        .as_ref()
+        .and_then(|returned| returned.value.as_ref())
+        .expect("f returns one direct call");
+    let ValueKind::DirectCall { type_arguments, .. } = &call.kind else {
+        panic!("f return must retain a direct call");
+    };
+    assert_eq!(type_arguments, &[Type::Record(dep_t)]);
 }
 
 #[test]
@@ -235,15 +289,57 @@ fn generic_application_failure_is_transactional_before_ordinary_argument_effects
 }
 
 #[test]
-fn abstract_parameter_does_not_gain_scalar_operator_capability() {
-    let errors = build("fn bad[T](left: T, right: T) -> T { return left + right; }")
+fn abstract_parameter_does_not_gain_concrete_field_or_scalar_operator_capability() {
+    let field_errors = build("fn bad[T](value: T) -> I64 { return value.field; }")
+        .expect_err("unconstrained abstract type has no record field capability");
+    assert!(has_diagnostic(
+        &field_errors,
+        DiagnosticKind::ExpectedRecordForFieldAccess
+    ));
+
+    let operator_errors = build("fn bad[T](left: T, right: T) -> T { return left + right; }")
         .expect_err("unconstrained abstract type has no addition capability");
-    assert!(errors.iter().any(|error| matches!(
+    assert!(operator_errors.iter().any(|error| matches!(
         error.kind,
         DiagnosticKind::AdditionRequiresIntegerOrFloating {
             required: Type::Parameter(_),
         }
     )));
+}
+
+#[test]
+fn direct_and_mutual_generic_recursion_retain_explicit_abstract_applications() {
+    let hir = build(
+        "fn recursive[T](value: T) -> T { return recursive[T](value); } \
+         fn left[T](value: T) -> T { return right[T](value); } \
+         fn right[U](value: U) -> U { return left[U](value); }",
+    )
+    .expect("direct and mutual generic recursion validate under exact explicit applications");
+
+    for name in ["recursive", "left", "right"] {
+        let function = function(&hir, name);
+        let slot = function.type_parameters[0].id;
+        let returned = function
+            .body
+            .terminal_return
+            .as_ref()
+            .and_then(|returned| returned.value.as_ref())
+            .expect("recursive function returns one direct call");
+        let ValueKind::DirectCall { type_arguments, .. } = &returned.kind else {
+            panic!("recursive return must retain a direct call");
+        };
+        assert_eq!(type_arguments, &[Type::Parameter(slot)]);
+    }
+}
+
+#[test]
+fn abstract_parameters_do_not_widen_safe_reference_result_origin_derivation() {
+    let hir = build("fn id[T](value: T, reference: &I64) -> &I64 { return reference; }")
+        .expect("concrete Shared-reference result contract remains valid beside an abstract parameter");
+    assert_eq!(
+        function(&hir, "id").safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 1 }
+    );
 }
 
 #[test]
