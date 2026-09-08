@@ -143,6 +143,12 @@ pub enum SyntaxKind {
     RefutableRecordPattern,
     RefutableRecordPatternField,
     Less,
+    LBracket,
+    RBracket,
+    GenericTypeParameterList,
+    GenericTypeParameter,
+    GenericTypeArgumentList,
+    GenericTypeArgument,
 }
 
 impl SyntaxKind {
@@ -304,6 +310,12 @@ impl Language for RunenLanguage {
             118 => SyntaxKind::RefutableRecordPattern,
             119 => SyntaxKind::RefutableRecordPatternField,
             120 => SyntaxKind::Less,
+            121 => SyntaxKind::LBracket,
+            122 => SyntaxKind::RBracket,
+            123 => SyntaxKind::GenericTypeParameterList,
+            124 => SyntaxKind::GenericTypeParameter,
+            125 => SyntaxKind::GenericTypeArgumentList,
+            126 => SyntaxKind::GenericTypeArgument,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
@@ -367,10 +379,12 @@ pub enum ExpectedSyntax {
     RightParen,
     LeftBrace,
     RightBrace,
+    RightBracket,
     Colon,
     DoubleColon,
     CommaOrRightParen,
     CommaOrRightBrace,
+    CommaOrRightBracket,
     Equals,
     Semicolon,
     Value,
