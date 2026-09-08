@@ -28,7 +28,7 @@ A source relation that requires one marker trait identity uses the ordinary **mo
 
 A bare marker trait reference resolves through same-module declaration lookup from `names-modules.md`. A qualified marker trait reference resolves through the existing source-unit module-alias and qualified cross-module lookup relation. After that lookup succeeds, the consuming marker-trait relation requires the selected binding to denote one marker trait entity.
 
-This rule is intentional even inside a generic binder. For example, if one module contains `trait T;` and a function declares a generic slot also spelled `T`, the marker reference in `fn f[T: T](...)` denotes the module binding `T`, while admitted bare type-position uses of the slot inside that function denote the generic type parameter under `generics.md`. Marker lookup does not consult, shadow through, or fall back through the generic type-parameter domain.
+This rule is intentional even inside a generic binder. For example, if one module contains `trait T;` and a function declares a generic slot also spelled `T`, the marker reference in `fn f[T: T] (...)` denotes the module binding `T`, while admitted bare type-position uses of the slot inside that function denote the generic type parameter under `generics.md`. Marker lookup does not consult, shadow through, or fall back through the generic type-parameter domain.
 
 A resolved record or function binding does not become a marker trait because the consuming position expected one. Lookup MUST NOT skip an existing wrong-category binding in order to search for another same-spelled declaration.
 

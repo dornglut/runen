@@ -53,7 +53,7 @@ That selection is final for the applicable bare type-position lookup. The consum
 
 Qualified `alias::member` type lookup remains the existing module relation and MUST NOT denote a function type parameter.
 
-Marker trait references attached to a type-parameter declaration use the module declaration/qualified lookup domain consumed by `traits.md`; they do not participate in this function-local type-parameter lookup domain. Therefore a bound-side name in `fn f[T: T](...)` may denote a same-module marker trait binding `T` while admitted type-position uses of the generic slot inside the function denote the function-local type parameter. Marker lookup never consults or falls back through this generic slot domain.
+Marker trait references attached to a type-parameter declaration use the module declaration/qualified lookup domain consumed by `traits.md`; they do not participate in this function-local type-parameter lookup domain. Therefore a bound-side name in `fn f[T: T] (...)` may denote a same-module marker trait binding `T` while admitted type-position uses of the generic slot inside the function denote the function-local type parameter. Marker lookup never consults or falls back through this generic slot domain.
 
 The type-parameter lookup domain participates only in type positions. It does not participate in function-local value-binding lookup, module value lookup, direct-call target lookup, record/pattern-head lookup, marker trait lookup, field lookup, or another name domain. A parameter/local value binding MAY therefore have the same lexical key as an in-scope type parameter without ambiguity: the receiving syntactic/semantic position selects the applicable name domain.
 
