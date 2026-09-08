@@ -73,6 +73,13 @@ pub struct RecordId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FunctionId(pub(crate) usize);
 
+/// Semantic identity of one ordered generic function type-parameter slot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct TypeParameterId {
+    pub function: FunctionId,
+    pub index: usize,
+}
+
 /// Opaque per-compilation parameter/local binding handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct BindingId(pub(crate) usize);
@@ -170,11 +177,22 @@ impl RawPointerPointee {
 pub enum Type {
     Intrinsic(IntrinsicType),
     Record(RecordId),
+    /// One abstract first-slice generic type expression, identified by declaring
+    /// function and ordered slot rather than lexical spelling.
+    Parameter(TypeParameterId),
     SafeReference {
         referent: ReferenceReferent,
         permission: ReferencePermission,
     },
     RawPointer(RawPointerPointee),
+}
+
+/// One retained ordered generic function type-parameter declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeParameter {
+    pub id: TypeParameterId,
+    pub name: String,
+    pub location: SourceLocation,
 }
 
 /// Retained source-semantic owned-value duplicability for one nominal record.
@@ -267,6 +285,7 @@ pub struct Record {
 pub(crate) fn type_is_duplicable_in_records(ty: Type, records: &[Record]) -> bool {
     match ty {
         Type::Intrinsic(_) | Type::RawPointer(_) => true,
+        Type::Parameter(_) => false,
         Type::SafeReference {
             permission: ReferencePermission::Shared,
             ..
@@ -502,6 +521,7 @@ pub enum ValueKind {
     },
     DirectCall {
         function: FunctionId,
+        type_arguments: Vec<Type>,
         arguments: Vec<Value>,
     },
     RecordConstruction {
@@ -583,6 +603,7 @@ pub enum Statement {
     },
     Call {
         function: FunctionId,
+        type_arguments: Vec<Type>,
         arguments: Vec<Value>,
         location: SourceLocation,
     },
@@ -633,6 +654,7 @@ pub struct Function {
     pub module: ModuleId,
     pub name: String,
     pub accessibility: Accessibility,
+    pub type_parameters: Vec<TypeParameter>,
     pub parameters: Vec<Parameter>,
     pub result: Option<Type>,
     pub safe_reference_result_contract: SafeReferenceResultContract,
@@ -668,6 +690,7 @@ impl TypedCompilation {
     }
 
     /// Whether the represented source type has non-consuming owned-value duplication.
+    /// Abstract generic parameters deliberately have no positive duplicability evidence.
     #[must_use]
     pub fn type_is_duplicable(&self, ty: Type) -> bool {
         type_is_duplicable_in_records(ty, &self.records)
@@ -707,6 +730,14 @@ pub enum DiagnosticKind {
     },
     InvalidRawPointerPointee {
         pointee: Type,
+    },
+    DuplicateTypeParameter,
+    InvalidGenericTypeParameterPosition,
+    MissingGenericTypeArguments,
+    UnexpectedGenericTypeArguments,
+    GenericTypeArgumentCount {
+        expected: usize,
+        found: usize,
     },
     DuplicateParameter,
     LocalShadowing,
