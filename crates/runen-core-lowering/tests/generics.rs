@@ -96,6 +96,25 @@ fn reachable_generic_application_materializes_one_exact_concrete_specialization(
 }
 
 #[test]
+fn reachable_no_result_generic_call_statement_materializes_and_targets_exact_specialization() {
+    let lowered = lower_source(
+        "fn sink[T](value: T) {} \
+         fn root(value: I64) { sink[I64](value); }",
+    );
+    let program = lowered.as_program();
+    let sink_id = function_id(program, "sink");
+    let sink = program.function(sink_id).expect("sink specialization exists");
+    assert_eq!(scalar_parameter(program, sink, 0), Some(ScalarType::I64));
+
+    let root_id = function_id(program, "root");
+    let root = program.function(root_id).expect("root exists");
+    let Terminator::Call { function, .. } = &root.body.blocks[0].terminator else {
+        panic!("root must call the concrete sink specialization");
+    };
+    assert_eq!(*function, sink_id);
+}
+
+#[test]
 fn distinct_concrete_applications_materialize_distinct_specializations() {
     let lowered = lower_source(
         "record Ticket { value: I64 } \
@@ -224,15 +243,15 @@ fn direct_and_mutual_generic_recursion_use_preallocated_specialization_ids() {
 
 #[test]
 fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
-    let mut invalid_slot = hir("fn id[T](value: T) -> T { return value; } \
+    let mut invalid_owner = hir("fn id[T](value: T) -> T { return value; } \
          fn root(value: I64) -> I64 { return id[I64](value); }");
-    let root_id = invalid_slot
+    let root_id = invalid_owner
         .functions
         .iter()
         .find(|function| function.name == "root")
         .expect("root exists")
         .id;
-    invalid_slot
+    invalid_owner
         .functions
         .iter_mut()
         .find(|function| function.name == "id")
@@ -241,7 +260,22 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         .id
         .function = root_id;
     assert!(matches!(
-        lower(&invalid_slot),
+        lower(&invalid_owner),
+        Err(LoweringError::InvalidHirInvariant(_))
+    ));
+
+    let mut invalid_index = hir("fn id[T](value: T) -> T { return value; } \
+         fn root(value: I64) -> I64 { return id[I64](value); }");
+    invalid_index
+        .functions
+        .iter_mut()
+        .find(|function| function.name == "id")
+        .expect("id exists")
+        .type_parameters[0]
+        .id
+        .index = 1;
+    assert!(matches!(
+        lower(&invalid_index),
         Err(LoweringError::InvalidHirInvariant(_))
     ));
 
