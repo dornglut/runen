@@ -162,6 +162,8 @@ pub(crate) fn lex(source: &str) -> (Vec<LexToken>, Vec<SyntaxError>) {
                 ')' => Some((SyntaxKind::RParen, 1)),
                 '{' => Some((SyntaxKind::LBrace, 1)),
                 '}' => Some((SyntaxKind::RBrace, 1)),
+                '[' => Some((SyntaxKind::LBracket, 1)),
+                ']' => Some((SyntaxKind::RBracket, 1)),
                 ':' => Some((SyntaxKind::Colon, 1)),
                 ',' => Some((SyntaxKind::Comma, 1)),
                 '-' => Some((SyntaxKind::Minus, 1)),
