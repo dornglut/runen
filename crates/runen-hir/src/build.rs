@@ -1385,7 +1385,9 @@ fn resolve_type(
                 unit,
                 range: token.text_range(),
             };
-            if let Some(parameter) = type_parameters.iter().find(|parameter| parameter.name == name)
+            if let Some(parameter) = type_parameters
+                .iter()
+                .find(|parameter| parameter.name == name)
             {
                 if reference_permission.is_some() || raw {
                     diagnostics.push(Diagnostic {
@@ -1427,7 +1429,9 @@ fn resolve_type(
             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
             Type::Record(record) => ReferenceReferent::Record(record),
             Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
-                unreachable!("source reference type syntax is non-recursive and abstract referents reject before wrapping")
+                unreachable!(
+                    "source reference type syntax is non-recursive and abstract referents reject before wrapping"
+                )
             }
         };
         Some(Type::SafeReference {
@@ -1439,7 +1443,9 @@ fn resolve_type(
             Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
             Type::Record(record) => RawPointerPointee::Record(record),
             Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
-                unreachable!("source raw-pointer type syntax is non-recursive and abstract pointees reject before wrapping")
+                unreachable!(
+                    "source raw-pointer type syntax is non-recursive and abstract pointees reject before wrapping"
+                )
             }
         };
         Some(Type::RawPointer(pointee))
@@ -5170,7 +5176,9 @@ fn validate_value_inner(
                         let referent = match selected_ty {
                             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
                             Type::Record(record) => ReferenceReferent::Record(record),
-                            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+                            Type::Parameter(_)
+                            | Type::SafeReference { .. }
+                            | Type::RawPointer(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidSafeReferenceReferent {
                                         referent: selected_ty,
@@ -5225,7 +5233,9 @@ fn validate_value_inner(
                         let pointee = match binding.ty {
                             Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
                             Type::Record(record) => RawPointerPointee::Record(record),
-                            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+                            Type::Parameter(_)
+                            | Type::SafeReference { .. }
+                            | Type::RawPointer(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidRawPointerPointee {
                                         pointee: binding.ty,
