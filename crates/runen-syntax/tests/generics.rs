@@ -71,9 +71,8 @@ fn function_generic_parameters_are_nonempty_ordered_and_allow_trailing_comma() {
 
 #[test]
 fn generic_call_arguments_are_ordered_qualified_and_allow_trailing_comma() {
-    let parsed = parse(
-        "fn caller[T](value: I64) -> I64 { return dep::apply[I64, dep::Thing, T,](value); }",
-    );
+    let parsed =
+        parse("fn caller[T](value: I64) -> I64 { return dep::apply[I64, dep::Thing, T,](value); }");
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
     assert_eq!(count(&parsed, SyntaxKind::GenericTypeArgumentList), 1);
@@ -108,8 +107,14 @@ fn use(value: I64) {
     assert_eq!(count(&parsed, SyntaxKind::CallStatement), 1);
     assert_eq!(count(&parsed, SyntaxKind::IfStatement), 1);
     assert_eq!(count(&parsed, SyntaxKind::FieldValueUse), 1);
-    assert_eq!(count(&parsed, SyntaxKind::RecordDestructuringDeclaration), 1);
-    assert_eq!(count(&parsed, SyntaxKind::RefutableRecordSelectionStatement), 1);
+    assert_eq!(
+        count(&parsed, SyntaxKind::RecordDestructuringDeclaration),
+        1
+    );
+    assert_eq!(
+        count(&parsed, SyntaxKind::RefutableRecordSelectionStatement),
+        1
+    );
 }
 
 #[test]
@@ -134,7 +139,10 @@ fn brackets_do_not_create_general_index_or_postfix_syntax() {
         "record R { field: I64 } fn f(value: R) { let x: I64 = value.field[I64]; }",
     ] {
         let parsed = parse(source);
-        assert!(!parsed.errors().is_empty(), "source unexpectedly accepted: {source}");
+        assert!(
+            !parsed.errors().is_empty(),
+            "source unexpectedly accepted: {source}"
+        );
     }
 }
 
