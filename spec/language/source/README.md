@@ -10,6 +10,7 @@
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
 - [Generics](generics.md)
+- [Marker traits](traits.md)
 - [Structural ownership](structural-ownership.md)
 - [Function-local bindings](local-bindings.md)
 - [Field-value access](field-access.md)
