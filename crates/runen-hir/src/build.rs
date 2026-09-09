@@ -673,6 +673,10 @@ fn syntax_admission_diagnostics(units: &[SourceUnit<'_>]) -> Vec<Diagnostic> {
     diagnostics
 }
 
+#[expect(
+    clippy::type_complexity,
+    reason = "declaration collection returns one exact phased source bundle"
+)]
 fn collect_declarations(
     units: &[SourceUnit<'_>],
     diagnostics: &mut Vec<Diagnostic>,
@@ -1888,6 +1892,10 @@ fn record_duplicability_is_valid(
     duplicable
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "source validation threads independent resolution and semantic state explicitly"
+)]
 fn validate_body(
     header: &FunctionHeader,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
