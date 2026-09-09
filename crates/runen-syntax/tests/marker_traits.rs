@@ -39,13 +39,16 @@ fn trait_and_impl_remain_contextual_identifier_keys() {
     assert_eq!(user_identifier_key("trait").as_deref(), Some("trait"));
     assert_eq!(user_identifier_key("impl").as_deref(), Some("impl"));
 
-    let source = "record trait { impl: I64 } \
-                  fn impl(trait: I64) -> I64 { let impl: I64 = trait; return impl; }";
+    let source = "record R { trait: I64, impl: I64 } \
+                  fn trait(impl: I64) -> I64 { let trait: I64 = impl; return trait; } \
+                  fn impl(trait: I64) -> I64 { let impl: I64 = trait; return impl; } \
+                  fn caller(value: I64) { trait(value); impl(value); }";
     let parsed = parse(source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(parsed.text(), source);
     assert_eq!(count(&parsed, SyntaxKind::TraitDeclaration), 0);
     assert_eq!(count(&parsed, SyntaxKind::TraitImplementation), 0);
+    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 2);
 }
 
 #[test]
@@ -82,6 +85,7 @@ fn comma_still_separates_type_parameters_after_one_marker_bound() {
 fn selected_marker_syntax_rejects_non_selected_forms() {
     for source in [
         "trait Marker {}",
+        "trait Marker; impl I64: Marker {}",
         "trait Marker; export impl I64: Marker;",
         "trait Marker; impl Marker for I64;",
         "trait Marker; trait Other; impl I64: Marker + Other;",
