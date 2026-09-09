@@ -54,6 +54,9 @@ impl Parser<'_> {
                 Some(SyntaxKind::KwExport) if self.at_contextual_ident(1, "trait") => {
                     self.parse_trait_declaration(true);
                 }
+                Some(SyntaxKind::KwExport) if self.at_contextual_ident(1, "const") => {
+                    self.parse_const_declaration(true);
+                }
                 Some(SyntaxKind::KwExport) => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::KwRecord) => self.parse_record_definition(true),
                     Some(SyntaxKind::KwFn) => self.parse_function_definition(true),
@@ -69,6 +72,9 @@ impl Parser<'_> {
                 }
                 Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "impl") => {
                     self.parse_trait_implementation();
+                }
+                Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "const") => {
+                    self.parse_const_declaration(false);
                 }
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Item));
@@ -88,6 +94,91 @@ impl Parser<'_> {
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
         self.builder.finish_node();
+    }
+
+    fn parse_const_declaration(&mut self, exported: bool) {
+        debug_assert!(self.at_contextual_ident(usize::from(exported), "const"));
+        self.builder.start_node(SyntaxKind::ConstDeclaration.into());
+        if exported {
+            self.expect(SyntaxKind::KwExport, ExpectedSyntax::Item);
+        }
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Item);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
+        self.parse_const_type();
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        if !self.parse_const_literal() {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
+            if self.current().is_some() && !self.at(SyntaxKind::Semicolon) {
+                self.recover_one();
+            }
+        }
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_const_type(&mut self) {
+        self.builder.start_node(SyntaxKind::TypeRef.into());
+        if self.current().is_some_and(is_intrinsic_type_start) {
+            self.bump();
+        } else {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Type));
+            if self.current().is_some() && !self.at(SyntaxKind::Eq) {
+                self.recover_one();
+            }
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_const_literal(&mut self) -> bool {
+        match self.current() {
+            Some(SyntaxKind::KwTrue | SyntaxKind::KwFalse) => {
+                self.builder.start_node(SyntaxKind::BooleanLiteral.into());
+                self.bump();
+                self.builder.finish_node();
+                true
+            }
+            Some(SyntaxKind::DecimalMagnitude) => {
+                self.builder
+                    .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                self.bump();
+                self.builder.finish_node();
+                true
+            }
+            Some(SyntaxKind::DecimalFloatingMagnitude) => {
+                self.builder
+                    .start_node(SyntaxKind::DecimalFloatingLiteral.into());
+                self.bump();
+                self.builder.finish_node();
+                true
+            }
+            Some(SyntaxKind::Minus) => match self.peek_nontrivia(1) {
+                Some(SyntaxKind::DecimalMagnitude) => {
+                    self.builder
+                        .start_node(SyntaxKind::DecimalIntegerLiteral.into());
+                    self.bump();
+                    self.expect(
+                        SyntaxKind::DecimalMagnitude,
+                        ExpectedSyntax::DecimalMagnitude,
+                    );
+                    self.builder.finish_node();
+                    true
+                }
+                Some(SyntaxKind::DecimalFloatingMagnitude) => {
+                    self.builder
+                        .start_node(SyntaxKind::DecimalFloatingLiteral.into());
+                    self.bump();
+                    self.expect(
+                        SyntaxKind::DecimalFloatingMagnitude,
+                        ExpectedSyntax::DecimalMagnitude,
+                    );
+                    self.builder.finish_node();
+                    true
+                }
+                _ => false,
+            },
+            _ => false,
+        }
     }
 
     fn parse_trait_declaration(&mut self, exported: bool) {
@@ -1148,7 +1239,14 @@ impl Parser<'_> {
                         Some(SyntaxKind::LBrace) => {
                             self.parse_record_construction_or_field_value_use();
                         }
-                        _ => self.parse_direct_call_or_field_value_use(),
+                        Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
+                            self.parse_direct_call_or_field_value_use();
+                        }
+                        _ => {
+                            self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                            self.parse_qualified_module_member();
+                            self.builder.finish_node();
+                        }
                     },
                     Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
                     _ => {
@@ -1172,7 +1270,7 @@ impl Parser<'_> {
                         }
                         _ => {
                             self.builder.start_node(SyntaxKind::IdentifierUse.into());
-                            self.bump();
+                            self.parse_qualified_module_member();
                             self.builder.finish_node();
                         }
                     },
@@ -1871,6 +1969,24 @@ impl Parser<'_> {
             );
         self.errors.push(SyntaxError::new(kind, range));
     }
+}
+
+const fn is_intrinsic_type_start(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        SyntaxKind::TyBool
+            | SyntaxKind::TyI8
+            | SyntaxKind::TyI16
+            | SyntaxKind::TyI32
+            | SyntaxKind::TyI64
+            | SyntaxKind::TyU8
+            | SyntaxKind::TyU16
+            | SyntaxKind::TyU32
+            | SyntaxKind::TyU64
+            | SyntaxKind::TyF16
+            | SyntaxKind::TyF32
+            | SyntaxKind::TyF64
+    )
 }
 
 const fn is_reference_referent_type_start(kind: SyntaxKind) -> bool {

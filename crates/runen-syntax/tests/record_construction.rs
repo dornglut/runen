@@ -146,7 +146,7 @@ fn build() -> Pair {
 }
 
 #[test]
-fn qualified_construction_backed_field_use_is_a_condition_but_bare_construction_is_not() {
+fn bare_qualified_condition_is_not_record_construction() {
     let accepted = parse(
         "import dep; fn f() { if dep::Flag { ready: true }.ready { let value: Bool = true; } }",
     );
@@ -162,10 +162,10 @@ fn qualified_construction_backed_field_use_is_a_condition_but_bare_construction_
                 .any(|child| child.kind() == SyntaxKind::RecordConstruction)
     }));
 
-    let rejected = parse("import dep; fn f() { if dep::Flag {} { let value: Bool = true; } }");
-    assert!(!rejected.errors().is_empty());
+    let bare = parse("import dep; fn f() { if dep::Flag {} { let value: Bool = true; } }");
+    assert!(bare.errors().is_empty(), "{:?}", bare.errors());
     assert!(
-        !rejected
+        !bare
             .syntax()
             .descendants()
             .any(|node| node.kind() == SyntaxKind::RecordConstruction)

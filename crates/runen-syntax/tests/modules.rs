@@ -195,7 +195,6 @@ fn malformed_qualification_and_export_import_recover_losslessly() {
         "record A { x: dep::B::C }",
         "export import dep;",
         "import dep export fn f() {}",
-        "fn f(x: I64) { let y: I64 = dep::value; }",
     ];
 
     for source in malformed {
@@ -246,9 +245,8 @@ fn malformed_constructs_do_not_swallow_later_top_level_elements() {
 }
 
 #[test]
-fn bare_or_nested_qualified_members_are_not_general_values_or_paths() {
+fn nested_qualified_members_are_not_general_paths() {
     for source in [
-        "fn f() { let x: I64 = dep::value; }",
         "fn f() { dep::nested::call(); }",
         "record R { value: dep::nested::Type }",
     ] {

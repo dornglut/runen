@@ -154,6 +154,7 @@ pub enum SyntaxKind {
     ImplementationTarget,
     TraitReference,
     TraitRequirementClause,
+    ConstDeclaration,
 }
 
 impl SyntaxKind {
@@ -326,6 +327,7 @@ impl Language for RunenLanguage {
             129 => SyntaxKind::ImplementationTarget,
             130 => SyntaxKind::TraitReference,
             131 => SyntaxKind::TraitRequirementClause,
+            132 => SyntaxKind::ConstDeclaration,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
