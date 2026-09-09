@@ -1,0 +1,34 @@
+name: Temporary P0-D 673 reference commit
+
+on:
+  push:
+    branches:
+      - p0d-673-core-callable-values-impl
+
+permissions:
+  contents: write
+
+jobs:
+  patch-reference:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-673-reference]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-673-core-callable-values-impl
+          persist-credentials: true
+          fetch-depth: 0
+      - run: python3 tools/tmp_p0d_673_reference.py
+      - name: Check reference oracle after patch
+        run: cargo check -p runen-reference
+      - name: Commit reference implementation only
+        run: |
+          if git diff --quiet -- crates/runen-reference/src/interprocedural.rs; then
+            echo 'No reference changes needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/runen-reference/src/interprocedural.rs
+          git commit -m 'P0-D: execute callable values and indirect calls [skip-673-reference]'
+          git push origin HEAD:p0d-673-core-callable-values-impl
