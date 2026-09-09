@@ -65,7 +65,7 @@ fn execute_float_div_with_contract(
     right: BinaryFloatValue,
 ) -> runen_reference::ExecutionReport {
     let mut types = TypeTable::new();
-    let ty = types.push(TypeDef::scalar("float", scalar));
+    let ty = types.push(TypeDef::scalar("float", scalar.clone()));
     let result = Place::local(LocalId(0));
     let program = Program {
         types,
@@ -82,7 +82,7 @@ fn execute_float_div_with_contract(
                     vec![Statement::FloatDiv {
                         contract,
                         dst: result.clone(),
-                        left: Operand::Constant(constant(scalar, left)),
+                        left: Operand::Constant(constant(scalar.clone(), left)),
                         right: Operand::Constant(constant(scalar, right)),
                     }],
                     Terminator::Return(Some(Operand::Move(result.into()))),
@@ -104,7 +104,7 @@ fn assert_div_with_contract(
     right: BinaryFloatValue,
     expected: ObservedBinaryFloatValue,
 ) {
-    let report = execute_float_div_with_contract(contract, scalar, left, right);
+    let report = execute_float_div_with_contract(contract, scalar.clone(), left, right);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(observed(scalar, expected)));
 }
@@ -167,8 +167,8 @@ fn oracle_quotient(
     left: BinaryFloatValue,
     right: BinaryFloatValue,
 ) -> BinaryFloatValue {
-    let (format, _, _) = format(scalar);
-    let (left_sign, numerator, left_exponent) = finite_parts(scalar, left);
+    let (format, _, _) = format(scalar.clone());
+    let (left_sign, numerator, left_exponent) = finite_parts(scalar.clone(), left);
     let (right_sign, denominator, right_exponent) = finite_parts(scalar, right);
     let rounded = round_binary_ratio(
         format,
@@ -218,7 +218,7 @@ fn exact_division_executes_in_all_three_formats_and_all_contracts() {
         ] {
             assert_div_with_contract(
                 contract,
-                scalar,
+                scalar.clone(),
                 left,
                 right,
                 ObservedBinaryFloatValue::Represented(expected),
@@ -237,7 +237,7 @@ fn recurring_one_third_matches_direct_expectations_and_independent_ratio_oracle(
         let one = positive_normal(1_u64 << (precision - 1), 0);
         let three = positive_normal(3_u64 << (precision - 2), 1);
         let expected = positive_normal(expected_significand, -2);
-        assert_eq!(oracle_quotient(scalar, one, three), expected);
+        assert_eq!(oracle_quotient(scalar.clone(), one, three), expected);
         for contract in [
             NumericContract::Standard,
             NumericContract::Reproducible,
@@ -245,7 +245,7 @@ fn recurring_one_third_matches_direct_expectations_and_independent_ratio_oracle(
         ] {
             assert_div_with_contract(
                 contract,
-                scalar,
+                scalar.clone(),
                 one,
                 three,
                 ObservedBinaryFloatValue::Represented(expected),
