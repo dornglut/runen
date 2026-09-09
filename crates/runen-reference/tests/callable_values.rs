@@ -38,11 +38,7 @@ fn indirect_call_dispatches_function_value_and_returns_through_existing_activati
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let callable = types.push(TypeDef::callable(
         "ReturnsI64",
-        CallableInterface::new(
-            Vec::new(),
-            Some(i64_ty),
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(Vec::new(), Some(i64_ty), SafeReferenceResultContract::None),
     ));
 
     let caller = Function {
@@ -98,11 +94,7 @@ fn stored_copy_and_move_preserve_exact_function_identity() {
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let callable = types.push(TypeDef::callable(
         "ReturnsI64",
-        CallableInterface::new(
-            Vec::new(),
-            Some(i64_ty),
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(Vec::new(), Some(i64_ty), SafeReferenceResultContract::None),
     ));
 
     let caller = Function {
@@ -212,11 +204,7 @@ fn indirect_runtime_evaluates_callee_before_arguments() {
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let callable = types.push(TypeDef::callable(
         "TakesI64",
-        CallableInterface::new(
-            vec![i64_ty],
-            None,
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(vec![i64_ty], None, SafeReferenceResultContract::None),
     ));
 
     let caller = Function {

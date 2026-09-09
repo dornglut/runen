@@ -66,10 +66,7 @@ fn callable_signature_cycles_are_non_structural_but_struct_cycles_remain_invalid
         functions: Vec::new(),
     })
     .expect_err("by-value structural cycles remain invalid");
-    assert_eq!(
-        error.kind,
-        MirValidationErrorKind::RecursiveType(TypeId(0))
-    );
+    assert_eq!(error.kind, MirValidationErrorKind::RecursiveType(TypeId(0)));
 }
 
 #[test]
@@ -268,11 +265,7 @@ fn indirect_call_validates_result_interface_and_initializes_normal_destination()
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let callable = types.push(TypeDef::callable(
         "ReturnsI64",
-        CallableInterface::new(
-            Vec::new(),
-            Some(i64_ty),
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(Vec::new(), Some(i64_ty), SafeReferenceResultContract::None),
     ));
 
     let caller = no_result_function(
@@ -324,11 +317,7 @@ fn indirect_call_evaluates_callee_before_arguments() {
     let mut types = TypeTable::new();
     let callable = types.push(TypeDef::callable(
         "RecursiveArg",
-        CallableInterface::new(
-            vec![TypeId(0)],
-            None,
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(vec![TypeId(0)], None, SafeReferenceResultContract::None),
     ));
     assert_eq!(callable, TypeId(0));
 
@@ -377,11 +366,7 @@ fn indirect_result_destination_is_admitted_before_callee_effects() {
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let callable = types.push(TypeDef::callable(
         "ReturnsI64",
-        CallableInterface::new(
-            Vec::new(),
-            Some(i64_ty),
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(Vec::new(), Some(i64_ty), SafeReferenceResultContract::None),
     ));
 
     let caller = no_result_function(
