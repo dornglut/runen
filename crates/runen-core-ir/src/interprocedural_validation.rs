@@ -1679,10 +1679,12 @@ fn validate_path_state(
                         types,
                         body,
                         &mut state,
-                        &interface,
-                        None,
-                        arguments,
-                        destination,
+                        CallStateInput {
+                            interface: &interface,
+                            callee: None,
+                            arguments,
+                            destination,
+                        },
                         &point,
                     )?,
                     DefinedStep::NoDefinedContinuation
@@ -1707,10 +1709,12 @@ fn validate_path_state(
                         types,
                         body,
                         &mut state,
-                        interface,
-                        Some(callee),
-                        arguments,
-                        destination,
+                        CallStateInput {
+                            interface,
+                            callee: Some(callee),
+                            arguments,
+                            destination,
+                        },
                         &point,
                     )?,
                     DefinedStep::NoDefinedContinuation
@@ -1726,16 +1730,27 @@ fn validate_path_state(
     Ok(())
 }
 
+struct CallStateInput<'a> {
+    interface: &'a CallableInterface,
+    callee: Option<&'a Operand>,
+    arguments: &'a [Operand],
+    destination: &'a Option<Place>,
+}
+
 fn validate_call_state(
     types: &TypeTable,
     body: &Body,
     state: &mut ValidationState,
-    interface: &CallableInterface,
-    callee: Option<&Operand>,
-    arguments: &[Operand],
-    destination: &Option<Place>,
+    call: CallStateInput<'_>,
     point: &MirPoint,
 ) -> Result<DefinedStep<()>, MirValidationError> {
+    let CallStateInput {
+        interface,
+        callee,
+        arguments,
+        destination,
+    } = call;
+
     if let Some(destination) = destination {
         authorize_direct_access(
             &state.active_loans,
