@@ -1,0 +1,141 @@
+name: Temporary P0-D 673 call-state descriptor
+
+on:
+  push:
+    branches:
+      - p0d-673-core-callable-values-impl
+
+permissions:
+  contents: write
+
+jobs:
+  refactor:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-673-call-state-input]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-673-core-callable-values-impl
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Bundle call-specific state inputs
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/runen-core-ir/src/interprocedural_validation.rs')
+          text = path.read_text()
+          old = '''                    validate_call_state(
+                        types,
+                        body,
+                        &mut state,
+                        &interface,
+                        None,
+                        arguments,
+                        destination,
+                        &point,
+                    )?,
+'''
+          new = '''                    validate_call_state(
+                        types,
+                        body,
+                        &mut state,
+                        CallStateInput {
+                            interface: &interface,
+                            callee: None,
+                            arguments,
+                            destination,
+                        },
+                        &point,
+                    )?,
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one direct call-state invocation, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '''                    validate_call_state(
+                        types,
+                        body,
+                        &mut state,
+                        interface,
+                        Some(callee),
+                        arguments,
+                        destination,
+                        &point,
+                    )?,
+'''
+          new = '''                    validate_call_state(
+                        types,
+                        body,
+                        &mut state,
+                        CallStateInput {
+                            interface,
+                            callee: Some(callee),
+                            arguments,
+                            destination,
+                        },
+                        &point,
+                    )?,
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one indirect call-state invocation, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '''fn validate_call_state(
+    types: &TypeTable,
+    body: &Body,
+    state: &mut ValidationState,
+    interface: &CallableInterface,
+    callee: Option<&Operand>,
+    arguments: &[Operand],
+    destination: &Option<Place>,
+    point: &MirPoint,
+) -> Result<DefinedStep<()>, MirValidationError> {
+    if let Some(destination) = destination {
+'''
+          new = '''struct CallStateInput<'a> {
+    interface: &'a CallableInterface,
+    callee: Option<&'a Operand>,
+    arguments: &'a [Operand],
+    destination: &'a Option<Place>,
+}
+
+fn validate_call_state(
+    types: &TypeTable,
+    body: &Body,
+    state: &mut ValidationState,
+    call: CallStateInput<'_>,
+    point: &MirPoint,
+) -> Result<DefinedStep<()>, MirValidationError> {
+    let CallStateInput {
+        interface,
+        callee,
+        arguments,
+        destination,
+    } = call;
+
+    if let Some(destination) = destination {
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one call-state function signature, found {text.count(old)}')
+          text = text.replace(old, new)
+          path.write_text(text)
+          PY
+          cargo +stable fmt --all
+      - name: Enforce bounded source scope
+        shell: bash
+        run: |
+          actual="$(git diff --name-only)"
+          if [[ "${actual}" != "crates/runen-core-ir/src/interprocedural_validation.rs" ]]; then
+            echo "Unexpected changed paths:" >&2
+            echo "${actual}" >&2
+            exit 1
+          fi
+      - run: cargo +stable clippy -p runen-core-ir --all-targets -- -D warnings
+      - run: cargo +stable test -p runen-core-ir --test callable_values --test callable_conformance_edges
+      - name: Commit bounded refactor
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/runen-core-ir/src/interprocedural_validation.rs
+          git commit -m 'refactor: bundle shared call-state inputs [skip-673-call-state-input]'
+          git push origin HEAD:p0d-673-core-callable-values-impl
