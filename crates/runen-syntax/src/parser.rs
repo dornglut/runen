@@ -1242,7 +1242,11 @@ impl Parser<'_> {
                         Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
                             self.parse_direct_call_or_field_value_use();
                         }
-                        _ => self.parse_qualified_module_member(),
+                        _ => {
+                            self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                            self.parse_qualified_module_member();
+                            self.builder.finish_node();
+                        }
                     },
                     Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
                     _ => {
@@ -1264,7 +1268,11 @@ impl Parser<'_> {
                         {
                             self.parse_record_construction_or_field_value_use();
                         }
-                        _ => self.parse_qualified_module_member(),
+                        _ => {
+                            self.builder.start_node(SyntaxKind::IdentifierUse.into());
+                            self.parse_qualified_module_member();
+                            self.builder.finish_node();
+                        }
                     },
                     Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
                     Some(SyntaxKind::LBrace) if self.record_construction_followed_by_selector() => {
