@@ -60,6 +60,7 @@ fn terminator_kinds(function: &runen_core_ir::Function) -> Vec<&'static str> {
             Terminator::Goto(_) => "goto",
             Terminator::Branch { .. } => "branch",
             Terminator::Call { .. } => "call",
+            Terminator::IndirectCall { .. } => "indirect-call",
             Terminator::Fault(_) => "fault",
         })
         .collect()
