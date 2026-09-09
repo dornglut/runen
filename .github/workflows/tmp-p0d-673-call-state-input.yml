@@ -25,99 +25,102 @@ jobs:
           from pathlib import Path
           path = Path('crates/runen-core-ir/src/interprocedural_validation.rs')
           text = path.read_text()
-          old = '''                    validate_call_state(
-                        types,
-                        body,
-                        &mut state,
-                        &interface,
-                        None,
-                        arguments,
-                        destination,
-                        &point,
-                    )?,
-'''
-          new = '''                    validate_call_state(
-                        types,
-                        body,
-                        &mut state,
-                        CallStateInput {
-                            interface: &interface,
-                            callee: None,
-                            arguments,
-                            destination,
-                        },
-                        &point,
-                    )?,
-'''
+          old = (
+              "                    validate_call_state(\n"
+              "                        types,\n"
+              "                        body,\n"
+              "                        &mut state,\n"
+              "                        &interface,\n"
+              "                        None,\n"
+              "                        arguments,\n"
+              "                        destination,\n"
+              "                        &point,\n"
+              "                    )?,\n"
+          )
+          new = (
+              "                    validate_call_state(\n"
+              "                        types,\n"
+              "                        body,\n"
+              "                        &mut state,\n"
+              "                        CallStateInput {\n"
+              "                            interface: &interface,\n"
+              "                            callee: None,\n"
+              "                            arguments,\n"
+              "                            destination,\n"
+              "                        },\n"
+              "                        &point,\n"
+              "                    )?,\n"
+          )
           if text.count(old) != 1:
               raise SystemExit(f'expected one direct call-state invocation, found {text.count(old)}')
           text = text.replace(old, new)
-          old = '''                    validate_call_state(
-                        types,
-                        body,
-                        &mut state,
-                        interface,
-                        Some(callee),
-                        arguments,
-                        destination,
-                        &point,
-                    )?,
-'''
-          new = '''                    validate_call_state(
-                        types,
-                        body,
-                        &mut state,
-                        CallStateInput {
-                            interface,
-                            callee: Some(callee),
-                            arguments,
-                            destination,
-                        },
-                        &point,
-                    )?,
-'''
+          old = (
+              "                    validate_call_state(\n"
+              "                        types,\n"
+              "                        body,\n"
+              "                        &mut state,\n"
+              "                        interface,\n"
+              "                        Some(callee),\n"
+              "                        arguments,\n"
+              "                        destination,\n"
+              "                        &point,\n"
+              "                    )?,\n"
+          )
+          new = (
+              "                    validate_call_state(\n"
+              "                        types,\n"
+              "                        body,\n"
+              "                        &mut state,\n"
+              "                        CallStateInput {\n"
+              "                            interface,\n"
+              "                            callee: Some(callee),\n"
+              "                            arguments,\n"
+              "                            destination,\n"
+              "                        },\n"
+              "                        &point,\n"
+              "                    )?,\n"
+          )
           if text.count(old) != 1:
               raise SystemExit(f'expected one indirect call-state invocation, found {text.count(old)}')
           text = text.replace(old, new)
-          old = '''fn validate_call_state(
-    types: &TypeTable,
-    body: &Body,
-    state: &mut ValidationState,
-    interface: &CallableInterface,
-    callee: Option<&Operand>,
-    arguments: &[Operand],
-    destination: &Option<Place>,
-    point: &MirPoint,
-) -> Result<DefinedStep<()>, MirValidationError> {
-    if let Some(destination) = destination {
-'''
-          new = '''struct CallStateInput<'a> {
-    interface: &'a CallableInterface,
-    callee: Option<&'a Operand>,
-    arguments: &'a [Operand],
-    destination: &'a Option<Place>,
-}
-
-fn validate_call_state(
-    types: &TypeTable,
-    body: &Body,
-    state: &mut ValidationState,
-    call: CallStateInput<'_>,
-    point: &MirPoint,
-) -> Result<DefinedStep<()>, MirValidationError> {
-    let CallStateInput {
-        interface,
-        callee,
-        arguments,
-        destination,
-    } = call;
-
-    if let Some(destination) = destination {
-'''
+          old = (
+              "fn validate_call_state(\n"
+              "    types: &TypeTable,\n"
+              "    body: &Body,\n"
+              "    state: &mut ValidationState,\n"
+              "    interface: &CallableInterface,\n"
+              "    callee: Option<&Operand>,\n"
+              "    arguments: &[Operand],\n"
+              "    destination: &Option<Place>,\n"
+              "    point: &MirPoint,\n"
+              ") -> Result<DefinedStep<()>, MirValidationError> {\n"
+              "    if let Some(destination) = destination {\n"
+          )
+          new = (
+              "struct CallStateInput<'a> {\n"
+              "    interface: &'a CallableInterface,\n"
+              "    callee: Option<&'a Operand>,\n"
+              "    arguments: &'a [Operand],\n"
+              "    destination: &'a Option<Place>,\n"
+              "}\n\n"
+              "fn validate_call_state(\n"
+              "    types: &TypeTable,\n"
+              "    body: &Body,\n"
+              "    state: &mut ValidationState,\n"
+              "    call: CallStateInput<'_>,\n"
+              "    point: &MirPoint,\n"
+              ") -> Result<DefinedStep<()>, MirValidationError> {\n"
+              "    let CallStateInput {\n"
+              "        interface,\n"
+              "        callee,\n"
+              "        arguments,\n"
+              "        destination,\n"
+              "    } = call;\n\n"
+              "    if let Some(destination) = destination {\n"
+          )
           if text.count(old) != 1:
               raise SystemExit(f'expected one call-state function signature, found {text.count(old)}')
-          text = text.replace(old, new)
-          path.write_text(text)
+          path.write_text(text.replace(old, new))
           PY
           cargo +stable fmt --all
       - name: Enforce bounded source scope
