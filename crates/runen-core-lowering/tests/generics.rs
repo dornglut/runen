@@ -50,7 +50,7 @@ fn scalar_parameter(
 ) -> Option<ScalarType> {
     let ty = function.parameter_type(slot)?;
     match &program.types.get(ty)?.kind {
-        TypeKind::Scalar(scalar) => Some(*scalar),
+        TypeKind::Scalar(scalar) => Some(scalar.clone()),
         TypeKind::Struct(_) => None,
     }
 }
