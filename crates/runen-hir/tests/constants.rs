@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, ImportTarget, IntrinsicType, LiteralValue, ModuleId, SourceUnit, Statement, Type,
-    TypedCompilation, Value, ValueKind, build_typed_hir,
+    DiagnosticKind, ImportTarget, IntrinsicType, LiteralValue, ModuleId, SourceUnit, Statement,
+    Type, TypedCompilation, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -168,7 +168,10 @@ fn constant_exact_type_anchors_existing_comparison_selection() {
 
     let errors = build("fn bad() -> Bool { return 1 == 2; }")
         .expect_err("two contextual literals remain unanchored");
-    assert!(has_kind(&errors, DiagnosticKind::EqualityOperandsUnanchored));
+    assert!(has_kind(
+        &errors,
+        DiagnosticKind::EqualityOperandsUnanchored
+    ));
 }
 
 #[test]
@@ -304,7 +307,8 @@ fn constants_do_not_become_binding_reference_or_raw_pointer_targets() {
         "const VALUE: I64 = 1; fn f() { let r: &I64 = &VALUE; }",
         "const VALUE: I64 = 1; fn f() { let p: raw I64 = raw &VALUE; }",
     ] {
-        let errors = build(source).expect_err("constant name must not acquire local binding identity");
+        let errors =
+            build(source).expect_err("constant name must not acquire local binding identity");
         assert!(
             has_kind(&errors, DiagnosticKind::ExpectedValueBinding),
             "missing binding-only rejection for {source}"
