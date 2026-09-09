@@ -37,7 +37,7 @@ fn execute_float_sub_with_contract(
     right: BinaryFloatValue,
 ) -> runen_reference::ExecutionReport {
     let mut types = TypeTable::new();
-    let ty = types.push(TypeDef::scalar("float", scalar));
+    let ty = types.push(TypeDef::scalar("float", scalar.clone()));
     let result = Place::local(LocalId(0));
     let program = Program {
         types,
@@ -54,7 +54,7 @@ fn execute_float_sub_with_contract(
                     vec![Statement::FloatSub {
                         contract,
                         dst: result.clone(),
-                        left: Operand::Constant(constant(scalar, left)),
+                        left: Operand::Constant(constant(scalar.clone(), left)),
                         right: Operand::Constant(constant(scalar, right)),
                     }],
                     Terminator::Return(Some(Operand::Move(result.into()))),
@@ -76,7 +76,7 @@ fn assert_sub_with_contract(
     right: BinaryFloatValue,
     expected: ObservedBinaryFloatValue,
 ) {
-    let report = execute_float_sub_with_contract(contract, scalar, left, right);
+    let report = execute_float_sub_with_contract(contract, scalar.clone(), left, right);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(observed(scalar, expected)));
 }
@@ -120,7 +120,7 @@ fn exact_subtraction_executes_in_all_three_formats_and_all_contracts() {
         ] {
             assert_sub_with_contract(
                 contract,
-                scalar,
+                scalar.clone(),
                 positive_normal(one, 1),
                 positive_normal(one, 0),
                 ObservedBinaryFloatValue::Represented(positive_normal(one, 0)),
@@ -638,8 +638,8 @@ fn standard_finite_results_match_independent_numeric_oracle_within_fixture_capac
     let mut capacity_limited = 0_usize;
 
     for scalar in [ScalarType::F16, ScalarType::F32, ScalarType::F64] {
-        let (format, _, _, _) = oracle_format(scalar);
-        let values = deterministic_finite_values(scalar);
+        let (format, _, _, _) = oracle_format(scalar.clone());
+        let values = deterministic_finite_values(scalar.clone());
         for left in &values {
             for right in &values {
                 if matches!(left, BinaryFloatValue::Zero(_))
@@ -649,13 +649,18 @@ fn standard_finite_results_match_independent_numeric_oracle_within_fixture_capac
                 }
 
                 let contributions = [
-                    oracle_contribution(scalar, *left, false),
-                    oracle_contribution(scalar, *right, true),
+                    oracle_contribution(scalar.clone(), *left, false),
+                    oracle_contribution(scalar.clone(), *right, true),
                 ];
                 match reduce_sum(format, &contributions) {
                     Ok(expected) => {
                         compared += 1;
-                        assert_sub(scalar, *left, *right, observed_from_oracle(expected));
+                        assert_sub(
+                            scalar.clone(),
+                            *left,
+                            *right,
+                            observed_from_oracle(expected),
+                        );
                     }
                     Err(NumericOracleError::InternalRangeExceeded) => capacity_limited += 1,
                     Err(error) => {
