@@ -59,11 +59,7 @@ fn callable_reference_cycle_and_no_result_none_are_valid() {
     let mut types = TypeTable::new();
     let callable = types.push(TypeDef::callable(
         "RecursiveCallable",
-        CallableInterface::new(
-            vec![TypeId(1)],
-            None,
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(vec![TypeId(1)], None, SafeReferenceResultContract::None),
     ));
     assert_eq!(callable, TypeId(0));
     let shared_callable = types.push(TypeDef::reference(
@@ -117,7 +113,10 @@ fn callable_interfaces_reject_unknown_parameter_and_result_types() {
         functions: Vec::new(),
     })
     .expect_err("callable results must name existing types");
-    assert_eq!(error.kind, MirValidationErrorKind::UnknownType(unknown_result));
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::UnknownType(unknown_result)
+    );
 }
 
 #[test]
@@ -127,11 +126,7 @@ fn callable_interfaces_reject_unsafe_results_and_invalid_reference_contracts() {
     let raw_i64 = types.push(TypeDef::raw_pointer("RawI64", i64_ty));
     types.push(TypeDef::callable(
         "RawResult",
-        CallableInterface::new(
-            Vec::new(),
-            Some(raw_i64),
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(Vec::new(), Some(raw_i64), SafeReferenceResultContract::None),
     ));
     let error = validate_program(Program {
         types,
