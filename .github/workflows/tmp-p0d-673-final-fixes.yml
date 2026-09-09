@@ -1,0 +1,80 @@
+name: Temporary P0-D 673 final fixes
+
+on:
+  push:
+    branches:
+      - p0d-673-core-callable-values-impl
+
+permissions:
+  contents: write
+
+jobs:
+  final-fixes:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-673-final-fixes]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-673-core-callable-values-impl
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Apply bounded fixture and A0 corrections
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/runen-reference/tests/floating_division.rs')
+          text = path.read_text()
+          replacements = [
+              ('let ty = types.push(TypeDef::scalar("float", scalar));', 'let ty = types.push(TypeDef::scalar("float", scalar.clone()));'),
+              ('left: Operand::Constant(constant(scalar, left)),', 'left: Operand::Constant(constant(scalar.clone(), left)),'),
+              ('let report = execute_float_div_with_contract(contract, scalar, left, right);', 'let report = execute_float_div_with_contract(contract, scalar.clone(), left, right);'),
+              ('let (format, _, _) = format(scalar);', 'let (format, _, _) = format(scalar.clone());'),
+              ('let (left_sign, numerator, left_exponent) = finite_parts(scalar, left);', 'let (left_sign, numerator, left_exponent) = finite_parts(scalar.clone(), left);'),
+              ('                scalar,\n                left,', '                scalar.clone(),\n                left,'),
+              ('assert_eq!(oracle_quotient(scalar, one, three), expected);', 'assert_eq!(oracle_quotient(scalar.clone(), one, three), expected);'),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one floating replacement for {old!r}, found {count}')
+              text = text.replace(old, new)
+          path.write_text(text)
+
+          path = Path('docs/verification/a0.md')
+          text = path.read_text()
+          replacements = [
+              ('A `ValidatedBody` may contain a `RawRead`', 'A `ValidatedProgram` may contain a `RawRead`'),
+              ('it is not exposed by `ValidatedBody`', 'it is not exposed by `ValidatedProgram`'),
+              ('result-bearing direct calls apply the same wholly-vacant, Init-like exclusive destination admission before argument transitions', 'result-bearing direct and indirect calls apply the same wholly-vacant, Init-like exclusive destination admission before call operand transitions'),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one A0 replacement for {old!r}, found {count}')
+              text = text.replace(old, new)
+          if '`ValidatedBody`' in text:
+              raise SystemExit('stale ValidatedBody wording remains in A0')
+          path.write_text(text)
+          PY
+          cargo +stable fmt --all
+      - name: Enforce bounded edit scope
+        shell: bash
+        run: |
+          expected=$'crates/runen-reference/tests/floating_division.rs\ndocs/verification/a0.md'
+          actual="$(git diff --name-only | sort)"
+          if [[ "${actual}" != "${expected}" ]]; then
+            echo "Unexpected changed paths:" >&2
+            echo "${actual}" >&2
+            exit 1
+          fi
+      - run: cargo +stable test -p runen-reference --test floating_division
+      - name: Commit bounded corrections
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/runen-reference/tests/floating_division.rs docs/verification/a0.md
+          git commit -m 'test: finish #673 non-Copy fixture and A0 cleanup [skip-673-final-fixes]'
+          git push origin HEAD:p0d-673-core-callable-values-impl
