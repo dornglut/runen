@@ -57,8 +57,7 @@ fn retains_nominal_traits_implementations_and_exact_requirement_sets() {
     assert!(pair.type_parameters[1].requirements.is_empty());
     let pair_reordered = function(&hir, "pair_reordered");
     assert_eq!(
-        pair.type_parameters[0].requirements,
-        pair_reordered.type_parameters[0].requirements,
+        pair.type_parameters[0].requirements, pair_reordered.type_parameters[0].requirements,
         "requirement source order is not semantic"
     );
     assert!(hir.marker_implementations.iter().any(|implementation| {
@@ -358,8 +357,9 @@ fn marker_requirement_does_not_widen_generic_body_operational_capabilities() {
     };
     assert_eq!(ownership, OwnedUse::Consume);
 
-    let errors = build("trait Copy; fn bad[T: Copy](left: T, right: T) -> T { return left + right; }")
-        .expect_err("marker named Copy does not grant scalar addition");
+    let errors =
+        build("trait Copy; fn bad[T: Copy](left: T, right: T) -> T { return left + right; }")
+            .expect_err("marker named Copy does not grant scalar addition");
     assert!(errors.iter().any(|error| matches!(
         error.kind,
         DiagnosticKind::AdditionRequiresIntegerOrFloating {
