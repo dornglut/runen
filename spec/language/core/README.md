@@ -2,7 +2,8 @@
 
 - [Value and storage](value-storage.md)
 - [Control flow](control-flow.md)
-- [Functions and direct calls](functions.md)
+- [Functions and calls](functions.md)
+- [Callable values and indirect calls](callable-values.md)
 - [Borrowing](borrowing.md)
 - [References](references.md)
 - [Pointers and provenance](pointers.md)
