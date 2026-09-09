@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Function, FunctionId, LocalDecl, LocalId,
-    NumericContract, Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
-    Terminator, TypeDef, TypeTable, Value, validate_program,
+    Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator,
+    TypeDef, TypeTable, Value, validate_program,
 };
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
 
