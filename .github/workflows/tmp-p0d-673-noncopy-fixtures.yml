@@ -18,7 +18,7 @@ jobs:
           ref: p0d-673-core-callable-values-impl
           persist-credentials: true
           fetch-depth: 0
-      - name: Adapt Core floating fixtures
+      - name: Adapt Core arithmetic floating fixtures
         shell: bash
         run: |
           python3 - <<'PY'
@@ -36,6 +36,38 @@ jobs:
                       raise SystemExit(f'{name}: expected one {old!r}, found {c}')
                   s = s.replace(old, new, 1)
               p.write_text(s)
+          PY
+      - name: Adapt Core floating constants fixture by borrowing scalar kind
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('crates/runen-core-ir/tests/floating_constants.rs')
+          s = p.read_text()
+          replacements = [
+              ('fn program_initializing(scalar: ScalarType, value: Value) -> Program {', 'fn program_initializing(scalar: &ScalarType, value: Value) -> Program {'),
+              ('TypeDef::scalar("scalar", scalar)', 'TypeDef::scalar("scalar", scalar.clone())'),
+              ('fn wrapped(scalar: ScalarType, value: BinaryFloatValue) -> Value {', 'fn wrapped(scalar: &ScalarType, value: BinaryFloatValue) -> Value {'),
+              ('fn assert_valid(scalar: ScalarType, value: BinaryFloatValue) {', 'fn assert_valid(scalar: &ScalarType, value: BinaryFloatValue) {'),
+              ('fn assert_invalid(scalar: ScalarType, value: BinaryFloatValue) {', 'fn assert_invalid(scalar: &ScalarType, value: BinaryFloatValue) {'),
+              ('assert_valid(scalar, positive_zero);', 'assert_valid(&scalar, positive_zero);'),
+              ('assert_valid(scalar, negative_zero);', 'assert_valid(&scalar, negative_zero);'),
+              ('assert_valid(scalar, positive_infinity);', 'assert_valid(&scalar, positive_infinity);'),
+              ('assert_valid(scalar, negative_infinity);', 'assert_valid(&scalar, negative_infinity);'),
+              ('wrapped(scalar, positive_zero)', 'wrapped(&scalar, positive_zero)'),
+              ('wrapped(scalar, negative_zero)', 'wrapped(&scalar, negative_zero)'),
+              ('wrapped(scalar, positive_infinity)', 'wrapped(&scalar, positive_infinity)'),
+              ('wrapped(scalar, negative_infinity)', 'wrapped(&scalar, negative_infinity)'),
+              ('assert_valid(scalar, value);', 'assert_valid(&scalar, value);'),
+              ('assert_invalid(scalar, value);', 'assert_invalid(&scalar, value);'),
+              ('program_initializing(scalar, value)', 'program_initializing(&scalar, value)'),
+          ]
+          for old, new in replacements:
+              c = s.count(old)
+              if c != 1:
+                  raise SystemExit(f'floating_constants.rs: expected one {old!r}, found {c}')
+              s = s.replace(old, new, 1)
+          p.write_text(s)
           PY
       - name: Adapt reference multiplication fixture
         shell: bash
@@ -66,7 +98,7 @@ jobs:
       - name: Enforce bounded adaptation scope
         shell: bash
         run: |
-          expected=$'crates/runen-core-ir/tests/floating_division.rs\ncrates/runen-core-ir/tests/floating_multiplication.rs\ncrates/runen-core-ir/tests/floating_subtraction.rs\ncrates/runen-reference/tests/floating_multiplication.rs'
+          expected=$'crates/runen-core-ir/tests/floating_constants.rs\ncrates/runen-core-ir/tests/floating_division.rs\ncrates/runen-core-ir/tests/floating_multiplication.rs\ncrates/runen-core-ir/tests/floating_subtraction.rs\ncrates/runen-reference/tests/floating_multiplication.rs'
           actual="$(git diff --name-only)"
           if [[ "${actual}" != "${expected}" ]]; then
             echo "Unexpected changed paths:" >&2
@@ -80,6 +112,6 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add crates/runen-core-ir/tests/floating_division.rs crates/runen-core-ir/tests/floating_multiplication.rs crates/runen-core-ir/tests/floating_subtraction.rs crates/runen-reference/tests/floating_multiplication.rs
+          git add crates/runen-core-ir/tests/floating_constants.rs crates/runen-core-ir/tests/floating_division.rs crates/runen-core-ir/tests/floating_multiplication.rs crates/runen-core-ir/tests/floating_subtraction.rs crates/runen-reference/tests/floating_multiplication.rs
           git commit -m 'test: adapt floating fixtures for non-Copy ScalarType [skip-673-noncopy-fixtures]'
           git push origin HEAD:p0d-673-core-callable-values-impl
