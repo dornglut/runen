@@ -5,9 +5,6 @@ on:
     branches:
       - p0d-673-core-callable-values-impl
 
-permissions:
-  contents: read
-
 jobs:
   patch-check:
     runs-on: ubuntu-latest
