@@ -1,7 +1,8 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Fault, Function, FunctionId, LocalDecl,
-    LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
-    Terminator, TypeDef, TypeTable, Value, validate_program,
+    LocalId, Operand, Place, Program, ReferenceAccess, ReferencePermission,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
+    validate_program,
 };
 use runen_reference::{Machine, ObservedValue, TerminalStatus, VerificationEventKind};
 
@@ -310,4 +311,217 @@ fn indirect_fault_uses_existing_fault_propagation_and_skips_normal_continuation(
     });
     assert_eq!(report.terminal, TerminalStatus::Faulted("indirect".into()));
     assert_eq!(report.result, None);
+}
+
+#[test]
+fn indirect_shared_identity_result_preserves_caller_reference_authority() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let shared_i64 = types.push(TypeDef::reference(
+        "SharedI64",
+        i64_ty,
+        ReferencePermission::Shared,
+    ));
+    let callable = types.push(TypeDef::callable(
+        "SharedIdentity",
+        CallableInterface::new(
+            vec![shared_i64],
+            Some(shared_i64),
+            SafeReferenceResultContract::SharedIdentity { origin: 0 },
+        ),
+    ));
+    let target = Place::local(LocalId(0));
+    let reference = Place::local(LocalId(1));
+    let returned = Place::local(LocalId(2));
+
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: Some(i64_ty),
+        safe_reference_result_contract: SafeReferenceResultContract::None,
+        body: body(
+            vec![
+                LocalDecl::new("target", i64_ty, false),
+                LocalDecl::new("reference", shared_i64, false),
+                LocalDecl::new("returned", shared_i64, false),
+            ],
+            vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: target.clone(),
+                            src: Operand::Constant(Value::I64(29)),
+                        },
+                        Statement::Init {
+                            dst: reference.clone(),
+                            src: Operand::ReferenceRoot {
+                                permission: ReferencePermission::Shared,
+                                place: target.clone(),
+                            },
+                        },
+                    ],
+                    Terminator::IndirectCall {
+                        callable,
+                        callee: Operand::FunctionValue(FunctionId(1)),
+                        arguments: vec![Operand::Move(reference.into())],
+                        destination: Some(returned.clone()),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(
+                    vec![
+                        Statement::ReferenceRead {
+                            src: ReferenceAccess::new(returned.clone()),
+                        },
+                        Statement::Drop {
+                            place: returned.into(),
+                        },
+                    ],
+                    Terminator::Return(Some(Operand::Move(target.into()))),
+                ),
+            ],
+        ),
+    };
+    let identity = Function {
+        name: "identity".into(),
+        parameters: vec![LocalId(0)],
+        result: Some(shared_i64),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedIdentity { origin: 0 },
+        body: body(
+            vec![LocalDecl::new("reference", shared_i64, false)],
+            vec![BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
+            )],
+        ),
+    };
+
+    let report = execute(Program {
+        types,
+        functions: vec![caller, identity],
+    });
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(29)));
+}
+
+#[test]
+fn indirect_shared_direct_child_result_preserves_ancestry_until_child_destruction() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let shared_i64 = types.push(TypeDef::reference(
+        "SharedI64",
+        i64_ty,
+        ReferencePermission::Shared,
+    ));
+    let replace_i64 = types.push(TypeDef::reference(
+        "ReplaceI64",
+        i64_ty,
+        ReferencePermission::ExclusiveReplace,
+    ));
+    let callable = types.push(TypeDef::callable(
+        "SharedDirectChild",
+        CallableInterface::new(
+            vec![replace_i64],
+            Some(shared_i64),
+            SafeReferenceResultContract::SharedDirectChild { origin: 0 },
+        ),
+    ));
+    let target = Place::local(LocalId(0));
+    let parent = Place::local(LocalId(1));
+    let returned = Place::local(LocalId(2));
+    let new_parent = Place::local(LocalId(3));
+
+    let caller = Function {
+        name: "caller".into(),
+        parameters: Vec::new(),
+        result: Some(i64_ty),
+        safe_reference_result_contract: SafeReferenceResultContract::None,
+        body: body(
+            vec![
+                LocalDecl::new("target", i64_ty, true),
+                LocalDecl::new("parent", replace_i64, false),
+                LocalDecl::new("returned", shared_i64, false),
+                LocalDecl::new("new_parent", replace_i64, false),
+            ],
+            vec![
+                BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: target.clone(),
+                            src: Operand::Constant(Value::I64(53)),
+                        },
+                        Statement::Init {
+                            dst: parent.clone(),
+                            src: Operand::ReferenceRoot {
+                                permission: ReferencePermission::ExclusiveReplace,
+                                place: target.clone(),
+                            },
+                        },
+                    ],
+                    Terminator::IndirectCall {
+                        callable,
+                        callee: Operand::FunctionValue(FunctionId(1)),
+                        arguments: vec![Operand::Move(parent.into())],
+                        destination: Some(returned.clone()),
+                        target: BasicBlockId(1),
+                    },
+                ),
+                BasicBlock::new(
+                    vec![
+                        Statement::ReferenceRead {
+                            src: ReferenceAccess::new(returned.clone()),
+                        },
+                        Statement::Drop {
+                            place: returned.into(),
+                        },
+                        Statement::Init {
+                            dst: new_parent.clone(),
+                            src: Operand::ReferenceRoot {
+                                permission: ReferencePermission::ExclusiveReplace,
+                                place: target.clone(),
+                            },
+                        },
+                        Statement::ReferenceRead {
+                            src: ReferenceAccess::new(new_parent.clone()),
+                        },
+                        Statement::Drop {
+                            place: new_parent.into(),
+                        },
+                    ],
+                    Terminator::Return(Some(Operand::Move(target.into()))),
+                ),
+            ],
+        ),
+    };
+    let direct_child = Function {
+        name: "direct_child".into(),
+        parameters: vec![LocalId(0)],
+        result: Some(shared_i64),
+        safe_reference_result_contract: SafeReferenceResultContract::SharedDirectChild {
+            origin: 0,
+        },
+        body: body(
+            vec![
+                LocalDecl::new("parent", replace_i64, false),
+                LocalDecl::new("child", shared_i64, false),
+            ],
+            vec![BasicBlock::new(
+                vec![Statement::Init {
+                    dst: Place::local(LocalId(1)),
+                    src: Operand::ReferenceReborrow {
+                        permission: ReferencePermission::Shared,
+                        src: ReferenceAccess::new(Place::local(LocalId(0))),
+                    },
+                }],
+                Terminator::Return(Some(Operand::Move(Place::local(LocalId(1)).into()))),
+            )],
+        ),
+    };
+
+    let report = execute(Program {
+        types,
+        functions: vec![caller, direct_child],
+    });
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(53)));
 }
