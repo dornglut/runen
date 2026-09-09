@@ -19,10 +19,14 @@ use crate::{
 };
 
 #[derive(Debug, Clone, Copy)]
+struct ConstantId(usize);
+
+#[derive(Debug, Clone, Copy)]
 enum EntityId {
     Record(RecordId),
     Function(FunctionId),
     MarkerTrait(MarkerTraitId),
+    Constant(ConstantId),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -60,6 +64,19 @@ struct FunctionSyntax {
     accessibility: Accessibility,
     node: SyntaxNode,
     location: SourceLocation,
+}
+
+#[derive(Debug, Clone)]
+struct ConstantSyntax {
+    id: ConstantId,
+    unit: usize,
+    node: SyntaxNode,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ResolvedConstant {
+    ty: Type,
+    value: LiteralValue,
 }
 
 #[derive(Debug, Clone)]
@@ -522,6 +539,7 @@ type MarkerImplementationRelation = BTreeSet<(MarkerTraitId, MarkerImplementatio
 struct BodyResolutionContext<'a> {
     modules: &'a BTreeMap<ModuleId, ModuleBuild>,
     imports: &'a [UnitImports],
+    constants: &'a [ResolvedConstant],
     records: &'a [Record],
     headers: &'a [FunctionHeader],
     marker_implementations: &'a MarkerImplementationRelation,
@@ -563,8 +581,14 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         return Err(diagnostics);
     }
 
-    let (mut modules, record_syntax, function_syntax, marker_traits, marker_implementation_syntax) =
-        collect_declarations(units, &mut diagnostics);
+    let (
+        mut modules,
+        constant_syntax,
+        record_syntax,
+        function_syntax,
+        marker_traits,
+        marker_implementation_syntax,
+    ) = collect_declarations(units, &mut diagnostics);
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
@@ -574,6 +598,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         return Err(diagnostics);
     }
 
+    let constants = resolve_constants(&constant_syntax, &mut diagnostics);
     let records = resolve_records(&record_syntax, &modules, &imports, &mut diagnostics);
     let marker_implementations = resolve_marker_implementations(
         &marker_implementation_syntax,
@@ -598,6 +623,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
+    let constants = constants.expect("constant resolution succeeds when diagnostics are empty");
 
     validate_record_acyclicity(&records, &mut diagnostics);
     if !diagnostics.is_empty() {
@@ -615,6 +641,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             header,
             &modules,
             &imports,
+            &constants,
             &records,
             &headers,
             &marker_implementation_relation,
@@ -682,12 +709,14 @@ fn collect_declarations(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> (
     BTreeMap<ModuleId, ModuleBuild>,
+    Vec<ConstantSyntax>,
     Vec<RecordSyntax>,
     Vec<FunctionSyntax>,
     Vec<MarkerTrait>,
     Vec<MarkerImplementationSyntax>,
 ) {
     let mut modules = BTreeMap::<ModuleId, ModuleBuild>::new();
+    let mut constants = Vec::new();
     let mut records = Vec::new();
     let mut functions = Vec::new();
     let mut marker_traits = Vec::new();
@@ -699,6 +728,41 @@ fn collect_declarations(
         for item in root.children() {
             match item.kind() {
                 SyntaxKind::ImportDeclaration => {}
+                SyntaxKind::ConstDeclaration => {
+                    let id = ConstantId(constants.len());
+                    let mut identifiers = item
+                        .children_with_tokens()
+                        .filter_map(|element| element.into_token())
+                        .filter(|token| token.kind() == SyntaxKind::Ident);
+                    let introducer = identifiers
+                        .next()
+                        .expect("syntax-clean constant declaration has contextual introducer");
+                    debug_assert_eq!(key(&introducer), "const");
+                    let name_token = identifiers
+                        .next()
+                        .expect("syntax-clean constant declaration has one declaration name");
+                    debug_assert!(identifiers.next().is_none());
+                    let name = key(&name_token);
+                    let accessibility = declaration_accessibility(&item);
+                    let item_location = location(unit_index, &item);
+                    if !insert_entity(
+                        &mut modules,
+                        unit.module,
+                        &name,
+                        EntityId::Constant(id),
+                        accessibility,
+                    ) {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::DuplicateModuleBinding,
+                            location: item_location,
+                        });
+                    }
+                    constants.push(ConstantSyntax {
+                        id,
+                        unit: unit_index,
+                        node: item,
+                    });
+                }
                 SyntaxKind::RecordDefinition => {
                     let id = RecordId(records.len());
                     let name_token = direct_token(&item, SyntaxKind::Ident);
@@ -836,11 +900,84 @@ fn collect_declarations(
 
     (
         modules,
+        constants,
         records,
         functions,
         marker_traits,
         marker_implementations,
     )
+}
+
+fn resolve_constants(
+    declarations: &[ConstantSyntax],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<ResolvedConstant>> {
+    let mut resolved = Vec::with_capacity(declarations.len());
+    for declaration in declarations {
+        debug_assert_eq!(declaration.id.0, resolved.len());
+        resolved.push(resolve_constant(declaration, diagnostics));
+    }
+    resolved.into_iter().collect()
+}
+
+fn resolve_constant(
+    declaration: &ConstantSyntax,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ResolvedConstant> {
+    let type_node = direct_child(&declaration.node, SyntaxKind::TypeRef);
+    let type_token = type_node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .find(|token| !token.kind().is_trivia())
+        .expect("syntax-clean constant type contains one intrinsic type token");
+    let ty = Type::Intrinsic(
+        intrinsic_type(type_token.kind())
+            .expect("syntax-clean constant type is one represented intrinsic type"),
+    );
+
+    let literal = declaration
+        .node
+        .children()
+        .find(|child| {
+            matches!(
+                child.kind(),
+                SyntaxKind::BooleanLiteral
+                    | SyntaxKind::DecimalIntegerLiteral
+                    | SyntaxKind::DecimalFloatingLiteral
+            )
+        })
+        .expect("syntax-clean constant declaration contains one literal initializer");
+    let literal_location = location(declaration.unit, &literal);
+    let value = match literal.kind() {
+        SyntaxKind::BooleanLiteral => {
+            let found = Type::Intrinsic(IntrinsicType::Bool);
+            if ty != found {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::TypeMismatch {
+                        expected: ty,
+                        found,
+                    },
+                    location: literal_location,
+                });
+                return None;
+            }
+            let token = literal
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .find(|token| matches!(token.kind(), SyntaxKind::KwTrue | SyntaxKind::KwFalse))
+                .expect("syntax-clean Boolean constant literal contains one Boolean token");
+            LiteralValue::Bool(token.kind() == SyntaxKind::KwTrue)
+        }
+        SyntaxKind::DecimalIntegerLiteral => {
+            materialize_integer_literal(&literal, ty, literal_location, diagnostics)?
+        }
+        SyntaxKind::DecimalFloatingLiteral => {
+            materialize_floating_literal(&literal, ty, literal_location, diagnostics)?
+        }
+        _ => unreachable!("constant initializer has one represented literal kind"),
+    };
+
+    Some(ResolvedConstant { ty, value })
 }
 
 fn insert_entity(
@@ -954,7 +1091,7 @@ fn resolve_marker_trait_reference(
     {
         return match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
             EntityId::MarkerTrait(id) => Some(id),
-            EntityId::Record(_) | EntityId::Function(_) => {
+            EntityId::Record(_) | EntityId::Function(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedMarkerTrait,
                     location: location(unit, &qualified),
@@ -977,7 +1114,7 @@ fn resolve_marker_trait_reference(
         .map(|entity| entity.entity)
     {
         Some(EntityId::MarkerTrait(id)) => Some(id),
-        Some(EntityId::Record(_) | EntityId::Function(_)) => {
+        Some(EntityId::Record(_) | EntityId::Function(_) | EntityId::Constant(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedMarkerTrait,
                 location: trait_location,
@@ -1014,7 +1151,7 @@ fn resolve_marker_implementation_target(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(MarkerImplementationTarget::Record(record)),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::InvalidMarkerImplementationTarget,
                     location: location(implementation.unit, &qualified),
@@ -1046,7 +1183,7 @@ fn resolve_marker_implementation_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(MarkerImplementationTarget::Record(record)),
-        Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+        Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidMarkerImplementationTarget,
                 location: target_location,
@@ -1656,7 +1793,7 @@ fn resolve_type(
     {
         match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
             EntityId::Record(id) => Type::Record(id),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(unit, &qualified),
@@ -1705,7 +1842,9 @@ fn resolve_type(
                     .map(|entity| entity.entity)
                 {
                     Some(EntityId::Record(id)) => Type::Record(id),
-                    Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+                    Some(
+                        EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_),
+                    ) => {
                         diagnostics.push(Diagnostic {
                             kind: DiagnosticKind::ExpectedRecordType,
                             location: token_location,
@@ -1812,6 +1951,68 @@ fn resolve_qualified_entity(
     Some(target.entity)
 }
 
+fn resolve_constant_reference(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ResolvedConstant> {
+    debug_assert_eq!(node.kind(), SyntaxKind::IdentifierUse);
+    let id = if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        match resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )? {
+            EntityId::Constant(id) => id,
+            EntityId::Record(_) | EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedValueBinding,
+                    location: location(header.unit, &qualified),
+                });
+                return None;
+            }
+        }
+    } else {
+        let token = direct_token(node, SyntaxKind::Ident);
+        let name = key(&token);
+        let name_location = SourceLocation {
+            unit: header.unit,
+            range: token.text_range(),
+        };
+        match context
+            .modules
+            .get(&header.module)
+            .and_then(|module| module.namespace.get(&name))
+            .copied()
+            .map(|entity| entity.entity)
+        {
+            Some(EntityId::Constant(id)) => id,
+            Some(EntityId::Record(_) | EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedValueBinding,
+                    location: name_location,
+                });
+                return None;
+            }
+            None => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnresolvedName,
+                    location: name_location,
+                });
+                return None;
+            }
+        }
+    };
+
+    Some(context.constants[id.0])
+}
+
 fn validate_record_acyclicity(records: &[Record], diagnostics: &mut Vec<Diagnostic>) {
     let mut state = vec![0_u8; records.len()];
     for record in records {
@@ -1900,6 +2101,7 @@ fn validate_body(
     header: &FunctionHeader,
     modules: &BTreeMap<ModuleId, ModuleBuild>,
     imports: &[UnitImports],
+    constants: &[ResolvedConstant],
     records: &[Record],
     headers: &[FunctionHeader],
     marker_implementations: &MarkerImplementationRelation,
@@ -1954,6 +2156,7 @@ fn validate_body(
     let context = BodyResolutionContext {
         modules,
         imports,
+        constants,
         records,
         headers,
         marker_implementations,
@@ -2978,7 +3181,7 @@ fn validate_record_pattern_node(
         };
         let record = match entity {
             EntityId::Record(record) => record,
-            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -3003,7 +3206,7 @@ fn validate_record_pattern_node(
             .map(|entity| entity.entity)
         {
             Some(EntityId::Record(record)) => record,
-            Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+            Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -3174,7 +3377,7 @@ fn validate_refutable_record_pattern_node(
         };
         let record = match entity {
             EntityId::Record(record) => record,
-            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -3199,7 +3402,7 @@ fn validate_refutable_record_pattern_node(
             .map(|entity| entity.entity)
         {
             Some(EntityId::Record(record)) => record,
-            Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+            Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -5273,23 +5476,21 @@ fn validate_value_inner(
                     | SyntaxKind::IntegerXorValue
                     | SyntaxKind::IntegerOrValue => Contextual,
                     SyntaxKind::IdentifierUse => {
+                        if node
+                            .children()
+                            .any(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+                        {
+                            return resolve_constant_reference(header, node, context, diagnostics)
+                                .map_or(Invalid, |constant| Exact(constant.ty));
+                        }
+
                         let token = direct_token(node, SyntaxKind::Ident);
                         let name = key(&token);
-                        state.bindings.get(&name).map_or_else(
-                            || {
-                                missing_binding_evidence(
-                                    header,
-                                    &name,
-                                    SourceLocation {
-                                        unit: header.unit,
-                                        range: token.text_range(),
-                                    },
-                                    context,
-                                    diagnostics,
-                                )
-                            },
-                            |binding| Exact(binding.ty),
-                        )
+                        match state.bindings.get(&name) {
+                            Some(binding) => Exact(binding.ty),
+                            None => resolve_constant_reference(header, node, context, diagnostics)
+                                .map_or(Invalid, |constant| Exact(constant.ty)),
+                        }
                     }
                     SyntaxKind::DirectCall => {
                         let Some(application) = resolve_call_application(
@@ -5858,25 +6059,19 @@ fn validate_identifier_use(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
+    if node
+        .children()
+        .any(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        let constant = resolve_constant_reference(header, node, context, diagnostics)?;
+        return validate_constant_value(constant, required, value_location, diagnostics);
+    }
+
     let token = direct_token(node, SyntaxKind::Ident);
     let name = key(&token);
     let Some(binding) = state.bindings.get(&name).cloned() else {
-        let entity = context
-            .modules
-            .get(&header.module)
-            .and_then(|module| module.namespace.get(&name));
-        diagnostics.push(Diagnostic {
-            kind: if entity.is_some() {
-                DiagnosticKind::ExpectedValueBinding
-            } else {
-                DiagnosticKind::UnresolvedName
-            },
-            location: SourceLocation {
-                unit: header.unit,
-                range: token.text_range(),
-            },
-        });
-        return None;
+        let constant = resolve_constant_reference(header, node, context, diagnostics)?;
+        return validate_constant_value(constant, required, value_location, diagnostics);
     };
     if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
         diagnostics.push(Diagnostic {
@@ -5952,6 +6147,30 @@ fn validate_identifier_use(
         },
         reference_authority,
     })
+}
+
+fn validate_constant_value(
+    constant: ResolvedConstant,
+    required: Type,
+    value_location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    if constant.ty != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found: constant.ty,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+
+    Some(ProducedValue::ordinary(Value {
+        ty: constant.ty,
+        kind: ValueKind::Literal(constant.value),
+        location: value_location,
+    }))
 }
 
 fn requested_reference_permission(node: &SyntaxNode) -> ReferencePermission {
@@ -7104,7 +7323,7 @@ fn resolve_record_construction_target(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(record),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(header.unit, &qualified),
@@ -7129,7 +7348,7 @@ fn resolve_record_construction_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(record),
-        Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+        Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedRecordType,
                 location: target_location,
@@ -7696,7 +7915,7 @@ fn resolve_call_target(
             diagnostics,
         )? {
             EntityId::Function(id) => Some(id),
-            EntityId::Record(_) | EntityId::MarkerTrait(_) => {
+            EntityId::Record(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedFunction,
                     location: location(header.unit, &qualified),
@@ -7729,7 +7948,7 @@ fn resolve_call_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Function(id)) => Some(id),
-        Some(EntityId::Record(_) | EntityId::MarkerTrait(_)) => {
+        Some(EntityId::Record(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedFunction,
                 location: name_location,
@@ -7765,7 +7984,7 @@ fn resolve_generic_type_argument(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(Type::Record(record)),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(header.unit, &qualified),
@@ -7806,7 +8025,7 @@ fn resolve_generic_type_argument(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(Type::Record(record)),
-        Some(EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+        Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedRecordType,
                 location: argument_location,
