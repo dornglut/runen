@@ -1,0 +1,43 @@
+name: Temporary P0-D 673 format
+
+on:
+  push:
+    branches:
+      - p0d-673-core-callable-values-impl
+
+permissions:
+  contents: write
+
+jobs:
+  format:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-673-format]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-673-core-callable-values-impl
+          persist-credentials: true
+          fetch-depth: 0
+      - run: rustup toolchain install stable --profile minimal --component rustfmt
+      - run: cargo +stable fmt --all
+      - name: Enforce bounded formatting scope
+        shell: bash
+        run: |
+          unexpected="$(git diff --name-only | grep -Ev '^(crates/runen-core-ir/src/common.rs|crates/runen-core-ir/src/interprocedural.rs|crates/runen-core-ir/src/interprocedural_validation.rs|crates/runen-core-ir/src/lib.rs|crates/runen-reference/src/interprocedural.rs|crates/runen-reference/src/lib.rs)$' || true)"
+          if [[ -n "${unexpected}" ]]; then
+            echo "Unexpected formatting paths:" >&2
+            echo "${unexpected}" >&2
+            exit 1
+          fi
+      - name: Commit formatting only
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No formatting changes needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/runen-core-ir/src/common.rs crates/runen-core-ir/src/interprocedural.rs crates/runen-core-ir/src/interprocedural_validation.rs crates/runen-core-ir/src/lib.rs crates/runen-reference/src/interprocedural.rs crates/runen-reference/src/lib.rs
+          git commit -m 'chore: format #673 implementation [skip-673-format]'
+          git push origin HEAD:p0d-673-core-callable-values-impl
