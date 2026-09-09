@@ -7,6 +7,8 @@
 
 mod build;
 
+use std::collections::BTreeSet;
+
 use runen_syntax::{Parse, SyntaxErrorKind, TextRange, user_identifier_key};
 
 /// Caller-supplied opaque source-module identity for one compilation.
@@ -72,6 +74,10 @@ pub struct RecordId(pub(crate) usize);
 /// Opaque per-compilation function handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FunctionId(pub(crate) usize);
+
+/// Opaque per-compilation nominal marker-trait handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct MarkerTraitId(pub(crate) usize);
 
 /// Semantic identity of one ordered generic function type-parameter slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -192,6 +198,42 @@ pub enum Type {
 pub struct TypeParameter {
     pub id: TypeParameterId,
     pub name: String,
+    pub requirements: BTreeSet<MarkerTraitId>,
+    pub location: SourceLocation,
+}
+
+/// One resolved nominal method-free marker trait declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkerTrait {
+    pub id: MarkerTraitId,
+    pub module: ModuleId,
+    pub name: String,
+    pub accessibility: Accessibility,
+    pub location: SourceLocation,
+}
+
+/// Exact concrete target admitted by the first marker implementation relation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum MarkerImplementationTarget {
+    Intrinsic(IntrinsicType),
+    Record(RecordId),
+}
+
+impl MarkerImplementationTarget {
+    #[must_use]
+    pub const fn ty(self) -> Type {
+        match self {
+            Self::Intrinsic(intrinsic) => Type::Intrinsic(intrinsic),
+            Self::Record(record) => Type::Record(record),
+        }
+    }
+}
+
+/// One coherent explicit marker implementation proposition.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MarkerImplementation {
+    pub trait_id: MarkerTraitId,
+    pub target: MarkerImplementationTarget,
     pub location: SourceLocation,
 }
 
@@ -668,6 +710,7 @@ pub struct Module {
     pub id: ModuleId,
     pub records: Vec<RecordId>,
     pub functions: Vec<FunctionId>,
+    pub marker_traits: Vec<MarkerTraitId>,
 }
 
 /// Complete resolved and typed HIR for a valid represented source compilation.
@@ -676,6 +719,8 @@ pub struct TypedCompilation {
     pub modules: Vec<Module>,
     pub records: Vec<Record>,
     pub functions: Vec<Function>,
+    pub marker_traits: Vec<MarkerTrait>,
+    pub marker_implementations: Vec<MarkerImplementation>,
 }
 
 impl TypedCompilation {
@@ -687,6 +732,11 @@ impl TypedCompilation {
     #[must_use]
     pub fn function(&self, id: FunctionId) -> &Function {
         &self.functions[id.0]
+    }
+
+    #[must_use]
+    pub fn marker_trait(&self, id: MarkerTraitId) -> &MarkerTrait {
+        &self.marker_traits[id.0]
     }
 
     /// Whether the represented source type has non-consuming owned-value duplication.
@@ -710,8 +760,10 @@ pub enum DiagnosticKind {
     UnresolvedName,
     InaccessibleBinding,
     ExpectedRecordType,
+    ExpectedMarkerTrait,
     PrivateTypeInExportedSignature,
     PrivateTypeInExportedField,
+    PrivateMarkerTraitInExportedSignature,
     DuplicateRecordField,
     RecordContainmentCycle,
     InvalidRecordDuplicabilitySelection,
@@ -732,12 +784,19 @@ pub enum DiagnosticKind {
         pointee: Type,
     },
     DuplicateTypeParameter,
+    DuplicateMarkerRequirement,
     InvalidGenericTypeParameterPosition,
     MissingGenericTypeArguments,
     UnexpectedGenericTypeArguments,
     GenericTypeArgumentCount {
         expected: usize,
         found: usize,
+    },
+    InvalidMarkerImplementationTarget,
+    DuplicateMarkerImplementation,
+    UnsatisfiedMarkerRequirement {
+        required: MarkerTraitId,
+        argument: Type,
     },
     DuplicateParameter,
     LocalShadowing,

@@ -149,6 +149,11 @@ pub enum SyntaxKind {
     GenericTypeParameter,
     GenericTypeArgumentList,
     GenericTypeArgument,
+    TraitDeclaration,
+    TraitImplementation,
+    ImplementationTarget,
+    TraitReference,
+    TraitRequirementClause,
 }
 
 impl SyntaxKind {
@@ -316,6 +321,11 @@ impl Language for RunenLanguage {
             124 => SyntaxKind::GenericTypeParameter,
             125 => SyntaxKind::GenericTypeArgumentList,
             126 => SyntaxKind::GenericTypeArgument,
+            127 => SyntaxKind::TraitDeclaration,
+            128 => SyntaxKind::TraitImplementation,
+            129 => SyntaxKind::ImplementationTarget,
+            130 => SyntaxKind::TraitReference,
+            131 => SyntaxKind::TraitRequirementClause,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

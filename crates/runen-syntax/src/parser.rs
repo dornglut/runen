@@ -51,6 +51,9 @@ impl Parser<'_> {
         while self.position < self.tokens.len() {
             match self.current() {
                 Some(SyntaxKind::KwImport) => self.parse_import_declaration(),
+                Some(SyntaxKind::KwExport) if self.at_contextual_ident(1, "trait") => {
+                    self.parse_trait_declaration(true);
+                }
                 Some(SyntaxKind::KwExport) => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::KwRecord) => self.parse_record_definition(true),
                     Some(SyntaxKind::KwFn) => self.parse_function_definition(true),
@@ -61,6 +64,12 @@ impl Parser<'_> {
                 },
                 Some(SyntaxKind::KwRecord) => self.parse_record_definition(false),
                 Some(SyntaxKind::KwFn) => self.parse_function_definition(false),
+                Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "trait") => {
+                    self.parse_trait_declaration(false);
+                }
+                Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "impl") => {
+                    self.parse_trait_implementation();
+                }
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Item));
                     self.recover_one();
@@ -78,6 +87,53 @@ impl Parser<'_> {
         self.expect(SyntaxKind::KwImport, ExpectedSyntax::Item);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_trait_declaration(&mut self, exported: bool) {
+        debug_assert!(self.at_contextual_ident(usize::from(exported), "trait"));
+        self.builder.start_node(SyntaxKind::TraitDeclaration.into());
+        if exported {
+            self.expect(SyntaxKind::KwExport, ExpectedSyntax::Item);
+        }
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Item);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_trait_implementation(&mut self) {
+        debug_assert!(self.at_contextual_ident(0, "impl"));
+        self.builder
+            .start_node(SyntaxKind::TraitImplementation.into());
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Item);
+        self.parse_implementation_target();
+        self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
+        self.parse_trait_reference();
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_implementation_target(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::ImplementationTarget.into());
+        if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
+            self.parse_qualified_module_member();
+        } else if self.current().is_some_and(is_reference_referent_type_start) {
+            self.bump();
+        } else {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Type));
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_trait_reference(&mut self) {
+        self.builder.start_node(SyntaxKind::TraitReference.into());
+        if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
+            self.parse_qualified_module_member();
+        } else {
+            self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        }
         self.builder.finish_node();
     }
 
@@ -196,6 +252,9 @@ impl Parser<'_> {
                 self.builder
                     .start_node(SyntaxKind::GenericTypeParameter.into());
                 self.bump();
+                if self.at(SyntaxKind::Colon) {
+                    self.parse_trait_requirement_clause();
+                }
                 self.builder.finish_node();
 
                 if self.eat(SyntaxKind::Comma) {
@@ -236,6 +295,17 @@ impl Parser<'_> {
 
         if !missing_close {
             self.expect(SyntaxKind::RBracket, ExpectedSyntax::RightBracket);
+        }
+        self.builder.finish_node();
+    }
+
+    fn parse_trait_requirement_clause(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::TraitRequirementClause.into());
+        self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
+        self.parse_trait_reference();
+        while self.eat(SyntaxKind::Plus) {
+            self.parse_trait_reference();
         }
         self.builder.finish_node();
     }
