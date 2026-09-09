@@ -13,8 +13,9 @@ use crate::{
     Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee, Record,
     RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTest,
     RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
-    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type, TypeParameter,
-    TypeParameterId, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type,
+    TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
+    type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -562,13 +563,8 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         return Err(diagnostics);
     }
 
-    let (
-        mut modules,
-        record_syntax,
-        function_syntax,
-        marker_traits,
-        marker_implementation_syntax,
-    ) = collect_declarations(units, &mut diagnostics);
+    let (mut modules, record_syntax, function_syntax, marker_traits, marker_implementation_syntax) =
+        collect_declarations(units, &mut diagnostics);
     if !diagnostics.is_empty() {
         return Err(diagnostics);
     }
@@ -7838,10 +7834,9 @@ fn type_argument_satisfies_marker_requirement(
     context: &BodyResolutionContext<'_>,
 ) -> bool {
     match argument {
-        Type::Intrinsic(intrinsic) => context.marker_implementations.contains(&(
-            required,
-            MarkerImplementationTarget::Intrinsic(intrinsic),
-        )),
+        Type::Intrinsic(intrinsic) => context
+            .marker_implementations
+            .contains(&(required, MarkerImplementationTarget::Intrinsic(intrinsic))),
         Type::Record(record) => context
             .marker_implementations
             .contains(&(required, MarkerImplementationTarget::Record(record))),
