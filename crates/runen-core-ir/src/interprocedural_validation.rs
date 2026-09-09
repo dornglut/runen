@@ -3,8 +3,8 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::interprocedural::{Body, Function, Program, Terminator};
 use crate::{
     BasicBlockId, BorrowKind, CallableInterface, FunctionId, LoanDecl, LoanId, LocalId, Operand,
-    Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission, SafeReferenceResultContract,
-    ScalarType, Statement, TypeId, TypeKind, TypeTable, Value,
+    Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission,
+    SafeReferenceResultContract, ScalarType, Statement, TypeId, TypeKind, TypeTable, Value,
 };
 
 /// Function-scoped location within program-level Core MIR.
@@ -363,9 +363,9 @@ fn validate_callable_interface(
         };
     };
 
-    let definition = types.get(result).ok_or_else(|| {
-        location_error(location, MirValidationErrorKind::UnknownType(result))
-    })?;
+    let definition = types
+        .get(result)
+        .ok_or_else(|| location_error(location, MirValidationErrorKind::UnknownType(result)))?;
 
     if types.is_result_transfer_safe(result) {
         return if matches!(contract, SafeReferenceResultContract::None) {
@@ -561,7 +561,10 @@ fn validate_static_terminator(
                 ));
             }
             let interface = program.types.callable(*callable).ok_or_else(|| {
-                point_error(point, MirValidationErrorKind::CallableTypeRequired(*callable))
+                point_error(
+                    point,
+                    MirValidationErrorKind::CallableTypeRequired(*callable),
+                )
             })?;
             validate_static_call_destination(&program.types, body, interface, destination, point)?;
             validate_operand_type(program, body, callee, *callable, point)?;
@@ -1043,7 +1046,10 @@ fn validate_operand_type(
                 point_error(point, MirValidationErrorKind::InvalidFunction(*function))
             })?;
             let expected_interface = types.callable(expected).ok_or_else(|| {
-                point_error(point, MirValidationErrorKind::CallableTypeRequired(expected))
+                point_error(
+                    point,
+                    MirValidationErrorKind::CallableTypeRequired(expected),
+                )
             })?;
             let target_interface = target
                 .callable_interface()
@@ -1786,7 +1792,8 @@ fn validate_call_state(
         SafeReferenceResultContract::SharedIdentity { origin } => {
             destroy_transient_values_except(types, &held, origin, state);
         }
-        SafeReferenceResultContract::None | SafeReferenceResultContract::SharedDirectChild { .. } => {
+        SafeReferenceResultContract::None
+        | SafeReferenceResultContract::SharedDirectChild { .. } => {
             destroy_transient_values(types, &held, state);
         }
     }
@@ -1795,8 +1802,8 @@ fn validate_call_state(
         let result_ty = interface
             .result
             .expect("static validation establishes result destination shape");
-        let value = returned_result
-            .unwrap_or_else(|| unknown_result_validation_value(types, result_ty));
+        let value =
+            returned_result.unwrap_or_else(|| unknown_result_validation_value(types, result_ty));
         write_validation_value(
             types,
             result_ty,
@@ -3725,10 +3732,7 @@ fn block_id(index: usize) -> BasicBlockId {
     BasicBlockId(u32::try_from(index).expect("basic block index exceeds u32::MAX"))
 }
 
-fn location_error(
-    location: &MirLocation,
-    kind: MirValidationErrorKind,
-) -> MirValidationError {
+fn location_error(location: &MirLocation, kind: MirValidationErrorKind) -> MirValidationError {
     MirValidationError {
         location: location.clone(),
         kind,

@@ -557,13 +557,9 @@ impl Machine {
                     destination,
                     target,
                 } => {
-                    if let Err(kind) = self.start_call(
-                        frame_index,
-                        function,
-                        &arguments,
-                        destination,
-                        target,
-                    ) {
+                    if let Err(kind) =
+                        self.start_call(frame_index, function, &arguments, destination, target)
+                    {
                         return Err(UndefinedBehavior {
                             kind,
                             verification_events: self.verification_events,
@@ -589,13 +585,9 @@ impl Machine {
                             });
                         }
                     };
-                    if let Err(kind) = self.start_call(
-                        frame_index,
-                        function,
-                        &arguments,
-                        destination,
-                        target,
-                    ) {
+                    if let Err(kind) =
+                        self.start_call(frame_index, function, &arguments, destination, target)
+                    {
                         return Err(UndefinedBehavior {
                             kind,
                             verification_events: self.verification_events,
