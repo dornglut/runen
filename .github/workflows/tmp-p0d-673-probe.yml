@@ -9,7 +9,7 @@ jobs:
   patch-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
       - run: python3 tools/tmp_p0d_673_patch.py
       - name: Check Core IR after patch
         run: cargo check -p runen-core-ir
