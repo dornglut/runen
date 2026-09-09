@@ -62,10 +62,8 @@ jobs:
               s = s.replace(old, new, 1)
           p.write_text(s)
           PY
-      - run: cargo +stable fmt --all --check
-      - run: cargo +stable test -p runen-core-ir --tests --no-run
-      - run: cargo +stable test -p runen-reference --test floating_multiplication
-      - name: Commit only forced fixture adaptations
+      - run: cargo +stable fmt --all
+      - name: Enforce bounded adaptation scope
         shell: bash
         run: |
           expected=$'crates/runen-core-ir/tests/floating_division.rs\ncrates/runen-core-ir/tests/floating_multiplication.rs\ncrates/runen-core-ir/tests/floating_subtraction.rs\ncrates/runen-reference/tests/floating_multiplication.rs'
@@ -75,6 +73,11 @@ jobs:
             echo "${actual}" >&2
             exit 1
           fi
+      - run: cargo +stable test -p runen-core-ir --tests --no-run
+      - run: cargo +stable test -p runen-reference --test floating_multiplication
+      - name: Commit only forced fixture adaptations
+        shell: bash
+        run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add crates/runen-core-ir/tests/floating_division.rs crates/runen-core-ir/tests/floating_multiplication.rs crates/runen-core-ir/tests/floating_subtraction.rs crates/runen-reference/tests/floating_multiplication.rs
