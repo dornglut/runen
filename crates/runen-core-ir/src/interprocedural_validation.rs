@@ -1,10 +1,10 @@
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::interprocedural::{Body, Function, Program, SafeReferenceResultContract, Terminator};
+use crate::interprocedural::{Body, Function, Program, Terminator};
 use crate::{
-    BasicBlockId, BorrowKind, FunctionId, LoanDecl, LoanId, LocalId, Operand, Place, PlaceAccess,
-    Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement, TypeId, TypeKind,
-    TypeTable, Value,
+    BasicBlockId, BorrowKind, CallableInterface, FunctionId, LoanDecl, LoanId, LocalId, Operand,
+    Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission, SafeReferenceResultContract,
+    ScalarType, Statement, TypeId, TypeKind, TypeTable, Value,
 };
 
 /// Function-scoped location within program-level Core MIR.
@@ -41,6 +41,7 @@ pub enum MirValidationErrorKind {
         projections: Vec<Projection>,
     },
     UnknownType(TypeId),
+    CallableTypeRequired(TypeId),
     RecursiveType(TypeId),
     DuplicateReferenceType(TypeId),
     ParameterTransferUnsafe(TypeId),
@@ -180,9 +181,11 @@ pub fn validate_program(program: Program) -> Result<ValidatedProgram, MirValidat
     validate_type_table(&program.types)?;
 
     for (index, function) in program.functions.iter().enumerate() {
-        let function_id = function_id(index);
-        validate_function_declarations(&program.types, function_id, function)?;
-        validate_structure_and_static_rules(&program, function_id, function)?;
+        validate_function_declarations(&program.types, function_id(index), function)?;
+    }
+
+    for (index, function) in program.functions.iter().enumerate() {
+        validate_structure_and_static_rules(&program, function_id(index), function)?;
     }
 
     for (index, function) in program.functions.iter().enumerate() {
@@ -222,6 +225,9 @@ fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
                         MirValidationErrorKind::DuplicateReferenceType(ty),
                     ));
                 }
+            }
+            TypeKind::Scalar(ScalarType::Callable(interface)) => {
+                validate_callable_interface(types, interface, &MirLocation::Program)?;
             }
             TypeKind::Scalar(_) | TypeKind::Struct(_) => {}
         }
@@ -302,65 +308,62 @@ fn validate_function_declarations(
                 MirValidationErrorKind::DuplicateParameter(*parameter),
             ));
         }
-        let local = function.body.local(*parameter).ok_or_else(|| {
+        function.body.local(*parameter).ok_or_else(|| {
             function_error(
                 function_id,
                 MirValidationErrorKind::InvalidLocal(*parameter),
             )
         })?;
-        require_known_parameter_type(types, function_id, local.ty)?;
     }
 
-    validate_result_contract(types, function_id, function)
+    let interface = function
+        .callable_interface()
+        .expect("validated parameter identities produce a complete callable interface");
+    validate_callable_interface(types, &interface, &MirLocation::Function(function_id))
 }
 
-fn require_known_parameter_type(
+fn validate_callable_interface(
     types: &TypeTable,
-    function: FunctionId,
-    ty: TypeId,
+    interface: &CallableInterface,
+    location: &MirLocation,
 ) -> Result<(), MirValidationError> {
-    if types.get(ty).is_none() {
-        return Err(function_error(
-            function,
-            MirValidationErrorKind::UnknownType(ty),
-        ));
+    for parameter in &interface.parameters {
+        if types.get(*parameter).is_none() {
+            return Err(location_error(
+                location,
+                MirValidationErrorKind::UnknownType(*parameter),
+            ));
+        }
+        if !types.is_parameter_transfer_safe(*parameter) {
+            return Err(location_error(
+                location,
+                MirValidationErrorKind::ParameterTransferUnsafe(*parameter),
+            ));
+        }
     }
-    if !types.is_parameter_transfer_safe(ty) {
-        return Err(function_error(
-            function,
-            MirValidationErrorKind::ParameterTransferUnsafe(ty),
-        ));
-    }
-    Ok(())
-}
 
-fn validate_result_contract(
-    types: &TypeTable,
-    function_id: FunctionId,
-    function: &Function,
-) -> Result<(), MirValidationError> {
-    let contract = function.safe_reference_result_contract;
-    let Some(result) = function.result else {
+    let contract = interface.safe_reference_result_contract;
+    let Some(result) = interface.result else {
         return if matches!(contract, SafeReferenceResultContract::None) {
             Ok(())
         } else {
-            Err(function_error(
-                function_id,
+            Err(location_error(
+                location,
                 MirValidationErrorKind::UnexpectedSafeReferenceResultContract,
             ))
         };
     };
 
-    let definition = types
-        .get(result)
-        .ok_or_else(|| function_error(function_id, MirValidationErrorKind::UnknownType(result)))?;
+    let definition = types.get(result).ok_or_else(|| {
+        location_error(location, MirValidationErrorKind::UnknownType(result))
+    })?;
 
     if types.is_result_transfer_safe(result) {
         return if matches!(contract, SafeReferenceResultContract::None) {
             Ok(())
         } else {
-            Err(function_error(
-                function_id,
+            Err(location_error(
+                location,
                 MirValidationErrorKind::UnexpectedSafeReferenceResultContract,
             ))
         };
@@ -371,40 +374,35 @@ fn validate_result_contract(
         permission: result_permission,
     }) = &definition.kind
     else {
-        return Err(function_error(
-            function_id,
+        return Err(location_error(
+            location,
             MirValidationErrorKind::ResultTransferUnsafe(result),
         ));
     };
 
     if *result_permission != ReferencePermission::Shared {
-        return Err(function_error(
-            function_id,
+        return Err(location_error(
+            location,
             MirValidationErrorKind::SafeReferenceResultContractRequiresSharedResult(result),
         ));
     }
 
     let origin_slot = match contract {
         SafeReferenceResultContract::None => {
-            return Err(function_error(
-                function_id,
+            return Err(location_error(
+                location,
                 MirValidationErrorKind::MissingSafeReferenceResultContract,
             ));
         }
         SafeReferenceResultContract::SharedIdentity { origin }
         | SafeReferenceResultContract::SharedDirectChild { origin } => origin,
     };
-    let Some(parameter) = function.parameters.get(origin_slot) else {
-        return Err(function_error(
-            function_id,
+    let Some(found) = interface.parameters.get(origin_slot).copied() else {
+        return Err(location_error(
+            location,
             MirValidationErrorKind::InvalidSafeReferenceResultContractSlot(origin_slot),
         ));
     };
-    let found = function
-        .body
-        .local(*parameter)
-        .expect("parameter validation establishes the designated origin local")
-        .ty;
 
     match contract {
         SafeReferenceResultContract::None => unreachable!("handled before origin validation"),
@@ -412,14 +410,14 @@ fn validate_result_contract(
             if let Some((_, permission)) = types.reference(found)
                 && permission != ReferencePermission::Shared
             {
-                return Err(function_error(
-                    function_id,
+                return Err(location_error(
+                    location,
                     MirValidationErrorKind::SharedIdentityOriginPermissionMismatch(found),
                 ));
             }
             if found != result {
-                return Err(function_error(
-                    function_id,
+                return Err(location_error(
+                    location,
                     MirValidationErrorKind::SharedIdentityOriginTypeMismatch {
                         expected: result,
                         found,
@@ -429,8 +427,8 @@ fn validate_result_contract(
         }
         SafeReferenceResultContract::SharedDirectChild { .. } => {
             let Some((found_referent, found_permission)) = types.reference(found) else {
-                return Err(function_error(
-                    function_id,
+                return Err(location_error(
+                    location,
                     MirValidationErrorKind::SharedDirectChildOriginPermissionMismatch(found),
                 ));
             };
@@ -438,14 +436,14 @@ fn validate_result_contract(
                 found_permission,
                 ReferencePermission::Exclusive | ReferencePermission::ExclusiveReplace
             ) {
-                return Err(function_error(
-                    function_id,
+                return Err(location_error(
+                    location,
                     MirValidationErrorKind::SharedDirectChildOriginPermissionMismatch(found),
                 ));
             }
             if found_referent != *result_referent {
-                return Err(function_error(
-                    function_id,
+                return Err(location_error(
+                    location,
                     MirValidationErrorKind::SharedDirectChildOriginReferentMismatch {
                         expected: *result_referent,
                         found: found_referent,
@@ -478,7 +476,7 @@ fn validate_structure_and_static_rules(
                 block: block_id,
                 statement: Some(statement_index),
             };
-            validate_static_statement(&program.types, body, statement, &point)?;
+            validate_static_statement(program, body, statement, &point)?;
         }
         let point = MirPoint {
             function: function_id,
@@ -506,7 +504,7 @@ fn validate_static_terminator(
         } => {
             require_target(body, *true_target, point)?;
             require_target(body, *false_target, point)?;
-            validate_branch_condition(&program.types, body, condition, point)
+            validate_branch_condition(program, body, condition, point)
         }
         Terminator::Fault(_) => Ok(()),
         Terminator::Return(value) => match (function.result, value) {
@@ -520,7 +518,7 @@ fn validate_static_terminator(
                 MirValidationErrorKind::MissingReturnValue,
             )),
             (Some(expected), Some(value)) => {
-                validate_operand_type(&program.types, body, value, expected, point)
+                validate_operand_type(program, body, value, expected, point)
             }
         },
         Terminator::Call {
@@ -533,40 +531,80 @@ fn validate_static_terminator(
             let callee = program.function(*target_id).ok_or_else(|| {
                 point_error(point, MirValidationErrorKind::InvalidFunction(*target_id))
             })?;
-            if arguments.len() != callee.parameters.len() {
+            let interface = callee
+                .callable_interface()
+                .expect("declaration validation establishes the direct-call interface");
+            validate_static_call_destination(&program.types, body, &interface, destination, point)?;
+            validate_static_call_arguments(program, body, &interface, arguments, point)
+        }
+        Terminator::IndirectCall {
+            callable,
+            callee,
+            arguments,
+            destination,
+            target,
+        } => {
+            require_target(body, *target, point)?;
+            if program.types.get(*callable).is_none() {
                 return Err(point_error(
                     point,
-                    MirValidationErrorKind::ArgumentCount {
-                        expected: callee.parameters.len(),
-                        found: arguments.len(),
-                    },
+                    MirValidationErrorKind::UnknownType(*callable),
                 ));
             }
-            for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-                let expected = callee
-                    .body
-                    .local(*parameter)
-                    .expect("function-declaration validation establishes parameter local")
-                    .ty;
-                validate_operand_type(&program.types, body, argument, expected, point)?;
-            }
-            match (callee.result, destination) {
-                (None, None) => Ok(()),
-                (None, Some(_)) => Err(point_error(
-                    point,
-                    MirValidationErrorKind::UnexpectedResultDestination,
-                )),
-                (Some(_), None) => Err(point_error(
-                    point,
-                    MirValidationErrorKind::MissingResultDestination,
-                )),
-                (Some(expected), Some(destination)) => {
-                    let actual = place_type(&program.types, body, destination, point)?;
-                    require_type_match(actual, expected, point)
-                }
-            }
+            let interface = program.types.callable(*callable).ok_or_else(|| {
+                point_error(point, MirValidationErrorKind::CallableTypeRequired(*callable))
+            })?;
+            validate_static_call_destination(&program.types, body, interface, destination, point)?;
+            validate_operand_type(program, body, callee, *callable, point)?;
+            validate_static_call_arguments(program, body, interface, arguments, point)
         }
     }
+}
+
+fn validate_static_call_destination(
+    types: &TypeTable,
+    body: &Body,
+    interface: &CallableInterface,
+    destination: &Option<Place>,
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    match (interface.result, destination) {
+        (None, None) => Ok(()),
+        (None, Some(_)) => Err(point_error(
+            point,
+            MirValidationErrorKind::UnexpectedResultDestination,
+        )),
+        (Some(_), None) => Err(point_error(
+            point,
+            MirValidationErrorKind::MissingResultDestination,
+        )),
+        (Some(expected), Some(destination)) => {
+            let actual = place_type(types, body, destination, point)?;
+            require_type_match(actual, expected, point)
+        }
+    }
+}
+
+fn validate_static_call_arguments(
+    program: &Program,
+    body: &Body,
+    interface: &CallableInterface,
+    arguments: &[Operand],
+    point: &MirPoint,
+) -> Result<(), MirValidationError> {
+    if arguments.len() != interface.parameters.len() {
+        return Err(point_error(
+            point,
+            MirValidationErrorKind::ArgumentCount {
+                expected: interface.parameters.len(),
+                found: arguments.len(),
+            },
+        ));
+    }
+    for (argument, expected) in arguments.iter().zip(&interface.parameters) {
+        validate_operand_type(program, body, argument, *expected, point)?;
+    }
+    Ok(())
 }
 
 fn require_target(
@@ -585,14 +623,24 @@ fn require_target(
 }
 
 fn validate_branch_condition(
-    types: &TypeTable,
+    program: &Program,
     body: &Body,
     operand: &Operand,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
+    let types = &program.types;
     let bool_valued = match operand {
         Operand::Constant(Value::Bool(_)) => true,
         Operand::Constant(_) => false,
+        Operand::FunctionValue(function) => {
+            if program.function(*function).is_none() {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::InvalidFunction(*function),
+                ));
+            }
+            false
+        }
         Operand::Move(src) => is_bool_type(types, access_type(types, body, src, point)?),
         Operand::Copy(src) => {
             let actual = access_type(types, body, src, point)?;
@@ -685,18 +733,19 @@ fn is_float_type(types: &TypeTable, ty: TypeId) -> bool {
 }
 
 fn validate_static_statement(
-    types: &TypeTable,
+    program: &Program,
     body: &Body,
     statement: &Statement,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
+    let types = &program.types;
     match statement {
         Statement::Init { dst, src } => {
             let expected = place_type(types, body, dst, point)?;
-            validate_operand_type(types, body, src, expected, point)
+            validate_operand_type(program, body, src, expected, point)
         }
         Statement::IntegerAdd { dst, left, right } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_integer_type,
@@ -704,7 +753,7 @@ fn validate_static_statement(
             point,
         ),
         Statement::IntegerSub { dst, left, right } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_integer_type,
@@ -712,7 +761,7 @@ fn validate_static_statement(
             point,
         ),
         Statement::IntegerMul { dst, left, right } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_integer_type,
@@ -720,7 +769,7 @@ fn validate_static_statement(
             point,
         ),
         Statement::IntegerXor { dst, left, right } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_integer_type,
@@ -728,7 +777,7 @@ fn validate_static_statement(
             point,
         ),
         Statement::IntegerOr { dst, left, right } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_integer_type,
@@ -740,17 +789,17 @@ fn validate_static_statement(
             operand_type,
             left,
             right,
-        } => validate_static_integer_eq(types, body, dst, *operand_type, left, right, point),
+        } => validate_static_integer_eq(program, body, dst, *operand_type, left, right, point),
         Statement::IntegerLt {
             dst,
             operand_type,
             left,
             right,
-        } => validate_static_integer_lt(types, body, dst, *operand_type, left, right, point),
+        } => validate_static_integer_lt(program, body, dst, *operand_type, left, right, point),
         Statement::FloatAdd {
             dst, left, right, ..
         } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_float_type,
@@ -760,7 +809,7 @@ fn validate_static_statement(
         Statement::FloatSub {
             dst, left, right, ..
         } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_float_type,
@@ -770,7 +819,7 @@ fn validate_static_statement(
         Statement::FloatMul {
             dst, left, right, ..
         } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_float_type,
@@ -780,7 +829,7 @@ fn validate_static_statement(
         Statement::FloatDiv {
             dst, left, right, ..
         } => validate_static_binary_numeric(
-            types,
+            program,
             body,
             (dst, left, right),
             is_float_type,
@@ -823,26 +872,26 @@ fn validate_static_statement(
                     MirValidationErrorKind::RawAssignRequiresPointer(actual),
                 ));
             };
-            validate_operand_type(types, body, src, pointee, point)
+            validate_operand_type(program, body, src, pointee, point)
         }
         Statement::Assign { dst, src } => {
             let expected = access_type(types, body, dst, point)?;
             if let PlaceAccess::Direct(place) = dst {
                 require_mutable_local(body, place, point)?;
             }
-            validate_operand_type(types, body, src, expected, point)
+            validate_operand_type(program, body, src, expected, point)
         }
         Statement::ReferenceAssign { dst, src } => {
             let (_, permission, expected) = reference_access_type(types, body, dst, point)?;
             require_reference_permission(permission, ReferencePermission::ExclusiveReplace, point)?;
-            validate_operand_type(types, body, src, expected, point)
+            validate_operand_type(program, body, src, expected, point)
         }
         Statement::InteriorAssign { dst, src } => {
             let expected = access_type(types, body, dst, point)?;
             if let PlaceAccess::Direct(place) = dst {
                 require_interior_mutable_place(types, body, place, point)?;
             }
-            validate_operand_type(types, body, src, expected, point)
+            validate_operand_type(program, body, src, expected, point)
         }
         Statement::ReferenceInteriorAssign { dst, src } => {
             let (referent, _, expected) = reference_access_type(types, body, dst, point)?;
@@ -852,7 +901,7 @@ fn validate_static_statement(
                     MirValidationErrorKind::InteriorMutationRequiresMarkedReferenceRegion,
                 ));
             }
-            validate_operand_type(types, body, src, expected, point)
+            validate_operand_type(program, body, src, expected, point)
         }
         Statement::Drop { place } => {
             access_type(types, body, place, point)?;
@@ -878,24 +927,25 @@ fn validate_static_statement(
 }
 
 fn validate_static_binary_numeric(
-    types: &TypeTable,
+    program: &Program,
     body: &Body,
     operands: (&Place, &Operand, &Operand),
     predicate: fn(&TypeTable, TypeId) -> bool,
     error: fn(TypeId) -> MirValidationErrorKind,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
+    let types = &program.types;
     let (dst, left, right) = operands;
     let expected = place_type(types, body, dst, point)?;
     if !predicate(types, expected) {
         return Err(point_error(point, error(expected)));
     }
-    validate_operand_type(types, body, left, expected, point)?;
-    validate_operand_type(types, body, right, expected, point)
+    validate_operand_type(program, body, left, expected, point)?;
+    validate_operand_type(program, body, right, expected, point)
 }
 
 fn validate_static_integer_eq(
-    types: &TypeTable,
+    program: &Program,
     body: &Body,
     dst: &Place,
     operand_type: TypeId,
@@ -903,6 +953,7 @@ fn validate_static_integer_eq(
     right: &Operand,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
+    let types = &program.types;
     let destination_type = place_type(types, body, dst, point)?;
     if !is_bool_type(types, destination_type) {
         return Err(point_error(
@@ -922,12 +973,12 @@ fn validate_static_integer_eq(
             MirValidationErrorKind::IntegerEqRequiresIntegerOperands(operand_type),
         ));
     }
-    validate_operand_type(types, body, left, operand_type, point)?;
-    validate_operand_type(types, body, right, operand_type, point)
+    validate_operand_type(program, body, left, operand_type, point)?;
+    validate_operand_type(program, body, right, operand_type, point)
 }
 
 fn validate_static_integer_lt(
-    types: &TypeTable,
+    program: &Program,
     body: &Body,
     dst: &Place,
     operand_type: TypeId,
@@ -935,6 +986,7 @@ fn validate_static_integer_lt(
     right: &Operand,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
+    let types = &program.types;
     let destination_type = place_type(types, body, dst, point)?;
     if !is_bool_type(types, destination_type) {
         return Err(point_error(
@@ -954,20 +1006,40 @@ fn validate_static_integer_lt(
             MirValidationErrorKind::IntegerLtRequiresIntegerOperands(operand_type),
         ));
     }
-    validate_operand_type(types, body, left, operand_type, point)?;
-    validate_operand_type(types, body, right, operand_type, point)
+    validate_operand_type(program, body, left, operand_type, point)?;
+    validate_operand_type(program, body, right, operand_type, point)
 }
 
 fn validate_operand_type(
-    types: &TypeTable,
+    program: &Program,
     body: &Body,
     operand: &Operand,
     expected: TypeId,
     point: &MirPoint,
 ) -> Result<(), MirValidationError> {
+    let types = &program.types;
     match operand {
         Operand::Constant(value) => {
             if types.value_matches(expected, value) {
+                Ok(())
+            } else {
+                Err(point_error(
+                    point,
+                    MirValidationErrorKind::TypeMismatch { expected },
+                ))
+            }
+        }
+        Operand::FunctionValue(function) => {
+            let target = program.function(*function).ok_or_else(|| {
+                point_error(point, MirValidationErrorKind::InvalidFunction(*function))
+            })?;
+            let expected_interface = types.callable(expected).ok_or_else(|| {
+                point_error(point, MirValidationErrorKind::CallableTypeRequired(expected))
+            })?;
+            let target_interface = target
+                .callable_interface()
+                .expect("declaration validation establishes function callable interface");
+            if &target_interface == expected_interface {
                 Ok(())
             } else {
                 Err(point_error(
@@ -1581,85 +1653,55 @@ fn validate_path_state(
                 destination,
                 target,
             } => {
-                if let Some(destination) = destination {
-                    authorize_direct_access(
-                        &state.active_loans,
-                        &state.reference_authorities,
-                        destination,
-                        AccessRequirement::Exclusive,
-                        &point,
-                    )?;
-                    if !place_state(&state.locals, destination).wholly_vacant() {
-                        return Err(point_error(
-                            &point,
-                            MirValidationErrorKind::CallResultRequiresVacant(destination.clone()),
-                        ));
-                    }
-                }
-
                 let callee = program
                     .function(*target_function)
                     .expect("static validation establishes call target");
-                let mut held = Vec::with_capacity(arguments.len());
-                for (argument, parameter) in arguments.iter().zip(&callee.parameters) {
-                    let parameter_ty = callee
-                        .body
-                        .local(*parameter)
-                        .expect("declaration validation establishes parameter local")
-                        .ty;
-                    let DefinedStep::Continue(value) =
-                        validate_operand_state(types, body, &mut state, argument, &point)?
-                    else {
-                        continue 'worklist;
-                    };
-                    held.push((parameter_ty, value));
-                }
-
-                for (ty, value) in &held {
-                    require_call_value_admissible(types, *ty, value, &state, &point)?;
-                }
-
-                let mut fault_state = state.clone();
-                destroy_transient_values(types, &held, &mut fault_state);
-                cleanup_function(types, body, &mut fault_state, &point)?;
-
-                for (ty, value) in &held {
-                    restore_transferred_referents(types, *ty, value, &mut state);
-                }
-
-                let returned_result = match callee.safe_reference_result_contract {
-                    SafeReferenceResultContract::None => None,
-                    SafeReferenceResultContract::SharedIdentity { origin } => {
-                        Some(held[origin].1.clone())
-                    }
-                    SafeReferenceResultContract::SharedDirectChild { origin } => Some(
-                        summarize_shared_direct_child_result(&held[origin].1, &mut state),
-                    ),
-                };
-                match callee.safe_reference_result_contract {
-                    SafeReferenceResultContract::SharedIdentity { origin } => {
-                        destroy_transient_values_except(types, &held, origin, &mut state);
-                    }
-                    SafeReferenceResultContract::None
-                    | SafeReferenceResultContract::SharedDirectChild { .. } => {
-                        destroy_transient_values(types, &held, &mut state);
-                    }
-                }
-
-                if let Some(destination) = destination {
-                    let result_ty = callee
-                        .result
-                        .expect("static validation establishes result destination shape");
-                    let value = returned_result
-                        .unwrap_or_else(|| unknown_result_validation_value(types, result_ty));
-                    write_validation_value(
+                let interface = callee
+                    .callable_interface()
+                    .expect("declaration validation establishes direct-call interface");
+                if matches!(
+                    validate_call_state(
                         types,
-                        result_ty,
-                        place_state_mut(&mut state.locals, destination),
-                        value,
-                    );
+                        body,
+                        &mut state,
+                        &interface,
+                        None,
+                        arguments,
+                        destination,
+                        &point,
+                    )?,
+                    DefinedStep::NoDefinedContinuation
+                ) {
+                    continue 'worklist;
                 }
-                normalize_reference_authorities(&mut state.reference_authorities);
+                state.current = *target;
+                worklist.push_back(state);
+            }
+            Terminator::IndirectCall {
+                callable,
+                callee,
+                arguments,
+                destination,
+                target,
+            } => {
+                let interface = types
+                    .callable(*callable)
+                    .expect("static validation establishes indirect callable type");
+                if matches!(
+                    validate_call_state(
+                        types,
+                        body,
+                        &mut state,
+                        interface,
+                        Some(callee),
+                        arguments,
+                        destination,
+                        &point,
+                    )?,
+                    DefinedStep::NoDefinedContinuation
+                ) {
+                    continue 'worklist;
+                }
                 state.current = *target;
                 worklist.push_back(state);
             }
@@ -1667,6 +1709,94 @@ fn validate_path_state(
     }
 
     Ok(())
+}
+
+fn validate_call_state(
+    types: &TypeTable,
+    body: &Body,
+    state: &mut ValidationState,
+    interface: &CallableInterface,
+    callee: Option<&Operand>,
+    arguments: &[Operand],
+    destination: &Option<Place>,
+    point: &MirPoint,
+) -> Result<DefinedStep<()>, MirValidationError> {
+    if let Some(destination) = destination {
+        authorize_direct_access(
+            &state.active_loans,
+            &state.reference_authorities,
+            destination,
+            AccessRequirement::Exclusive,
+            point,
+        )?;
+        if !place_state(&state.locals, destination).wholly_vacant() {
+            return Err(point_error(
+                point,
+                MirValidationErrorKind::CallResultRequiresVacant(destination.clone()),
+            ));
+        }
+    }
+
+    if let Some(callee) = callee {
+        let DefinedStep::Continue(_) = validate_operand_state(types, body, state, callee, point)?
+        else {
+            return Ok(DefinedStep::NoDefinedContinuation);
+        };
+    }
+
+    let mut held = Vec::with_capacity(arguments.len());
+    for (argument, parameter_ty) in arguments.iter().zip(&interface.parameters) {
+        let DefinedStep::Continue(value) =
+            validate_operand_state(types, body, state, argument, point)?
+        else {
+            return Ok(DefinedStep::NoDefinedContinuation);
+        };
+        held.push((*parameter_ty, value));
+    }
+
+    for (ty, value) in &held {
+        require_call_value_admissible(types, *ty, value, state, point)?;
+    }
+
+    let mut fault_state = state.clone();
+    destroy_transient_values(types, &held, &mut fault_state);
+    cleanup_function(types, body, &mut fault_state, point)?;
+
+    for (ty, value) in &held {
+        restore_transferred_referents(types, *ty, value, state);
+    }
+
+    let returned_result = match interface.safe_reference_result_contract {
+        SafeReferenceResultContract::None => None,
+        SafeReferenceResultContract::SharedIdentity { origin } => Some(held[origin].1.clone()),
+        SafeReferenceResultContract::SharedDirectChild { origin } => {
+            Some(summarize_shared_direct_child_result(&held[origin].1, state))
+        }
+    };
+    match interface.safe_reference_result_contract {
+        SafeReferenceResultContract::SharedIdentity { origin } => {
+            destroy_transient_values_except(types, &held, origin, state);
+        }
+        SafeReferenceResultContract::None | SafeReferenceResultContract::SharedDirectChild { .. } => {
+            destroy_transient_values(types, &held, state);
+        }
+    }
+
+    if let Some(destination) = destination {
+        let result_ty = interface
+            .result
+            .expect("static validation establishes result destination shape");
+        let value = returned_result
+            .unwrap_or_else(|| unknown_result_validation_value(types, result_ty));
+        write_validation_value(
+            types,
+            result_ty,
+            place_state_mut(&mut state.locals, destination),
+            value,
+        );
+    }
+    normalize_reference_authorities(&mut state.reference_authorities);
+    Ok(DefinedStep::Continue(()))
 }
 
 fn validate_state_statement(
@@ -2222,6 +2352,9 @@ fn validate_operand_state(
         Operand::Constant(value) => {
             Ok(DefinedStep::Continue(validation_value_from_constant(value)))
         }
+        Operand::FunctionValue(_) => Ok(DefinedStep::Continue(ValidationValue::Scalar(
+            ValidationScalar::NonPointer,
+        ))),
         Operand::Move(src) => {
             let place = resolve_authorized_access(
                 &state.active_loans,
@@ -3581,6 +3714,16 @@ fn function_id(index: usize) -> FunctionId {
 
 fn block_id(index: usize) -> BasicBlockId {
     BasicBlockId(u32::try_from(index).expect("basic block index exceeds u32::MAX"))
+}
+
+fn location_error(
+    location: &MirLocation,
+    kind: MirValidationErrorKind,
+) -> MirValidationError {
+    MirValidationError {
+        location: location.clone(),
+        kind,
+    }
 }
 
 fn point_error(point: &MirPoint, kind: MirValidationErrorKind) -> MirValidationError {
