@@ -1,0 +1,119 @@
+name: Temporary P0-D 673 indirect static order
+
+on:
+  push:
+    branches:
+      - p0d-673-core-callable-values-impl
+
+permissions:
+  contents: write
+
+jobs:
+  static-order:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-673-static-order]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-673-core-callable-values-impl
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Apply exact static-validation ordering correction
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('crates/runen-core-ir/src/interprocedural_validation.rs')
+          text = path.read_text()
+          old = '''        } => {
+            require_target(body, *target, point)?;
+            if program.types.get(*callable).is_none() {
+'''
+          new = '''        } => {
+            if program.types.get(*callable).is_none() {
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one indirect prelude, found {text.count(old)}')
+          text = text.replace(old, new)
+          old = '''            validate_static_call_destination(&program.types, body, interface, destination, point)?;
+            validate_operand_type(program, body, callee, *callable, point)?;
+            validate_static_call_arguments(program, body, interface, arguments, point)
+        }
+'''
+          new = '''            validate_static_call_destination(&program.types, body, interface, destination, point)?;
+            validate_operand_type(program, body, callee, *callable, point)?;
+            validate_static_call_arguments(program, body, interface, arguments, point)?;
+            require_target(body, *target, point)
+        }
+'''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one indirect validation tail, found {text.count(old)}')
+          path.write_text(text.replace(old, new))
+
+          path = Path('crates/runen-core-ir/tests/callable_conformance_edges.rs')
+          with path.open('a') as f:
+              f.write(r'''
+
+#[test]
+fn indirect_static_validation_checks_arguments_before_normal_continuation() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let callable = types.push(TypeDef::callable(
+        "TakesI64",
+        CallableInterface::new(vec![i64_ty], None, SafeReferenceResultContract::None),
+    ));
+    let caller = no_result_function(
+        "caller",
+        Vec::new(),
+        Vec::new(),
+        vec![BasicBlock::new(
+            Vec::new(),
+            Terminator::IndirectCall {
+                callable,
+                callee: Operand::FunctionValue(FunctionId(1)),
+                arguments: vec![Operand::Constant(Value::Bool(true))],
+                destination: None,
+                target: BasicBlockId(99),
+            },
+        )],
+    );
+    let target = no_result_function(
+        "target",
+        vec![LocalId(0)],
+        vec![LocalDecl::new("parameter", i64_ty, false)],
+        vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+    );
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![caller, target],
+    })
+    .expect_err("argument validity precedes normal-continuation validity for indirect calls");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::TypeMismatch { expected: i64_ty }
+    );
+}
+''')
+          PY
+          cargo +stable fmt --all
+      - name: Enforce bounded scope
+        shell: bash
+        run: |
+          expected=$'crates/runen-core-ir/src/interprocedural_validation.rs\ncrates/runen-core-ir/tests/callable_conformance_edges.rs'
+          actual="$(git diff --name-only | sort)"
+          if [[ "${actual}" != "${expected}" ]]; then
+            echo "Unexpected changed paths:" >&2
+            echo "${actual}" >&2
+            exit 1
+          fi
+      - run: cargo +stable test -p runen-core-ir --test callable_conformance_edges
+      - name: Commit correction and proof
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/runen-core-ir/src/interprocedural_validation.rs crates/runen-core-ir/tests/callable_conformance_edges.rs
+          git commit -m 'fix: honor #673 indirect static-validation order [skip-673-static-order]'
+          git push origin HEAD:p0d-673-core-callable-values-impl
