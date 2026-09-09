@@ -34,6 +34,7 @@ jobs:
               ('let values = deterministic_finite_values(scalar);', 'let values = deterministic_finite_values(scalar.clone());'),
               ('oracle_contribution(scalar, *left, false),', 'oracle_contribution(scalar.clone(), *left, false),'),
               ('oracle_contribution(scalar, *right, true),', 'oracle_contribution(scalar.clone(), *right, true),'),
+              ('assert_sub(scalar, *left, *right, observed_from_oracle(expected));', 'assert_sub(scalar.clone(), *left, *right, observed_from_oracle(expected));'),
           ]
           for old, new in replacements:
               count = text.count(old)
