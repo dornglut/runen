@@ -226,9 +226,7 @@ fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
                     ));
                 }
             }
-            TypeKind::Scalar(ScalarType::Callable(interface)) => {
-                validate_callable_interface(types, interface, &MirLocation::Program)?;
-            }
+            TypeKind::Scalar(ScalarType::Callable(_)) => {}
             TypeKind::Scalar(_) | TypeKind::Struct(_) => {}
         }
     }
@@ -275,6 +273,17 @@ fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
             }
         }
     }
+
+    for index in 0..types.len() {
+        let ty = TypeId(u32::try_from(index).expect("type index exceeds u32::MAX"));
+        let definition = types
+            .get(ty)
+            .expect("type index was derived from the type-table length");
+        if let TypeKind::Scalar(ScalarType::Callable(interface)) = &definition.kind {
+            validate_callable_interface(types, interface, &MirLocation::Program)?;
+        }
+    }
+
     Ok(())
 }
 
