@@ -68,7 +68,7 @@ fn parses_selected_marker_declarations_implementations_and_bounds() {
     assert_eq!(count(&parsed, SyntaxKind::TraitImplementation), 3);
     assert_eq!(count(&parsed, SyntaxKind::ImplementationTarget), 3);
     assert_eq!(count(&parsed, SyntaxKind::TraitRequirementClause), 2);
-    assert_eq!(count(&parsed, SyntaxKind::TraitReference), 7);
+    assert_eq!(count(&parsed, SyntaxKind::TraitReference), 6);
     assert_eq!(count(&parsed, SyntaxKind::QualifiedModuleMember), 3);
 }
 
