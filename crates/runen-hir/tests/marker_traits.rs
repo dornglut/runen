@@ -67,6 +67,42 @@ fn retains_nominal_traits_implementations_and_exact_requirement_sets() {
 }
 
 #[test]
+fn same_spelled_markers_in_distinct_modules_have_distinct_nominal_identities() {
+    let left = parse("export trait Marker;");
+    let right = parse("export trait Marker;");
+    let caller = parse("import a; import b; fn f[T: a::Marker + b::Marker](value: T) {}");
+    let imports = [
+        ImportTarget::new("a", ModuleId::new(2)).expect("valid alias"),
+        ImportTarget::new("b", ModuleId::new(3)).expect("valid alias"),
+    ];
+    let hir = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &caller, &imports),
+        SourceUnit::new(ModuleId::new(2), &left, &[]),
+        SourceUnit::new(ModuleId::new(3), &right, &[]),
+    ])
+    .expect("same spelling in distinct modules denotes distinct nominal marker identities");
+
+    let left_id = hir
+        .marker_traits
+        .iter()
+        .find(|marker| marker.module == ModuleId::new(2) && marker.name == "Marker")
+        .expect("left marker exists")
+        .id;
+    let right_id = hir
+        .marker_traits
+        .iter()
+        .find(|marker| marker.module == ModuleId::new(3) && marker.name == "Marker")
+        .expect("right marker exists")
+        .id;
+    assert_ne!(left_id, right_id);
+
+    let requirements = &function(&hir, "f").type_parameters[0].requirements;
+    assert_eq!(requirements.len(), 2);
+    assert!(requirements.contains(&left_id));
+    assert!(requirements.contains(&right_id));
+}
+
+#[test]
 fn trait_declarations_share_the_existing_module_namespace() {
     for source in [
         "trait Name; record Name {}",
