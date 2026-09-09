@@ -14,7 +14,10 @@ fn count(parsed: &Parse, kind: SyntaxKind) -> usize {
 
 #[test]
 fn constant_syntax_kind_appends_without_renumbering_existing_kinds() {
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::TraitRequirementClause).0, 131);
+    assert_eq!(
+        rowan::SyntaxKind::from(SyntaxKind::TraitRequirementClause).0,
+        131
+    );
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::ConstDeclaration).0, 132);
 }
 
