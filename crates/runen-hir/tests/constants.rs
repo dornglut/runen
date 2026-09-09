@@ -253,6 +253,15 @@ fn exported_qualified_constant_bypasses_local_lookup_and_erases_to_literal() {
 }
 
 #[test]
+fn qualified_constant_exact_type_anchors_existing_comparison_selection() {
+    build_qualified(
+        "export const LIMIT: I64 = 7;",
+        "import dep; fn ok() -> Bool { return dep::LIMIT == 7; }",
+    )
+    .expect("qualified constant reference supplies exact comparison operand type");
+}
+
+#[test]
 fn qualified_constant_lookup_enforces_accessibility_and_category() {
     let private = build_qualified(
         "const PRIVATE: I64 = 1;",
