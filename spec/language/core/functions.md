@@ -166,10 +166,8 @@ A canonical callable interface is language-valid exactly when all of the followi
 
 - every parameter `TypeId` exists in the program-wide Core type domain;
 - every parameter type is parameter-transfer-safe;
-- a no-result interface has safe-reference result contract `None`;
-- an ordinary result type exists and is result-transfer-safe when the contract is `None`;
-- a contract-bearing result satisfies exactly one of the bounded scalar Shared-reference forms above; and
-- every designated special-contract origin slot exists in the interface's ordered parameter sequence and satisfies the exact parameter/result type and permission requirements of that contract.
+- when the interface has a result `TypeId`, that type exists in the program-wide Core type domain; and
+- the interface's exact no-result/result structure together with its safe-reference result contract is admissible under the callable-interface result relation above.
 
 A represented function entity is valid only when its derived callable interface is valid under this one relation. A callable scalar type from `callable-values.md` is likewise valid only when the interface it carries is valid under this same relation.
 
