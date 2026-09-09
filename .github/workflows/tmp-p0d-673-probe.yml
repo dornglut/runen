@@ -13,3 +13,8 @@ jobs:
       - run: python3 tools/tmp_p0d_673_patch.py
       - name: Check Core IR after patch
         run: cargo check -p runen-core-ir
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: patched-validator
+          path: crates/runen-core-ir/src/interprocedural_validation.rs
+          retention-days: 1
