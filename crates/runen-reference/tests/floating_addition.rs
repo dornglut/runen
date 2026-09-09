@@ -37,7 +37,7 @@ fn execute_float_add_with_contract(
     right: BinaryFloatValue,
 ) -> runen_reference::ExecutionReport {
     let mut types = TypeTable::new();
-    let ty = types.push(TypeDef::scalar("float", scalar));
+    let ty = types.push(TypeDef::scalar("float", scalar.clone()));
     let result = Place::local(LocalId(0));
     let program = Program {
         types,
@@ -54,7 +54,7 @@ fn execute_float_add_with_contract(
                     vec![Statement::FloatAdd {
                         contract,
                         dst: result.clone(),
-                        left: Operand::Constant(constant(scalar, left)),
+                        left: Operand::Constant(constant(scalar.clone(), left)),
                         right: Operand::Constant(constant(scalar, right)),
                     }],
                     Terminator::Return(Some(Operand::Move(result.into()))),
@@ -84,7 +84,7 @@ fn assert_add_with_contract(
     right: BinaryFloatValue,
     expected: ObservedBinaryFloatValue,
 ) {
-    let report = execute_float_add_with_contract(contract, scalar, left, right);
+    let report = execute_float_add_with_contract(contract, scalar.clone(), left, right);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(observed(scalar, expected)));
 }
@@ -95,7 +95,7 @@ fn assert_add(
     right: BinaryFloatValue,
     expected: ObservedBinaryFloatValue,
 ) {
-    let report = execute_float_add(scalar, left, right);
+    let report = execute_float_add(scalar.clone(), left, right);
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(observed(scalar, expected)));
 }
@@ -740,14 +740,19 @@ fn reference_results_match_independent_numeric_oracle_within_fixture_capacity() 
     let mut capacity_limited = 0_usize;
 
     for scalar in [ScalarType::F16, ScalarType::F32, ScalarType::F64] {
-        let format = oracle_format(scalar);
-        let values = deterministic_values(scalar);
+        let format = oracle_format(scalar.clone());
+        let values = deterministic_values(scalar.clone());
         for left in &values {
             for right in &values {
                 match add_standard_tree_node(format, oracle_value(*left), oracle_value(*right)) {
                     Ok(expected) => {
                         compared += 1;
-                        assert_add(scalar, *left, *right, observed_from_oracle(expected));
+                        assert_add(
+                            scalar.clone(),
+                            *left,
+                            *right,
+                            observed_from_oracle(expected),
+                        );
                     }
                     Err(NumericOracleError::InternalRangeExceeded) => capacity_limited += 1,
                     Err(error) => {
