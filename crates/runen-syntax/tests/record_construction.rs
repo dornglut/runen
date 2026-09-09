@@ -146,8 +146,7 @@ fn build() -> Pair {
 }
 
 #[test]
-fn qualified_construction_backed_field_use_is_a_condition_and_bare_qualified_value_is_not_construction()
-{
+fn bare_qualified_condition_is_not_record_construction() {
     let accepted = parse(
         "import dep; fn f() { if dep::Flag { ready: true }.ready { let value: Bool = true; } }",
     );
