@@ -60,22 +60,22 @@ fn callable_leaf_inside_aggregate_uses_ordinary_copy_move_and_cleanup() {
             ],
             vec![BasicBlock::new(
                 vec![
-                    runen_core_ir::Statement::Init {
+                    Statement::Init {
                         dst: Place::local(LocalId(0)).field(0),
                         src: Operand::FunctionValue(FunctionId(1)),
                     },
-                    runen_core_ir::Statement::Init {
+                    Statement::Init {
                         dst: Place::local(LocalId(1)),
                         src: Operand::Copy(Place::local(LocalId(0)).into()),
                     },
-                    runen_core_ir::Statement::Init {
+                    Statement::Init {
                         dst: Place::local(LocalId(2)),
                         src: Operand::Move(Place::local(LocalId(1)).into()),
                     },
-                    runen_core_ir::Statement::Drop {
+                    Statement::Drop {
                         place: Place::local(LocalId(0)).into(),
                     },
-                    runen_core_ir::Statement::Drop {
+                    Statement::Drop {
                         place: Place::local(LocalId(2)).into(),
                     },
                 ],
