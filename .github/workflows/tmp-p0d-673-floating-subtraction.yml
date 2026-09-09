@@ -1,0 +1,63 @@
+name: Temporary P0-D 673 floating subtraction adaptation
+
+on:
+  push:
+    branches:
+      - p0d-673-core-callable-values-impl
+
+permissions:
+  contents: write
+
+jobs:
+  adapt:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-673-floating-subtraction]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-673-core-callable-values-impl
+          persist-credentials: true
+          fetch-depth: 0
+      - name: Apply compiler-proven ownership adaptations
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('crates/runen-reference/tests/floating_subtraction.rs')
+          text = path.read_text()
+          replacements = [
+              ('let ty = types.push(TypeDef::scalar("float", scalar));', 'let ty = types.push(TypeDef::scalar("float", scalar.clone()));'),
+              ('left: Operand::Constant(constant(scalar, left)),', 'left: Operand::Constant(constant(scalar.clone(), left)),'),
+              ('let report = execute_float_sub_with_contract(contract, scalar, left, right);', 'let report = execute_float_sub_with_contract(contract, scalar.clone(), left, right);'),
+              ('                scalar,\n                positive_normal(one, 1),', '                scalar.clone(),\n                positive_normal(one, 1),'),
+              ('let (format, _, _, _) = oracle_format(scalar);', 'let (format, _, _, _) = oracle_format(scalar.clone());'),
+              ('let values = deterministic_finite_values(scalar);', 'let values = deterministic_finite_values(scalar.clone());'),
+              ('oracle_contribution(scalar, *left, false),', 'oracle_contribution(scalar.clone(), *left, false),'),
+              ('oracle_contribution(scalar, *right, true),', 'oracle_contribution(scalar.clone(), *right, true),'),
+          ]
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one replacement for {old!r}, found {count}')
+              text = text.replace(old, new)
+          path.write_text(text)
+          PY
+          cargo +stable fmt --all
+      - name: Enforce bounded scope
+        shell: bash
+        run: |
+          actual="$(git diff --name-only)"
+          if [[ "${actual}" != "crates/runen-reference/tests/floating_subtraction.rs" ]]; then
+            echo "Unexpected changed paths:" >&2
+            echo "${actual}" >&2
+            exit 1
+          fi
+      - run: cargo +stable test -p runen-reference --test floating_subtraction
+      - name: Commit bounded adaptation
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/runen-reference/tests/floating_subtraction.rs
+          git commit -m 'test: adapt floating subtraction fixture to non-Copy ScalarType [skip-673-floating-subtraction]'
+          git push origin HEAD:p0d-673-core-callable-values-impl
