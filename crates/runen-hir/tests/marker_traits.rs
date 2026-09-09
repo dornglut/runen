@@ -30,7 +30,8 @@ fn retains_nominal_traits_implementations_and_exact_requirement_sets() {
     let hir = build(
         "trait A; trait B; record Ticket {} \
          impl I64: A; impl Ticket: B; \
-         fn pair[T: B + A, U](left: T, right: U) {}",
+         fn pair[T: B + A, U](left: T, right: U) {} \
+         fn pair_reordered[V: A + B](value: V) {}",
     )
     .expect("marker declarations, implementations and requirements are valid");
 
@@ -54,6 +55,12 @@ fn retains_nominal_traits_implementations_and_exact_requirement_sets() {
     assert!(pair.type_parameters[0].requirements.contains(&a));
     assert!(pair.type_parameters[0].requirements.contains(&b));
     assert!(pair.type_parameters[1].requirements.is_empty());
+    let pair_reordered = function(&hir, "pair_reordered");
+    assert_eq!(
+        pair.type_parameters[0].requirements,
+        pair_reordered.type_parameters[0].requirements,
+        "requirement source order is not semantic"
+    );
     assert!(hir.marker_implementations.iter().any(|implementation| {
         implementation.trait_id == a
             && implementation.target == MarkerImplementationTarget::Intrinsic(IntrinsicType::I64)
@@ -104,6 +111,37 @@ fn marker_reference_lookup_uses_module_domain_not_generic_slot_domain() {
 
     let errors = build("record R {} fn f[T: R](value: T) {}")
         .expect_err("wrong-category module binding selected for marker reference is final");
+    assert!(has_diagnostic(&errors, DiagnosticKind::ExpectedMarkerTrait));
+    assert!(!has_diagnostic(&errors, DiagnosticKind::UnresolvedName));
+}
+
+#[test]
+fn qualified_marker_lookup_honors_accessibility_and_wrong_category_finality() {
+    let defs = parse("export trait Public; trait Private; export record R {}");
+    let imports = [ImportTarget::new("defs", ModuleId::new(2)).expect("valid alias")];
+
+    let good = parse("import defs; fn f[T: defs::Public](value: T) {}");
+    let hir = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &good, &imports),
+        SourceUnit::new(ModuleId::new(2), &defs, &[]),
+    ])
+    .expect("qualified exported marker reference is accessible");
+    assert_eq!(function(&hir, "f").type_parameters[0].requirements.len(), 1);
+
+    let private = parse("import defs; fn f[T: defs::Private](value: T) {}");
+    let errors = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &private, &imports),
+        SourceUnit::new(ModuleId::new(2), &defs, &[]),
+    ])
+    .expect_err("qualified private marker binding is inaccessible");
+    assert!(has_diagnostic(&errors, DiagnosticKind::InaccessibleBinding));
+
+    let wrong_category = parse("import defs; fn f[T: defs::R](value: T) {}");
+    let errors = build_typed_hir(&[
+        SourceUnit::new(ModuleId::new(1), &wrong_category, &imports),
+        SourceUnit::new(ModuleId::new(2), &defs, &[]),
+    ])
+    .expect_err("qualified wrong-category binding is final");
     assert!(has_diagnostic(&errors, DiagnosticKind::ExpectedMarkerTrait));
     assert!(!has_diagnostic(&errors, DiagnosticKind::UnresolvedName));
 }
@@ -187,16 +225,28 @@ fn duplicate_exact_implementation_pair_is_compilation_global_and_identity_based(
     let second = parse("import b; impl b::Ticket: b::Marker;");
     let first_imports = [ImportTarget::new("a", ModuleId::new(2)).expect("valid alias")];
     let second_imports = [ImportTarget::new("b", ModuleId::new(2)).expect("valid alias")];
-    let errors = build_typed_hir(&[
-        SourceUnit::new(ModuleId::new(2), &defs, &[]),
-        SourceUnit::new(ModuleId::new(3), &first, &first_imports),
-        SourceUnit::new(ModuleId::new(4), &second, &second_imports),
-    ])
-    .expect_err("same resolved pair declared anywhere twice violates exact coherence");
-    assert!(has_diagnostic(
-        &errors,
-        DiagnosticKind::DuplicateMarkerImplementation
-    ));
+
+    for reversed in [false, true] {
+        let units = if reversed {
+            vec![
+                SourceUnit::new(ModuleId::new(2), &defs, &[]),
+                SourceUnit::new(ModuleId::new(4), &second, &second_imports),
+                SourceUnit::new(ModuleId::new(3), &first, &first_imports),
+            ]
+        } else {
+            vec![
+                SourceUnit::new(ModuleId::new(2), &defs, &[]),
+                SourceUnit::new(ModuleId::new(3), &first, &first_imports),
+                SourceUnit::new(ModuleId::new(4), &second, &second_imports),
+            ]
+        };
+        let errors = build_typed_hir(&units)
+            .expect_err("same resolved pair declared anywhere twice violates exact coherence");
+        assert!(has_diagnostic(
+            &errors,
+            DiagnosticKind::DuplicateMarkerImplementation
+        ));
+    }
 }
 
 #[test]
@@ -294,8 +344,8 @@ fn marker_obligation_failure_precedes_and_does_not_commit_argument_producer_effe
 
 #[test]
 fn marker_requirement_does_not_widen_generic_body_operational_capabilities() {
-    let hir = build("trait Marker; fn id[T: Marker](value: T) -> T { return value; }")
-        .expect("opaque marker-bounded body may transport its complete value");
+    let hir = build("trait Copy; fn id[T: Copy](value: T) -> T { return value; }")
+        .expect("marker spelling Copy still leaves an abstract value opaque");
     let id = function(&hir, "id");
     let returned = id
         .body
@@ -308,9 +358,8 @@ fn marker_requirement_does_not_widen_generic_body_operational_capabilities() {
     };
     assert_eq!(ownership, OwnedUse::Consume);
 
-    let errors =
-        build("trait Marker; fn bad[T: Marker](left: T, right: T) -> T { return left + right; }")
-            .expect_err("arbitrary marker does not grant scalar addition");
+    let errors = build("trait Copy; fn bad[T: Copy](left: T, right: T) -> T { return left + right; }")
+        .expect_err("marker named Copy does not grant scalar addition");
     assert!(errors.iter().any(|error| matches!(
         error.kind,
         DiagnosticKind::AdditionRequiresIntegerOrFloating {
