@@ -34,6 +34,7 @@ jobs:
               ('let (left_sign, numerator, left_exponent) = finite_parts(scalar, left);', 'let (left_sign, numerator, left_exponent) = finite_parts(scalar.clone(), left);'),
               ('                scalar,\n                left,', '                scalar.clone(),\n                left,'),
               ('assert_eq!(oracle_quotient(scalar, one, three), expected);', 'assert_eq!(oracle_quotient(scalar.clone(), one, three), expected);'),
+              ('                scalar,\n                one,', '                scalar.clone(),\n                one,'),
           ]
           for old, new in replacements:
               count = text.count(old)
