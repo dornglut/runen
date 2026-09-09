@@ -8,9 +8,7 @@ mod common;
 pub use common::*;
 
 mod interprocedural;
-pub use interprocedural::{
-    BasicBlock, Body, Function, Program, SafeReferenceResultContract, Terminator,
-};
+pub use interprocedural::{BasicBlock, Body, Function, Program, Terminator};
 
 mod interprocedural_validation;
 pub use interprocedural_validation::{
