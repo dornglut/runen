@@ -7,6 +7,7 @@
 - [Shared references](references.md)
 - [Raw pointers and unsafe admission](raw-pointers-unsafe.md)
 - [Literal semantics](literals.md)
+- [Constants](constants.md)
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
 - [Generics](generics.md)
