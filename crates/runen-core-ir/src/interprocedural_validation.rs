@@ -553,7 +553,6 @@ fn validate_static_terminator(
             destination,
             target,
         } => {
-            require_target(body, *target, point)?;
             if program.types.get(*callable).is_none() {
                 return Err(point_error(
                     point,
@@ -568,7 +567,8 @@ fn validate_static_terminator(
             })?;
             validate_static_call_destination(&program.types, body, interface, destination, point)?;
             validate_operand_type(program, body, callee, *callable, point)?;
-            validate_static_call_arguments(program, body, interface, arguments, point)
+            validate_static_call_arguments(program, body, interface, arguments, point)?;
+            require_target(body, *target, point)
         }
     }
 }

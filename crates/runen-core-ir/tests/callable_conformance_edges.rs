@@ -438,3 +438,44 @@ fn indirect_arguments_are_left_to_right_before_final_reference_admission() {
     .expect_err("earlier indirect-argument effects must be visible to final call-entry admission");
     assert_eq!(error.kind, MirValidationErrorKind::ReferenceTargetNotLive);
 }
+
+#[test]
+fn indirect_static_validation_checks_arguments_before_normal_continuation() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let callable = types.push(TypeDef::callable(
+        "TakesI64",
+        CallableInterface::new(vec![i64_ty], None, SafeReferenceResultContract::None),
+    ));
+    let caller = no_result_function(
+        "caller",
+        Vec::new(),
+        Vec::new(),
+        vec![BasicBlock::new(
+            Vec::new(),
+            Terminator::IndirectCall {
+                callable,
+                callee: Operand::FunctionValue(FunctionId(1)),
+                arguments: vec![Operand::Constant(Value::Bool(true))],
+                destination: None,
+                target: BasicBlockId(99),
+            },
+        )],
+    );
+    let target = no_result_function(
+        "target",
+        vec![LocalId(0)],
+        vec![LocalDecl::new("parameter", i64_ty, false)],
+        vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+    );
+
+    let error = validate_program(Program {
+        types,
+        functions: vec![caller, target],
+    })
+    .expect_err("argument validity precedes normal-continuation validity for indirect calls");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::TypeMismatch { expected: i64_ty }
+    );
+}
