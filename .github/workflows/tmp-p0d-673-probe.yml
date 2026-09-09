@@ -1,13 +1,32 @@
-name: Temporary P0-D 673 probe
+name: Temporary P0-D 673 patch
 
 on:
   push:
     branches:
       - p0d-673-core-callable-values-impl
 
+permissions:
+  contents: write
+
 jobs:
-  probe:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[skip-673-patch]') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo probe-ok
+        with:
+          ref: p0d-673-core-callable-values-impl
+          persist-credentials: true
+          fetch-depth: 0
+      - run: python3 tools/tmp_p0d_673_patch.py
+      - name: Commit validator patch
+        run: |
+          if git diff --quiet; then
+            echo 'No validator changes needed.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add crates/runen-core-ir/src/interprocedural_validation.rs
+          git commit -m 'P0-D: validate callable values and indirect calls [skip-673-patch]'
+          git push origin HEAD:p0d-673-core-callable-values-impl
