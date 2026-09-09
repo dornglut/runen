@@ -1,10 +1,10 @@
-# Core Functions and Direct Calls
+# Core Functions and Calls
 
 Status: **provisional normative; incomplete**
 
-This document owns the currently represented Core semantics for finite function programs, function identity, owned-value parameter slots, direct calls, dynamic function activations, result transfer, recursion, divergence, and defined-fault propagation through direct calls.
+This document owns the currently represented Core semantics for finite function programs, function identity, the canonical callable-interface relation, owned-value parameter slots, direct-call target selection, common function-call destination/argument/activation semantics after a callable interface is established, result transfer, recursion, divergence, and defined-fault propagation through calls.
 
-It consumes local storage, initialization state, owned move/copy, destruction domains, and function-termination cleanup from [Core value and storage semantics](value-storage.md); access authority and explicit-loan termination from [Core borrowing](borrowing.md); safe-reference values, reference-backed authority, carrier lifecycle, and reference access from [Core references](references.md); raw-pointer value and provenance semantics from [Core pointers and provenance](pointers.md); and defined-fault classification from [Core faults](faults.md). It does not redefine those owners.
+It consumes local storage, initialization state, owned move/copy, destruction domains, and function-termination cleanup from [Core value and storage semantics](value-storage.md); access authority and explicit-loan termination from [Core borrowing](borrowing.md); safe-reference values, reference-backed authority, carrier lifecycle, and reference access from [Core references](references.md); raw-pointer value and provenance semantics from [Core pointers and provenance](pointers.md); and defined-fault classification from [Core faults](faults.md). First-class callable scalar types/values, static function-value formation, indirect-call callee evaluation, and dynamic target selection are owned by [Core callable values and indirect calls](callable-values.md); after an indirect target is selected, that owner reuses the common call relations defined here rather than redefining them.
 
 This relation is independent of source syntax, source name resolution, ABI, calling convention, physical stack layout, backend realization, or a particular compiler representation.
 
@@ -17,21 +17,27 @@ A represented Core program contains:
 
 Each represented function entity has one identity within that program. Function identity is semantic within the represented Core program but does not require a stable numeric encoding, serialized identifier, symbol name, physical address, or source declaration identity.
 
-Each represented function contains exactly one body under the Core body relation and exactly one callable structure consisting of:
+Each represented function contains exactly one body under the Core body relation, one finite ordered sequence of owned-value parameter slots, and exactly one **derived callable interface**.
 
-1. one finite ordered sequence of owned-value parameter slots;
-2. either no result value or exactly one result type; and
+A canonical Core **callable interface** consists of exactly:
+
+1. one finite ordered sequence of parameter `TypeId`s;
+2. either no result value or exactly one result `TypeId`; and
 3. exactly one **safe-reference result contract** selected from the bounded alternatives below.
 
-The program-wide type domain is shared by every function body and callable structure in that program. A type identity used by two different functions therefore denotes the same represented Core type.
+For a represented function entity, the callable-interface parameter `TypeId` sequence is derived in parameter-slot order from the designated parameter locals defined below. The function's result specification and safe-reference result contract complete the derived interface. The semantic interface therefore contains no second independent function-parameter type source.
 
-This revision defines no overload set, indirect call, function value, closure, method receiver, variadic parameter list, default argument, generic callable, effect signature, ABI signature, or linkage identity.
+The program-wide type domain is shared by every function body and callable interface in that program. A type identity used by two different functions therefore denotes the same represented Core type.
+
+`callable-values.md` may attach this same canonical interface relation to callable scalar types. It does not create a second signature/interface validity relation.
+
+This revision defines no overload set, closure, method receiver, variadic parameter list, default argument, generic callable, effect signature, ABI signature, or linkage identity. Callable scalar types, function values, and indirect target selection are separately owned by `callable-values.md`.
 
 ## Parameter slots and parameter locals
 
 Every represented parameter slot designates exactly one local declaration in the function body. Parameter-local designations are ordered in parameter-slot order and MUST be unique within that function.
 
-The type of parameter slot `i` is exactly the declared Core type of the local designated by slot `i`. The semantic callable structure does not contain a second independent parameter-type sequence. An implementation MAY cache the derived parameter-type sequence only when it remains provably equal to the designated locals' declared types.
+The type of parameter slot `i` is exactly the declared Core type of the local designated by slot `i`. The function's derived callable-interface parameter sequence contains those exact types in parameter-slot order. An implementation MAY cache that derived sequence only when it remains provably equal to the designated locals' declared types.
 
 A designated parameter local is otherwise an ordinary Core local. Its assignment-mutability property, structural type, storage extent, stored-value lifetime, borrow interactions, reference-carrier contents, and termination cleanup follow the existing Core owners.
 
@@ -46,19 +52,19 @@ No-result structure does not introduce Unit, Void, or another Core value type.
 
 Parameter slots remain ordinary owned-value slots even when their types contain safe references. This revision introduces no separate borrowed-parameter slot or call pass-mode category.
 
-A **safe-reference result contract** is one semantic callable fact selected from exactly these alternatives:
+A **safe-reference result contract** is one semantic callable-interface fact selected from exactly these alternatives:
 
 - **None** — no special safe-reference result contract;
 - **SharedIdentity(i)** — one identity-preserving scalar Shared-reference result whose designated origin is parameter slot `i`; or
 - **SharedDirectChild(i)** — one scalar Shared-reference result whose authority is a direct complete-referent Shared child of the exclusive safe-reference authority transferred through parameter slot `i`.
 
-These alternatives are mutually exclusive. A represented function has exactly one of them; it cannot simultaneously advertise two result-origin facts. The variant names above identify semantic alternatives and do not require a particular implementation enum, field layout, serialization, or source spelling.
+These alternatives are mutually exclusive. A represented callable interface has exactly one of them; it cannot simultaneously advertise two result-origin facts. The variant names above identify semantic alternatives and do not require a particular implementation enum, field layout, serialization, or source spelling.
 
-A designated result-origin slot selects one parameter slot by semantic slot identity. It is not a body-local `LocalId`, a source binding identity, a lifetime name, a physical frame location, a runtime counter, or a second parameter value.
+A designated result-origin slot selects one position in the callable interface's ordered parameter sequence. For a function's derived interface, that position corresponds to the same function parameter slot. It is not a body-local `LocalId`, a source binding identity, a lifetime name, a physical frame location, a runtime counter, or a second parameter value.
 
 ## Parameter-transfer-safe types
 
-The represented Core direct-call relation permits a bounded class of safe-reference-containing values to cross **into parameters**, but it continues to prohibit cross-activation raw-pointer transfer and does not yet transfer references whose referent storage itself contains raw-pointer or safe-reference values.
+The represented Core call-transfer relation permits a bounded class of safe-reference-containing values to cross **into parameters**, but it continues to prohibit cross-activation raw-pointer transfer and does not yet transfer references whose referent storage itself contains raw-pointer or safe-reference values.
 
 Define a Core type as **reference-parameter-referent-safe** exactly as follows:
 
@@ -74,13 +80,15 @@ A represented Core type is **parameter-transfer-safe** exactly as follows:
 - a safe-reference type is parameter-transfer-safe exactly when its exact referent type is reference-parameter-referent-safe; and
 - a structural aggregate is parameter-transfer-safe exactly when every recursively structurally contained field type is parameter-transfer-safe.
 
+Callable scalar types from `callable-values.md` are ordinary non-pointer, non-reference scalar leaves for these structural transfer predicates. Their parameter/result signature edges are semantic interface references rather than structural value-containment edges; the callable interface itself is validated separately under the canonical interface-validity relation below.
+
 The parameter value may therefore itself be a safe reference or an aggregate containing multiple safe-reference leaves. The restriction applies to the storage reached **through** each transferred reference: that referent structural value contains neither a raw-pointer leaf nor another safe-reference leaf in this first slice.
 
 This is a call-transfer restriction only. It does not prohibit general Core safe-reference types from referring to reference-containing or raw-pointer-containing types inside one activation when another accepted operation permits such a reference.
 
 The restriction is semantically required for independent function validation. A callee receiving a reference to raw-pointer-containing storage could otherwise obtain a raw-pointer value from suspended ancestor storage, silently creating the cross-activation raw-pointer relation that this function owner does not define. A callee receiving a reference to safe-reference-containing storage could move, replace, copy, or otherwise change reference carriers/authority identities in suspended ancestor storage, including creating a callee-local reference escape path, without a callable authority/effect contract capable of describing the caller's resulting state.
 
-Every represented function parameter type MUST be parameter-transfer-safe.
+Every parameter type appearing in a valid callable interface MUST be parameter-transfer-safe. Consequently every represented function's derived callable interface satisfies that same requirement.
 
 Raw-pointer locals, raw-pointer operations, and safe references with richer referent types remain permitted inside one activation under their existing owners. The parameter-transfer restriction therefore does not weaken or redefine those intra-activation semantics.
 
@@ -95,27 +103,29 @@ A represented Core type is **result-transfer-safe** exactly when its structural 
 - a safe-reference type is not result-transfer-safe; and
 - a structural aggregate is result-transfer-safe exactly when every recursively contained field type is result-transfer-safe.
 
+Callable scalar types from `callable-values.md` are ordinary non-pointer, non-reference scalar leaves for this structural predicate. A callable value therefore does not contain parameter/result values merely because its interface refers to those types.
+
 A bare safe-reference type therefore does not become result-transfer-safe merely because this revision adds bounded contract-bearing Shared-reference result forms. Reference-containing aggregate types and raw-pointer-containing types also remain outside the ordinary result-transfer-safe class.
 
 ## Safe-reference result contracts
 
-A represented function result is admissible exactly when one of the following holds:
+A callable-interface result is admissible exactly when one of the following holds:
 
-1. the function has no result type and its safe-reference result contract is `None`;
-2. the function has one result-transfer-safe result type and its safe-reference result contract is `None`;
-3. the function has one scalar Shared safe-reference result type and contract `SharedIdentity(i)` satisfying the identity-preserving contract below; or
-4. the function has one scalar Shared safe-reference result type and contract `SharedDirectChild(i)` satisfying the complete direct-child contract below.
+1. the interface has no result type and its safe-reference result contract is `None`;
+2. the interface has one result-transfer-safe result type and its safe-reference result contract is `None`;
+3. the interface has one scalar Shared safe-reference result type and contract `SharedIdentity(i)` satisfying the identity-preserving contract below; or
+4. the interface has one scalar Shared safe-reference result type and contract `SharedDirectChild(i)` satisfying the complete direct-child contract below.
 
 A reference leaf nested inside an aggregate parameter cannot be selected indirectly as the result origin in either special result form.
 
 ### Identity-preserving Shared result
 
-For `SharedIdentity(i)`, every one of these declaration requirements MUST hold:
+For `SharedIdentity(i)`, every one of these interface requirements MUST hold:
 
 - the result type is exactly one scalar safe-reference type whose permission is `Shared`;
-- the designated origin slot `i` exists in the function's ordered parameter sequence;
+- the designated origin slot `i` exists in the callable interface's ordered parameter sequence;
 - the designated origin parameter type is itself exactly one scalar Shared safe-reference type; and
-- the designated origin parameter type is exactly equal to the function result type.
+- the designated origin parameter type is exactly equal to the interface result type.
 
 Because exact safe-reference type identity already fixes exact referent type identity and permission, the equality requirement permits neither referent mismatch nor permission strengthening/weakening.
 
@@ -123,16 +133,16 @@ At activation entry, after the designated argument value has been transferred in
 
 The activation identity result origin is a validation fact about an already existing transferred reference value. It creates no carrier, authority, target, storage, `LoanId`, allocation, physical address, or hidden runtime object.
 
-Independent function validation treats parameter slots according to their advertised callable identities. A body cannot satisfy an origin contract naming slot `i` merely by returning slot `j` because some particular dynamic call might pass aliasing Shared arguments. The contract must hold for every admitted call, including calls where the two parameter values name distinct authorities/targets.
+Independent function validation treats parameter slots according to their advertised callable-interface identities. A body cannot satisfy an origin contract naming slot `i` merely by returning slot `j` because some particular dynamic call might pass aliasing Shared arguments. The contract must hold for every admitted call, including calls where the two parameter values name distinct authorities/targets.
 
-This contract is identity-preserving. A normal result may be carried through ordinary Shared `Copy`, `Move`, initialization, local storage, or a nested contract-bearing direct call, but the final returned carrier MUST name the exact activation identity-result-origin authority and target. A reference reborrow creates a fresh child authority and therefore does not satisfy this contract. A fresh root reference, including one targeting callee-local storage, likewise does not satisfy it.
+This contract is identity-preserving. A normal result may be carried through ordinary Shared `Copy`, `Move`, initialization, local storage, or a nested contract-bearing call, but the final returned carrier MUST name the exact activation identity-result-origin authority and target. A reference reborrow creates a fresh child authority and therefore does not satisfy this contract. A fresh root reference, including one targeting callee-local storage, likewise does not satisfy it.
 
 ### Complete direct-child Shared result
 
-For `SharedDirectChild(i)`, every one of these declaration requirements MUST hold:
+For `SharedDirectChild(i)`, every one of these interface requirements MUST hold:
 
 - the result type is exactly one scalar safe-reference type with permission `Shared` and exact referent type `T`;
-- the designated origin slot `i` exists in the function's ordered parameter sequence;
+- the designated origin slot `i` exists in the callable interface's ordered parameter sequence;
 - the designated origin parameter type is exactly one scalar safe-reference type with permission `Exclusive` or `ExclusiveReplace` and exact referent type `T`; and
 - the designated origin parameter type remains parameter-transfer-safe under the ordinary parameter rule.
 
@@ -150,9 +160,22 @@ The returned Shared child is a capability downgrade through that handle, not rel
 
 Neither special contract defines a result-origin projection, alternative-origin set, general descendant summary, authority-detachment relation, or general borrowed-effect summary.
 
+## Callable-interface validity
+
+A canonical callable interface is language-valid exactly when all of the following hold:
+
+- every parameter `TypeId` exists in the program-wide Core type domain;
+- every parameter type is parameter-transfer-safe;
+- when the interface has a result `TypeId`, that type exists in the program-wide Core type domain; and
+- the interface's exact no-result/result structure together with its safe-reference result contract is admissible under the callable-interface result relation above.
+
+A represented function entity is valid only when its derived callable interface is valid under this one relation. A callable scalar type from `callable-values.md` is likewise valid only when the interface it carries is valid under this same relation.
+
+There is no weaker callable-type interface validator for indirect calls. Callable type/value semantics and target selection remain separately owned by `callable-values.md`, while the interface admitted here is the common contract consumed by both direct and indirect call forms.
+
 ## Dynamic function activations
 
-Every dynamic direct call creates one fresh **Core function activation** for the target function.
+Every dynamic call, after one exact represented function target has been selected, creates one fresh **Core function activation** for that target function.
 
 Each activation has independent dynamic local-storage state and independent body-local explicit-loan declaration state for the target body. Distinct simultaneously active or recursively nested calls therefore have distinct dynamic storage instances and distinct activations of equal body-local `LoanId` declarations even when they execute the same static function.
 
@@ -175,15 +198,19 @@ The call contains:
 - either no result destination or exactly one direct result destination place; and
 - the caller's normal continuation block.
 
-The target function MUST exist in the same represented Core program.
+The target function MUST exist in the same represented Core program. Its derived callable interface MUST be valid under the canonical interface relation above.
 
 Call-graph cycles are valid. Direct recursion and mutual recursion therefore remain valid represented Core programs. A recursive execution may diverge.
 
+An indirect call does not use this static target-selection form. Its exact static callable type, callee operand, and dynamic target-selection prelude are defined by `callable-values.md`; after that prelude selects one target function, the common relations below apply.
+
 ## Result destination admission
 
-A no-result target requires no result destination.
+Let `I` be the valid callable interface governing one call. For a direct call, `I` is the selected target function's derived callable interface. For an indirect call, `I` is the exact interface carried by the explicit static callable type from `callable-values.md`, which the selected dynamic target is required to match.
 
-A result-bearing target requires exactly one direct destination place in the caller whose Core type is exactly equal to the target result type.
+A no-result interface requires no result destination.
+
+A result-bearing interface requires exactly one direct destination place in the caller whose Core type is exactly equal to the interface result type.
 
 The result destination is a non-replacing initialization destination, not an assignment or replacement destination. At the call point:
 
@@ -192,23 +219,27 @@ The result destination is a non-replacing initialization destination, not an ass
 
 The containing local need not be mutable merely because the call may initialize the destination.
 
-The destination admission facts are established for the call point before argument operand state transitions are applied. Argument evaluation cannot make an initially Live destination admissible to that same call merely by moving or destroying its prior value.
+The destination admission facts are established for the call point before call-operand state transitions are applied. For a direct call this means before ordinary argument operand effects. For an indirect call, `callable-values.md` requires the same admission before callee-operand and ordinary argument-operand effects. Operand evaluation cannot make an initially Live destination admissible to that same call merely by moving or destroying its prior value.
 
 A successful result return initializes the admitted vacant destination without replacement destruction and begins new stored-value lifetimes there before control continues at the normal target. Those lifetimes may be the first or later lifetimes in the same continuing destination storage extent.
 
 A faulting or diverging callee does not initialize the destination and does not follow the normal target.
 
-An admitted result destination may receive either an ordinary result-transfer-safe value or one scalar Shared-reference value authorized by the target's selected safe-reference result contract. Raw-pointer-containing results, reference-containing aggregate results, and uncontracted safe-reference results remain invalid.
+An admitted result destination may receive either an ordinary result-transfer-safe value or one scalar Shared-reference value authorized by the governing callable interface's selected safe-reference result contract. Raw-pointer-containing results, reference-containing aggregate results, and uncontracted safe-reference results remain invalid.
 
 ## Argument evaluation and parameter transfer
 
-Argument count MUST equal the target parameter count exactly.
+Let `I` be the valid callable interface governing the call.
 
-Each argument operand MUST produce one owned Core value whose Core type is exactly equal to the corresponding parameter-slot type. This revision introduces no implicit conversion, widening, narrowing, coercion, subtyping, or defaulting relation.
+Argument count MUST equal `I`'s parameter count exactly.
 
-Arguments are evaluated strictly left to right in argument/parameter-slot order.
+Each argument operand MUST produce one owned Core value whose Core type is exactly equal to the corresponding parameter `TypeId` in `I`. This revision introduces no implicit conversion, widening, narrowing, coercion, subtyping, or defaulting relation.
+
+Arguments are evaluated strictly left to right in interface parameter order.
 
 Each successfully evaluated argument value is held as one owned transient call value until all represented argument operands have evaluated successfully. Producing a transient call value does not itself require an addressable Core local storage place.
+
+For an indirect call, `callable-values.md` evaluates and holds the callee operand before entering this ordinary argument sequence. For a direct call there is no callee operand because target selection is static.
 
 Existing operand semantics determine each argument's state effects. In particular, `Move` consumes its source stored value and `Copy` preserves its source stored value. Safe-reference carrier effects of Move and Shared-reference Copy are owned by [Core references](references.md).
 
@@ -230,12 +261,15 @@ The fully-Live requirement is independent of authority. An Exclusive or Exclusiv
 
 These entry invariants ensure that an independently validated callee may rely on the exact Shared, Exclusive, or ExclusiveReplace capability stated by each reference parameter and on a fully-Live initial referent state without depending on hidden caller-side path or descendant state. They do not create a new reference authority, end an existing child, reinitialize storage, or add a borrowed-call pass mode.
 
-After call-entry admission succeeds:
+After call-entry admission succeeds and one exact target function has been selected:
 
-1. create one fresh activation of the target function;
-2. transfer the transient argument values into the designated parameter locals in parameter-slot order;
-3. mark each transferred parameter local initialized with the transferred value before target-body entry; and
-4. when the target has `SharedIdentity(i)` or `SharedDirectChild(i)`, record the exact target/authority identity carried by the selected transferred parameter as the corresponding activation origin fact.
+1. require the target function's derived callable interface to equal governing interface `I`;
+2. create one fresh activation of the target function;
+3. transfer the transient argument values into the designated parameter locals in parameter-slot order;
+4. mark each transferred parameter local initialized with the transferred value before target-body entry; and
+5. when the target has `SharedIdentity(i)` or `SharedDirectChild(i)`, record the exact target/authority identity carried by the selected transferred parameter as the corresponding activation origin fact.
+
+For direct calls the target/interface equality is immediate from static target selection. For indirect calls it is the dynamic target invariant established by `callable-values.md`.
 
 Parameter transfer does not duplicate a transient argument value. When the value contains safe-reference carriers, those existing carriers are transferred unchanged into the callee parameter storage; the call boundary does not create a new reference authority, reborrow, target, or carrier merely because transfer occurred.
 
@@ -243,7 +277,7 @@ A caller that requires a temporary borrowed-call interval may explicitly produce
 
 If such a caller-created Shared child is supplied to the parameter designated by `SharedIdentity(i)` and the callee returns that exact authority, the child does not end merely because the callee returns: the preserved result carrier keeps that same child authority active after callee cleanup. Its parent remains delegated until the returned carrier later ends under ordinary reference lifecycle rules.
 
-The represented operand set in this revision does not itself add a new defined-fault or divergence relation for operand evaluation. Undefined behavior selected by an existing unsafe operand has no defined post-state to continue into a call. A future operand owner that adds another abnormal evaluation outcome must define its interaction with held transient call values rather than inferring that behavior from this direct-call relation.
+The represented ordinary argument operand set in this revision does not itself add a new defined-fault or divergence relation for operand evaluation. Undefined behavior selected by an existing unsafe operand has no defined post-state to continue into a call. A future operand owner that adds another abnormal evaluation outcome must define its interaction with held transient call values rather than inferring that behavior from this call relation. `callable-values.md` separately owns the callee-operand prelude of an indirect call.
 
 ## Reference-parameter referent state
 
@@ -319,7 +353,7 @@ A moved return source is already Dead before termination cleanup and therefore i
 
 A safe-reference value may escape through a normal result only when it satisfies the function's selected safe-reference result contract. An unpreserved temporary reborrow follows ordinary callee cleanup: when its remaining callee-owned carriers and descendants end, its authority ends and delegated parent capability is restored according to `references.md`. A preserved direct-child result instead keeps its parent authority delegated after Return for as long as that child branch remains active.
 
-The outer consumer of a represented Core function execution receives the same optional result structure: no-result normal completion yields no value, an ordinary result-bearing normal completion yields the preserved owned result value, and a contract-bearing Shared-reference result preserves the exact authority/target/ancestry relation guaranteed by the selected callable contract. This fact defines Core execution structure and does not establish source entry-point semantics.
+The outer consumer of a represented Core function execution receives the same optional result structure: no-result normal completion yields no value, an ordinary result-bearing normal completion yields the preserved owned result value, and a contract-bearing Shared-reference result preserves the exact authority/target/ancestry relation guaranteed by the selected callable interface. This fact defines Core execution structure and does not establish source entry-point semantics.
 
 ## Contract-bearing Shared-reference result at the caller
 
@@ -327,26 +361,26 @@ The outer consumer of a represented Core function execution receives the same op
 
 For a target with `SharedIdentity(i)`, let the successfully admitted held argument for slot `i` contain Shared carrier `C` naming target `R` and authority `A`.
 
-The callable contract guarantees that every normal result from that activation contains one Shared carrier naming exactly `R` and `A`. Dynamic result transfer preserves the carrier produced by the callee's return operand; the call boundary does not create a fresh authority, target, reborrow, or additional carrier merely because the result crosses activations.
+The callable interface guarantees that every normal result from that activation contains one Shared carrier naming exactly `R` and `A`. Dynamic result transfer preserves the carrier produced by the callee's return operand; the call boundary does not create a fresh authority, target, reborrow, or additional carrier merely because the result crosses activations.
 
 Independent caller path-state validation MUST preserve that guarantee without expanding the callee body. For the normal continuation it accounts for one surviving result carrier naming `R` and `A` before the transferred/held argument carriers are given their ordinary end-of-call cleanup consequences. It then:
 
 1. applies the existing fully-Live normal-return summary to every transferred external referent domain;
 2. removes the transient call carriers that do not survive as caller values under the ordinary carrier lifecycle;
 3. initializes the previously admitted result destination with the preserved result carrier, without replacement destruction or authority creation; and
-4. continues at the target's normal continuation block.
+4. continues at the call's normal continuation block.
 
 This summary describes the net guaranteed carrier state; it does not assert that the call boundary performed a Shared `Copy`. The actual result carrier was produced by ordinary callee execution and preserved across cleanup.
 
 If the caller retained another Shared carrier for authority `A` before the call, that carrier and the returned carrier coexist normally. If `C` was the only carrier before transfer, the returned carrier keeps `A` active after callee cleanup. If `A` is itself a child authority created by the caller, preserving the returned carrier keeps that child active and its parent remains delegated until the result carrier later ends.
 
-A nested or recursive identity-contract call composes by the same rule. If a callee's selected argument names authority `A`, its normal result is known from callable structure alone to name the same `A`; an enclosing `SharedIdentity` function may therefore forward that result when `A` is its own advertised activation identity result origin. Call-graph expansion or fixed-point inference is unnecessary.
+A nested or recursive identity-contract call composes by the same rule. If a callee's selected argument names authority `A`, its normal result is known from callable interface alone to name the same `A`; an enclosing `SharedIdentity` function may therefore forward that result when `A` is its own advertised activation identity result origin. Call-graph expansion or fixed-point inference is unnecessary.
 
 ### Complete direct-child result
 
 For a target with `SharedDirectChild(i)`, let the successfully admitted held argument for slot `i` contain one `Exclusive` or `ExclusiveReplace` carrier naming target `R` and authority `A`.
 
-The callable contract guarantees that every normal result from that activation contains one Shared carrier naming a callee-created authority `C` such that:
+The callable interface guarantees that every normal result from that activation contains one Shared carrier naming a callee-created authority `C` such that:
 
 - `C` targets exactly `R`;
 - `C` has permission `Shared`; and
@@ -361,7 +395,7 @@ Independent caller path-state validation MUST preserve this finite guaranteed re
 3. keeps `A` active carrierlessly when removal of its transferred parameter carrier would otherwise leave it without a carrier, because `C` remains its active child;
 4. preserves every pre-existing ancestor of `A` through the unchanged authority chain;
 5. initializes the previously admitted result destination with the preserved `C` carrier, without replacement destruction, authority creation, or parent-carrier synthesis; and
-6. continues at the target's normal continuation block.
+6. continues at the call's normal continuation block.
 
 Because `A` is an active exclusive authority while `C` survives, direct/root alias checks after caller continuation continue to observe that exclusive ancestor under the common conflict law from `borrowing.md`. The returned Shared child therefore weakens capability through the returned handle but does not release the original exclusive authority interval. When `C` and any descendants later end, carrierless ancestors that then have no active child end transitively under the ordinary reference lifecycle.
 
@@ -369,19 +403,19 @@ If `A` was itself a child authority with retained ancestor `P`, the returned bra
 
 Nested composition remains finite. An already-derived Shared child `C` may pass through `SharedIdentity` unchanged. A nested `SharedDirectChild` call receiving exact exclusive origin `A` may produce `C`, and an enclosing `SharedDirectChild` function advertising the same exact origin `A` may forward that `C` unchanged because its direct parent remains `A`. Deriving again from `C` produces a grandchild and does not satisfy an outer contract advertising `A` in this slice.
 
-Direct recursion and mutual recursion consume these same callable summaries. The direct-child relation is checked against the concrete transferred origin of each activation; no call-graph expansion, ancestry fixed point, or body-derived public contract is required.
+Direct or indirect recursion consumes these same callable-interface summaries. The direct-child relation is checked against the concrete transferred origin of each activation; no call-graph expansion, ancestry fixed point, or body-derived public contract is required.
 
 ## Defined-fault propagation through calls
 
-The represented direct-call subset has no catch boundary.
+The represented call subset has no catch boundary.
 
 When a called activation terminates with defined fault `F`:
 
 1. that activation performs its ordinary defined-fault termination handling and cleanup under the existing Core owners, including reference-carrier removal and reference-authority termination consequences;
 2. every ending local storage extent satisfies the safe-reference storage-extent validity relation before that extent ends;
-3. the suspended caller's direct-call evaluation yields the same defined fault `F` instead of following its normal continuation;
+3. the suspended caller's call evaluation yields the same defined fault `F` instead of following its normal continuation;
 4. the caller performs its own defined-fault termination handling and cleanup; and
-5. the same `F` continues outward through each suspended direct caller.
+5. the same `F` continues outward through each suspended caller.
 
 Propagation therefore preserves the selected defined-fault outcome while cleaning each terminated activation exactly once.
 
@@ -423,15 +457,15 @@ The external referent domains targeted through safe-reference parameters belong 
 
 A represented Core program is language-valid under this relation only when all of the following hold in addition to existing body validity:
 
-- every represented function body and callable type references the program-wide type domain;
+- every represented function body and callable interface references the program-wide type domain;
 - every designated parameter local exists in that function body and parameter-local designations are unique;
-- every parameter type is parameter-transfer-safe;
-- every function result is either absent with contract `None`, one ordinary result-transfer-safe type with contract `None`, or one scalar Shared-reference type with exactly one valid special safe-reference result contract;
+- every represented function's derived callable interface is valid under the canonical callable-interface relation;
+- every valid callable interface has parameter-transfer-safe parameter types and one admissible no-result/result plus safe-reference result-contract structure;
 - every `SharedIdentity(i)` slot exists, designates one scalar Shared-reference parameter, and has exact type equality with the result;
 - every `SharedDirectChild(i)` slot exists, designates one scalar `Exclusive` or `ExclusiveReplace` reference parameter, and has exact referent-type equality with the scalar Shared result;
-- every direct-call target function exists;
-- every direct call has exactly the target parameter count;
-- each argument operand type exactly matches its corresponding target parameter-local type;
+- every direct-call target function exists and has one valid derived callable interface;
+- every direct call has exactly the target interface parameter count;
+- each direct-call argument operand type exactly matches its corresponding interface parameter type;
 - argument operand state transitions, including safe-reference carrier/authority transitions, are valid in left-to-right order;
 - after all argument operands complete, every recursively contained safe-reference carrier has complete advertised authority and a fully-Live complete target before callee activation creation;
 - function-body validation treats each transferred safe-reference target as a fully-Live external referent domain with its exact reference permission;
@@ -442,13 +476,15 @@ A represented Core program is language-valid under this relation only when all o
 - a caller normal continuation treats transferred referent regions as fully Live with their actual callee-produced non-reference/non-pointer values, while validation may conservatively forget value identity;
 - a caller normal continuation for `SharedIdentity` preserves one result carrier for the exact authority/target of the designated admitted argument before transient call-carrier cleanup and initializes the admitted destination with that carrier;
 - a caller normal continuation for `SharedDirectChild` preserves one callee-created Shared result authority with exact target equal to the designated argument target and direct parent equal to the designated argument authority, preserving that ancestry through transient call-carrier cleanup before initializing the admitted destination;
-- result-destination presence exactly matches target result/no-result structure;
-- a result destination has exactly the target result type, is wholly vacant at the call point, and has ordinary direct exclusive initialization authority;
+- result-destination presence exactly matches the governing callable interface result/no-result structure;
+- a result destination has exactly the governing interface result type, is wholly vacant at the call point, and has ordinary direct exclusive initialization authority;
 - every normal call continuation block exists in the caller body;
 - every return's result presence and type exactly match its enclosing function result structure;
 - result operand state effects are valid before termination;
 - no defined-fault or diverging path receives a synthetic result carrier or normal-continuation state; and
 - every ending activation/local storage extent satisfies the safe-reference storage-extent validity relation.
+
+Direct-call-specific validation remains the static-target subset listed above. Callable scalar type/value validation, the explicit static callable `TypeId`, indirect callee-operand validation, dynamic target selection, and the target/interface invariant are separately required by `callable-values.md` and consume this document's canonical interface/common-call relations.
 
 Validation MUST NOT reject a program merely because its call graph contains a cycle or because a call might diverge or yield a defined fault.
 
@@ -472,8 +508,8 @@ This revision does not define:
 - parameter transfer through a safe reference whose referent structural value contains another safe-reference or raw-pointer leaf;
 - callable borrowed-effect summaries beyond the fixed fully-Live entry/normal-return referent-state contract and the two bounded scalar Shared result contracts above;
 - a borrowed/reference parameter pass mode distinct from ordinary owned-value transfer;
-- indirect calls, function values, closures, methods, virtual dispatch, or overload resolution;
-- variadics, default arguments, generics, traits, or effect-polymorphic calls;
+- closure values/environments, methods, virtual dispatch, or overload resolution;
+- generic function values, variadics, default arguments, generics, traits, or effect-polymorphic calls;
 - async functions, tasks, Exec calls, cancellation, or scheduling;
 - catch targets, panic completion, exception objects, or recoverable-result conventions;
 - ABI, calling convention, FFI, linkage, symbol export, physical stack layout, tail-call guarantees, or target recursion capability;
@@ -482,6 +518,8 @@ This revision does not define:
 - numeric operations, literal construction, host floating-point representation, or physical scalar layout;
 - optimizer transformation legality; or
 - a universal inter-stratum refinement proof.
+
+First-class callable scalar types/values and the indirect-call target-selection prelude are owned by `callable-values.md`. This document's deliberate boundaries therefore do not exclude that accepted sibling relation; they prevent this owner from duplicating it while retaining the common callable interface and execution consequences consumed after target selection.
 
 The admitted direct-child result deliberately preserves the complete authority ancestry selected by ordinary reference reborrow. A carrierless exclusive parent may therefore remain active and continue to constrain direct/root access while the returned Shared child survives. This is a capability downgrade through the returned handle, not an implicit release or shortening of the exclusive authority interval. When the final descendant branch ends, childless carrierless ancestors terminate transitively under the existing reference lifecycle.
 

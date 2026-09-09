@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented Core semantics for defined-fault reason identity and explicit defined-fault termination.
 
-It consumes termination loan handling from [Core borrowing](borrowing.md), termination cleanup and storage-extent ending from [Core value and storage semantics](value-storage.md), and same-fault propagation through suspended direct callers from [Core functions and direct calls](functions.md). [Core control flow](control-flow.md) consumes this document's explicit fault terminator as one represented basic-block termination category with no intra-activation successor.
+It consumes termination loan handling from [Core borrowing](borrowing.md), termination cleanup and storage-extent ending from [Core value and storage semantics](value-storage.md), and same-fault propagation through suspended callers from [Core functions and calls](functions.md). [Core control flow](control-flow.md) consumes this document's explicit fault terminator as one represented basic-block termination category with no intra-activation successor.
 
 Defined faults are distinct from undefined behavior and from ordinary recoverable result values.
 
@@ -50,25 +50,27 @@ When execution reaches `Fault(F)` after every preceding statement in that basic 
 4. perform the current activation's existing defined-fault termination loan handling under `borrowing.md`;
 5. perform the current activation's existing defined-fault local cleanup and storage-extent ending under `value-storage.md`;
 6. terminate the current activation with defined fault `F`; and
-7. apply the surrounding direct-call or outer-execution relation below without changing `F`.
+7. apply the surrounding represented-call or outer-execution relation below without changing `F`.
 
 Steps 4 and 5 consume the existing termination rules; this document does not create a second loan-ending, destruction-domain, cleanup-order, or storage-lifetime relation.
 
 A place that was moved, destroyed, never initialized, or only partially initialized before `Fault(F)` therefore participates in termination cleanup exactly as required by its then-current state under `value-storage.md`. The fault terminator neither revives nor normalizes storage before cleanup.
 
-## Direct-call propagation
+## Call propagation
 
-When the faulting activation has a suspended direct caller, [Core functions and direct calls](functions.md) owns propagation through that call boundary.
+When the faulting activation has a suspended represented caller, [Core functions and calls](functions.md) owns propagation through that call boundary.
 
 The caller receives **the same defined-fault reason `F`** instead of following the call's normal continuation. The caller's result destination is not initialized on that fault path. The caller then performs its own applicable defined-fault termination handling and propagates the same `F` outward.
 
-Repeated propagation through any finite prefix of suspended represented direct callers preserves exactly the initiating reason `F`. Each terminated activation performs its applicable termination handling exactly once.
+This propagation is independent of whether the suspended call selected its target statically through the direct-call form in `functions.md` or dynamically through the indirect-call prelude in [Core callable values and indirect calls](callable-values.md). Once one exact target activation exists, both call forms reuse the same fault-propagation relation.
+
+Repeated propagation through any finite prefix of suspended represented callers preserves exactly the initiating reason `F`. Each terminated activation performs its applicable termination handling exactly once.
 
 This preservation requirement is semantic fault-reason identity, not equality of implementation strings, numeric codes, physical exception objects, or backtraces.
 
 ## Outermost represented execution
 
-When `Fault(F)` or its direct-call propagation reaches the outermost represented Core activation with no suspended represented direct caller:
+When `Fault(F)` or its call propagation reaches the outermost represented Core activation with no suspended represented caller:
 
 - that activation performs its applicable defined-fault termination handling exactly once;
 - the represented Core execution terminates with defined-fault outcome `F`;
@@ -119,7 +121,7 @@ This document introduces no implicit conversion between ordinary result values a
 
 `control-flow.md` owns basic-block execution, `Goto`, `Branch`, CFG reachability, and cyclic execution. It consumes only the fact that `Fault(F)` is one terminator with no intra-activation successor.
 
-`borrowing.md` owns termination loan handling. `value-storage.md` owns destruction domains, cleanup order, stored-value lifetimes, and storage-extent ending. `functions.md` owns caller suspension, direct-call fault propagation, and the fact that a faulting call does not follow its normal continuation or initialize its result destination.
+`borrowing.md` owns termination loan handling. `value-storage.md` owns destruction domains, cleanup order, stored-value lifetimes, and storage-extent ending. `functions.md` owns caller suspension, represented-call fault propagation, and the fact that a faulting call does not follow its normal continuation or initialize its result destination. `callable-values.md` owns only the indirect-call target-selection prelude and does not define a second fault-propagation relation after activation creation.
 
 This document does not redefine those relations.
 

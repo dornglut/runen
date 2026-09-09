@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented Core semantics for finite function-body basic blocks, activation entry into a body, statement-order progression at the control-flow level, unconditional intra-activation transfer, scalar-`Bool` conditional branching, control-flow-graph path-state validity, and cyclic intra-activation execution.
 
-It consumes Core values and value/type compatibility, local storage, stored-value lifetime, operand ownership transfer/copy, assignment, destruction domains, and termination cleanup from [Core value and storage semantics](value-storage.md); loan/access authority from [Core borrowing](borrowing.md); raw-pointer operand behavior from [Core pointers and provenance](pointers.md); unsafe-operation outcomes and undefined-behavior separation from [Core unsafe semantics](unsafe.md); direct-call activation, caller suspension, result transfer, normal return, and call fault propagation from [Core functions and direct calls](functions.md); and defined-fault classification from [Core faults](faults.md). It does not redefine those owners.
+It consumes Core values and value/type compatibility, local storage, stored-value lifetime, operand ownership transfer/copy, assignment, destruction domains, and termination cleanup from [Core value and storage semantics](value-storage.md); loan/access authority from [Core borrowing](borrowing.md); raw-pointer operand behavior from [Core pointers and provenance](pointers.md); unsafe-operation outcomes and undefined-behavior separation from [Core unsafe semantics](unsafe.md); direct-call target selection plus common call activation, caller suspension, result transfer, normal return, and call fault propagation from [Core functions and calls](functions.md); indirect-call callee evaluation and dynamic target selection from [Core callable values and indirect calls](callable-values.md); and defined-fault classification from [Core faults](faults.md). It does not redefine those owners.
 
 The represented Core data model and validator may use numeric block identifiers, vectors, worklists, hashes, or other implementation structures. Those representations are not Core program values or source-language semantics.
 
@@ -61,6 +61,7 @@ A terminator either:
 
 - selects a successor basic block in the same activation under this document;
 - delegates to the accepted direct-call relation in `functions.md`, which may later resume at its represented normal continuation block;
+- delegates to the accepted indirect-call relation in `callable-values.md`, which evaluates/selects its target and then reuses the common call relation in `functions.md` before any later normal continuation;
 - delegates to the accepted normal-return relation in `functions.md`; or
 - delegates to the accepted defined-fault termination relation and call-fault propagation owned by `faults.md` and `functions.md`.
 
@@ -170,7 +171,7 @@ A validation state is **CFG-reachable** at a block when it can be propagated fro
 
 - `Goto` contributes its one target edge;
 - `Branch` contributes both target edges after condition-operand validation-state effects;
-- a normally continuing direct call contributes its existing normal continuation edge after the call's already-defined state effects and result initialization facts;
+- a normally continuing represented call, direct or indirect, contributes its normal continuation edge after all call-form-specific operand effects, common call-entry effects, and result initialization facts;
 - `Return` and `Fault` contribute no intra-activation successor edge.
 
 When an existing unsafe operation has no defined continuation under the validation relation, that validation execution contributes no successor state beyond that point.
@@ -211,7 +212,7 @@ This distinction permits validation to remain CFG-based without turning static s
 
 ## Cycles and divergence
 
-A represented Core control-flow graph MAY contain cycles formed by `Goto`, `Branch`, normal direct-call continuation edges, or combinations of those edges where the applicable owner permits them.
+A represented Core control-flow graph MAY contain cycles formed by `Goto`, `Branch`, normal represented-call continuation edges, or combinations of those edges where the applicable owner permits them.
 
 A cycle is not itself a validation error.
 
