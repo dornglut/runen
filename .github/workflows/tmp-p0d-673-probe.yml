@@ -1,0 +1,13 @@
+name: Temporary P0-D 673 probe
+
+on:
+  push:
+    branches:
+      - p0d-673-core-callable-values-impl
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: echo probe-ok
