@@ -615,13 +615,16 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         .map(|implementation| (implementation.trait_id, implementation.target))
         .collect::<MarkerImplementationRelation>();
     let mut next_binding = 0_usize;
+    let header_context = HeaderResolutionContext {
+        modules: &modules,
+        imports: &imports,
+        records: &records,
+        marker_traits: &marker_traits,
+        function_types: &function_types,
+    };
     let headers = resolve_function_headers(
         &function_syntax,
-        &modules,
-        &imports,
-        &records,
-        &marker_traits,
-        &function_types,
+        &header_context,
         &mut next_binding,
         &mut diagnostics,
     );
@@ -1299,16 +1302,14 @@ fn resolve_records(
                 });
                 continue;
             }
-            if let Some(ty) = resolve_type(
-                record.module,
-                record.unit,
-                &type_node,
+            let type_context = TypeNameResolutionContext {
+                module: record.module,
+                unit: record.unit,
                 modules,
                 imports,
-                &[],
-                true,
-                diagnostics,
-            ) {
+                type_parameters: &[],
+            };
+            if let Some(ty) = resolve_type(&type_node, &type_context, true, diagnostics) {
                 validate_exported_field_type(
                     record,
                     accessibility,
@@ -1367,16 +1368,27 @@ fn validate_exported_field_type(
     }
 }
 
+struct HeaderResolutionContext<'a> {
+    modules: &'a BTreeMap<ModuleId, ModuleBuild>,
+    imports: &'a [UnitImports],
+    records: &'a [Record],
+    marker_traits: &'a [MarkerTrait],
+    function_types: &'a RefCell<Vec<FunctionType>>,
+}
+
 fn resolve_function_headers(
     syntax: &[FunctionSyntax],
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    records: &[Record],
-    marker_traits: &[MarkerTrait],
-    function_types: &RefCell<Vec<FunctionType>>,
+    context: &HeaderResolutionContext<'_>,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Vec<FunctionHeader> {
+    let HeaderResolutionContext {
+        modules,
+        imports,
+        records,
+        marker_traits,
+        function_types,
+    } = context;
     let mut headers = Vec::with_capacity(syntax.len());
     for function in syntax {
         let mut type_parameter_names = BTreeSet::new();
@@ -1448,6 +1460,18 @@ fn resolve_function_headers(
             })
             .unwrap_or_default();
 
+        let type_context = FullTypeResolutionContext {
+            names: TypeNameResolutionContext {
+                module: function.module,
+                unit: function.unit,
+                modules,
+                imports,
+                type_parameters: &type_parameters,
+            },
+            records,
+            function_types,
+        };
+
         let parameter_list = direct_child(&function.node, SyntaxKind::ParameterList);
         let mut parameter_names = BTreeSet::new();
         let mut parameters = Vec::new();
@@ -1465,18 +1489,7 @@ fn resolve_function_headers(
                 });
             }
             let type_node = direct_child(&parameter_node, SyntaxKind::TypeRef);
-            if let Some(ty) = resolve_full_type(
-                function.module,
-                function.unit,
-                &type_node,
-                modules,
-                imports,
-                records,
-                function_types,
-                &type_parameters,
-                true,
-                diagnostics,
-            ) {
+            if let Some(ty) = resolve_full_type(&type_node, &type_context, true, diagnostics) {
                 if matches!(ty, Type::RawPointer(_)) {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::RawPointerParameter,
@@ -1519,18 +1532,7 @@ fn resolve_function_headers(
             .find(|node| node.kind() == SyntaxKind::ResultClause)
             .and_then(|result_clause| {
                 let type_node = direct_child(&result_clause, SyntaxKind::TypeRef);
-                let ty = resolve_full_type(
-                    function.module,
-                    function.unit,
-                    &type_node,
-                    modules,
-                    imports,
-                    records,
-                    function_types,
-                    &type_parameters,
-                    true,
-                    diagnostics,
-                )?;
+                let ty = resolve_full_type(&type_node, &type_context, true, diagnostics)?;
                 if matches!(ty, Type::RawPointer(_)) {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::RawPointerResult,
@@ -1833,16 +1835,27 @@ fn intrinsic_type(kind: SyntaxKind) -> Option<IntrinsicType> {
     }
 }
 
-fn resolve_type(
+struct TypeNameResolutionContext<'a> {
     module: ModuleId,
     unit: usize,
+    modules: &'a BTreeMap<ModuleId, ModuleBuild>,
+    imports: &'a [UnitImports],
+    type_parameters: &'a [TypeParameter],
+}
+
+fn resolve_type(
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    type_parameters: &[TypeParameter],
+    context: &TypeNameResolutionContext<'_>,
     allow_type_parameters: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
+    let TypeNameResolutionContext {
+        module,
+        unit,
+        modules,
+        imports,
+        type_parameters,
+    } = context;
     let reference_permission = type_ref_reference_permission(node);
     let raw = type_ref_is_raw_pointer(node);
     debug_assert!(!(reference_permission.is_some() && raw));
@@ -1850,12 +1863,12 @@ fn resolve_type(
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
+        match resolve_qualified_entity(*unit, &qualified, modules, imports, diagnostics)? {
             EntityId::Record(id) => Type::Record(id),
             EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
-                    location: location(unit, &qualified),
+                    location: location(*unit, &qualified),
                 });
                 return None;
             }
@@ -1878,7 +1891,7 @@ fn resolve_type(
             debug_assert_eq!(token.kind(), SyntaxKind::Ident);
             let name = key(&token);
             let token_location = SourceLocation {
-                unit,
+                unit: *unit,
                 range: token.text_range(),
             };
             if let Some(parameter) = type_parameters
@@ -1895,7 +1908,7 @@ fn resolve_type(
                 Type::Parameter(parameter.id)
             } else {
                 match modules
-                    .get(&module)
+                    .get(module)
                     .and_then(|module| module.namespace.get(&name))
                     .copied()
                     .map(|entity| entity.entity)
@@ -1964,60 +1977,27 @@ fn type_ref_is_function(node: &SyntaxNode) -> bool {
         .any(|token| token.kind() == SyntaxKind::KwFn)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "function-type resolution reuses the existing explicit source-resolution inputs"
-)]
+struct FullTypeResolutionContext<'a> {
+    names: TypeNameResolutionContext<'a>,
+    records: &'a [Record],
+    function_types: &'a RefCell<Vec<FunctionType>>,
+}
+
 fn resolve_full_type(
-    module: ModuleId,
-    unit: usize,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    records: &[Record],
-    function_types: &RefCell<Vec<FunctionType>>,
-    type_parameters: &[TypeParameter],
+    context: &FullTypeResolutionContext<'_>,
     allow_type_parameters: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
     if type_ref_is_function(node) {
-        return resolve_function_type(
-            module,
-            unit,
-            node,
-            modules,
-            imports,
-            records,
-            function_types,
-            type_parameters,
-            diagnostics,
-        );
+        return resolve_function_type(node, context, diagnostics);
     }
-    resolve_type(
-        module,
-        unit,
-        node,
-        modules,
-        imports,
-        type_parameters,
-        allow_type_parameters,
-        diagnostics,
-    )
+    resolve_type(node, &context.names, allow_type_parameters, diagnostics)
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "function-type resolution reuses the existing explicit source-resolution inputs"
-)]
 fn resolve_function_type(
-    module: ModuleId,
-    unit: usize,
     node: &SyntaxNode,
-    modules: &BTreeMap<ModuleId, ModuleBuild>,
-    imports: &[UnitImports],
-    records: &[Record],
-    function_types: &RefCell<Vec<FunctionType>>,
-    type_parameters: &[TypeParameter],
+    context: &FullTypeResolutionContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
     debug_assert!(type_ref_is_function(node));
@@ -2037,29 +2017,18 @@ fn resolve_function_type(
 
     let mut parameters = Vec::with_capacity(components.len());
     for parameter_node in components {
-        let parameter = resolve_full_type(
-            module,
-            unit,
-            &parameter_node,
-            modules,
-            imports,
-            records,
-            function_types,
-            type_parameters,
-            false,
-            diagnostics,
-        )?;
+        let parameter = resolve_full_type(&parameter_node, context, false, diagnostics)?;
         if matches!(parameter, Type::RawPointer(_)) {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::RawPointerParameter,
-                location: location(unit, &parameter_node),
+                location: location(context.names.unit, &parameter_node),
             });
             return None;
         }
         if !validate_safe_reference_referent(
             parameter,
-            records,
-            location(unit, &parameter_node),
+            context.records,
+            location(context.names.unit, &parameter_node),
             diagnostics,
         ) {
             return None;
@@ -2068,22 +2037,11 @@ fn resolve_function_type(
     }
 
     let result = if let Some(result_node) = result_node {
-        let result = resolve_full_type(
-            module,
-            unit,
-            &result_node,
-            modules,
-            imports,
-            records,
-            function_types,
-            type_parameters,
-            false,
-            diagnostics,
-        )?;
+        let result = resolve_full_type(&result_node, context, false, diagnostics)?;
         if matches!(result, Type::RawPointer(_)) {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::RawPointerResult,
-                location: location(unit, &result_node),
+                location: location(context.names.unit, &result_node),
             });
             return None;
         }
@@ -2096,14 +2054,14 @@ fn resolve_function_type(
         ) {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ReplacementReferenceResult,
-                location: location(unit, &result_node),
+                location: location(context.names.unit, &result_node),
             });
             return None;
         }
         if !validate_safe_reference_referent(
             result,
-            records,
-            location(unit, &result_node),
+            context.records,
+            location(context.names.unit, &result_node),
             diagnostics,
         ) {
             return None;
@@ -2131,7 +2089,7 @@ fn resolve_function_type(
             (Some(_), Some(_)) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
-                    location: location(unit, node),
+                    location: location(context.names.unit, node),
                 });
                 return None;
             }
@@ -2151,14 +2109,14 @@ fn resolve_function_type(
                     (None, _) => {
                         diagnostics.push(Diagnostic {
                             kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
-                            location: location(unit, node),
+                            location: location(context.names.unit, node),
                         });
                         return None;
                     }
                     (Some(_), Some(_)) => {
                         diagnostics.push(Diagnostic {
                             kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
-                            location: location(unit, node),
+                            location: location(context.names.unit, node),
                         });
                         return None;
                     }
@@ -2170,7 +2128,7 @@ fn resolve_function_type(
     };
 
     Some(Type::Function(intern_function_type(
-        function_types,
+        context.function_types,
         FunctionType {
             parameters,
             result,
@@ -3282,19 +3240,18 @@ fn validate_local(
     };
     let local_location = location(header.unit, node);
     let type_node = direct_child(node, SyntaxKind::TypeRef);
-    let declared = resolve_full_type(
-        header.module,
-        header.unit,
-        &type_node,
-        context.modules,
-        context.imports,
-        context.records,
-        context.function_types,
-        &header.type_parameters,
-        true,
-        diagnostics,
-    )
-    .and_then(|ty| {
+    let type_context = FullTypeResolutionContext {
+        names: TypeNameResolutionContext {
+            module: header.module,
+            unit: header.unit,
+            modules: context.modules,
+            imports: context.imports,
+            type_parameters: &header.type_parameters,
+        },
+        records: context.records,
+        function_types: context.function_types,
+    };
+    let declared = resolve_full_type(&type_node, &type_context, true, diagnostics).and_then(|ty| {
         if matches!(ty, Type::SafeReference { .. }) {
             if mutability.is_mutable() {
                 diagnostics.push(Diagnostic {
