@@ -1,0 +1,405 @@
+name: Temporary P0-D 676 spec integration
+
+on:
+  push:
+    branches:
+      - p0d-676-source-function-values-spec
+    paths:
+      - .github/workflows/p0d-676-spec-transform.yml
+
+permissions:
+  contents: write
+
+jobs:
+  transform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-676-source-function-values-spec
+      - name: Apply exact normative integration
+        shell: python
+        run: |
+          from pathlib import Path
+
+          def edit(path, fn):
+              p = Path(path)
+              old = p.read_text()
+              new = fn(old)
+              if new == old:
+                  raise SystemExit(f"no change produced for {path}")
+              p.write_text(new)
+
+          def once(text, old, new, label):
+              n = text.count(old)
+              if n != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, found {n}")
+              return text.replace(old, new, 1)
+
+          # Navigation.
+          edit("spec/language/source/README.md", lambda s: once(
+              s,
+              "- [Callable signatures](callables.md)\n- [Generics](generics.md)",
+              "- [Callable signatures](callables.md)\n- [Function values and indirect calls](function-values.md)\n- [Generics](generics.md)",
+              "README function-values index",
+          ))
+
+          # Type foundation integrates the specialized constructor without owning it.
+          def types(s):
+              s = once(s,
+                  "The first function-local abstract parametric type expressions and their generic-validation equality/substitution relation are owned by [Source generics](generics.md); they do not enlarge the concrete represented source type identities owned here.",
+                  "Captureless function-value type structure, constructor-specific identity, and function-value semantics are owned by [Source function values and indirect calls](function-values.md); this type foundation integrates that represented value-type category into general source type equality, duplicability, and contextual record-shape boundaries without redefining function-value formation or invocation. The first function-local abstract parametric type expressions and their generic-validation equality/substitution relation are owned by [Source generics](generics.md); they do not enlarge the concrete represented source type identities owned here.",
+                  "types owner dependency")
+              s = once(s,
+                  "The represented concrete intrinsic, safe-reference, raw-pointer, and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md).",
+                  "The represented concrete intrinsic, safe-reference, raw-pointer, function-value, and record-definition spellings are owned by [Source concrete syntax](concrete-syntax.md).",
+                  "types concrete spelling")
+              marker = "## Deliberately absent intrinsic and indirection types"
+              section = '''## Function-value source types\n\nThe represented source type set additionally contains the captureless structural function-value type constructor owned by `function-values.md`. One such type contains a finite ordered parameter-type sequence, an optional result type, and the exact bounded safe-reference result contract derived for that interface. Constructor-specific structure and identity are owned by `function-values.md`; this document integrates that category into the general source type-equality and duplicability relations below.\n\nFinite nested concrete function-value types are represented. Their parameter/result edges are semantic callable-interface edges rather than nominal-record direct-containment edges. They therefore do not add edges to the nominal record containment graph below and establish no aggregate layout or closure environment.\n\nFunction-value types are deliberately not record-field-admissible, safe-reference-referent-admissible, or raw-pointer-pointee-admissible in this slice. Those contextual boundaries remain owned by this document, `references.md`, `raw-pointers-unsafe.md`, and `function-values.md` as applicable.\n\n'''
+              s = once(s, marker, section + marker, "types function-value section")
+              s = once(s,
+                  "- slices, arrays, tuples, enums, unions, function types, or other unrepresented composite/indirection forms.",
+                  "- slices, arrays, tuples, enums, unions, or other unrepresented composite/indirection forms beyond the bounded function-value type from `function-values.md`.",
+                  "types absent list")
+              s = once(s,
+                  "- two raw-pointer source types `RawPtr(A)` and `RawPtr(B)` are equal exactly when `A` and `B` are equal under this same source type-equality relation; and\n- values from different represented type categories are never equal merely because lower representation or structure is similar.",
+                  "- two raw-pointer source types `RawPtr(A)` and `RawPtr(B)` are equal exactly when `A` and `B` are equal under this same source type-equality relation;\n- two function-value source types are equal exactly when their constructor-specific structures are equal under `function-values.md`; and\n- values from different represented type categories are never equal merely because lower representation or structure is similar.",
+                  "types equality")
+              s = once(s,
+                  "`SharedRef(T)`, `ExclusiveReplaceRef(T)`, and `RawPtr(T)` are represented source value types but are deliberately not record-field-admissible in these indirection slices.",
+                  "`SharedRef(T)`, `ExclusiveReplaceRef(T)`, `RawPtr(T)`, and the captureless function-value types from `function-values.md` are represented source value types but are deliberately not record-field-admissible in these slices.",
+                  "types record-field exclusion")
+              s = once(s,
+                  "A safe-reference referent edge and a raw-pointer pointee edge are semantic indirection and are not direct-containment edges.",
+                  "A safe-reference referent edge, a raw-pointer pointee edge, and every function-value callable-interface parameter/result edge are semantic non-containment edges and are not direct-containment edges.",
+                  "types containment")
+              s = once(s,
+                  "Every represented `RawPtr(T)` is duplicable under the pointer-value/provenance consequence owned by `raw-pointers-unsafe.md`. Duplicating one raw pointer preserves its pointer value and exact pointer-origin provenance; it does not duplicate, borrow, move, or otherwise access the pointee value and creates no safe-reference authority.\n\nEach nominal record declaration",
+                  "Every represented `RawPtr(T)` is duplicable under the pointer-value/provenance consequence owned by `raw-pointers-unsafe.md`. Duplicating one raw pointer preserves its pointer value and exact pointer-origin provenance; it does not duplicate, borrow, move, or otherwise access the pointee value and creates no safe-reference authority.\n\nEvery represented captureless function-value type is duplicable under `function-values.md`. Duplicating one function value preserves the exact source function-entity identity and creates no activation, capture environment, address, reference authority, or cleanup obligation.\n\nEach nominal record declaration",
+                  "types duplicability")
+              return s
+          edit("spec/language/source/types.md", types)
+
+          # Callable signatures admit concrete function-value types but retain signature authority.
+          def callables(s):
+              s = once(s,
+                  "represented concrete source value type identity and equality from [Source type foundation](types.md), first-slice function type-parameter identity",
+                  "represented concrete source value type identity and equality from [Source type foundation](types.md), captureless concrete function-value type structure from [Source function values and indirect calls](function-values.md), first-slice function type-parameter identity",
+                  "callables dependency")
+              s = once(s,
+                  "Represented source function body attachment, dynamic activations, direct calls, owned argument/result transfer including safe-reference carrier/result/external-referent consequences, recursion, cleanup, return, divergence, and defined-fault propagation through direct calls are owned by [Source function execution](function-execution.md).",
+                  "Represented source function body attachment, dynamic activations, common direct/indirect call execution, owned argument/result transfer including safe-reference carrier/result/external-referent consequences, recursion, cleanup, return, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md). Direct-versus-bounded-indirect target classification and function-value formation are owned by `function-values.md`.",
+                  "callables execution relation")
+              s = once(s,
+                  "This document does not define indirect calls or function values, effects, generic substitution/capability semantics beyond the callable integration stated here, trait implementation/coherence, ABI, source lifetime names, a separate reference pass mode, an unsafe callable contract, or an implementation representation.",
+                  "This document does not define function-value payload identity, function-value formation, bounded indirect target classification, effects, generic substitution/capability semantics beyond the callable integration stated here, trait implementation/coherence, ABI, source lifetime names, a separate reference pass mode, an unsafe callable contract, or an implementation representation.",
+                  "callables exclusions")
+              s = once(s,
+                  "- one represented intrinsic scalar or nominal record source type admitted by `types.md`;\n- one represented `SharedRef(T)`",
+                  "- one represented intrinsic scalar or nominal record source type admitted by `types.md`;\n- one represented concrete function-value type admitted by `function-values.md`;\n- one represented `SharedRef(T)`",
+                  "callables parameter FunctionType")
+              s = once(s,
+                  "- one represented intrinsic scalar or nominal record source type already result-admissible;\n- one represented `SharedRef(T)`",
+                  "- one represented intrinsic scalar or nominal record source type already result-admissible;\n- one represented concrete function-value type admitted by `function-values.md`;\n- one represented `SharedRef(T)`",
+                  "callables result FunctionType")
+              s = once(s,
+                  "It also does not establish a first-class function type, function-pointer type, closure type, implicit conversion, trait conformance beyond the separately owned marker requirement structure, overload relation, substitutability relation, or ABI compatibility.",
+                  "It also does not establish function-value payload identity or formation, closure type compatibility, implicit conversion, trait conformance beyond the separately owned marker requirement structure, overload relation, substitutability relation, or ABI compatibility. The bounded first-class captureless function-value type is owned separately by `function-values.md`.",
+                  "callables first-class stale exclusion")
+              s = once(s,
+                  "- the direct nominal referent `T` of a result type `SharedRef(T)`.\n\nIf an exported function is generic",
+                  "- the direct nominal referent `T` of a result type `SharedRef(T)`; or\n- any nominal record reached by recursively traversing a concrete function-value type that appears directly as a parameter/result type, including nominal records reached through an admitted safe-reference component of that finite function-value interface.\n\nThe function-value traversal follows only finite callable-interface parameter/result type syntax. It recursively enters nested concrete function-value types, follows the one direct referent edge of an admitted safe-reference component, and does not traverse fields of a nominal record merely because that record identity has been reached. Function-valued nominal record fields are independently absent in this slice.\n\nIf an exported function is generic",
+                  "callables accessibility traversal")
+              s = once(s,
+                  "This rule follows only the one direct safe-reference referent edge admitted by this slice. Nested references are invalid and record fields cannot contain references, so no broader recursive reference-interface traversal is defined.",
+                  "Outside the finite function-value traversal above, this rule follows only the one direct safe-reference referent edge admitted by this slice. Nested references remain invalid and nominal-record fields are not recursively traversed for exported callable-interface accessibility.",
+                  "callables accessibility boundary")
+              return s
+          edit("spec/language/source/callables.md", callables)
+
+          # Names/modules stays category-neutral; add relationships only.
+          def names(s):
+              s = once(s,
+                  "Constant declaration/value/use semantics are owned by [Source constants](constants.md). This document does not define member lookup",
+                  "Constant declaration/value/use semantics are owned by [Source constants](constants.md). Captureless function-value formation and bounded indirect-call target classification consume these lookup relations through [Source function values and indirect calls](function-values.md). This document does not define member lookup",
+                  "names dependency")
+              s = once(s,
+                  "A bare constant value use consumes the local-first relation from `local-bindings.md` and reaches this same-module relation only when no active function-local value binding selects the key; `constants.md` then requires the selected module binding to be a constant.",
+                  "A bare constant value use consumes the local-first relation from `local-bindings.md` and reaches this same-module relation only when no active function-local value binding selects the key; `constants.md` then requires the selected module binding to be a constant. A bare function-value formation under an exact required function-value type uses the same local-first boundary and reaches this same-module relation only when no active local resolves; `function-values.md` then requires the selected module binding to be one exact non-generic function entity. The same same-module function lookup continues to select the existing direct-call target when no active local resolves an unqualified call target.",
+                  "names same-module function values")
+              s = once(s,
+                  "A qualified constant value consumes this same one-hop exported-binding relation. `constants.md` separately requires the selected binding to denote one source constant and defines its effect-free owned-value production. Function-local value bindings do not participate in this explicitly qualified lookup.",
+                  "A qualified constant value consumes this same one-hop exported-binding relation. `constants.md` separately requires the selected binding to denote one source constant and defines its effect-free owned-value production. A qualified function-value formation consumes the same exported-binding relation and `function-values.md` separately requires one non-generic function entity of the exact required function-value type. A qualified call target likewise remains the existing direct module-function call category because function-local bindings do not participate in this explicitly qualified lookup.",
+                  "names qualified function values")
+              return s
+          edit("spec/language/source/names-modules.md", names)
+
+          # Function-local binding integration.
+          def locals_(s):
+              s = once(s,
+                  "concrete source value types and owned-value duplicability from [Source type foundation](types.md), module-level constant binding/value semantics",
+                  "concrete source value types and owned-value duplicability from [Source type foundation](types.md), captureless function-value local/use/call-target facts from [Source function values and indirect calls](function-values.md), module-level constant binding/value semantics",
+                  "locals dependency")
+              s = once(s,
+                  "Represented nominal record fields cannot have `SharedRef(T)`, `ExclusiveReplaceRef(T)`, `RawPtr(T)`, or abstract function type-parameter type, so the represented record pattern relation cannot introduce a safe-reference, raw-pointer, or abstract-generic binding in this slice.",
+                  "Represented nominal record fields cannot have `SharedRef(T)`, `ExclusiveReplaceRef(T)`, `RawPtr(T)`, a captureless function-value type, or abstract function type-parameter type, so the represented record pattern relation cannot introduce a safe-reference, raw-pointer, function-value, or abstract-generic binding in this slice.",
+                  "locals pattern exclusion")
+              s = once(s,
+                  "Raw-pointer local mutability applies only to the stored pointer value. It does not grant pointee mutation authority. Every raw-pointer initializer additionally MUST satisfy the pointer-origin lexical target-validity relation from `raw-pointers-unsafe.md` for the complete static extent of the receiving local.\n\nAfter successful initializer transfer",
+                  "Raw-pointer local mutability applies only to the stored pointer value. It does not grant pointee mutation authority. Every raw-pointer initializer additionally MUST satisfy the pointer-origin lexical target-validity relation from `raw-pointers-unsafe.md` for the complete static extent of the receiving local.\n\nA concrete captureless function-value type from `function-values.md` is an ordinary non-reference local type and may use either assignment-mutability class. Its initializer, whole-binding use, reassignment, and cleanup consume the ordinary relations here; function-value-specific identity/formation/indirect-call behavior remains owned by `function-values.md`.\n\nAfter successful initializer transfer",
+                  "locals function local admission")
+              s = once(s,
+                  "unqualified direct-call target, safe-reference root/reborrow/dereference/reference-replacement operands",
+                  "unqualified call target, safe-reference root/reborrow/dereference/reference-replacement operands",
+                  "locals neutral call target")
+              s = once(s,
+                  "For the bare identifier value form, a selected active parameter/local binding uses the ordinary binding-use relation below; only when no active binding resolves the key may same-module lookup select a source constant, whose value-production semantics are then owned by `constants.md`.",
+                  "For the bare identifier value form, a selected active parameter/local binding uses the ordinary binding-use relation below. Only when no active binding resolves the key may same-module lookup select a module declaration: `constants.md` owns constant value production, while `function-values.md` owns context-typed formation when an exact required function-value type selects a non-generic function entity. A wrong-category module binding is final.\n\nFor an unqualified call target, this same precedence is decisive. If a local/parameter is selected, `function-values.md` accepts the call only when that binding has one exact function-value type and then classifies it as bounded indirect invocation; a non-function-valued local is a final wrong-category failure. Only when no local resolves may same-module lookup select the existing direct source function target. A generic argument list does not bypass a selected local.",
+                  "locals value/call lookup")
+              return s
+          edit("spec/language/source/local-bindings.md", locals_)
+
+          # Generics: keep the polymorphic boundary closed.
+          def generics(s):
+              s = once(s,
+                  "callable entity/signature structure from [Source callables](callables.md), structural ownership",
+                  "callable entity/signature structure from [Source callables](callables.md), concrete captureless function-value types and generic-function-value exclusions from [Source function values and indirect calls](function-values.md), structural ownership",
+                  "generics dependency")
+              s = once(s,
+                  "- nested in another aggregate or type constructor;",
+                  "- nested in another aggregate or type constructor, including a captureless function-value type;",
+                  "generics nested FunctionType")
+              s = once(s,
+                  "Existing concrete non-parametric source types MAY appear in the same generic callable signature/body under their existing owners.",
+                  "Existing concrete non-parametric source types MAY appear in the same generic callable signature/body under their existing owners. This includes a concrete function-value type from `function-values.md`, provided that function-value type itself contains no abstract type parameter under that owner's first-slice boundary.",
+                  "generics concrete FunctionType")
+              s = once(s,
+                  "Safe-reference and raw-pointer types are not generic type arguments in this revision. No nested generic type application exists because this revision defines no generic type constructor.",
+                  "Safe-reference, raw-pointer, and function-value types are not generic type arguments in this revision. No nested generic type application exists because this revision defines no generic type constructor.",
+                  "generics type arguments")
+              s = once(s,
+                  "Applying a substitution to one parametric callable/local type expression replaces each occurrence of a target type-parameter slot with its mapped argument and leaves existing concrete type expressions unchanged.",
+                  "Applying a substitution to one parametric callable/local type expression replaces each occurrence of a target type-parameter slot with its mapped argument and leaves existing concrete type expressions unchanged. A concrete function-value type is therefore left unchanged by first-slice substitution because abstract type parameters are not admitted inside that type constructor.",
+                  "generics substitution FunctionType")
+              s = once(s,
+                  "A generic direct application remains the same direct-call producer/call-statement semantic category owned by `function-execution.md`; this document adds no indirect call, generic function value, method/associated lookup, or second call mechanism.",
+                  "A generic direct application remains the same direct-call producer/call-statement semantic category owned by `function-execution.md`. `function-values.md` independently excludes generic function entities and explicit specializations as function values; a bounded indirect call through a function-value local therefore never consumes this generic-application relation. This document adds no generic function value, method/associated lookup, or second generic call mechanism.",
+                  "generics direct boundary")
+              return s
+          edit("spec/language/source/generics.md", generics)
+
+          # References: explicitly preserve the no-reference-to-callable boundary and generalize call summaries.
+          def refs(s):
+              s = once(s,
+                  "function entity/parameter/result-contract callable structure from [Source callables](callables.md); direct-call argument/result evaluation",
+                  "function entity/parameter/result-contract callable structure from [Source callables](callables.md); the exclusion of safe references to captureless function-value types and bounded indirect target facts from [Source function values and indirect calls](function-values.md); call argument/result evaluation",
+                  "references dependency")
+              s = once(s,
+                  "1. `T` is a represented source value type under `types.md`;\n2. `T` is duplicable under the source-semantic duplicability relation from `types.md`;\n3. the structural source value shape of `T` contains neither a safe-reference type nor a raw-pointer type.\n\nThis preserves the previously accepted Shared-reference referent domain.",
+                  "1. `T` is one represented intrinsic scalar or nominal record source type under `types.md`;\n2. `T` is duplicable under the source-semantic duplicability relation from `types.md`; and\n3. the structural source value shape of `T` contains neither a safe-reference type nor a raw-pointer type.\n\nThis is exactly the previously accepted Shared-reference referent domain. It explicitly does not admit the new captureless function-value type from `function-values.md`; that type's duplicability does not create safe-reference-to-function-value semantics.",
+                  "references Shared referent closure")
+              s = once(s,
+                  "Source safe-reference values arise only from root formation, explicit reborrow, ordinary transport of an existing valid safe-reference value, or a successful direct call whose advertised result contract summarizes an authority already created by valid callee execution.",
+                  "Source safe-reference values arise only from root formation, explicit reborrow, ordinary transport of an existing valid safe-reference value, or a successful result-bearing source call—direct or bounded indirect—whose advertised result contract summarizes an authority already created by valid callee execution.",
+                  "references result producer")
+              s = s.replace("`SharedIdentity(j)` direct call", "`SharedIdentity(j)` source call")
+              s = s.replace("`SharedDirectChild(j)` direct call", "`SharedDirectChild(j)` source call")
+              s = once(s,
+                  "A local may initialize from root formation, ordinary transport of an existing reference, explicit reborrow, or a valid Shared contract-bearing direct-call result as applicable to its exact type.",
+                  "A local may initialize from root formation, ordinary transport of an existing reference, explicit reborrow, or a valid Shared contract-bearing source-call result—direct or bounded indirect—as applicable to its exact type.",
+                  "references local call result")
+              s = once(s, "## Direct-call transfer and call-entry authority", "## Call transfer and call-entry authority", "references call heading")
+              s = once(s,
+                  "Arguments are evaluated left-to-right and successful produced values are held by `function-execution.md`.",
+                  "For a bounded indirect call, `function-values.md`/`function-execution.md` evaluate and hold the captureless callee value before ordinary arguments; that callable value contains no safe-reference carrier or referent authority. Ordinary arguments are then evaluated left-to-right and successful produced values are held by `function-execution.md`.",
+                  "references indirect callee ordering")
+              s = once(s,
+                  "A successful result-bearing direct call validates from the callee's advertised callable contract without expanding the callee body.",
+                  "A successful result-bearing source call, whether direct or bounded indirect, validates from its already-established callable contract without expanding the dynamically selected callee body. For an indirect call the exact function-value type supplies that static contract before callee-value or argument effects.",
+                  "references caller summary")
+              s = once(s,
+                  "- safe-reference record fields or reference-containing aggregates;",
+                  "- safe-reference record fields, safe references whose referent is a function-value type, or other reference-containing aggregates;",
+                  "references exclusion")
+              return s
+          edit("spec/language/source/references.md", refs)
+
+          # Function execution: add only the callee-value phase, then reuse common call machinery.
+          def execution(s):
+              s = once(s,
+                  "dynamic direct-call activations, direct-call argument/result ownership transfer",
+                  "dynamic source-call activations, common direct/indirect call argument/result ownership transfer",
+                  "execution intro calls")
+              s = once(s,
+                  "function entity/callable-signature structure from [Source callables](callables.md), source value type equality",
+                  "function entity/callable-signature structure from [Source callables](callables.md), captureless function-value formation and bounded direct/indirect target classification from [Source function values and indirect calls](function-values.md), source value type equality",
+                  "execution function-values dependency")
+              s = once(s,
+                  "In the represented direct-call subset, a direct source call targets exactly one resolved source function entity that has a represented body.\n\nA source function entity without a represented body has no direct source execution relation under this document. Later FFI, external-function, intrinsic, or other callable owners may add distinct relations without redefining this one.\n\nThe represented direct call is statically bound to its resolved function entity. This revision introduces no function-operand evaluation, overload selection, indirect call, function value, virtual dispatch, or closure call.",
+                  "A represented direct source call targets exactly one statically resolved source function entity that has a represented body. A represented bounded indirect source call instead obtains one exact non-generic source function entity from the held captureless function value selected under `function-values.md` before entering the same execution relation.\n\nA source function entity without a represented body has no represented source execution relation through either target-selection form under this document. Later FFI, external-function, intrinsic, or other callable owners may add distinct relations without redefining this one.\n\nDirect calls remain statically bound and perform no callee-value evaluation. Bounded indirect calls add only the function-local callee-value evaluation/target-selection phase owned jointly with `function-values.md`; overload selection, virtual dispatch, closure calls, and a second activation model remain absent.",
+                  "execution source body calls")
+              s = once(s, "Every dynamic direct call creates one distinct **source function activation**", "Every dynamic source call, direct or bounded indirect, creates one distinct **source function activation**", "execution activation")
+              s = once(s, "Direct and mutual recursion are source-valid. Every recursive direct call creates a fresh activation.", "Direct recursion, bounded-indirect recursion, and mutual recursion through either represented call target form are source-valid. Every recursive source call creates a fresh activation.", "execution recursion")
+              s = once(s,
+                  "- ordinary whole-binding owned-value use from `local-bindings.md`;\n- a successful result-bearing direct call under this document;",
+                  "- ordinary whole-binding owned-value use from `local-bindings.md`;\n- context-typed formation of a captureless non-generic source function value from `function-values.md`;\n- a successful result-bearing source call, direct or bounded indirect, under this document and `function-values.md`;",
+                  "execution producers")
+              s = once(s, "`concrete-syntax.md` exposes exactly those twelve producer families", "`concrete-syntax.md` exposes exactly those thirteen producer families", "execution producer count")
+              s = s.replace("direct-call argument", "call argument")
+              s = s.replace("direct-call arguments", "call arguments")
+              s = s.replace("grouped direct call", "grouped source call")
+              s = s.replace("ordinary direct call", "ordinary source call")
+              s = once(s,
+                  "- a result-bearing direct call is `Exact(T)` from its statically resolved callable result type, without executing the call or its arguments;",
+                  "- a result-bearing source call is `Exact(T)` from its statically established callable result type—either the resolved direct target signature or the selected function-value local's exact function-value type—without evaluating a bounded indirect callee value or executing any arguments;",
+                  "execution comparison call evidence")
+              s = once(s, "## Direct-call arguments", "## Source-call arguments and bounded-indirect callee evaluation", "execution call heading")
+              s = once(s,
+                  "A represented direct call has exactly one ordered argument operand for each callable-signature parameter slot. Argument count MUST match exactly.",
+                  "Before a source call may commit callee/argument producer effects, source validation establishes its target category, complete static callable interface, result presence/type, and the surrounding result-receiving admission when applicable. A direct call obtains that interface from its statically resolved function entity. A bounded indirect call obtains it from the selected function-local binding's exact function-value type under `function-values.md`.\n\nA direct call performs no callee-value evaluation. For a bounded indirect call, dynamic execution first evaluates the selected callable-local use exactly once under its exact function-value type. Because captureless function values are duplicable, this ordinary binding use produces a duplicate and leaves the stored local value unchanged. The call holds that one produced function value as a **callee transient** before the first ordinary argument begins. Function-value-specific formation/target identity is owned by `function-values.md`; this execution owner fixes its transient lifetime relative to arguments and activation.\n\nAfter the direct target is statically available or the indirect callee transient has been established, every represented source call has exactly one ordered argument operand for each callable-signature parameter slot. Argument count MUST match exactly.",
+                  "execution callee phase")
+              s = once(s,
+                  "If argument `i` yields a defined fault before callee activation:\n\n1. no callee activation is created;\n2. earlier transient argument values are cleaned in reverse production order;\n3. cleaning an earlier safe-reference transient removes exactly its carrier and lets `references.md` end that authority or transitively restore any parent capability when its last descendant branch ends;\n4. source ownership and safe-reference consequences already caused by earlier arguments remain otherwise effective; and\n5. the same fault continues in the caller.",
+                  "If argument `i` yields a defined fault before callee activation:\n\n1. no callee activation is created;\n2. earlier transient argument values are cleaned in reverse production order;\n3. cleaning an earlier safe-reference transient removes exactly its carrier and lets `references.md` end that authority or transitively restore any parent capability when its last descendant branch ends;\n4. if this is a bounded indirect call, ownership of the held callee transient then ends with no function-specific cleanup effect;\n5. source ownership and safe-reference consequences already caused by earlier arguments remain otherwise effective; and\n6. the same fault continues in the caller.",
+                  "execution arg fault callee transient")
+              s = once(s,
+                  "If argument evaluation diverges, no callee activation is created. Earlier transient arguments remain owned by the suspended computation and no cleanup occurs merely because time passes.",
+                  "If argument evaluation diverges, no callee activation is created. Earlier transient arguments and, for a bounded indirect call, the already-held callee transient remain owned by the suspended computation and no cleanup occurs merely because time passes.",
+                  "execution arg divergence callee transient")
+              s = once(s,
+                  "After those obligations succeed:\n\n1. create the callee activation;",
+                  "After those obligations succeed, target selection is complete before activation creation. A direct call retains its already resolved function entity. A bounded indirect call reads the exact function-entity identity carried by the held callee transient, requires the invariant already established by function-value typing that its callable interface equals the static function-value interface, and consumes the callee transient into target selection with no callable-specific cleanup action. No null/unknown/mismatched target is a represented runtime outcome.\n\nThen common call execution proceeds exactly as follows:\n\n1. create the callee activation;",
+                  "execution target selection")
+              s = once(s,
+                  "Parameter slots remain ordinary owned-value parameter slots. Safe-reference type is a value-type dimension, not a pass-mode dimension. Raw-pointer type is not admitted as a parameter. This slice introduces no borrowed slot, raw-pointer slot, hidden outlives parameter, or alternate call mechanism.",
+                  "Parameter slots remain ordinary owned-value parameter slots. Safe-reference type is a value-type dimension, not a pass-mode dimension. Raw-pointer type is not admitted as a parameter. A captureless function-value parameter is likewise one ordinary duplicable owned-value slot. This slice introduces no borrowed slot, raw-pointer slot, hidden outlives parameter, or second activation/parameter-transfer mechanism.",
+                  "execution parameter FunctionType")
+              s = once(s, "## Direct-call result transfer", "## Source-call result transfer", "execution result heading")
+              s = once(s, "A result-bearing direct call produces exactly one owned source result value", "A result-bearing source call, direct or bounded indirect, produces exactly one owned source result value", "execution result intro")
+              s = s.replace("the direct-call producer", "the source-call producer")
+              s = s.replace("nested direct-call result", "nested source-call result")
+              s = once(s,
+                  "For a raw-pointer value, cleaning ends only ownership of that pointer value and any non-observable source provenance retained with it. It does not read, move, mutate, destroy, restore, retarget, or otherwise affect the pointee and creates/ends no safe authority.",
+                  "For a raw-pointer value, cleaning ends only ownership of that pointer value and any non-observable source provenance retained with it. It does not read, move, mutate, destroy, restore, retarget, or otherwise affect the pointee and creates/ends no safe authority.\n\nFor a captureless function value, cleaning ends only ownership of that function value. It does not call the target, end or create an activation, release an environment, observe an address, or perform another function-specific cleanup action. The same rule applies to the bounded-indirect callee transient when target selection or an abnormal pre-activation path ends its ownership.",
+                  "execution function cleanup")
+              return s
+          edit("spec/language/source/function-execution.md", execution)
+
+          # Concrete syntax: neutral Call nonterminal plus bounded FunctionType spelling.
+          def syntax(s):
+              s = once(s,
+                  "function entities and callable signatures from [Source callables](callables.md); first-slice function type-parameter identity",
+                  "function entities and callable signatures from [Source callables](callables.md); captureless function-value type/value formation and bounded direct/indirect target classification from [Source function values and indirect calls](function-values.md); first-slice function type-parameter identity",
+                  "syntax dependency")
+              s = s.replace("DirectCall", "Call")
+              s = once(s,
+                  "Type                     = RawPointerType | ReplacementReferenceType | SharedReferenceType | BareType\nRawPointerType",
+                  "Type                     = FunctionType | RawPointerType | ReplacementReferenceType | SharedReferenceType | BareType\nFunctionType             = \"fn\" \"(\" FunctionTypeParameters? \")\" FunctionTypeResult?\nFunctionTypeParameters   = Type (\",\" Type)* \",\"?\nFunctionTypeResult       = \"->\" Type\nRawPointerType",
+                  "syntax FunctionType grammar")
+              s = once(s,
+                  "A `SharedReferenceType` maps to `SharedRef(T)` under `references.md`;",
+                  "A `FunctionType` maps to the bounded structural captureless function-value type owned by `function-values.md`. Its parameter/result components recursively use this `Type` grammar, but source validity excludes abstract generic parameters inside the function-value type, function-value record fields, and function-value use as a safe-reference referent or raw-pointer pointee under the applicable semantic owners. The finite concrete syntax may nest another `FunctionType` directly as a parameter/result component. Omission of `FunctionTypeResult` denotes no result value, not Unit/Void.\n\nA `SharedReferenceType` maps to `SharedRef(T)` under `references.md`;",
+                  "syntax FunctionType mapping")
+              s = once(s,
+                  "This subset has no nested module path, inferred type, type alias, generic type-constructor application, plain-Exclusive reference type/spelling, lifetime spelling, tuple, array, vector, or other type form beyond the bounded raw-pointer, Shared-reference, replacement-capable reference constructors, and bare function-local abstract type-parameter occurrences owned by `generics.md`.",
+                  "This subset has no nested module path, inferred type, type alias, generic type-constructor application, plain-Exclusive reference type/spelling, lifetime spelling, tuple, array, vector, or other type form beyond the bounded captureless function-value, raw-pointer, Shared-reference, replacement-capable reference constructors, and bare function-local abstract type-parameter occurrences owned by `generics.md`.",
+                  "syntax type boundary")
+              s = once(s,
+                  "A `SharedReferenceType`, `ReplacementReferenceType`, or `RawPointerType` is syntactically a `Type`, so the record-field grammar can represent spellings such as `field: &T`, `field: &mut T`, or `field: raw T`; `types.md`, `references.md`, and `raw-pointers-unsafe.md` reject safe-reference and raw-pointer record fields in this slice.",
+                  "A `SharedReferenceType`, `ReplacementReferenceType`, `RawPointerType`, or `FunctionType` is syntactically a `Type`, so the record-field grammar can represent spellings such as `field: &T`, `field: &mut T`, `field: raw T`, or `field: fn(I64) -> I64`; `types.md`, `references.md`, `raw-pointers-unsafe.md`, and `function-values.md` reject those non-record-shape field categories in this slice.",
+                  "syntax record FunctionType")
+              s = once(s, "## Direct calls", "## Calls", "syntax calls heading")
+              old = '''An unqualified `UserIdentifier` call target maps to the direct-call relation owned by `function-execution.md` after its target identifier is resolved using the function-local lookup precedence from `local-bindings.md` and the same-module fallback from `names-modules.md`. Generic type-parameter lookup does not participate in direct-call target lookup. If no local binding exists and the same-module binding is a constant, selection is final and the call is invalid as a wrong-category direct-call target rather than treating the produced constant value as a function value.\n\nA qualified `alias::member` call target resolves only through the source-unit module-alias and qualified cross-module lookup relation in `names-modules.md`. Function-local value bindings and generic type parameters do not participate in that syntactically qualified target lookup. An exported constant selected by that lookup is wrong-category for this call form; a bare qualified constant reference is the distinct no-argument-list value shape described below and does not create indirect-call semantics.\n\nIn either form, the resolved entity MUST be one source function entity with a represented source body. Lookup does not bypass a selected wrong-category or inaccessible binding merely because the call context requires a function.\n'''
+              new = '''The concrete `Call` token shape is neutral between the existing direct source-call relation and the bounded indirect source-call relation from `function-values.md`; parsing does not use semantic lookup to choose between them.\n\nFor an unqualified `UserIdentifier` target, function-local lookup from `local-bindings.md` occurs first. If an active parameter/local is selected, `function-values.md` requires its exact type to be a function-value type and classifies the call as bounded indirect invocation through that binding. A selected non-function-valued local is a final wrong-category failure. Only when no local resolves does same-module lookup occur; a selected source function then retains the existing direct-call relation owned by `function-execution.md`, while a selected constant/record/trait or another wrong category is invalid. Generic type-parameter lookup does not participate in this value-target lookup.\n\nA qualified `alias::member` call target resolves only through the source-unit module-alias and qualified cross-module lookup relation in `names-modules.md`. Function-local value bindings and generic type parameters do not participate, so a source-valid qualified call remains an existing direct call to an exported function entity. An exported constant or another wrong category is final.\n\nEvery direct target and every dynamic target carried by a source-valid function value must denote a source function entity with a represented body under `function-execution.md`. The bounded indirect case does not turn the function-value binding itself into a module declaration or function body.\n'''
+              s = once(s, old, new, "syntax target semantics")
+              s = once(s,
+                  "The `GenericTypeArgumentList` is syntactically optional so parsing does not require target lookup. When present it is non-empty by grammar, preserves source argument order, and permits one trailing comma. After target resolution and before any ordinary value argument producer may commit effects, `generics.md` requires the list exactly when the selected function is generic, rejects it when the selected function is non-generic, requires exact generic arity, resolves/admits its type arguments, constructs the exact substitution, validates every target marker requirement under `traits.md`, and instantiates the target parameter/result type expressions.",
+                  "The `GenericTypeArgumentList` is syntactically optional so parsing does not require target lookup. When present it is non-empty by grammar, preserves source argument order, and permits one trailing comma. After target classification and before any ordinary value argument producer may commit effects, the list is valid only for the existing direct generic-function relation: `generics.md` requires it exactly when the selected direct target function is generic, rejects it when that direct target is non-generic, requires exact generic arity, resolves/admits its type arguments, constructs the exact substitution, validates every target marker requirement under `traits.md`, and instantiates the target parameter/result type expressions. If local-first lookup instead selects a function-value local/parameter, any present generic list makes the bounded indirect call invalid before argument effects.",
+                  "syntax generic call boundary")
+              s = once(s,
+                  "This subset has no indirect call, function-value call, method call, named argument, default ordinary argument, variadic argument, nested module path, type inference, omitted/default/named generic type argument, or arbitrary member-call form.",
+                  "This subset has no indirect call target beyond one bare unqualified function-value parameter/local binding, method call, named argument, default ordinary argument, variadic argument, nested module path, type inference, omitted/default/named generic type argument, or arbitrary member-call form.",
+                  "syntax stale call exclusion")
+              s = once(s,
+                  "A direct call used as a body statement is language-valid only when its resolved and, when generic, instantiated callable signature specifies no result value.",
+                  "A `Call` used as a body statement is language-valid only when its statically established callable interface—resolved/instantiated direct target or function-value local type for a bounded indirect call—specifies no result value.",
+                  "syntax CallStatement semantics")
+              # Bare qualified value forms may now also form function values under exact context.
+              s = s.replace("is source-valid only when qualified lookup selects an exported constant", "is source-valid as a constant only when qualified lookup selects an exported constant; under an exact required function-value type it may instead form an exported non-generic function value through `function-values.md`")
+              s = s.replace("A bare qualified constant reference", "A bare qualified constant-or-function-value candidate")
+              return s
+          edit("spec/language/source/concrete-syntax.md", syntax)
+
+          # Field receiver consumes neutral result-bearing Call, not an arbitrary expression.
+          def field(s):
+              s = s.replace("DirectCall", "Call")
+              s = once(s,
+                  "producer receiver**: exactly one represented result-bearing direct call or one represented record construction",
+                  "producer receiver**: exactly one represented result-bearing source call (direct or bounded indirect) or one represented record construction",
+                  "field receiver category")
+              s = s.replace("a bare direct call remains a direct-call producer", "a bare result-bearing call remains a call producer")
+              s = s.replace("direct-call arguments", "call arguments")
+              s = once(s,
+                  "- for a `Call`, resolve the call target through the existing direct-call lookup relation and require the selected source function signature to have exactly one result value; that declared result type is the receiver type;",
+                  "- for a `Call`, apply the direct/indirect target classification from `function-values.md`/`local-bindings.md` and require the statically established callable interface to have exactly one result value; for a direct target that is its resolved/instantiated function result, while for a bounded indirect target it is the exact result of the selected function-value local type; that exact result type is the receiver type;",
+                  "field call receiver type")
+              s = s.replace("A no-result direct call", "A no-result call")
+              s = s.replace("direct-call", "call")
+              return s
+          edit("spec/language/source/field-access.md", field)
+
+          # Pattern producer category consumes neutral result-bearing Call.
+          def patterns(s):
+              s = s.replace("DirectCall", "Call")
+              s = s.replace("a result-bearing direct call", "a result-bearing source call, direct or bounded indirect")
+              s = s.replace("internal direct-call or record-construction receiver", "internal call or record-construction receiver")
+              return s
+          edit("spec/language/source/patterns.md", patterns)
+
+          # Control-flow only needs neutral call-backed receiver wording.
+          edit("spec/language/source/control-flow.md", lambda s: once(
+              s,
+              "the internal direct-call or record-construction receiver retains its independently selected exact receiver type.",
+              "the internal result-bearing call or record-construction receiver retains its independently selected exact receiver type.",
+              "control-flow neutral call receiver",
+          ))
+
+          # The new specialized owner gets one explicit canonical-reference boundary note.
+          def fv(s):
+              s = once(s,
+                  "A function-value type is also not admitted as the referent of `SharedRef` or `ExclusiveReplaceRef`, or as the pointee of `RawPtr`, because `concrete-syntax.md` does not add `FunctionType` to `ReferenceReferentType`.",
+                  "A function-value type is also not admitted as the referent of `SharedRef` or `ExclusiveReplaceRef`, or as the pointee of `RawPtr`. `references.md` retains the Shared/replacement referent domain and `raw-pointers-unsafe.md` retains the raw-pointee domain; `concrete-syntax.md` correspondingly does not add `FunctionType` to `ReferenceReferentType`.",
+                  "function-values reference ownership boundary")
+              return s
+          edit("spec/language/source/function-values.md", fv)
+
+          # Guard against accidental implementation or Core edits.
+          allowed = {
+              "spec/language/source/README.md",
+              "spec/language/source/types.md",
+              "spec/language/source/callables.md",
+              "spec/language/source/names-modules.md",
+              "spec/language/source/local-bindings.md",
+              "spec/language/source/generics.md",
+              "spec/language/source/references.md",
+              "spec/language/source/function-execution.md",
+              "spec/language/source/concrete-syntax.md",
+              "spec/language/source/field-access.md",
+              "spec/language/source/patterns.md",
+              "spec/language/source/control-flow.md",
+              "spec/language/source/function-values.md",
+              ".github/workflows/p0d-676-spec-transform.yml",
+          }
+          import subprocess
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"]).decode().splitlines())
+          unexpected = changed - allowed
+          if unexpected:
+              raise SystemExit(f"unexpected changed files: {sorted(unexpected)}")
+      - name: Commit exact integration
+        run: |
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git add spec/language/source
+          git diff --cached --check
+          git commit -m "spec: integrate source function values across owners"
+          git push origin HEAD:p0d-676-source-function-values-spec
