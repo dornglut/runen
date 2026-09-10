@@ -1,0 +1,37 @@
+name: Temporary P0-D 678 HIR patch
+
+on:
+  push:
+    branches:
+      - p0d-678-source-function-values-impl
+    paths:
+      - .github/scripts/p0d_678_hir_patch.py
+      - .github/workflows/p0d-678-hir-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out implementation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-678-source-function-values-impl
+          fetch-depth: 1
+      - name: Apply bounded HIR patch
+        run: python .github/scripts/p0d_678_hir_patch.py
+      - name: Format affected Rust code
+        run: cargo +stable fmt --all
+      - name: Test HIR crate
+        run: cargo +stable test -p runen-hir
+      - name: Commit HIR implementation
+        run: |
+          set -euo pipefail
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git add crates/runen-hir/src/lib.rs crates/runen-hir/src/build.rs crates/runen-hir/tests
+          git diff --cached --quiet && { echo "No HIR implementation changes produced" >&2; exit 1; }
+          git commit -m "P0-D: implement HIR function values and indirect calls"
+          git push origin HEAD:p0d-678-source-function-values-impl
