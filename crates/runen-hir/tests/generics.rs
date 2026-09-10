@@ -1,6 +1,7 @@
 use runen_hir::{
-    DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse, SafeReferenceResultContract,
-    SourceUnit, Statement, Type, TypeParameterId, TypedCompilation, ValueKind, build_typed_hir,
+    CallTarget, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
+    SafeReferenceResultContract, SourceUnit, Statement, Type, TypeParameterId, TypedCompilation,
+    ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -89,8 +90,8 @@ fn abstract_whole_binding_use_is_consuming_even_when_a_call_substitutes_i64() {
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
         .expect("caller returns generic call result");
-    let ValueKind::DirectCall {
-        type_arguments,
+    let ValueKind::Call {
+        target: CallTarget::Direct { type_arguments, .. },
         arguments,
         ..
     } = &call.kind
@@ -129,8 +130,8 @@ fn generic_call_composes_an_enclosing_abstract_slot_without_reidentifying_it() {
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
         .expect("outer returns call result");
-    let ValueKind::DirectCall {
-        type_arguments,
+    let ValueKind::Call {
+        target: CallTarget::Direct { type_arguments, .. },
         arguments,
         ..
     } = &call.kind
@@ -204,7 +205,11 @@ fn qualified_type_positions_and_arguments_never_select_a_local_type_parameter() 
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
         .expect("f returns one direct call");
-    let ValueKind::DirectCall { type_arguments, .. } = &call.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { type_arguments, .. },
+        ..
+    } = &call.kind
+    else {
         panic!("f return must retain a direct call");
     };
     assert_eq!(type_arguments, &[Type::Record(dep_t)]);
@@ -325,7 +330,11 @@ fn direct_and_mutual_generic_recursion_retain_explicit_abstract_applications() {
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
             .expect("recursive function returns one direct call");
-        let ValueKind::DirectCall { type_arguments, .. } = &returned.kind else {
+        let ValueKind::Call {
+            target: CallTarget::Direct { type_arguments, .. },
+            ..
+        } = &returned.kind
+        else {
             panic!("recursive return must retain a direct call");
         };
         assert_eq!(type_arguments, &[Type::Parameter(slot)]);
@@ -372,7 +381,11 @@ fn caller_private_record_is_an_admitted_argument_to_accessible_exported_generic(
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
         .expect("caller returns generic result");
-    let ValueKind::DirectCall { type_arguments, .. } = &call.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { type_arguments, .. },
+        ..
+    } = &call.kind
+    else {
         panic!("caller return must retain generic direct call");
     };
     assert_eq!(type_arguments, &[Type::Record(local)]);
@@ -386,7 +399,13 @@ fn generic_call_statement_retains_exact_type_arguments() {
     )
     .expect("generic call statement is valid");
     let f = function(&hir, "f");
-    let [Statement::Call { type_arguments, .. }] = f.body.statements.as_slice() else {
+    let [
+        Statement::Call {
+            target: CallTarget::Direct { type_arguments, .. },
+            ..
+        },
+    ] = f.body.statements.as_slice()
+    else {
         panic!("expected one retained call statement");
     };
     assert_eq!(

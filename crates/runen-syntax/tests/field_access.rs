@@ -49,7 +49,7 @@ fn producer_receivers_wrap_complete_call_or_construction_nodes() {
         .filter_map(|field_use| {
             field_use
                 .children()
-                .find(|node| node.kind() == SyntaxKind::DirectCall)
+                .find(|node| node.kind() == SyntaxKind::Call)
         })
         .collect::<Vec<_>>();
     assert_eq!(direct_call_receivers.len(), 2);
@@ -78,7 +78,7 @@ fn producer_receivers_wrap_complete_call_or_construction_nodes() {
             .filter(|child| {
                 matches!(
                     child.kind(),
-                    SyntaxKind::DirectCall | SyntaxKind::RecordConstruction
+                    SyntaxKind::Call | SyntaxKind::RecordConstruction
                 )
             })
             .count()
@@ -105,7 +105,7 @@ fn producer_receiver_requires_selector_and_bare_producers_stay_bare() {
         parsed
             .syntax()
             .descendants()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .filter(|node| node.kind() == SyntaxKind::Call)
             .count(),
         1
     );
@@ -127,7 +127,7 @@ fn producer_field_values_compose_only_through_existing_nested_value_positions() 
     assert!(uses.iter().all(|field_use| {
         field_use
             .children()
-            .filter(|child| child.kind() == SyntaxKind::DirectCall)
+            .filter(|child| child.kind() == SyntaxKind::Call)
             .count()
             == 1
     }));

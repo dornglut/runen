@@ -1,5 +1,5 @@
 use runen_hir::{
-    DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Statement, Type,
+    CallTarget, DiagnosticKind, IntrinsicType, ModuleId, OwnedUse, SourceUnit, Statement, Type,
     TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
@@ -92,7 +92,13 @@ fn direct_call_and_field_conditions_retain_existing_value_forms() {
     .expect("represented Bool producers are valid conditions");
 
     let (call, _, _) = conditional(&function(&hir, "call_condition").body.statements[0]);
-    assert!(matches!(call.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        call.kind,
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
+    ));
 
     let (field, _, _) = conditional(&function(&hir, "field_condition").body.statements[0]);
     assert!(matches!(

@@ -68,7 +68,7 @@ fn literals(flag: Bool) {
     );
     assert_eq!(
         root.descendants()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .filter(|node| node.kind() == SyntaxKind::Call)
             .count(),
         2
     );
@@ -134,7 +134,7 @@ fn producer_backed_field_conditions_preserve_constructor_disambiguation() {
     assert_eq!(
         field_uses[0]
             .children()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .filter(|node| node.kind() == SyntaxKind::Call)
             .count(),
         1
     );

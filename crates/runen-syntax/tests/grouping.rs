@@ -94,7 +94,7 @@ fn f(root: Flag, flag: Bool) -> Bool {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 7);
     assert_eq!(count(&parsed, SyntaxKind::RecordConstruction), 1);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
     assert_eq!(count(&parsed, SyntaxKind::FieldValueUse), 1);
     assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 1);
 
@@ -164,7 +164,7 @@ fn empty_tuple_like_and_category_widening_forms_remain_invalid() {
     assert_eq!(count(&field, SyntaxKind::FieldValueUse), 0);
 
     let indirect = parse("fn bad(f: Bool, x: Bool) { let value: Bool = (f)(x); }");
-    assert_eq!(count(&indirect, SyntaxKind::DirectCall), 0);
+    assert_eq!(count(&indirect, SyntaxKind::Call), 0);
 }
 
 #[test]
@@ -197,7 +197,7 @@ fn missing_group_close_preserves_call_argument_comma_and_following_argument() {
     assert_eq!(parsed.text(), source);
     assert!(!parsed.errors().is_empty());
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 1);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
     assert_eq!(count(&parsed, SyntaxKind::ArgumentList), 1);
     assert_eq!(count(&parsed, SyntaxKind::BooleanLiteral), 1);
 }

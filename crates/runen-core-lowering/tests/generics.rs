@@ -4,8 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    IntrinsicType, ModuleId, ReferencePermission, ReferenceReferent, SourceUnit, Type, ValueKind,
-    build_typed_hir,
+    CallTarget, IntrinsicType, ModuleId, ReferencePermission, ReferenceReferent, SourceUnit, Type,
+    ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -294,7 +294,11 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
         .expect("root returns a direct call");
-    let ValueKind::DirectCall { type_arguments, .. } = &mut call.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { type_arguments, .. },
+        ..
+    } = &mut call.kind
+    else {
         panic!("root must retain a direct call");
     };
     type_arguments.clear();
@@ -337,7 +341,11 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
         .expect("root returns a direct call");
-    let ValueKind::DirectCall { type_arguments, .. } = &mut call.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { type_arguments, .. },
+        ..
+    } = &mut call.kind
+    else {
         panic!("root must retain a direct call");
     };
     type_arguments[0] = Type::SafeReference {

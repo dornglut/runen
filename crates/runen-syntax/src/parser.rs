@@ -977,11 +977,11 @@ impl Parser<'_> {
         match self.peek_nontrivia(1) {
             Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
             Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
-                self.parse_direct_call_or_field_value_use();
+                self.parse_call_or_field_value_use();
             }
             Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
                 Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
-                _ => self.parse_direct_call_or_field_value_use(),
+                _ => self.parse_call_or_field_value_use(),
             },
             Some(SyntaxKind::Dot) => self.parse_binding_field_value_use(),
             _ => self.bump(),
@@ -1063,7 +1063,7 @@ impl Parser<'_> {
 
     fn parse_call_statement(&mut self) {
         self.builder.start_node(SyntaxKind::CallStatement.into());
-        self.parse_direct_call();
+        self.parse_call();
         self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
         self.builder.finish_node();
     }
@@ -1105,7 +1105,9 @@ impl Parser<'_> {
 
     fn parse_type(&mut self) {
         self.builder.start_node(SyntaxKind::TypeRef.into());
-        if self.eat(SyntaxKind::KwRaw) {
+        if self.at(SyntaxKind::KwFn) {
+            self.parse_function_type();
+        } else if self.eat(SyntaxKind::KwRaw) {
             self.parse_reference_referent_type();
         } else {
             if self.eat(SyntaxKind::Amp) {
@@ -1114,6 +1116,61 @@ impl Parser<'_> {
             self.parse_reference_referent_type();
         }
         self.builder.finish_node();
+    }
+
+    fn parse_function_type(&mut self) {
+        self.expect(SyntaxKind::KwFn, ExpectedSyntax::Type);
+        if !self.expect(SyntaxKind::LParen, ExpectedSyntax::LeftParen) {
+            return;
+        }
+
+        self.bump_trivia();
+        let mut missing_close = false;
+        while !self.at(SyntaxKind::RParen) && self.current().is_some() {
+            if self.at(SyntaxKind::Arrow)
+                || self.at(SyntaxKind::Semicolon)
+                || self.at(SyntaxKind::RBrace)
+                || self.at(SyntaxKind::LBrace)
+                || self.at(SyntaxKind::KwImport)
+                || self.at(SyntaxKind::KwExport)
+                || self.at(SyntaxKind::KwRecord)
+                || (self.at(SyntaxKind::KwFn) && self.peek_nontrivia(1) != Some(SyntaxKind::LParen))
+            {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightParen));
+                missing_close = true;
+                break;
+            }
+
+            self.parse_type();
+            if self.eat(SyntaxKind::Comma) {
+                self.bump_trivia();
+                continue;
+            }
+            if !self.at(SyntaxKind::RParen) {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightParen));
+                self.recover_until(&[
+                    SyntaxKind::Comma,
+                    SyntaxKind::RParen,
+                    SyntaxKind::Arrow,
+                    SyntaxKind::Semicolon,
+                    SyntaxKind::RBrace,
+                    SyntaxKind::LBrace,
+                    SyntaxKind::KwImport,
+                    SyntaxKind::KwExport,
+                    SyntaxKind::KwFn,
+                    SyntaxKind::KwRecord,
+                ]);
+                self.eat(SyntaxKind::Comma);
+            }
+            self.bump_trivia();
+        }
+
+        if !missing_close {
+            self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
+        }
+        if self.eat(SyntaxKind::Arrow) {
+            self.parse_type();
+        }
     }
 
     fn parse_reference_referent_type(&mut self) {
@@ -1233,14 +1290,14 @@ impl Parser<'_> {
                 ValueContext::Ordinary => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::LBrace) => self.parse_record_construction_or_field_value_use(),
                     Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
-                        self.parse_direct_call_or_field_value_use();
+                        self.parse_call_or_field_value_use();
                     }
                     Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
                         Some(SyntaxKind::LBrace) => {
                             self.parse_record_construction_or_field_value_use();
                         }
                         Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
-                            self.parse_direct_call_or_field_value_use();
+                            self.parse_call_or_field_value_use();
                         }
                         _ => {
                             self.builder.start_node(SyntaxKind::IdentifierUse.into());
@@ -1257,11 +1314,11 @@ impl Parser<'_> {
                 },
                 ValueContext::Conditional => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
-                        self.parse_direct_call_or_field_value_use();
+                        self.parse_call_or_field_value_use();
                     }
                     Some(SyntaxKind::ColonColon) => match self.qualified_member_follower() {
                         Some(SyntaxKind::LParen | SyntaxKind::LBracket) => {
-                            self.parse_direct_call_or_field_value_use();
+                            self.parse_call_or_field_value_use();
                         }
                         Some(SyntaxKind::LBrace)
                             if self.record_construction_followed_by_selector() =>
@@ -1502,9 +1559,9 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_direct_call_or_field_value_use(&mut self) {
+    fn parse_call_or_field_value_use(&mut self) {
         let checkpoint = self.builder.checkpoint();
-        self.parse_direct_call();
+        self.parse_call();
         if self.at(SyntaxKind::Dot) {
             self.builder
                 .start_node_at(checkpoint, SyntaxKind::FieldValueUse.into());
@@ -1683,8 +1740,8 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_direct_call(&mut self) {
-        self.builder.start_node(SyntaxKind::DirectCall.into());
+    fn parse_call(&mut self) {
+        self.builder.start_node(SyntaxKind::Call.into());
         if self.at(SyntaxKind::Ident) && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon) {
             self.parse_qualified_module_member();
         } else {

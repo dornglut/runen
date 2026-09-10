@@ -1,5 +1,5 @@
 use runen_hir::{
-    DiagnosticKind, ImportTarget, IntrinsicType, LiteralValue, ModuleId, OwnedUse,
+    CallTarget, DiagnosticKind, ImportTarget, IntrinsicType, LiteralValue, ModuleId, OwnedUse,
     RecordPatternScrutinee, RecordPatternTestKind, RecordPatternTransientCleanup, SourceUnit,
     Statement, Type, ValueKind, build_typed_hir,
 };
@@ -179,7 +179,13 @@ fn producer_retains_success_frontier_and_distinct_complete_root_mismatch_cleanup
     let RecordPatternScrutinee::Producer { value, cleanup } = scrutinee else {
         panic!("expected producer-backed scrutinee");
     };
-    assert!(matches!(value.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        value.kind,
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
+    ));
     assert_eq!(cleanup.paths, [vec![2], vec![0]]);
     assert_eq!(
         mismatch_cleanup,

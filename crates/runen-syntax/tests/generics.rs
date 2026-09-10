@@ -74,7 +74,7 @@ fn generic_call_arguments_are_ordered_qualified_and_allow_trailing_comma() {
     let parsed =
         parse("fn caller[T](value: I64) -> I64 { return dep::apply[I64, dep::Thing, T,](value); }");
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
     assert_eq!(count(&parsed, SyntaxKind::GenericTypeArgumentList), 1);
     assert_eq!(
         child_texts(
@@ -103,7 +103,7 @@ fn use(value: I64) {
     );
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::GenericTypeArgumentList), 5);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 5);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 5);
     assert_eq!(count(&parsed, SyntaxKind::CallStatement), 1);
     assert_eq!(count(&parsed, SyntaxKind::IfStatement), 1);
     assert_eq!(count(&parsed, SyntaxKind::FieldValueUse), 1);
@@ -126,7 +126,7 @@ fn generic_call_list_is_nonempty_and_requires_the_ordinary_argument_list() {
 
     let incomplete = parse("fn f() { g[I64]; }");
     assert!(!incomplete.errors().is_empty());
-    assert_eq!(count(&incomplete, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&incomplete, SyntaxKind::Call), 1);
     assert_eq!(count(&incomplete, SyntaxKind::GenericTypeArgumentList), 1);
     assert_eq!(count(&incomplete, SyntaxKind::ArgumentList), 1);
 }
@@ -154,6 +154,6 @@ fn missing_generic_list_close_recovers_at_following_parenthesis() {
 
     let call = parse("fn f(value: I64) { g[I64(value); }");
     assert!(!call.errors().is_empty());
-    assert_eq!(count(&call, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&call, SyntaxKind::Call), 1);
     assert_eq!(count(&call, SyntaxKind::ArgumentList), 1);
 }
