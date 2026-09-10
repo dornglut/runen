@@ -237,3 +237,74 @@ fn recursive_and_mutual_indirect_calls_validate_without_target_set_analysis() {
         ));
     }
 }
+
+#[test]
+fn indirect_generic_type_arguments_reject_before_consuming_argument_state() {
+    let errors = build(
+        "record Ticket {} \
+         fn sink(value: Ticket) {} \
+         fn use(f: fn(Ticket), ticket: Ticket) { f[I64](ticket); sink(ticket); }",
+    )
+    .expect_err("indirect generic arguments are rejected before ordinary argument effects");
+    assert!(has_diagnostic(
+        &errors,
+        DiagnosticKind::UnexpectedGenericTypeArguments
+    ));
+    assert!(
+        !has_diagnostic(&errors, DiagnosticKind::UnavailableBinding),
+        "rejected indirect generic arguments must not consume the ordinary argument"
+    );
+}
+
+#[test]
+fn local_shadowing_is_final_for_function_value_formation() {
+    let errors = build(
+        "fn target(value: I64) -> I64 { return value; } \
+         fn use(target: I64) { let f: fn(I64) -> I64 = target; }",
+    )
+    .expect_err("active local binding must block module-function fallback during formation");
+    assert!(errors.iter().any(|error| matches!(
+        error.kind,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Function(_),
+            found: Type::Intrinsic(runen_hir::IntrinsicType::I64),
+        }
+    )));
+}
+
+#[test]
+fn indirect_static_interface_controls_argument_and_result_types() {
+    let argument_errors = build("fn use(f: fn(I64) -> I64) -> I64 { return f(true); }")
+        .expect_err("indirect argument type comes from the static function-value type");
+    assert!(argument_errors.iter().any(|error| matches!(
+        error.kind,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Intrinsic(runen_hir::IntrinsicType::I64),
+            found: Type::Intrinsic(runen_hir::IntrinsicType::Bool),
+        }
+    )));
+
+    let result_errors = build("fn use(f: fn(I64) -> I64) { let value: Bool = f(1); }")
+        .expect_err("indirect result type comes from the static function-value type");
+    assert!(result_errors.iter().any(|error| matches!(
+        error.kind,
+        DiagnosticKind::TypeMismatch {
+            expected: Type::Intrinsic(runen_hir::IntrinsicType::Bool),
+            found: Type::Intrinsic(runen_hir::IntrinsicType::I64),
+        }
+    )));
+}
+
+#[test]
+fn function_values_do_not_gain_source_equality() {
+    build(
+        "fn left(value: I64) -> I64 { return value; } \
+         fn right(value: I64) -> I64 { return value; } \
+         fn bad() -> Bool { \
+             let a: fn(I64) -> I64 = left; \
+             let b: fn(I64) -> I64 = right; \
+             return a == b; \
+         }",
+    )
+    .expect_err("function identity has no represented source equality operation");
+}

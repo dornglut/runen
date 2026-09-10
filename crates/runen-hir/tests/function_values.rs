@@ -187,3 +187,34 @@ fn shared_reference_function_type_contract_is_derived_once_and_retained() {
         SafeReferenceResultContract::SharedIdentity { origin: 0 }
     );
 }
+
+#[test]
+fn unequal_function_type_structures_use_distinct_canonical_handles() {
+    let hir = build(
+        "fn use( \
+             a: fn(I64) -> I64, \
+             b: fn(Bool) -> I64, \
+             c: fn(I64) -> Bool, \
+             identity: fn(&I64) -> &I64, \
+             child: fn(&mut I64) -> &I64 \
+         ) {}",
+    )
+    .expect("distinct concrete function-type structures are valid");
+    let use_fn = function(&hir, "use");
+    let a = function_type(use_fn.parameters[0].ty);
+    let b = function_type(use_fn.parameters[1].ty);
+    let c = function_type(use_fn.parameters[2].ty);
+    let identity = function_type(use_fn.parameters[3].ty);
+    let child = function_type(use_fn.parameters[4].ty);
+    assert_ne!(a, b);
+    assert_ne!(a, c);
+    assert_ne!(identity, child);
+    assert_eq!(
+        hir.function_type(identity).safe_reference_result_contract,
+        SafeReferenceResultContract::SharedIdentity { origin: 0 }
+    );
+    assert_eq!(
+        hir.function_type(child).safe_reference_result_contract,
+        SafeReferenceResultContract::SharedDirectChild { origin: 0 }
+    );
+}

@@ -1570,51 +1570,17 @@ fn resolve_function_headers(
                     &type_node,
                     diagnostics,
                 );
-                if let Type::SafeReference {
-                    referent,
-                    permission: ReferencePermission::Shared,
-                } = ty
-                {
-                    let mut matching_shared = parameters
-                        .iter()
-                        .enumerate()
-                        .filter(|(_, parameter)| parameter.ty == ty);
-                    match (matching_shared.next(), matching_shared.next()) {
-                        (Some((slot, _)), None) => {
-                            safe_reference_result_contract =
-                                SafeReferenceResultContract::SharedIdentity { origin: slot };
-                        }
-                        (Some(_), Some(_)) => diagnostics.push(Diagnostic {
-                            kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
-                            location: location(function.unit, &type_node),
-                        }),
-                        (None, _) => {
-                            let replacement_ty = Type::SafeReference {
-                                referent,
-                                permission: ReferencePermission::ExclusiveReplace,
-                            };
-                            let mut matching_replacement = parameters
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, parameter)| parameter.ty == replacement_ty);
-                            match (matching_replacement.next(), matching_replacement.next()) {
-                                (None, _) => diagnostics.push(Diagnostic {
-                                    kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
-                                    location: location(function.unit, &type_node),
-                                }),
-                                (Some((slot, _)), None) => {
-                                    safe_reference_result_contract =
-                                        SafeReferenceResultContract::SharedDirectChild {
-                                            origin: slot,
-                                        };
-                                }
-                                (Some(_), Some(_)) => diagnostics.push(Diagnostic {
-                                    kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
-                                    location: location(function.unit, &type_node),
-                                }),
-                            }
-                        }
-                    }
+                let parameter_types = parameters
+                    .iter()
+                    .map(|parameter| parameter.ty)
+                    .collect::<Vec<_>>();
+                if let Some(contract) = derive_safe_reference_result_contract(
+                    &parameter_types,
+                    Some(ty),
+                    location(function.unit, &type_node),
+                    diagnostics,
+                ) {
+                    safe_reference_result_contract = contract;
                 }
                 Some(ty)
             });
@@ -1724,6 +1690,69 @@ fn type_contains_reference_or_pointer_inner(
             contains
         }
         Type::SafeReference { .. } | Type::RawPointer(_) => true,
+    }
+}
+
+fn derive_safe_reference_result_contract(
+    parameter_types: &[Type],
+    result: Option<Type>,
+    type_location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<SafeReferenceResultContract> {
+    let Some(Type::SafeReference {
+        referent,
+        permission: ReferencePermission::Shared,
+    }) = result
+    else {
+        return Some(SafeReferenceResultContract::None);
+    };
+
+    let shared = Type::SafeReference {
+        referent,
+        permission: ReferencePermission::Shared,
+    };
+    let mut matching_shared = parameter_types
+        .iter()
+        .enumerate()
+        .filter(|(_, parameter)| **parameter == shared);
+    match (matching_shared.next(), matching_shared.next()) {
+        (Some((origin, _)), None) => Some(SafeReferenceResultContract::SharedIdentity { origin }),
+        (Some(_), Some(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
+                location: type_location,
+            });
+            None
+        }
+        (None, _) => {
+            let replacement = Type::SafeReference {
+                referent,
+                permission: ReferencePermission::ExclusiveReplace,
+            };
+            let mut matching_replacement = parameter_types
+                .iter()
+                .enumerate()
+                .filter(|(_, parameter)| **parameter == replacement);
+            match (matching_replacement.next(), matching_replacement.next()) {
+                (Some((origin, _)), None) => {
+                    Some(SafeReferenceResultContract::SharedDirectChild { origin })
+                }
+                (None, _) => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
+                        location: type_location,
+                    });
+                    None
+                }
+                (Some(_), Some(_)) => {
+                    diagnostics.push(Diagnostic {
+                        kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
+                        location: type_location,
+                    });
+                    None
+                }
+            }
+        }
     }
 }
 
@@ -2071,61 +2100,12 @@ fn resolve_function_type(
         None
     };
 
-    let safe_reference_result_contract = if let Some(Type::SafeReference {
-        referent,
-        permission: ReferencePermission::Shared,
-    }) = result
-    {
-        let shared = Type::SafeReference {
-            referent,
-            permission: ReferencePermission::Shared,
-        };
-        let mut matching_shared = parameters
-            .iter()
-            .enumerate()
-            .filter(|(_, parameter)| **parameter == shared);
-        match (matching_shared.next(), matching_shared.next()) {
-            (Some((origin, _)), None) => SafeReferenceResultContract::SharedIdentity { origin },
-            (Some(_), Some(_)) => {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
-                    location: location(context.names.unit, node),
-                });
-                return None;
-            }
-            (None, _) => {
-                let replacement = Type::SafeReference {
-                    referent,
-                    permission: ReferencePermission::ExclusiveReplace,
-                };
-                let mut matching_replacement = parameters
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, parameter)| **parameter == replacement);
-                match (matching_replacement.next(), matching_replacement.next()) {
-                    (Some((origin, _)), None) => {
-                        SafeReferenceResultContract::SharedDirectChild { origin }
-                    }
-                    (None, _) => {
-                        diagnostics.push(Diagnostic {
-                            kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
-                            location: location(context.names.unit, node),
-                        });
-                        return None;
-                    }
-                    (Some(_), Some(_)) => {
-                        diagnostics.push(Diagnostic {
-                            kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
-                            location: location(context.names.unit, node),
-                        });
-                        return None;
-                    }
-                }
-            }
-        }
-    } else {
-        SafeReferenceResultContract::None
-    };
+    let safe_reference_result_contract = derive_safe_reference_result_contract(
+        &parameters,
+        result,
+        location(context.names.unit, node),
+        diagnostics,
+    )?;
 
     Some(Type::Function(intern_function_type(
         context.function_types,
@@ -8630,17 +8610,6 @@ fn validate_call_inner(
         .filter(|child| is_value_node(child.kind()))
         .collect::<Vec<_>>();
 
-    if argument_nodes.len() != application.parameter_types.len() {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::ArgumentCount {
-                expected: application.parameter_types.len(),
-                found: argument_nodes.len(),
-            },
-            location: location(header.unit, node),
-        });
-        return None;
-    }
-
     if let CallTarget::Indirect { binding, .. } = &application.target {
         let binding_state = binding_state_by_id(&state.bindings, *binding)
             .expect("classified indirect target remains an active binding");
@@ -8652,6 +8621,17 @@ fn validate_call_inner(
             return None;
         }
         debug_assert!(context.type_is_duplicable(binding_state.ty));
+    }
+
+    if argument_nodes.len() != application.parameter_types.len() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ArgumentCount {
+                expected: application.parameter_types.len(),
+                found: argument_nodes.len(),
+            },
+            location: location(header.unit, node),
+        });
+        return None;
     }
 
     let mut arguments = Vec::with_capacity(argument_nodes.len());
