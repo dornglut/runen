@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# Temporary guarded rewrite used only to narrow ambiguous anchors in the lowering patch.
 path = Path('.github/scripts/p0d_678_lowering_patch.py')
 text = path.read_text()
 
