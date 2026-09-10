@@ -186,3 +186,54 @@ fn indirect_shared_direct_child_result_preserves_parent_ancestry() {
         }
     ));
 }
+
+#[test]
+fn recursive_and_mutual_indirect_calls_validate_without_target_set_analysis() {
+    let recursive = build(
+        "fn recurse(value: I64) -> I64 { \
+             let f: fn(I64) -> I64 = recurse; \
+             return f(value); \
+         }",
+    )
+    .expect("self-indirect recursion is statically valid without target expansion");
+    let returned = function(&recursive, "recurse")
+        .body
+        .terminal_return
+        .as_ref()
+        .and_then(|returned| returned.value.as_ref())
+        .expect("recursive function returns one indirect call");
+    assert!(matches!(
+        returned.kind,
+        ValueKind::Call {
+            target: CallTarget::Indirect { .. },
+            ..
+        }
+    ));
+
+    let mutual = build(
+        "fn left(value: I64) -> I64 { \
+             let f: fn(I64) -> I64 = right; \
+             return f(value); \
+         } \
+         fn right(value: I64) -> I64 { \
+             let f: fn(I64) -> I64 = left; \
+             return f(value); \
+         }",
+    )
+    .expect("mutual indirect recursion is statically valid without target expansion");
+    for name in ["left", "right"] {
+        let returned = function(&mutual, name)
+            .body
+            .terminal_return
+            .as_ref()
+            .and_then(|returned| returned.value.as_ref())
+            .expect("mutually recursive function returns one indirect call");
+        assert!(matches!(
+            returned.kind,
+            ValueKind::Call {
+                target: CallTarget::Indirect { .. },
+                ..
+            }
+        ));
+    }
+}
