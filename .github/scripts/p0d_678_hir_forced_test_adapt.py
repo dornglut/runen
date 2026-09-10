@@ -38,11 +38,13 @@ for path in sorted(root.glob('*.rs')):
     text = re.sub(r'Statement::Call\s*\{([^{}]*)\}', statement_call_pattern, text)
     if 'ValueKind::DirectCall' in text:
         raise AssertionError(f'unadapted ValueKind::DirectCall remains in {path}')
-    # Every newly introduced CallTarget reference needs the import, but do not duplicate it.
-    if 'CallTarget::Direct' in text and 'CallTarget,' not in text:
-        marker = 'use runen_hir::{\n'
-        assert marker in text, f'expected multiline runen_hir import in {path}'
-        text = text.replace(marker, marker + '    CallTarget,\n', 1)
+    # Every newly introduced CallTarget reference needs the import. Insert just
+    # after the opening brace so both one-line and multiline use forms are valid;
+    # rustfmt restores the repository's preferred formatting afterward.
+    if 'CallTarget::Direct' in text and not re.search(r'use\s+runen_hir::\{[^;]*\bCallTarget\b', text, re.S):
+        marker = 'use runen_hir::{'
+        assert marker in text, f'expected runen_hir grouped import in {path}'
+        text = text.replace(marker, marker + ' CallTarget,', 1)
     if text != original:
         path.write_text(text)
         changed.append(str(path))
