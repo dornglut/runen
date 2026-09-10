@@ -8,6 +8,7 @@ on:
       - .github/scripts/p0d_678_hir_patch.py
       - .github/scripts/p0d_678_hir_script_fix.py
       - .github/scripts/p0d_678_hir_script_fix2.py
+      - .github/scripts/p0d_678_hir_script_fix3.py
       - .github/workflows/p0d-678-hir-patch.yml
 
 permissions:
@@ -26,6 +27,7 @@ jobs:
         run: |
           python .github/scripts/p0d_678_hir_script_fix.py
           python .github/scripts/p0d_678_hir_script_fix2.py
+          python .github/scripts/p0d_678_hir_script_fix3.py
           python .github/scripts/p0d_678_hir_patch.py
       - name: Format affected Rust code
         run: cargo +stable fmt --all
