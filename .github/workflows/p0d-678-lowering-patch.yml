@@ -1,19 +1,17 @@
-name: Temporary P0-D 678 lowering patch
+name: Temporary P0-D 678 implementation audit
 
 on:
   push:
     branches:
       - p0d-678-source-function-values-impl
     paths:
-      - .github/scripts/p0d_678_lowering_patch.py
-      - .github/scripts/p0d_678_lowering_design_fix.py
       - .github/workflows/p0d-678-lowering-patch.yml
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  patch:
+  audit:
     runs-on: ubuntu-latest
     steps:
       - name: Check out implementation branch
@@ -21,22 +19,15 @@ jobs:
         with:
           ref: p0d-678-source-function-values-impl
           fetch-depth: 1
-      - name: Apply lowering patch
-        run: |
-          python .github/scripts/p0d_678_lowering_design_fix.py
-          python .github/scripts/p0d_678_lowering_patch.py
-      - name: Format
-        run: cargo +stable fmt --all
-      - name: Test lowering crate
+      - name: Format check
+        run: cargo +stable fmt --all -- --check
+      - name: Focused function-value lowering/reference conformance
+        run: cargo +stable test -p runen-core-lowering --test function_values
+      - name: Full lowering regression
         run: cargo +stable test -p runen-core-lowering
-      - name: Clippy lowering all targets
+      - name: Lowering Clippy all targets
         run: cargo +stable clippy -p runen-core-lowering --all-targets -- -D warnings
-      - name: Commit implementation
-        run: |
-          set -euo pipefail
-          git config user.name "Aschenrot"
-          git config user.email "128308156+aschenrot@users.noreply.github.com"
-          git add crates/runen-hir/src/lib.rs crates/runen-core-lowering/src/lib.rs crates/runen-core-lowering/tests
-          git diff --cached --quiet && { echo "No lowering changes produced" >&2; exit 1; }
-          git commit -m "P0-D: lower source function values and indirect calls"
-          git push origin HEAD:p0d-678-source-function-values-impl
+      - name: Full HIR regression
+        run: cargo +stable test -p runen-hir
+      - name: HIR Clippy all targets
+        run: cargo +stable clippy -p runen-hir --all-targets -- -D warnings
