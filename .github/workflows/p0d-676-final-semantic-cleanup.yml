@@ -1,0 +1,220 @@
+name: Temporary P0-D 676 final semantic cleanup
+
+on:
+  push:
+    branches:
+      - p0d-676-source-function-values-spec
+    paths:
+      - .github/workflows/p0d-676-final-semantic-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: p0d-676-source-function-values-spec
+      - name: Prove editing base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD^)" = "30984bf3d20b732ccfb0c7a41fa6eb177405db9c"
+          test "$(git diff --name-only HEAD^ HEAD)" = ".github/workflows/p0d-676-final-semantic-cleanup.yml"
+      - name: Apply bounded normative cleanup
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace(path, old, new, count=1):
+              p = Path(path)
+              text = p.read_text()
+              actual = text.count(old)
+              if actual != count:
+                  raise SystemExit(f"{path}: expected {count} occurrence(s), found {actual}: {old!r}")
+              p.write_text(text.replace(old, new))
+
+          fe = "spec/language/source/function-execution.md"
+          replace(fe,
+              "so no source raw-pointer value or pointer-origin provenance is transferred into a callee parameter by this direct-call relation.",
+              "so no source raw-pointer value or pointer-origin provenance is transferred into a callee parameter by this source-call relation.")
+          replace(fe,
+              "A direct-call receiver therefore executes against the result type selected from its resolved callable signature, and a record-construction receiver executes against its explicit resolved nominal target type, whether the concrete target was unqualified or qualified.",
+              "A call receiver therefore executes against the result type selected from its statically established callable interface, and a record-construction receiver executes against its explicit resolved nominal target type, whether the concrete target was unqualified or qualified.")
+          replace(fe,
+              "evaluate the retained receiver producer exactly once under its existing direct-call or record-construction semantics and its own exact receiver type;",
+              "evaluate the retained receiver producer exactly once under its existing source-call or record-construction semantics and its own exact receiver type;")
+          replace(fe,
+              "validate the selected direct-call, record-construction, or field-value producer using the top pattern head's resolved nominal record type as the exact required type and the pre-pattern-binding lexical/source producer-validation environment;",
+              "validate the selected call, record-construction, or field-value producer using the top pattern head's resolved nominal record type as the exact required type and the pre-pattern-binding lexical/source producer-validation environment;")
+          replace(fe,
+              "For a no-result direct-call statement, complete the call normally—including every replacement-capable external-referent normal-restoration obligation—before continuing. Safe-reference arguments have already transferred into and been cleaned with the callee according to the direct-call relation above. Raw-pointer values cannot be direct-call parameters in this slice.",
+              "For a no-result source-call statement, direct or bounded indirect, complete the call normally—including every replacement-capable external-referent normal-restoration obligation—before continuing. Safe-reference arguments have already transferred into and been cleaned with the callee according to the source-call relation above. Raw-pointer values cannot be source-call parameters in this slice.")
+          replace(fe,
+              "If the fault arises from a directly called callee, the caller's direct-call evaluation yields `F`; with no catch boundary, the caller performs its own fault cleanup and propagates the same fault outward.",
+              "If the fault arises from a called callee, the caller's source-call evaluation yields `F`; with no catch boundary, the caller performs its own fault cleanup and propagates the same fault outward.")
+          replace(fe,
+              "the accepted Core `Assign`, `Fault(F)`, `Goto`, reference/direct-call-result, pointer, and unsafe relations are consumed rather than redefined;",
+              "the accepted Core `Assign`, `Fault(F)`, `Goto`, reference/call-result, pointer, and unsafe relations are consumed rather than redefined;")
+          replace(fe,
+              "arbitrary value/expression field-value receivers beyond the bounded direct-call/record-construction receiver set",
+              "arbitrary value/expression field-value receivers beyond the bounded call/record-construction receiver set")
+          replace(fe,
+              "producer-backed pattern scrutinees beyond direct calls/record constructions/field-value uses",
+              "producer-backed pattern scrutinees beyond source calls/record constructions/field-value uses")
+          replace(fe,
+              "indirect calls/function values/closures, generics/traits/coherence",
+              "function values or indirect calls beyond the bounded captureless relation owned by `function-values.md`, closures, generics/traits/coherence")
+
+          callables = "spec/language/source/callables.md"
+          replace(callables,
+              "positional direct-call validation, argument evaluation order, owned-value transfer, reference-carrier transfer, call-entry authority, and replacement-capable external-referent consequences",
+              "positional source-call validation, argument evaluation order, owned-value transfer, reference-carrier transfer, call-entry authority, and replacement-capable external-referent consequences")
+          replace(callables,
+              "therefore remains available to independent direct-call validation, nested calls, direct recursion, mutual recursion, and generic application without inspecting or expanding a callee body.",
+              "therefore remains available to independent source-call validation, nested calls, direct or bounded-indirect recursion, mutual recursion, and generic application without inspecting or expanding a callee body.")
+          replace(callables,
+              "`function-execution.md` is the sole source owner for the represented direct-function execution relation built on these function entities and signatures.",
+              "`function-execution.md` is the sole source owner for the represented source-function execution relation built on these function entities and signatures after direct or bounded-indirect target selection.")
+          replace(callables, "- direct-call target validity;", "- source-call execution after target selection;")
+          replace(callables, "- direct return or recursion;", "- return or direct/bounded-indirect recursion;")
+          replace(callables, "- direct-call divergence;", "- source-call divergence;")
+          replace(callables,
+              "no marker evidence becomes a direct-execution value or dispatch relation here.",
+              "no marker evidence becomes an execution value or dispatch relation here.")
+          replace(callables,
+              "the represented direct-call relation transports no raw-pointer value or pointer-origin provenance across activation boundaries through either ordinary or generic parameters.",
+              "the represented source-call relation transports no raw-pointer value or pointer-origin provenance across activation boundaries through either ordinary or generic parameters.")
+          replace(callables,
+              "Indirect calls, function values, closures, overload dispatch, methods, external/FFI execution, intrinsic execution, async/task invocation, and other future callable forms are not implied by the direct-call relation or first-slice generic application.",
+              "Function-value payload/formation and bounded indirect target classification remain owned by `function-values.md` rather than this callable-signature owner. Closures, overload dispatch, methods, external/FFI execution, intrinsic execution, async/task invocation, and other future callable forms remain unrepresented and are not implied by the bounded function-value relation or first-slice generic application.")
+
+          lb = "spec/language/source/local-bindings.md"
+          replace(lb,
+              "safe-reference/raw-pointer local contextual integration",
+              "safe-reference/raw-pointer/function-value local contextual integration",
+              count=1)
+          replace(lb,
+              "The concrete `alias::member` direct-call target and qualified constant value resolve through that mechanism rather than this unqualified lookup. Function-local bindings do not block an explicitly qualified constant value.",
+              "The concrete `alias::member` qualified call target and qualified constant/function-value candidate resolve through that mechanism rather than this unqualified lookup. Qualified calls remain direct module-function calls under `function-values.md`; an exact required function-value type may instead select qualified formation from an exported non-generic function. Function-local bindings do not block either explicitly qualified value relation.")
+          replace(lb,
+              "- direct-call argument evaluation and parameter transfer;",
+              "- source-call argument evaluation and parameter transfer;")
+
+          cs = "spec/language/source/concrete-syntax.md"
+          replace(cs,
+              "parameter-list, direct-call, argument-list, or value-wrapper roles.",
+              "parameter-list, call, argument-list, or value-wrapper roles.")
+          replace(cs,
+              "A bracketed generic list is recognized only in the exact function-declaration or direct-call position stated by those productions.",
+              "A bracketed generic list is recognized only in the exact function-declaration or `Call` position stated by those productions; semantic admission on a call remains restricted to the existing direct generic-call relation.")
+          replace(cs,
+              "(and optional direct-call generic argument list) remains a `Call`",
+              "(and optional generic type-argument list, semantically admitted only for a direct generic target) remains a `Call`")
+          replace(cs,
+              "such as a direct-call argument, when the corresponding semantic type admission succeeds.",
+              "such as a call argument, when the corresponding semantic type admission succeeds.")
+          replace(cs,
+              "the same literal, identifier-use, qualified-constant-reference, direct-call, and bounded field-value atoms",
+              "the same literal, identifier-use, qualified-constant-reference, `Call`, and bounded field-value atoms")
+          replace(cs,
+              "Because direct-call arguments and construction initializers contain `Value`,",
+              "Because call arguments and construction initializers contain `Value`,")
+          replace(cs,
+              "A qualified direct-call receiver may therefore yield a foreign exported record",
+              "A qualified call receiver may therefore yield a foreign exported record")
+
+          old_identifier = """An `IdentifierUse` is the shared bare-identifier value shape for ordinary function-local whole-binding use and the unqualified branch of `ConstReference`. Resolution applies the local-first precedence owned by `local-bindings.md`: when an active parameter/local binding resolves the key, selection is final and ordinary whole-binding owned-value use applies exactly as before. Only when no active local resolves does same-module lookup apply. If that lookup selects one source constant declaration, `constants.md` produces the declaration's exact intrinsic scalar type/value with no binding ownership, availability, storage, or mutability state. A selected wrong-category module binding is invalid and is not skipped. Generic type-parameter keys remain type-position-only and do not shadow this value lookup domain.
+
+For the local-binding branch, the complete structural root must be fully available under `structural-ownership.md`; an abstract generic type parameter uses the capability-conservative Move relation from `generics.md`; `SharedRef(T)` use duplicates a carrier; `ExclusiveReplaceRef(T)` use moves its non-copy carrier; and raw-pointer use duplicates the pointer value/origin exactly as owned by the existing binding/reference/raw owners. For the constant branch, no structural root, carrier, pointer origin, availability state, hidden storage, or Copy-from-storage operation exists. Repeated bare constant uses independently produce the same declared semantic scalar value under `constants.md`.
+
+A bare `QualifiedModuleMember` in an ordinary or conditional value atom is the qualified branch of `ConstReference`. Its first identifier is resolved only as a source-unit module alias and the second by existing qualified cross-module lookup; the selected binding must be exported and must denote one source constant declaration. The produced value is the exact declared intrinsic scalar value from `constants.md`. A private or wrong-category target is final and invalid. This form bypasses local value lookup and creates no nested path, arbitrary member access, field receiver, call target-as-value, or runtime module object. Direct-call and record-construction forms using the same two-part target remain distinguished by their complete following token shape."""
+          new_identifier = """An `IdentifierUse` is the shared bare-identifier value shape for ordinary function-local whole-binding use, the unqualified branch of `ConstReference`, and context-typed unqualified function-value formation. Resolution applies the local-first precedence owned by `local-bindings.md`: when an active parameter/local binding resolves the key, selection is final and ordinary whole-binding owned-value use applies exactly as before, including duplication of a captureless function value when that is the binding's exact type. Only when no active local resolves does same-module lookup apply. A selected source constant may produce its exact intrinsic scalar value under `constants.md`; when the surrounding receiving position instead supplies one exact function-value type, a selected non-generic source function may form the exact function value under `function-values.md`. The consuming relation validates the selected category and exact required type; a selected wrong-category, generic-function, or type-mismatched module binding is final and is not skipped. Generic type-parameter keys remain type-position-only and do not shadow this value lookup domain.
+
+For the local-binding branch, the complete structural root must be fully available under `structural-ownership.md`; an abstract generic type parameter uses the capability-conservative Move relation from `generics.md`; `SharedRef(T)` use duplicates a carrier; `ExclusiveReplaceRef(T)` use moves its non-copy carrier; raw-pointer use duplicates the pointer value/origin exactly as owned by the existing binding/reference/raw owners; and captureless function-value use duplicates the exact carried source function-entity identity under `function-values.md`. For the module-constant branch, no structural root, carrier, pointer origin, availability state, hidden storage, or Copy-from-storage operation exists, and repeated uses independently produce the same declared semantic scalar value. Context-typed module-function formation likewise creates no binding root or storage state and is effect-free after successful validation under `function-values.md`.
+
+A bare `QualifiedModuleMember` in an ordinary value atom may be the qualified branch of `ConstReference` or, when the surrounding receiving position supplies one exact function-value type, the qualified function-value formation shape from `function-values.md`. Its first identifier is resolved only as a source-unit module alias and the second by existing qualified cross-module lookup; the selected binding must be exported. The constant relation requires an exported source constant and produces its exact intrinsic scalar value; the function-value relation requires an exported non-generic source function whose exact callable interface equals the required function-value type. A private, wrong-category, generic-function, or type-mismatched target is final and invalid. In a direct conditional atom the surrounding exact type is `Bool`, so only the constant relation can succeed. Explicit qualification bypasses local value lookup and creates no nested path, arbitrary member access, field receiver, runtime module object, or general module-member value category. `Call` and record-construction forms using the same two-part target remain distinguished by their complete following token shape."""
+          replace(cs, old_identifier, new_identifier)
+
+          replace(cs,
+              "A qualified module member without a direct-call argument list (and any required generic type-argument list), record-construction body, or record-pattern body is represented in ordinary/conditional value positions only as the qualified branch of `ConstReference`; source validity then requires it to resolve to an exported constant. It is not an `IdentifierUse`, general module-member value, function value, record value, or arbitrary path. Module aliases themselves never become source values.",
+              "A qualified module member without a call argument list, record-construction body, or record-pattern body remains one bounded bare qualified value shape. In an ordinary receiving position it may select either the qualified `ConstReference` relation or, under one exact required function-value type, the qualified non-generic function-value formation relation from `function-values.md`; in a direct conditional position only the constant relation can satisfy the required `Bool`. It is not an `IdentifierUse`, general module-member value, record value, arbitrary path, or general function/member reference. Module aliases themselves never become source values.")
+
+          old_lookup = """Consequently, when a parameter/local binding has the same key as a module-level constant, an unqualified bare value spelling selects the local and uses ordinary local-binding semantics; the module constant is not considered. When no local resolves, a same-module constant selected by bare value lookup uses `constants.md`. When a parameter/local binding has the same key as a module-level function, an unqualified direct-call spelling resolves to the local binding and is invalid as a direct call rather than bypassing it. When no local resolves and same-module lookup selects a constant in a direct-call context, that selected constant is likewise final and wrong-category for the call. For either assignment alternative, the root identifier follows the same function-local value precedence and must select a represented parameter/local binding; a constant reached only by fallback is wrong-category. The selected root is then validated for assignment mutability and canonical direct safe-authority compatibility as required by its operation, with raw-pointer incoming-origin requirements applying only to whole-binding raw-pointer replacement. The bounded field alternative additionally resolves its non-empty selector path under `field-access.md` and admits no module-level or qualified assignment root. A `BindingFieldValueUse` root and direct binding-root record-pattern scrutinee follow the same local-first spelling but require a parameter/local binding under their owners; neither treats a fallback constant as a structural root. The root/parent identifier of the bounded `SafeReferenceValue` forms, plus `SafeDereferenceValue`, `ReferenceReplaceStatement`, `RawAddressOfValue`, `RawMoveValue`, and `RawAssignStatement`, likewise requires an applicable active parameter/local binding and does not reinterpret a same-module constant or another declaration as source-addressable storage. Field selectors after a Shared or replacement-capable root identifier, and after a Shared or replacement-capable reborrow parent identifier, are nominal field selections, not further function-local lookups.
+
+A `ProducerFieldValueUse` applies the lookup relation of its complete receiver producer: unqualified direct call uses ordinary function-body value/call lookup for the target followed by any generic application relation, qualified direct call uses module-alias lookup followed by any generic application relation, unqualified record construction uses same-module record lookup, and qualified record construction uses module-alias lookup. The later field selectors do not cause a second root/name lookup; they consume nominal field identities and per-field accessibility under `field-access.md`."""
+          new_lookup = """Consequently, when a parameter/local binding has the same key as a module-level constant or function, an unqualified bare value spelling selects the local and uses ordinary local-binding semantics; the module declaration is not considered. Only when no local resolves may same-module bare value lookup select a constant under `constants.md` or, under one exact required function-value type, a non-generic function under `function-values.md`. For an unqualified `Call`, the same local-first selection is final: a selected function-valued parameter/local produces the bounded indirect-call classification, a selected non-function-valued local is wrong-category, and only when no local resolves may same-module lookup select the existing direct module-function target. When same-module lookup instead selects a constant or another wrong category in a call context, that selection is final and invalid. For either assignment alternative, the root identifier follows the same function-local value precedence and must select a represented parameter/local binding; a module declaration reached only by fallback is wrong-category. The selected root is then validated for assignment mutability and canonical direct safe-authority compatibility as required by its operation, with raw-pointer incoming-origin requirements applying only to whole-binding raw-pointer replacement. The bounded field alternative additionally resolves its non-empty selector path under `field-access.md` and admits no module-level or qualified assignment root. A `BindingFieldValueUse` root and direct binding-root record-pattern scrutinee follow the same local-first spelling but require a parameter/local binding under their owners; neither treats a fallback module declaration as a structural root. The root/parent identifier of the bounded `SafeReferenceValue` forms, plus `SafeDereferenceValue`, `ReferenceReplaceStatement`, `RawAddressOfValue`, `RawMoveValue`, and `RawAssignStatement`, likewise requires an applicable active parameter/local binding and does not reinterpret a same-module declaration as source-addressable storage. Field selectors after a Shared or replacement-capable root identifier, and after a Shared or replacement-capable reborrow parent identifier, are nominal field selections, not further function-local lookups.
+
+A `ProducerFieldValueUse` applies the lookup/classification relation of its complete receiver producer: an unqualified `Call` uses local-first target classification and is bounded indirect for a selected function-value local/parameter or direct for a selected same-module function when no local resolves; a qualified `Call` uses module-alias lookup and remains direct; any valid generic application remains confined to a direct generic call. Unqualified record construction uses same-module record lookup and qualified record construction uses module-alias lookup. The later field selectors do not cause a second root/name lookup; they consume nominal field identities and per-field accessibility under `field-access.md`."""
+          replace(cs, old_lookup, new_lookup)
+
+          old_qualified = """After qualified lookup selects the target binding, the consuming `BareType`, `ReferenceReferentType`, `GenericTypeArgument`, `TraitReference`, nominal-record `ImplementationTarget`, direct-call, record-construction, record-pattern-head, or constant-reference context validates the entity category. A constant-reference context requires the selected binding to denote one exported source constant and then consumes its exact intrinsic scalar type/value from `constants.md`. `SharedReferenceType`, `ReplacementReferenceType`, and `RawPointerType` all consume `ReferenceReferentType`, so the same qualified nominal-record spelling may supply a safe referent or raw pointee when that constructor's own semantic admission permits it. `GenericTypeArgument` admits the selected exported nominal record only under `generics.md`; `TraitReference` requires the selected exported binding to denote a marker trait under `traits.md`; a nominal `ImplementationTarget` requires the selected exported binding to denote a record under `traits.md`. None widens qualified lookup or creates associated/type-member lookup. Lookup MUST NOT skip a private or wrong-category target to search for another entity.
+
+A parameter/local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local controls ordinary unqualified value/call spelling but does not block syntactically qualified `alias::member`. A generic type parameter likewise does not block explicit qualification or the marker-reference module lookup domain.
+
+The two-part qualification syntax is reused only in the explicitly represented `BareType`/`ReferenceReferentType`, `GenericTypeArgument`, `TraitReference`, nominal `ImplementationTarget`, direct-call target, record-construction target, record-pattern-head, and constant-reference value positions. It does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, turbofish syntax, a qualified assignment root, qualified binding leaves, qualified field names, a qualified safe-reference root/reborrow/dereference target, or a qualified raw address/move target. A qualified direct call may appear as a producer-backed record-pattern scrutinee in either pattern statement or as the receiver of a `ProducerFieldValueUse`; a qualified record construction may likewise appear wherever the existing `RecordConstruction` producer category is admitted. A qualified constant reference is a scalar value only and is not a producer-backed pattern scrutinee or field receiver. Any resulting record value from call/construction may then undergo ordinary `.` field selection through `field-access.md`. A qualified record-pattern head uses the same lookup relation only to select its nominal record and does not turn its field selectors, refutable-test leaves, ordinary binding leaves, or same-path bind-and-test binding identifiers into qualified module members. Marker qualification selects only a top-level marker trait binding; it does not create trait member or associated-item lookup."""
+          new_qualified = """After qualified lookup selects the target binding, the consuming `BareType`, `ReferenceReferentType`, `GenericTypeArgument`, `TraitReference`, nominal-record `ImplementationTarget`, `Call`, record-construction, record-pattern-head, constant-reference, or context-typed function-value-formation relation validates the entity category. A constant-reference context requires the selected binding to denote one exported source constant and consumes its exact intrinsic scalar type/value from `constants.md`; a function-value receiving context requires one exported non-generic source function whose exact callable interface equals the required function-value type under `function-values.md`. A qualified `Call` remains the existing direct module-function relation. `SharedReferenceType`, `ReplacementReferenceType`, and `RawPointerType` all consume `ReferenceReferentType`, so the same qualified nominal-record spelling may supply a safe referent or raw pointee when that constructor's own semantic admission permits it. `GenericTypeArgument` admits the selected exported nominal record only under `generics.md`; `TraitReference` requires the selected exported binding to denote a marker trait under `traits.md`; a nominal `ImplementationTarget` requires the selected exported binding to denote a record under `traits.md`. None widens qualified lookup or creates associated/type-member lookup. Lookup MUST NOT skip a private or wrong-category target to search for another entity.
+
+A parameter/local binding MAY have the same lexical key as a module alias because the two participate in distinct lookup domains. Such a local controls ordinary unqualified value/call spelling but does not block syntactically qualified `alias::member`. A generic type parameter likewise does not block explicit qualification or the marker-reference module lookup domain.
+
+The two-part qualification syntax is reused only in the explicitly represented `BareType`/`ReferenceReferentType`, `GenericTypeArgument`, `TraitReference`, nominal `ImplementationTarget`, `Call` target, record-construction target, record-pattern-head, constant-reference value, and bounded context-typed function-value-formation positions. It does not create arbitrary member access, nested module paths, associated-item lookup, methods, re-export behavior, turbofish syntax, a qualified assignment root, qualified binding leaves, qualified field names, a qualified safe-reference root/reborrow/dereference target, or a qualified raw address/move target. A qualified call may appear as a producer-backed record-pattern scrutinee in either pattern statement or as the receiver of a `ProducerFieldValueUse`; it is still a direct module-function call. A qualified record construction may likewise appear wherever the existing `RecordConstruction` producer category is admitted. A bare qualified constant or function-value formation candidate is not by itself a producer-backed pattern scrutinee or field receiver. Any resulting record value from call/construction may then undergo ordinary `.` field selection through `field-access.md`. A qualified record-pattern head uses the same lookup relation only to select its nominal record and does not turn its field selectors, refutable-test leaves, ordinary binding leaves, or same-path bind-and-test binding identifiers into qualified module members. Marker qualification selects only a top-level marker trait binding; it does not create trait member or associated-item lookup."""
+          replace(cs, old_qualified, new_qualified)
+          replace(cs,
+              "- indirect calls, function values, closures, or any closure/function-value role for standalone `|`;",
+              "- function values or indirect calls beyond the bounded captureless relation in `function-values.md`, closures, or any closure role for standalone `|`;" )
+
+          types = "spec/language/source/types.md"
+          replace(types,
+              "Consequently a nominal record cannot yet store a safe reference or raw-pointer value, and record construction/pattern/field-value owners require no reference-carrier or pointer-provenance aggregate semantics.",
+              "Consequently a nominal record cannot yet store a safe-reference, raw-pointer, or function value, and record construction/pattern/field-value owners require no reference-carrier, pointer-provenance, or callable-value aggregate semantics.")
+          replace(types,
+              "The existence of safe-reference and raw-pointer value types does not alter that graph while indirection-containing record fields remain forbidden.",
+              "The existence of safe-reference, raw-pointer, and function-value types does not alter that graph while those non-record-shape field categories remain forbidden.")
+
+          refs = "spec/language/source/references.md"
+          replace(refs,
+              "`SharedRef`, `ExclusiveReplaceRef`, and `RawPtr` are not admissible replacement-reference referents.",
+              "`SharedRef`, `ExclusiveReplaceRef`, `RawPtr`, and captureless function-value types are not admissible replacement-reference referents.")
+
+          # Reject the known contradictory residuals rather than silently accepting a partial cleanup.
+          checks = {
+              fe: [
+                  "indirect calls/function values/closures",
+                  "bounded direct-call/record-construction receiver set",
+                  "selected direct-call, record-construction, or field-value producer",
+                  "For a no-result direct-call statement",
+                  "caller's direct-call evaluation yields",
+              ],
+              callables: [
+                  "sole source owner for the represented direct-function execution relation",
+                  "Indirect calls, function values, closures",
+                  "represented direct-call relation transports no raw-pointer",
+              ],
+              cs: [
+                  "call target-as-value",
+                  "is invalid as a direct call rather than bypassing it",
+                  "only as the qualified branch of `ConstReference`",
+                  "- indirect calls, function values, closures",
+              ],
+          }
+          for path, forbidden in checks.items():
+              text = Path(path).read_text()
+              for phrase in forbidden:
+                  if phrase in text:
+                      raise SystemExit(f"{path}: forbidden residual remains: {phrase}")
+          PY
+          git diff --check
+      - name: Commit normative cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git add spec/language/source
+          test -n "$(git diff --cached --name-only)"
+          git commit -m "docs: complete source callable integration for #676"
+          git push origin HEAD:p0d-676-source-function-values-spec
