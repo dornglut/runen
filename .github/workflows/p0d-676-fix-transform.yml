@@ -1,0 +1,38 @@
+name: Temporary P0-D 676 transform assertion repair
+
+on:
+  push:
+    branches:
+      - p0d-676-source-function-values-spec
+    paths:
+      - .github/workflows/p0d-676-fix-transform.yml
+
+permissions:
+  contents: write
+
+jobs:
+  repair:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-676-source-function-values-spec
+      - name: Repair one exact assertion
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('.github/workflows/p0d-676-spec-transform.yml')
+          s = p.read_text()
+          old = '2. `T` is duplicable under the source-semantic duplicability relation from `types.md`;\\n3. the structural source value shape'
+          new = '2. `T` is duplicable under the source-semantic duplicability relation from `types.md`; and\\n3. the structural source value shape'
+          if s.count(old) != 1:
+              raise SystemExit(f'expected one assertion fragment, found {s.count(old)}')
+          p.write_text(s.replace(old, new, 1))
+      - name: Commit repair
+        run: |
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git add .github/workflows/p0d-676-spec-transform.yml
+          git diff --cached --check
+          git commit -m "chore: repair #676 transform assertion"
+          git push origin HEAD:p0d-676-source-function-values-spec
