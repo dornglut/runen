@@ -1,0 +1,41 @@
+name: Temporary P0-D 676 type-summary cleanup
+
+on:
+  push:
+    branches:
+      - p0d-676-source-function-values-spec
+    paths:
+      - .github/workflows/p0d-676-type-summary-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+          ref: p0d-676-source-function-values-spec
+      - name: Prove editing surface
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff --name-only 07ab8b658a09f1d1bae160c70bf3277198edcd43..HEAD | sort)" = "$(printf '%s\n' '.github/scripts/p0d_676_type_summary_cleanup.py' '.github/workflows/p0d-676-type-summary-cleanup.yml' | sort)"
+      - name: Apply exact replacement
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/p0d_676_type_summary_cleanup.py
+          git diff --check
+      - name: Commit normative cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git add spec/language/source/types.md
+          test -n "$(git diff --cached --name-only)"
+          git commit -m "docs: align Shared referent summary for #676"
+          git push origin HEAD:p0d-676-source-function-values-spec
