@@ -1,4 +1,5 @@
 use std::{
+    cell::RefCell,
     cmp::Ordering,
     collections::{BTreeMap, BTreeSet},
 };
@@ -7,15 +8,15 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
     Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
-    BooleanEqualityRelation, CleanupPath, Diagnostic, DiagnosticKind, Duplicability, Field,
-    FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, IntrinsicType,
-    LiteralValue, MarkerImplementation, MarkerImplementationTarget, MarkerTrait, MarkerTraitId,
-    Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee, Record,
-    RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTest,
-    RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
-    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type,
-    TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
-    type_is_duplicable_in_records,
+    BooleanEqualityRelation, CallTarget, CleanupPath, Diagnostic, DiagnosticKind, Duplicability,
+    Field, FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, FunctionType,
+    FunctionTypeId, IntrinsicType, LiteralValue, MarkerImplementation, MarkerImplementationTarget,
+    MarkerTrait, MarkerTraitId, Module, ModuleId, NumericContract, OwnedUse, Parameter,
+    RawPointerPointee, Record, RecordFieldValue, RecordId, RecordPatternBinding,
+    RecordPatternScrutinee, RecordPatternTest, RecordPatternTestKind,
+    RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent, Return,
+    SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type, TypeParameter,
+    TypeParameterId, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -98,6 +99,7 @@ struct FunctionHeader {
     parameters: Vec<Parameter>,
     result: Option<Type>,
     safe_reference_result_contract: SafeReferenceResultContract,
+    function_type: Option<FunctionTypeId>,
     body: SyntaxNode,
     location: SourceLocation,
 }
@@ -542,6 +544,7 @@ struct BodyResolutionContext<'a> {
     constants: &'a [ResolvedConstant],
     records: &'a [Record],
     headers: &'a [FunctionHeader],
+    function_types: &'a RefCell<Vec<FunctionType>>,
     marker_implementations: &'a MarkerImplementationRelation,
     safe_reference_result_origin_authority: Option<ReferenceAuthorityId>,
 }
@@ -599,6 +602,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
     }
 
     let constants = resolve_constants(&constant_syntax, &mut diagnostics);
+    let function_types = RefCell::new(Vec::new());
     let records = resolve_records(&record_syntax, &modules, &imports, &mut diagnostics);
     let marker_implementations = resolve_marker_implementations(
         &marker_implementation_syntax,
@@ -617,6 +621,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         &imports,
         &records,
         &marker_traits,
+        &function_types,
         &mut next_binding,
         &mut diagnostics,
     );
@@ -644,6 +649,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             &constants,
             &records,
             &headers,
+            &function_types,
             &marker_implementation_relation,
             &mut next_binding,
             &mut diagnostics,
@@ -679,6 +685,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         modules,
         records,
         functions,
+        function_types: function_types.into_inner(),
         marker_traits,
         marker_implementations,
     })
@@ -1271,6 +1278,13 @@ fn resolve_records(
                 });
             }
             let type_node = direct_child(&field_node, SyntaxKind::TypeRef);
+            if type_ref_is_function(&type_node) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::FunctionTypeField,
+                    location: location(record.unit, &type_node),
+                });
+                continue;
+            }
             if type_ref_reference_permission(&type_node).is_some() {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::SafeReferenceField,
@@ -1292,6 +1306,7 @@ fn resolve_records(
                 modules,
                 imports,
                 &[],
+                true,
                 diagnostics,
             ) {
                 validate_exported_field_type(
@@ -1358,6 +1373,7 @@ fn resolve_function_headers(
     imports: &[UnitImports],
     records: &[Record],
     marker_traits: &[MarkerTrait],
+    function_types: &RefCell<Vec<FunctionType>>,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Vec<FunctionHeader> {
@@ -1449,13 +1465,16 @@ fn resolve_function_headers(
                 });
             }
             let type_node = direct_child(&parameter_node, SyntaxKind::TypeRef);
-            if let Some(ty) = resolve_type(
+            if let Some(ty) = resolve_full_type(
                 function.module,
                 function.unit,
                 &type_node,
                 modules,
                 imports,
+                records,
+                function_types,
                 &type_parameters,
+                true,
                 diagnostics,
             ) {
                 if matches!(ty, Type::RawPointer(_)) {
@@ -1477,6 +1496,7 @@ fn resolve_function_headers(
                     function.accessibility,
                     ty,
                     records,
+                    function_types,
                     function.unit,
                     &type_node,
                     diagnostics,
@@ -1499,13 +1519,16 @@ fn resolve_function_headers(
             .find(|node| node.kind() == SyntaxKind::ResultClause)
             .and_then(|result_clause| {
                 let type_node = direct_child(&result_clause, SyntaxKind::TypeRef);
-                let ty = resolve_type(
+                let ty = resolve_full_type(
                     function.module,
                     function.unit,
                     &type_node,
                     modules,
                     imports,
+                    records,
+                    function_types,
                     &type_parameters,
+                    true,
                     diagnostics,
                 )?;
                 if matches!(ty, Type::RawPointer(_)) {
@@ -1540,6 +1563,7 @@ fn resolve_function_headers(
                     function.accessibility,
                     ty,
                     records,
+                    function_types,
                     function.unit,
                     &type_node,
                     diagnostics,
@@ -1592,6 +1616,18 @@ fn resolve_function_headers(
                 }
                 Some(ty)
             });
+        let function_type = if type_parameters.is_empty() {
+            Some(intern_function_type(
+                function_types,
+                FunctionType {
+                    parameters: parameters.iter().map(|parameter| parameter.ty).collect(),
+                    result,
+                    safe_reference_result_contract,
+                },
+            ))
+        } else {
+            None
+        };
         let body = direct_child(&function.node, SyntaxKind::Body);
         headers.push(FunctionHeader {
             id: function.id,
@@ -1603,6 +1639,7 @@ fn resolve_function_headers(
             parameters,
             result,
             safe_reference_result_contract,
+            function_type,
             body,
             location: function.location,
         });
@@ -1614,6 +1651,7 @@ fn validate_exported_signature_type(
     accessibility: Accessibility,
     ty: Type,
     records: &[Record],
+    function_types: &RefCell<Vec<FunctionType>>,
     unit: usize,
     type_node: &SyntaxNode,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1621,26 +1659,43 @@ fn validate_exported_signature_type(
     if accessibility != Accessibility::Exported {
         return;
     }
-    let record = match ty {
+    if exported_type_exposes_private_record(ty, records, function_types) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::PrivateTypeInExportedSignature,
+            location: location(unit, type_node),
+        });
+    }
+}
+
+fn exported_type_exposes_private_record(
+    ty: Type,
+    records: &[Record],
+    function_types: &RefCell<Vec<FunctionType>>,
+) -> bool {
+    match ty {
         Type::Record(record)
         | Type::SafeReference {
             referent: ReferenceReferent::Record(record),
             ..
         }
-        | Type::RawPointer(RawPointerPointee::Record(record)) => record,
+        | Type::RawPointer(RawPointerPointee::Record(record)) => {
+            records[record.0].accessibility == Accessibility::ModulePrivate
+        }
+        Type::Function(function_type) => {
+            let function_type = function_types.borrow()[function_type.0].clone();
+            function_type.parameters.into_iter().any(|parameter| {
+                exported_type_exposes_private_record(parameter, records, function_types)
+            }) || function_type.result.is_some_and(|result| {
+                exported_type_exposes_private_record(result, records, function_types)
+            })
+        }
         Type::Intrinsic(_)
         | Type::Parameter(_)
         | Type::SafeReference {
             referent: ReferenceReferent::Intrinsic(_),
             ..
         }
-        | Type::RawPointer(RawPointerPointee::Intrinsic(_)) => return,
-    };
-    if records[record.0].accessibility == Accessibility::ModulePrivate {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::PrivateTypeInExportedSignature,
-            location: location(unit, type_node),
-        });
+        | Type::RawPointer(RawPointerPointee::Intrinsic(_)) => false,
     }
 }
 
@@ -1654,7 +1709,7 @@ fn type_contains_reference_or_pointer_inner(
     visiting: &mut BTreeSet<RecordId>,
 ) -> bool {
     match ty {
-        Type::Intrinsic(_) | Type::Parameter(_) => false,
+        Type::Intrinsic(_) | Type::Parameter(_) | Type::Function(_) => false,
         Type::Record(record) => {
             if !visiting.insert(record) {
                 return false;
@@ -1709,7 +1764,10 @@ fn raw_pointer_pointee_type_is_valid(ty: Type, records: &[Record]) -> bool {
             .fields
             .iter()
             .all(|field| raw_pointer_pointee_type_is_valid(field.ty, records)),
-        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => false,
+        Type::Parameter(_)
+        | Type::SafeReference { .. }
+        | Type::RawPointer(_)
+        | Type::Function(_) => false,
     }
 }
 
@@ -1782,6 +1840,7 @@ fn resolve_type(
     modules: &BTreeMap<ModuleId, ModuleBuild>,
     imports: &[UnitImports],
     type_parameters: &[TypeParameter],
+    allow_type_parameters: bool,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Type> {
     let reference_permission = type_ref_reference_permission(node);
@@ -1826,7 +1885,7 @@ fn resolve_type(
                 .iter()
                 .find(|parameter| parameter.name == name)
             {
-                if reference_permission.is_some() || raw {
+                if reference_permission.is_some() || raw || !allow_type_parameters {
                     diagnostics.push(Diagnostic {
                         kind: DiagnosticKind::InvalidGenericTypeParameterPosition,
                         location: token_location,
@@ -1867,7 +1926,10 @@ fn resolve_type(
         let referent = match ordinary {
             Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
             Type::Record(record) => ReferenceReferent::Record(record),
-            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+            Type::Parameter(_)
+            | Type::SafeReference { .. }
+            | Type::RawPointer(_)
+            | Type::Function(_) => {
                 unreachable!(
                     "source reference type syntax is non-recursive and abstract referents reject before wrapping"
                 )
@@ -1881,7 +1943,10 @@ fn resolve_type(
         let pointee = match ordinary {
             Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
             Type::Record(record) => RawPointerPointee::Record(record),
-            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+            Type::Parameter(_)
+            | Type::SafeReference { .. }
+            | Type::RawPointer(_)
+            | Type::Function(_) => {
                 unreachable!(
                     "source raw-pointer type syntax is non-recursive and abstract pointees reject before wrapping"
                 )
@@ -1891,6 +1956,244 @@ fn resolve_type(
     } else {
         Some(ordinary)
     }
+}
+
+fn type_ref_is_function(node: &SyntaxNode) -> bool {
+    node.children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::KwFn)
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "function-type resolution reuses the existing explicit source-resolution inputs"
+)]
+fn resolve_full_type(
+    module: ModuleId,
+    unit: usize,
+    node: &SyntaxNode,
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    records: &[Record],
+    function_types: &RefCell<Vec<FunctionType>>,
+    type_parameters: &[TypeParameter],
+    allow_type_parameters: bool,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Type> {
+    if type_ref_is_function(node) {
+        return resolve_function_type(
+            module,
+            unit,
+            node,
+            modules,
+            imports,
+            records,
+            function_types,
+            type_parameters,
+            diagnostics,
+        );
+    }
+    resolve_type(
+        module,
+        unit,
+        node,
+        modules,
+        imports,
+        type_parameters,
+        allow_type_parameters,
+        diagnostics,
+    )
+}
+
+#[expect(
+    clippy::too_many_arguments,
+    reason = "function-type resolution reuses the existing explicit source-resolution inputs"
+)]
+fn resolve_function_type(
+    module: ModuleId,
+    unit: usize,
+    node: &SyntaxNode,
+    modules: &BTreeMap<ModuleId, ModuleBuild>,
+    imports: &[UnitImports],
+    records: &[Record],
+    function_types: &RefCell<Vec<FunctionType>>,
+    type_parameters: &[TypeParameter],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Type> {
+    debug_assert!(type_ref_is_function(node));
+    let mut components = node
+        .children()
+        .filter(|child| child.kind() == SyntaxKind::TypeRef)
+        .collect::<Vec<_>>();
+    let has_result = node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .any(|token| token.kind() == SyntaxKind::Arrow);
+    let result_node = has_result.then(|| {
+        components
+            .pop()
+            .expect("syntax-clean result-bearing function type has one result TypeRef")
+    });
+
+    let mut parameters = Vec::with_capacity(components.len());
+    for parameter_node in components {
+        let parameter = resolve_full_type(
+            module,
+            unit,
+            &parameter_node,
+            modules,
+            imports,
+            records,
+            function_types,
+            type_parameters,
+            false,
+            diagnostics,
+        )?;
+        if matches!(parameter, Type::RawPointer(_)) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::RawPointerParameter,
+                location: location(unit, &parameter_node),
+            });
+            return None;
+        }
+        if !validate_safe_reference_referent(
+            parameter,
+            records,
+            location(unit, &parameter_node),
+            diagnostics,
+        ) {
+            return None;
+        }
+        parameters.push(parameter);
+    }
+
+    let result = if let Some(result_node) = result_node {
+        let result = resolve_full_type(
+            module,
+            unit,
+            &result_node,
+            modules,
+            imports,
+            records,
+            function_types,
+            type_parameters,
+            false,
+            diagnostics,
+        )?;
+        if matches!(result, Type::RawPointer(_)) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::RawPointerResult,
+                location: location(unit, &result_node),
+            });
+            return None;
+        }
+        if matches!(
+            result,
+            Type::SafeReference {
+                permission: ReferencePermission::ExclusiveReplace,
+                ..
+            }
+        ) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ReplacementReferenceResult,
+                location: location(unit, &result_node),
+            });
+            return None;
+        }
+        if !validate_safe_reference_referent(
+            result,
+            records,
+            location(unit, &result_node),
+            diagnostics,
+        ) {
+            return None;
+        }
+        Some(result)
+    } else {
+        None
+    };
+
+    let safe_reference_result_contract = if let Some(Type::SafeReference {
+        referent,
+        permission: ReferencePermission::Shared,
+    }) = result
+    {
+        let shared = Type::SafeReference {
+            referent,
+            permission: ReferencePermission::Shared,
+        };
+        let mut matching_shared = parameters
+            .iter()
+            .enumerate()
+            .filter(|(_, parameter)| **parameter == shared);
+        match (matching_shared.next(), matching_shared.next()) {
+            (Some((origin, _)), None) => SafeReferenceResultContract::SharedIdentity { origin },
+            (Some(_), Some(_)) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
+                    location: location(unit, node),
+                });
+                return None;
+            }
+            (None, _) => {
+                let replacement = Type::SafeReference {
+                    referent,
+                    permission: ReferencePermission::ExclusiveReplace,
+                };
+                let mut matching_replacement = parameters
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, parameter)| **parameter == replacement);
+                match (matching_replacement.next(), matching_replacement.next()) {
+                    (Some((origin, _)), None) => {
+                        SafeReferenceResultContract::SharedDirectChild { origin }
+                    }
+                    (None, _) => {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::MissingSharedReferenceResultOrigin,
+                            location: location(unit, node),
+                        });
+                        return None;
+                    }
+                    (Some(_), Some(_)) => {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::AmbiguousSharedReferenceResultOrigin,
+                            location: location(unit, node),
+                        });
+                        return None;
+                    }
+                }
+            }
+        }
+    } else {
+        SafeReferenceResultContract::None
+    };
+
+    Some(Type::Function(intern_function_type(
+        function_types,
+        FunctionType {
+            parameters,
+            result,
+            safe_reference_result_contract,
+        },
+    )))
+}
+
+fn intern_function_type(
+    function_types: &RefCell<Vec<FunctionType>>,
+    candidate: FunctionType,
+) -> FunctionTypeId {
+    if let Some(index) = function_types
+        .borrow()
+        .iter()
+        .position(|existing| existing == &candidate)
+    {
+        return FunctionTypeId(index);
+    }
+    let mut function_types = function_types.borrow_mut();
+    let id = FunctionTypeId(function_types.len());
+    function_types.push(candidate);
+    id
 }
 
 fn resolve_qualified_entity(
@@ -2088,6 +2391,7 @@ fn record_duplicability_is_valid(
         Type::Intrinsic(_) => true,
         Type::Record(target) => record_duplicability_is_valid(target, records, resolved),
         Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => false,
+        Type::Function(_) => true,
     });
     resolved[id.0] = Some(duplicable);
     duplicable
@@ -2104,6 +2408,7 @@ fn validate_body(
     constants: &[ResolvedConstant],
     records: &[Record],
     headers: &[FunctionHeader],
+    function_types: &RefCell<Vec<FunctionType>>,
     marker_implementations: &MarkerImplementationRelation,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -2159,6 +2464,7 @@ fn validate_body(
         constants,
         records,
         headers,
+        function_types,
         marker_implementations,
         safe_reference_result_origin_authority,
     };
@@ -2976,13 +3282,16 @@ fn validate_local(
     };
     let local_location = location(header.unit, node);
     let type_node = direct_child(node, SyntaxKind::TypeRef);
-    let declared = resolve_type(
+    let declared = resolve_full_type(
         header.module,
         header.unit,
         &type_node,
         context.modules,
         context.imports,
+        context.records,
+        context.function_types,
         &header.type_parameters,
+        true,
         diagnostics,
     )
     .and_then(|ty| {
@@ -4610,8 +4919,7 @@ fn validate_call_statement(
     }
     *state = candidate;
     Some(Statement::Call {
-        function: validated.function,
-        type_arguments: validated.type_arguments,
+        target: validated.target,
         arguments: validated.arguments,
         location: location(header.unit, node),
     })
@@ -5685,7 +5993,8 @@ fn validate_value_inner(
                             Type::Record(record) => ReferenceReferent::Record(record),
                             Type::Parameter(_)
                             | Type::SafeReference { .. }
-                            | Type::RawPointer(_) => {
+                            | Type::RawPointer(_)
+                            | Type::Function(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidSafeReferenceReferent {
                                         referent: selected_ty,
@@ -5742,7 +6051,8 @@ fn validate_value_inner(
                             Type::Record(record) => RawPointerPointee::Record(record),
                             Type::Parameter(_)
                             | Type::SafeReference { .. }
-                            | Type::RawPointer(_) => {
+                            | Type::RawPointer(_)
+                            | Type::Function(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidRawPointerPointee {
                                         pointee: binding.ty,
@@ -6012,9 +6322,8 @@ fn validate_value_inner(
             Some(ProducedValue {
                 value: Value {
                     ty,
-                    kind: ValueKind::DirectCall {
-                        function: validated.function,
-                        type_arguments: validated.type_arguments,
+                    kind: ValueKind::Call {
+                        target: validated.target,
                         arguments: validated.arguments,
                     },
                     location: value_location,
@@ -6050,6 +6359,39 @@ fn complete_semantic_state_matches(actual: &SemanticState, required: &SemanticSt
         && reference_state_matches_target(actual, required)
 }
 
+fn validate_function_value(
+    function: FunctionId,
+    required: Type,
+    value_location: SourceLocation,
+    context: &BodyResolutionContext<'_>,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let target = &context.headers[function.0];
+    let Some(function_type) = target.function_type else {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::GenericFunctionValue,
+            location: value_location,
+        });
+        return None;
+    };
+    let found = Type::Function(function_type);
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+    Some(ProducedValue::ordinary(Value {
+        ty: found,
+        kind: ValueKind::FunctionValue { function },
+        location: value_location,
+    }))
+}
+
 fn validate_identifier_use(
     header: &FunctionHeader,
     node: &SyntaxNode,
@@ -6059,94 +6401,146 @@ fn validate_identifier_use(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
-    if node
+    if let Some(qualified) = node
         .children()
-        .any(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        let constant = resolve_constant_reference(header, node, context, diagnostics)?;
-        return validate_constant_value(constant, required, value_location, diagnostics);
+        return match resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )? {
+            EntityId::Constant(id) => validate_constant_value(
+                context.constants[id.0],
+                required,
+                value_location,
+                diagnostics,
+            ),
+            EntityId::Function(function) if matches!(required, Type::Function(_)) => {
+                validate_function_value(function, required, value_location, context, diagnostics)
+            }
+            EntityId::Record(_) | EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedValueBinding,
+                    location: value_location,
+                });
+                None
+            }
+        };
     }
 
     let token = direct_token(node, SyntaxKind::Ident);
     let name = key(&token);
-    let Some(binding) = state.bindings.get(&name).cloned() else {
-        let constant = resolve_constant_reference(header, node, context, diagnostics)?;
-        return validate_constant_value(constant, required, value_location, diagnostics);
-    };
-    if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::UnavailableBinding,
-            location: value_location,
-        });
-        return None;
-    }
-    if binding.ty != required {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::TypeMismatch {
-                expected: required,
-                found: binding.ty,
-            },
-            location: value_location,
-        });
-        return None;
-    }
+    if let Some(binding) = state.bindings.get(&name).cloned() {
+        if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnavailableBinding,
+                location: value_location,
+            });
+            return None;
+        }
+        if binding.ty != required {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::TypeMismatch {
+                    expected: required,
+                    found: binding.ty,
+                },
+                location: value_location,
+            });
+            return None;
+        }
 
-    let duplicable = context.type_is_duplicable(binding.ty);
-    let target = ReferenceTarget::local_root(binding.id);
-    let compatible = if duplicable {
-        state.target_satisfies_shared_requirement(&target)
-    } else {
-        state.target_satisfies_exclusive_requirement(&target)
-    };
-    if !compatible {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::ReferencePermissionUnavailable,
-            location: value_location,
-        });
-        return None;
-    }
+        let duplicable = context.type_is_duplicable(binding.ty);
+        let target = ReferenceTarget::local_root(binding.id);
+        let compatible = if duplicable {
+            state.target_satisfies_shared_requirement(&target)
+        } else {
+            state.target_satisfies_exclusive_requirement(&target)
+        };
+        if !compatible {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ReferencePermissionUnavailable,
+                location: value_location,
+            });
+            return None;
+        }
 
-    let ownership = if duplicable {
-        OwnedUse::Duplicate
-    } else {
-        state
-            .bindings
-            .get_mut(&name)
-            .expect("resolved value binding remains active")
-            .ownership
-            .consume_path(&[]);
-        OwnedUse::Consume
-    };
-
-    let reference_authority = if matches!(binding.ty, Type::SafeReference { .. }) {
-        let authority = binding
-            .reference_authority
-            .expect("live safe-reference binding retains authority");
-        if duplicable {
-            state.add_reference_carrier(authority);
+        let ownership = if duplicable {
+            OwnedUse::Duplicate
         } else {
             state
                 .bindings
                 .get_mut(&name)
-                .expect("resolved replacement-reference binding remains active")
-                .reference_authority = None;
-        }
-        Some(authority)
-    } else {
-        None
-    };
+                .expect("resolved value binding remains active")
+                .ownership
+                .consume_path(&[]);
+            OwnedUse::Consume
+        };
 
-    Some(ProducedValue {
-        value: Value {
-            ty: binding.ty,
-            kind: ValueKind::BindingUse {
-                binding: binding.id,
-                ownership,
+        let reference_authority = if matches!(binding.ty, Type::SafeReference { .. }) {
+            let authority = binding
+                .reference_authority
+                .expect("live safe-reference binding retains authority");
+            if duplicable {
+                state.add_reference_carrier(authority);
+            } else {
+                state
+                    .bindings
+                    .get_mut(&name)
+                    .expect("resolved replacement-reference binding remains active")
+                    .reference_authority = None;
+            }
+            Some(authority)
+        } else {
+            None
+        };
+
+        return Some(ProducedValue {
+            value: Value {
+                ty: binding.ty,
+                kind: ValueKind::BindingUse {
+                    binding: binding.id,
+                    ownership,
+                },
+                location: value_location,
             },
-            location: value_location,
-        },
-        reference_authority,
-    })
+            reference_authority,
+        });
+    }
+
+    let entity = context
+        .modules
+        .get(&header.module)
+        .and_then(|module| module.namespace.get(&name))
+        .copied()
+        .map(|entity| entity.entity);
+    match entity {
+        Some(EntityId::Constant(id)) => validate_constant_value(
+            context.constants[id.0],
+            required,
+            value_location,
+            diagnostics,
+        ),
+        Some(EntityId::Function(function)) if matches!(required, Type::Function(_)) => {
+            validate_function_value(function, required, value_location, context, diagnostics)
+        }
+        Some(EntityId::Record(_) | EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedValueBinding,
+                location: value_location,
+            });
+            None
+        }
+        None => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: value_location,
+            });
+            None
+        }
+    }
 }
 
 fn validate_constant_value(
@@ -6247,7 +6641,10 @@ fn validate_reference_root(
     let referent = match selected_ty {
         Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
         Type::Record(record) => ReferenceReferent::Record(record),
-        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+        Type::Parameter(_)
+        | Type::SafeReference { .. }
+        | Type::RawPointer(_)
+        | Type::Function(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSafeReferenceReferent {
                     referent: selected_ty,
@@ -6401,7 +6798,10 @@ fn validate_reference_reborrow(
     let referent = match selected_ty {
         Type::Intrinsic(intrinsic) => ReferenceReferent::Intrinsic(intrinsic),
         Type::Record(record) => ReferenceReferent::Record(record),
-        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+        Type::Parameter(_)
+        | Type::SafeReference { .. }
+        | Type::RawPointer(_)
+        | Type::Function(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSafeReferenceReferent {
                     referent: selected_ty,
@@ -6587,7 +6987,10 @@ fn validate_raw_address(
     let pointee = match binding.ty {
         Type::Intrinsic(intrinsic) => RawPointerPointee::Intrinsic(intrinsic),
         Type::Record(record) => RawPointerPointee::Record(record),
-        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => {
+        Type::Parameter(_)
+        | Type::SafeReference { .. }
+        | Type::RawPointer(_)
+        | Type::Function(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidRawPointerPointee {
                     pointee: binding.ty,
@@ -7896,13 +8299,21 @@ fn parse_decimal_magnitude(text: &str, limit: u64) -> Option<u64> {
     Some(value)
 }
 
+enum ResolvedCallTarget {
+    Direct(FunctionId),
+    Indirect {
+        binding: BindingId,
+        function_type: FunctionTypeId,
+    },
+}
+
 fn resolve_call_target(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     bindings: &BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<FunctionId> {
+) -> Option<ResolvedCallTarget> {
     if let Some(qualified) = node
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
@@ -7914,7 +8325,7 @@ fn resolve_call_target(
             context.imports,
             diagnostics,
         )? {
-            EntityId::Function(id) => Some(id),
+            EntityId::Function(id) => Some(ResolvedCallTarget::Direct(id)),
             EntityId::Record(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedFunction,
@@ -7932,12 +8343,20 @@ fn resolve_call_target(
         range: name_token.text_range(),
     };
 
-    if bindings.contains_key(&name) {
-        diagnostics.push(Diagnostic {
-            kind: DiagnosticKind::ExpectedFunction,
-            location: name_location,
-        });
-        return None;
+    if let Some(binding) = bindings.get(&name) {
+        return match binding.ty {
+            Type::Function(function_type) => Some(ResolvedCallTarget::Indirect {
+                binding: binding.id,
+                function_type,
+            }),
+            _ => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedFunction,
+                    location: name_location,
+                });
+                None
+            }
+        };
     }
 
     match context
@@ -7947,7 +8366,7 @@ fn resolve_call_target(
         .copied()
         .map(|entity| entity.entity)
     {
-        Some(EntityId::Function(id)) => Some(id),
+        Some(EntityId::Function(id)) => Some(ResolvedCallTarget::Direct(id)),
         Some(EntityId::Record(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedFunction,
@@ -8076,15 +8495,15 @@ fn type_argument_satisfies_marker_requirement(
                     candidate.id == parameter && candidate.requirements.contains(&required)
                 })
         }
-        Type::SafeReference { .. } | Type::RawPointer(_) => false,
+        Type::SafeReference { .. } | Type::RawPointer(_) | Type::Function(_) => false,
     }
 }
 
 struct ResolvedCallApplication {
-    function: FunctionId,
-    type_arguments: Vec<Type>,
+    target: CallTarget,
     parameter_types: Vec<Type>,
     result: Option<Type>,
+    safe_reference_result_contract: SafeReferenceResultContract,
 }
 
 fn resolve_call_application(
@@ -8094,12 +8513,39 @@ fn resolve_call_application(
     bindings: &BTreeMap<String, BindingState>,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ResolvedCallApplication> {
-    let function = resolve_call_target(header, node, context, bindings, diagnostics)?;
-    let target = &context.headers[function.0];
+    let resolved_target = resolve_call_target(header, node, context, bindings, diagnostics)?;
     let type_argument_list = node
         .children()
         .find(|child| child.kind() == SyntaxKind::GenericTypeArgumentList);
 
+    if let ResolvedCallTarget::Indirect {
+        binding,
+        function_type,
+    } = resolved_target
+    {
+        if let Some(list) = type_argument_list {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnexpectedGenericTypeArguments,
+                location: location(header.unit, &list),
+            });
+            return None;
+        }
+        let interface = context.function_types.borrow()[function_type.0].clone();
+        return Some(ResolvedCallApplication {
+            target: CallTarget::Indirect {
+                binding,
+                function_type,
+            },
+            parameter_types: interface.parameters,
+            result: interface.result,
+            safe_reference_result_contract: interface.safe_reference_result_contract,
+        });
+    }
+
+    let ResolvedCallTarget::Direct(function) = resolved_target else {
+        unreachable!("indirect target returned above")
+    };
+    let target = &context.headers[function.0];
     let type_arguments = match (target.type_parameters.is_empty(), type_argument_list) {
         (false, None) => {
             diagnostics.push(Diagnostic {
@@ -8173,16 +8619,18 @@ fn resolve_call_application(
         .map(|result| instantiate_call_type(result, target, &type_arguments));
 
     Some(ResolvedCallApplication {
-        function,
-        type_arguments,
+        target: CallTarget::Direct {
+            function,
+            type_arguments,
+        },
         parameter_types,
         result,
+        safe_reference_result_contract: target.safe_reference_result_contract,
     })
 }
 
 struct ValidatedCall {
-    function: FunctionId,
-    type_arguments: Vec<Type>,
+    target: CallTarget,
     arguments: Vec<Value>,
     result: Option<Type>,
     result_reference_authority: Option<ReferenceAuthorityId>,
@@ -8219,7 +8667,6 @@ fn validate_call_inner(
 ) -> Option<ValidatedCall> {
     let application =
         resolve_call_application(header, node, context, &state.bindings, diagnostics)?;
-    let target = &context.headers[application.function.0];
     let argument_list = direct_child(node, SyntaxKind::ArgumentList);
     let argument_nodes = argument_list
         .children()
@@ -8235,6 +8682,19 @@ fn validate_call_inner(
             location: location(header.unit, node),
         });
         return None;
+    }
+
+    if let CallTarget::Indirect { binding, .. } = &application.target {
+        let binding_state = binding_state_by_id(&state.bindings, *binding)
+            .expect("classified indirect target remains an active binding");
+        if binding_state.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnavailableBinding,
+                location: location(header.unit, node),
+            });
+            return None;
+        }
+        debug_assert!(context.type_is_duplicable(binding_state.ty));
     }
 
     let mut arguments = Vec::with_capacity(argument_nodes.len());
@@ -8279,7 +8739,7 @@ fn validate_call_inner(
         }
     }
 
-    let result_reference_authority = match target.safe_reference_result_contract {
+    let result_reference_authority = match application.safe_reference_result_contract {
         SafeReferenceResultContract::None => None,
         SafeReferenceResultContract::SharedIdentity { origin } => {
             let authority = authorities[origin]
@@ -8303,8 +8763,7 @@ fn validate_call_inner(
     }
 
     Some(ValidatedCall {
-        function: application.function,
-        type_arguments: application.type_arguments,
+        target: application.target,
         arguments,
         result: application.result,
         result_reference_authority,

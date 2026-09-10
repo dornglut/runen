@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, ImportTarget, IntrinsicType, MarkerImplementationTarget, ModuleId, OwnedUse,
-    SourceUnit, Type, TypedCompilation, ValueKind, build_typed_hir,
+    CallTarget, DiagnosticKind, ImportTarget, IntrinsicType, MarkerImplementationTarget, ModuleId,
+    OwnedUse, SourceUnit, Type, TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -309,7 +309,11 @@ fn concrete_generic_argument_requires_exact_global_implementation() {
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
         .expect("caller returns one value");
-    let ValueKind::DirectCall { type_arguments, .. } = &returned.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { type_arguments, .. },
+        ..
+    } = &returned.kind
+    else {
         panic!("caller return remains direct call");
     };
     assert_eq!(type_arguments, &[Type::Intrinsic(IntrinsicType::I64)]);

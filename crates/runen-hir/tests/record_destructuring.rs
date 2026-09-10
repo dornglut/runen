@@ -1,7 +1,7 @@
 use runen_hir::{
-    AssignmentMutability, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
-    RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit, Statement, Type, ValueKind,
-    build_typed_hir,
+    AssignmentMutability, CallTarget, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId,
+    OwnedUse, RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit, Statement, Type,
+    ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -165,7 +165,10 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
         scrutinee,
         RecordPatternScrutinee::Producer {
             value: runen_hir::Value {
-                kind: ValueKind::DirectCall { .. },
+                kind: ValueKind::Call {
+                    target: CallTarget::Direct { .. },
+                    ..
+                },
                 ..
             },
             ..
@@ -334,7 +337,10 @@ fn producer_lookup_occurs_before_pattern_bindings_enter_scope() {
         scrutinee,
         RecordPatternScrutinee::Producer {
             value: runen_hir::Value {
-                kind: ValueKind::DirectCall { .. },
+                kind: ValueKind::Call {
+                    target: CallTarget::Direct { .. },
+                    ..
+                },
                 ..
             },
             ..
@@ -635,8 +641,13 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
         assert!(
             matches!(
                 (&value.kind, expected),
-                (ValueKind::DirectCall { .. }, "call")
-                    | (ValueKind::RecordConstruction { .. }, "construction")
+                (
+                    ValueKind::Call {
+                        target: CallTarget::Direct { .. },
+                        ..
+                    },
+                    "call"
+                ) | (ValueKind::RecordConstruction { .. }, "construction")
                     | (ValueKind::FieldValueUse { .. }, "field")
             ),
             "unexpected producer kind for {name}: {:?}",

@@ -1,6 +1,6 @@
 use runen_hir::{
-    BinaryFloatSign, BinaryFloatValue, DiagnosticKind, IntrinsicType, LiteralValue, ModuleId,
-    SourceUnit, Statement, Type, ValueKind, build_typed_hir,
+    BinaryFloatSign, BinaryFloatValue, CallTarget, DiagnosticKind, IntrinsicType, LiteralValue,
+    ModuleId, SourceUnit, Statement, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -394,7 +394,12 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
     let Statement::Local { initializer, .. } = &test.body.statements[2] else {
         panic!("expected result-bearing call initializer");
     };
-    let ValueKind::DirectCall { arguments, .. } = &initializer.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { .. },
+        arguments,
+        ..
+    } = &initializer.kind
+    else {
         panic!("expected direct call value");
     };
     assert_eq!(arguments.len(), 1);
@@ -425,7 +430,12 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
     let Statement::Local { initializer, .. } = &test.body.statements[5] else {
         panic!("expected floating result-bearing call initializer");
     };
-    let ValueKind::DirectCall { arguments, .. } = &initializer.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { .. },
+        arguments,
+        ..
+    } = &initializer.kind
+    else {
         panic!("expected floating direct call value");
     };
     assert_eq!(arguments[0].ty, Type::Intrinsic(IntrinsicType::F32));

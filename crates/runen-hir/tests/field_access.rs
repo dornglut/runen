@@ -1,6 +1,7 @@
 use runen_hir::{
-    DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
-    RecordPatternScrutinee, SourceUnit, Statement, Type, Value, ValueKind, build_typed_hir,
+    CallTarget, DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, ModuleId,
+    OwnedUse, RecordPatternScrutinee, SourceUnit, Statement, Type, Value, ValueKind,
+    build_typed_hir,
 };
 use runen_syntax::{Parse, SyntaxKind, parse_source};
 
@@ -158,7 +159,13 @@ fn producer_call_receiver_retains_producer_type_path_and_complete_duplicate_clea
     else {
         panic!("expected producer receiver");
     };
-    assert!(matches!(producer.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        producer.kind,
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
+    ));
     assert_eq!(producer.ty, Type::Record(hir.records[1].id));
     assert_eq!(fields, &[0, 0]);
     assert_eq!(*ownership, OwnedUse::Duplicate);
@@ -381,7 +388,13 @@ fn producer_bool_field_composes_as_existing_conditional_value() {
     else {
         panic!("expected producer receiver");
     };
-    assert!(matches!(producer.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        producer.kind,
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
+    ));
     assert_eq!(fields, &[0]);
     assert_eq!(*ownership, OwnedUse::Duplicate);
     assert_eq!(cleanup.paths, vec![Vec::<usize>::new()]);
@@ -421,7 +434,13 @@ fn producer_record_field_pattern_keeps_field_and_pattern_transients_distinct() {
     else {
         panic!("expected producer field receiver");
     };
-    assert!(matches!(producer.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        producer.kind,
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
+    ));
     assert_eq!(fields, &[0]);
     assert_eq!(*ownership, OwnedUse::Consume);
     assert_eq!(field_cleanup.paths, vec![vec![1]]);

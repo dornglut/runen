@@ -1,4 +1,4 @@
-use runen_hir::{ImportTarget, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
+use runen_hir::{CallTarget, ImportTarget, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -51,7 +51,11 @@ fn qualified_resolution_ignores_import_item_and_unit_presentation_order() {
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
             .expect("importing function returns one value");
-        let ValueKind::DirectCall { function, .. } = &returned.kind else {
+        let ValueKind::Call {
+            target: CallTarget::Direct { function, .. },
+            ..
+        } = &returned.kind
+        else {
             panic!("qualified result call must remain a resolved direct call");
         };
         assert_eq!(hir.function(*function).name, "id");

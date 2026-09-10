@@ -1,7 +1,7 @@
 use runen_hir::{
-    DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse, ReferencePermission,
-    ReferenceReferent, SafeReferenceResultContract, SourceUnit, Statement, Type, TypedCompilation,
-    ValueKind, build_typed_hir,
+    CallTarget, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
+    ReferencePermission, ReferenceReferent, SafeReferenceResultContract, SourceUnit, Statement,
+    Type, TypedCompilation, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -629,7 +629,13 @@ fn shared_reference_identity_composes_through_nested_recursive_and_mutual_calls(
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
         .expect("outer returns the nested call result");
-    assert!(matches!(returned.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        returned.kind,
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
+    ));
 
     let recursive = function(&hir, "recursive");
     let returned = recursive
@@ -640,7 +646,7 @@ fn shared_reference_identity_composes_through_nested_recursive_and_mutual_calls(
         .expect("recursive function returns its recursive call result");
     assert!(matches!(
         returned.kind,
-        ValueKind::DirectCall { function, .. } if function == recursive.id
+        ValueKind::Call { target: CallTarget::Direct { function, .. }, .. } if function == recursive.id
     ));
 }
 

@@ -1,6 +1,6 @@
 use runen_hir::{
-    Accessibility, DiagnosticKind, ImportTarget, ModuleId, OwnedUse, SourceUnit, Statement, Type,
-    ValueKind, build_typed_hir,
+    Accessibility, CallTarget, DiagnosticKind, ImportTarget, ModuleId, OwnedUse, SourceUnit,
+    Statement, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -463,7 +463,11 @@ fn qualified_calls_require_exported_functions_and_support_nested_values() {
         .iter()
         .find(|function| function.name == "f")
         .unwrap();
-    let Statement::Call { function, .. } = f.body.statements[0] else {
+    let Statement::Call {
+        target: CallTarget::Direct { function, .. },
+        ..
+    } = f.body.statements[0]
+    else {
         panic!("expected qualified call statement");
     };
     assert_eq!(hir.function(function).name, "sink");
@@ -475,7 +479,11 @@ fn qualified_calls_require_exported_functions_and_support_nested_values() {
         .value
         .as_ref()
         .unwrap();
-    let ValueKind::DirectCall { function, .. } = returned.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { function, .. },
+        ..
+    } = returned.kind
+    else {
         panic!("expected qualified result call");
     };
     assert_eq!(hir.function(function).name, "id");

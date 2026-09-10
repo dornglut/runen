@@ -1,6 +1,6 @@
 use runen_hir::{
-    DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, LiteralValue, ModuleId,
-    OwnedUse, RecordPatternScrutinee, SourceUnit, Statement, Type, Value, ValueKind,
+    CallTarget, DiagnosticKind, FieldValueReceiver, ImportTarget, IntrinsicType, LiteralValue,
+    ModuleId, OwnedUse, RecordPatternScrutinee, SourceUnit, Statement, Type, Value, ValueKind,
     build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
@@ -397,7 +397,13 @@ fn nested_construction_calls_and_nonduplicable_field_consumption_are_retained() 
     };
     assert_eq!(fields.len(), 2);
     assert_eq!(fields[0].field, 1);
-    assert!(matches!(fields[0].value.kind, ValueKind::DirectCall { .. }));
+    assert!(matches!(
+        fields[0].value.kind,
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
+    ));
     assert_eq!(fields[1].field, 0);
 
     let ValueKind::RecordConstruction {

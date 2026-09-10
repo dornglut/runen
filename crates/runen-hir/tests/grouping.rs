@@ -1,6 +1,6 @@
 use runen_hir::{
-    BooleanEqualityRelation, Diagnostic, DiagnosticKind, IntrinsicType, ModuleId, OwnedUse,
-    SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind, build_typed_hir,
+    BooleanEqualityRelation, CallTarget, Diagnostic, DiagnosticKind, IntrinsicType, ModuleId,
+    OwnedUse, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -80,7 +80,10 @@ fn construction() -> Flag { return (Flag { ready: true }); }
     ));
     assert!(matches!(
         returned(&hir, "call").kind,
-        ValueKind::DirectCall { .. }
+        ValueKind::Call {
+            target: CallTarget::Direct { .. },
+            ..
+        }
     ));
     assert!(matches!(
         returned(&hir, "field").kind,

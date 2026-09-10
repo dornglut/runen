@@ -75,6 +75,10 @@ pub struct RecordId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FunctionId(pub(crate) usize);
 
+/// Opaque per-compilation canonical structural function-type handle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct FunctionTypeId(pub(crate) usize);
+
 /// Opaque per-compilation nominal marker-trait handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarkerTraitId(pub(crate) usize);
@@ -160,6 +164,14 @@ pub enum SafeReferenceResultContract {
     SharedDirectChild { origin: usize },
 }
 
+/// Canonical structural source function-value type retained for one compilation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FunctionType {
+    pub parameters: Vec<Type>,
+    pub result: Option<Type>,
+    pub safe_reference_result_contract: SafeReferenceResultContract,
+}
+
 /// Exact non-pointer pointee identity admitted by the first raw-pointer HIR slice.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum RawPointerPointee {
@@ -191,6 +203,8 @@ pub enum Type {
         permission: ReferencePermission,
     },
     RawPointer(RawPointerPointee),
+    /// Canonical structural captureless function-value type.
+    Function(FunctionTypeId),
 }
 
 /// One retained ordered generic function type-parameter declaration.
@@ -326,7 +340,7 @@ pub struct Record {
 
 pub(crate) fn type_is_duplicable_in_records(ty: Type, records: &[Record]) -> bool {
     match ty {
-        Type::Intrinsic(_) | Type::RawPointer(_) => true,
+        Type::Intrinsic(_) | Type::RawPointer(_) | Type::Function(_) => true,
         Type::Parameter(_) => false,
         Type::SafeReference {
             permission: ReferencePermission::Shared,
@@ -460,6 +474,19 @@ pub enum NumericContract {
     Fast,
 }
 
+/// Resolved source call-target classification shared by value and statement calls.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CallTarget {
+    Direct {
+        function: FunctionId,
+        type_arguments: Vec<Type>,
+    },
+    Indirect {
+        binding: BindingId,
+        function_type: FunctionTypeId,
+    },
+}
+
 /// Resolved producer for one typed HIR value.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
@@ -561,9 +588,11 @@ pub enum ValueKind {
         binding: BindingId,
         ownership: OwnedUse,
     },
-    DirectCall {
+    FunctionValue {
         function: FunctionId,
-        type_arguments: Vec<Type>,
+    },
+    Call {
+        target: CallTarget,
         arguments: Vec<Value>,
     },
     RecordConstruction {
@@ -644,8 +673,7 @@ pub enum Statement {
         location: SourceLocation,
     },
     Call {
-        function: FunctionId,
-        type_arguments: Vec<Type>,
+        target: CallTarget,
         arguments: Vec<Value>,
         location: SourceLocation,
     },
@@ -719,6 +747,7 @@ pub struct TypedCompilation {
     pub modules: Vec<Module>,
     pub records: Vec<Record>,
     pub functions: Vec<Function>,
+    pub function_types: Vec<FunctionType>,
     pub marker_traits: Vec<MarkerTrait>,
     pub marker_implementations: Vec<MarkerImplementation>,
 }
@@ -732,6 +761,11 @@ impl TypedCompilation {
     #[must_use]
     pub fn function(&self, id: FunctionId) -> &Function {
         &self.functions[id.0]
+    }
+
+    #[must_use]
+    pub fn function_type(&self, id: FunctionTypeId) -> &FunctionType {
+        &self.function_types[id.0]
     }
 
     #[must_use]
@@ -769,6 +803,7 @@ pub enum DiagnosticKind {
     InvalidRecordDuplicabilitySelection,
     SafeReferenceField,
     RawPointerField,
+    FunctionTypeField,
     RawPointerParameter,
     RawPointerResult,
     ReplacementReferenceResult,
@@ -815,6 +850,7 @@ pub enum DiagnosticKind {
     BorrowedAssignmentTarget,
     ImmutableAssignmentTarget,
     ExpectedFunction,
+    GenericFunctionValue,
     ArgumentCount {
         expected: usize,
         found: usize,

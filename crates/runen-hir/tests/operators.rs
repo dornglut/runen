@@ -1,6 +1,6 @@
 use runen_hir::{
-    BooleanEqualityRelation, Diagnostic, DiagnosticKind, IntrinsicType, ModuleId, OwnedUse,
-    SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind, build_typed_hir,
+    BooleanEqualityRelation, CallTarget, Diagnostic, DiagnosticKind, IntrinsicType, ModuleId,
+    OwnedUse, SourceUnit, Statement, Type, TypedCompilation, Value, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -194,7 +194,12 @@ fn direct_call_and_field_operands_retain_existing_value_semantics() {
         .and_then(|returned| returned.value.as_ref())
         .expect("call-backed return value");
     let call_operand = boolean_not(call);
-    let ValueKind::DirectCall { arguments, .. } = &call_operand.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { .. },
+        arguments,
+        ..
+    } = &call_operand.kind
+    else {
         panic!("expected direct-call operand");
     };
     assert_eq!(arguments.len(), 1);
@@ -468,7 +473,12 @@ fn equality_operands_reuse_call_field_construction_and_prefix_semantics() {
         .and_then(|returned| returned.value.as_ref())
         .expect("return value");
     let (_, left, right) = boolean_equality(returned);
-    let ValueKind::DirectCall { arguments, .. } = &left.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { .. },
+        arguments,
+        ..
+    } = &left.kind
+    else {
         panic!("expected direct-call left operand");
     };
     assert!(matches!(

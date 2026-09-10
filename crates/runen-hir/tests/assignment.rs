@@ -1,6 +1,6 @@
 use runen_hir::{
-    AssignmentMutability, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId, OwnedUse,
-    SourceUnit, Statement, Type, ValueKind, build_typed_hir,
+    AssignmentMutability, CallTarget, DiagnosticKind, ImportTarget, IntrinsicType, ModuleId,
+    OwnedUse, SourceUnit, Statement, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -233,7 +233,12 @@ fn call_rhs_ownership_effects_precede_assignment_reavailability() {
     let Statement::Assignment { value, .. } = &function.body.statements[1] else {
         panic!("expected assignment");
     };
-    let ValueKind::DirectCall { arguments, .. } = &value.kind else {
+    let ValueKind::Call {
+        target: CallTarget::Direct { .. },
+        arguments,
+        ..
+    } = &value.kind
+    else {
         panic!("expected result-bearing call RHS");
     };
     let ValueKind::BindingUse { ownership, .. } = arguments[0].kind else {
