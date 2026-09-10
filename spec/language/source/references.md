@@ -134,7 +134,7 @@ The final selected field/root type, not the outer record type, is the candidate 
 
 Replacement-capable root formation additionally requires the selected binding to be one mutable ordinary local as defined below. Parameters remain eligible only for Shared root formation because represented parameters do not establish ordinary local replacement permission.
 
-No root formation selects a pattern path independently of its root binding, producer transient, direct-call result, record-construction transient, dereference result, arbitrary temporary, grouped value, or general source expression/place/lvalue. No source qualification syntax is introduced inside a field path.
+No root formation selects a pattern path independently of its root binding, producer transient, source-call result, record-construction transient, dereference result, arbitrary temporary, grouped value, or general source expression/place/lvalue. No source qualification syntax is introduced inside a field path.
 
 ### Replacement-capable external referent structural root
 
