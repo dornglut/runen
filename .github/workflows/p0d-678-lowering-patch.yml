@@ -6,7 +6,7 @@ on:
       - p0d-678-source-function-values-impl
     paths:
       - .github/scripts/p0d_678_lowering_patch.py
-      - .github/scripts/p0d_678_lowering_script_fix.py
+      - .github/scripts/p0d_678_lowering_design_fix.py
       - .github/workflows/p0d-678-lowering-patch.yml
 
 permissions:
@@ -23,7 +23,7 @@ jobs:
           fetch-depth: 1
       - name: Apply lowering patch
         run: |
-          python .github/scripts/p0d_678_lowering_script_fix.py
+          python .github/scripts/p0d_678_lowering_design_fix.py
           python .github/scripts/p0d_678_lowering_patch.py
       - name: Format
         run: cargo +stable fmt --all
