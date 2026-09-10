@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for function-local binding identity, lexical scope and lookup precedence, binding assignment mutability, binding lifecycle, ordinary whole-binding owned-value use, whole-binding assignment legality, bounded binding-root field assignment/reinitialization legality, safe-reference/raw-pointer local contextual integration, and the points at which a binding's structural ownership state begins, persists, resets, or ends.
+This document owns the represented source semantics for function-local binding identity, lexical scope and lookup precedence, binding assignment mutability, binding lifecycle, ordinary whole-binding owned-value use, whole-binding assignment legality, bounded binding-root field assignment/reinitialization legality, safe-reference/raw-pointer/function-value local contextual integration, and the points at which a binding's structural ownership state begins, persists, resets, or ends.
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module lookup from [Source names and modules](names-modules.md), concrete source value types and owned-value duplicability from [Source type foundation](types.md), captureless function-value local/use/call-target facts from [Source function values and indirect calls](function-values.md), module-level constant binding/value semantics from [Source constants](constants.md), first-slice abstract type-parameter expressions and their capability-conservative whole-value use rule from [Source generics](generics.md), structural paths, structural ownership state, path availability, consumption, remaining-ownership frontiers, complete-root replacement reset, bounded non-empty subpath installation, and opaque abstract roots from [Source structural ownership](structural-ownership.md), callable parameter-slot type expressions from [Source callables](callables.md), safe-reference target/authority/carrier/lifetime and direct safe-authority compatibility rules from [Source safe references](references.md), and raw-pointer contextual admission, pointer-origin provenance, lexical target validity, and raw pointee operations from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). It does not redefine those owners.
 
@@ -163,7 +163,7 @@ For raw address formation, `raw-pointers-unsafe.md` additionally requires the re
 
 A nominal record-pattern head is not a function-local value-binding lookup. `patterns.md` defines each represented record-pattern head through same-module nominal-record declaration lookup independently of active local bindings with equal keys.
 
-Source-unit module aliases remain the distinct qualified-lookup mechanism owned by `names-modules.md`. The concrete `alias::member` direct-call target and qualified constant value resolve through that mechanism rather than this unqualified lookup. Function-local bindings do not block an explicitly qualified constant value.
+Source-unit module aliases remain the distinct qualified-lookup mechanism owned by `names-modules.md`. The concrete `alias::member` qualified call target and qualified constant/function-value candidate resolve through that mechanism rather than this unqualified lookup. Qualified calls remain direct module-function calls under `function-values.md`; an exact required function-value type may instead select qualified formation from an exported non-generic function. Function-local bindings do not block either explicitly qualified value relation.
 
 Generic type-parameter lookup is also distinct from this value-binding precedence. `generics.md` owns bare type-position lookup and consults its in-scope type-parameter keys before same-module nominal-type lookup; it does not consult or shadow this function-local value-binding domain. A generic type-parameter key therefore does not block an otherwise valid module constant lookup in a value position.
 
@@ -369,7 +369,7 @@ It does not redefine constant declaration/value/use semantics from `constants.md
 It does not redefine the ordinary execution relation owned by `function-execution.md`, including:
 
 - function body execution and normal-continuation presence;
-- direct-call argument evaluation and parameter transfer;
+- source-call argument evaluation and parameter transfer;
 - safe-reference produced-carrier transfer/caller suspension/external-referent consequences;
 - whole-binding and bounded binding-root field assignment RHS evaluation, old-value cleanup, and replacement transfer;
 - safe-reference referent replacement ordering;

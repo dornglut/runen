@@ -146,7 +146,7 @@ For this revision, a **record-field-admissible source type** is exactly either:
 - one intrinsic scalar source type defined here; or
 - one nominal record source type whose record binding is legally resolvable for the declaring source unit under same-module or qualified cross-module lookup from `names-modules.md`.
 
-`SharedRef(T)`, `ExclusiveReplaceRef(T)`, `RawPtr(T)`, and the captureless function-value types from `function-values.md` are represented source value types but are deliberately not record-field-admissible in these slices. Consequently a nominal record cannot yet store a safe reference or raw-pointer value, and record construction/pattern/field-value owners require no reference-carrier or pointer-provenance aggregate semantics. Function type parameters are likewise not record-field-admissible; their first-slice type-position boundary is owned by `generics.md` and no generic record declaration exists.
+`SharedRef(T)`, `ExclusiveReplaceRef(T)`, `RawPtr(T)`, and the captureless function-value types from `function-values.md` are represented source value types but are deliberately not record-field-admissible in these slices. Consequently a nominal record cannot yet store a safe-reference, raw-pointer, or function value, and record construction/pattern/field-value owners require no reference-carrier, pointer-provenance, or callable-value aggregate semantics. Function type parameters are likewise not record-field-admissible; their first-slice type-position boundary is owned by `generics.md` and no generic record declaration exists.
 
 The ordered field sequence is semantic structural order for the source record value shape. It MAY be consumed where another accepted owner needs structural order. It does not define physical field order, byte offsets, padding, alignment, ABI layout, stable representation, or address arithmetic.
 
@@ -160,7 +160,7 @@ For represented record types, define a **direct-containment edge** `A -> B` exac
 
 The finite graph consisting of represented record types and all such edges MUST be acyclic.
 
-This requirement still applies because represented record fields remain restricted to intrinsic scalars or direct nominal-record containment. The existence of safe-reference and raw-pointer value types does not alter that graph while indirection-containing record fields remain forbidden.
+This requirement still applies because represented record fields remain restricted to intrinsic scalars or direct nominal-record containment. The existence of safe-reference, raw-pointer, and function-value types does not alter that graph while those non-record-shape field categories remain forbidden.
 
 A safe-reference referent edge, a raw-pointer pointee edge, and every function-value callable-interface parameter/result edge are semantic non-containment edges and are not direct-containment edges. This fact does not itself authorize an indirection-containing record field or recursive nominal type in this revision.
 

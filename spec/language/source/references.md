@@ -42,7 +42,7 @@ A source type `T` is **replacement-reference-referent-admissible** exactly when 
 1. `T` is one represented intrinsic scalar or nominal record source type under `types.md`; and
 2. the structural source value shape of `T` contains neither a safe-reference type nor a raw-pointer type.
 
-Replacement-reference referents may therefore be duplicable or non-duplicable nominal values. `SharedRef`, `ExclusiveReplaceRef`, and `RawPtr` are not admissible replacement-reference referents.
+Replacement-reference referents may therefore be duplicable or non-duplicable nominal values. `SharedRef`, `ExclusiveReplaceRef`, `RawPtr`, and captureless function-value types are not admissible replacement-reference referents.
 
 These bounded restrictions preserve the current Core transferable-referent safety boundary. They do not claim that future safe references fundamentally require the same exclusions.
 
