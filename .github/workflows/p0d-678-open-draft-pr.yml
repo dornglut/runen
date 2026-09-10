@@ -1,0 +1,66 @@
+name: Temporary P0-D 678 draft PR creation
+
+on:
+  push:
+    branches:
+      - p0d-678-source-function-values-impl
+    paths:
+      - .github/workflows/p0d-678-open-draft-pr.yml
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  open-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-678-source-function-values-impl
+          fetch-depth: 1
+      - name: Create draft pull request
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          cat > /tmp/body.md <<'EOF'
+          Implements #678 from accepted base `a200477ffca609c9cb7e36564e2ed8711f7a1404` / tree `108a4a423c95ab6ca1c9bc197c0f9ec489c68906`.
+
+          This implements the accepted bounded captureless non-generic source function-value relation through syntax, HIR, lowering, and focused end-to-end conformance only.
+
+          Key points:
+          - neutral syntax `Call` representation and recursive function-value type syntax;
+          - canonical per-compilation structural HIR `FunctionTypeId` table, context-typed function values, and explicit direct/indirect `CallTarget`;
+          - local-first indirect-call classification while preserving direct-call behavior;
+          - usage-driven HIR function-type to Core callable-type mapping, avoiding unrelated Core type-table growth;
+          - function values lower to existing `core::Operand::FunctionValue` root function identities;
+          - indirect lowering snapshots the callable binding before ordinary argument lowering, then lowers arguments left-to-right and emits existing `core::Terminator::IndirectCall`;
+          - no Core/reference/runtime production changes and no target-set analysis;
+          - focused syntax/HIR/lowering/reference conformance covers distinct equal-typed payloads, ordinary transport, result/no-result calls, ordering, faults, safe-reference summaries, and recursive/mutual indirect edges.
+
+          Focused feature-local tests and all-target Clippy passed before temporary tooling was removed. Canonical repository validation on the exact clean PR head is required before readiness or merge.
+
+          Closes #678
+          EOF
+          jq -n \
+            --arg title 'P0-D: implement source function values and indirect calls through syntax, HIR, and lowering' \
+            --arg head 'p0d-678-source-function-values-impl' \
+            --arg base 'main' \
+            --arg body "$(cat /tmp/body.md)" \
+            '{title:$title, head:$head, base:$base, body:$body, draft:true}' > /tmp/pr.json
+          curl --fail-with-body \
+            -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            --data-binary @/tmp/pr.json \
+            https://api.github.com/repos/dornglut/runen/pulls
+      - name: Remove temporary workflow
+        run: |
+          set -euo pipefail
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git rm .github/workflows/p0d-678-open-draft-pr.yml
+          git commit -m "chore: remove temporary #678 PR creation workflow"
+          git push origin HEAD:p0d-678-source-function-values-impl
