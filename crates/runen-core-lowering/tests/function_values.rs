@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
 use runen_core_ir::{
-    CallableInterface, Function, FunctionId, LocalId, Operand, PlaceAccess, SafeReferenceResultContract,
-    ScalarType, Statement as CoreStatement, Terminator, TypeId, TypeKind, ValidatedProgram,
+    CallableInterface, Function, FunctionId, LocalId, Operand, PlaceAccess,
+    SafeReferenceResultContract, ScalarType, Statement as CoreStatement, Terminator, TypeId,
+    TypeKind, ValidatedProgram,
 };
 use runen_core_lowering::lower;
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
@@ -71,9 +72,9 @@ fn execute_source(source: &str, entry_name: &str) -> ExecutionReport {
 }
 
 #[test]
-fn equal_source_function_types_share_one_core_callable_type_but_function_payloads_remain_distinct() {
-    let source =
-        "fn left(value: I64) -> I64 { return value + 1; } \
+fn equal_source_function_types_share_one_core_callable_type_but_function_payloads_remain_distinct()
+{
+    let source = "fn left(value: I64) -> I64 { return value + 1; } \
          fn right(value: I64) -> I64 { return value + 2; } \
          fn entry() -> I64 { \
              let mut f: fn(I64) -> I64 = left; \
@@ -104,7 +105,11 @@ fn equal_source_function_types_share_one_core_callable_type_but_function_payload
     assert_eq!(
         payloads
             .iter()
-            .map(|id| program.function(*id).expect("function value target exists").name.as_str())
+            .map(|id| program
+                .function(*id)
+                .expect("function value target exists")
+                .name
+                .as_str())
             .collect::<BTreeSet<_>>(),
         BTreeSet::from(["left", "right"])
     );
@@ -129,7 +134,10 @@ fn used_nested_source_function_types_map_recursively_without_materializing_unrel
         .find(|(_, interface)| {
             interface.parameters.len() == 1
                 && matches!(
-                    program.types.get(interface.parameters[0]).map(|ty| &ty.kind),
+                    program
+                        .types
+                        .get(interface.parameters[0])
+                        .map(|ty| &ty.kind),
                     Some(TypeKind::Scalar(ScalarType::Callable(_)))
                 )
         })
@@ -137,17 +145,17 @@ fn used_nested_source_function_types_map_recursively_without_materializing_unrel
     let inner_id = outer.parameters[0];
     assert_ne!(*outer_id, inner_id);
     assert!(callables.iter().any(|(id, _)| *id == inner_id));
-    assert_eq!(outer.result, Some(
-        function(program, "higher")
-            .result
-            .expect("higher callable parameter's interface returns I64")
-    ));
+    let inner = &callables
+        .iter()
+        .find(|(id, _)| *id == inner_id)
+        .expect("nested callable mapping exists")
+        .1;
+    assert_eq!(outer.result, inner.result);
 }
 
 #[test]
 fn function_values_transport_through_locals_parameters_and_results_using_existing_call_relations() {
-    let source =
-        "fn plus_one(value: I64) -> I64 { return value + 1; } \
+    let source = "fn plus_one(value: I64) -> I64 { return value + 1; } \
          fn pass(f: fn(I64) -> I64) -> fn(I64) -> I64 { return f; } \
          fn entry() -> I64 { \
              let f: fn(I64) -> I64 = plus_one; \
@@ -164,7 +172,10 @@ fn function_values_transport_through_locals_parameters_and_results_using_existin
     )));
     assert!(entry.body.blocks.iter().any(|block| matches!(
         block.terminator,
-        Terminator::IndirectCall { destination: Some(_), .. }
+        Terminator::IndirectCall {
+            destination: Some(_),
+            ..
+        }
     )));
 
     let pass = function(program, "pass");
@@ -177,8 +188,7 @@ fn function_values_transport_through_locals_parameters_and_results_using_existin
 
 #[test]
 fn indirect_callee_snapshot_precedes_nested_arguments_and_arguments_remain_left_to_right() {
-    let source =
-        "fn combine(left: I64, right: I64) -> I64 { return left + right; } \
+    let source = "fn combine(left: I64, right: I64) -> I64 { return left + right; } \
          fn left() -> I64 { return 20; } \
          fn right() -> I64 { return 22; } \
          fn entry() -> I64 { \
@@ -200,7 +210,10 @@ fn indirect_callee_snapshot_precedes_nested_arguments_and_arguments_remain_left_
                 src: Operand::Copy(PlaceAccess::Direct(source)),
             } if source.local == f
                 && source.projections.is_empty()
-                && dst.projections.is_empty() => Some(dst.local),
+                && dst.projections.is_empty() =>
+            {
+                Some(dst.local)
+            }
             _ => None,
         })
         .expect("callee binding is copied into an operation-owned temporary before arguments");
@@ -213,7 +226,10 @@ fn indirect_callee_snapshot_precedes_nested_arguments_and_arguments_remain_left_
     else {
         panic!("first nested argument must be the first emitted call");
     };
-    assert_eq!(program.function(*first).expect("first target exists").name, "left");
+    assert_eq!(
+        program.function(*first).expect("first target exists").name,
+        "left"
+    );
 
     let second_block = &entry.body.blocks[after_first.0 as usize];
     let Terminator::Call {
@@ -224,7 +240,13 @@ fn indirect_callee_snapshot_precedes_nested_arguments_and_arguments_remain_left_
     else {
         panic!("second nested argument must follow the first call continuation");
     };
-    assert_eq!(program.function(*second).expect("second target exists").name, "right");
+    assert_eq!(
+        program
+            .function(*second)
+            .expect("second target exists")
+            .name,
+        "right"
+    );
 
     let call_block = &entry.body.blocks[after_second.0 as usize];
     let Terminator::IndirectCall {
@@ -251,8 +273,7 @@ fn indirect_callee_snapshot_precedes_nested_arguments_and_arguments_remain_left_
 
 #[test]
 fn no_result_indirect_call_has_no_destination_and_uses_the_existing_normal_continuation() {
-    let source =
-        "fn sink(value: I64) {} \
+    let source = "fn sink(value: I64) {} \
          fn entry() -> I64 { \
              let f: fn(I64) = sink; \
              f(1); \
@@ -260,14 +281,18 @@ fn no_result_indirect_call_has_no_destination_and_uses_the_existing_normal_conti
          }";
     let lowered = lower_source(source);
     let entry = function(lowered.as_program(), "entry");
-    let indirect = entry.body.blocks.iter().find_map(|block| match &block.terminator {
-        Terminator::IndirectCall {
-            destination,
-            target,
-            ..
-        } => Some((destination, target)),
-        _ => None,
-    });
+    let indirect = entry
+        .body
+        .blocks
+        .iter()
+        .find_map(|block| match &block.terminator {
+            Terminator::IndirectCall {
+                destination,
+                target,
+                ..
+            } => Some((destination, target)),
+            _ => None,
+        });
     let Some((destination, target)) = indirect else {
         panic!("entry must contain one indirect no-result call");
     };
@@ -281,8 +306,7 @@ fn no_result_indirect_call_has_no_destination_and_uses_the_existing_normal_conti
 
 #[test]
 fn indirect_fault_propagates_through_the_existing_reference_machine() {
-    let source =
-        "fn boom() -> I64 { fault; } \
+    let source = "fn boom() -> I64 { fault; } \
          fn entry() -> I64 { \
              let f: fn() -> I64 = boom; \
              return f(); \
@@ -296,9 +320,9 @@ fn indirect_fault_propagates_through_the_existing_reference_machine() {
 }
 
 #[test]
-fn indirect_shared_identity_and_direct_child_contracts_execute_through_existing_reference_summaries() {
-    let identity_source =
-        "fn identity(reference: &I64) -> &I64 { return reference; } \
+fn indirect_shared_identity_and_direct_child_contracts_execute_through_existing_reference_summaries()
+ {
+    let identity_source = "fn identity(reference: &I64) -> &I64 { return reference; } \
          fn entry() -> I64 { \
              let value: I64 = 73; \
              let reference: &I64 = &value; \
@@ -318,8 +342,7 @@ fn indirect_shared_identity_and_direct_child_contracts_execute_through_existing_
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(ObservedValue::I64(73)));
 
-    let child_source =
-        "fn child(reference: &mut I64) -> &I64 { return &*reference; } \
+    let child_source = "fn child(reference: &mut I64) -> &I64 { return &*reference; } \
          fn entry() -> I64 { \
              let mut value: I64 = 84; \
              let reference: &mut I64 = &mut value; \
@@ -366,5 +389,9 @@ fn mutual_indirect_call_graph_lowers_without_dynamic_target_set_discovery() {
             "{name} must lower one bounded indirect recursive edge"
         );
     }
-    assert_eq!(program.functions.len(), 2, "no target-set specialization is introduced");
+    assert_eq!(
+        program.functions.len(),
+        2,
+        "no target-set specialization is introduced"
+    );
 }
