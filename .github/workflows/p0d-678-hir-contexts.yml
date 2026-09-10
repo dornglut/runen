@@ -6,6 +6,7 @@ on:
       - p0d-678-source-function-values-impl
     paths:
       - .github/scripts/p0d_678_hir_contexts.py
+      - .github/scripts/p0d_678_hir_contexts_fix.py
       - .github/workflows/p0d-678-hir-contexts.yml
 
 permissions:
@@ -21,7 +22,9 @@ jobs:
           ref: p0d-678-source-function-values-impl
           fetch-depth: 1
       - name: Apply resolution context cleanup
-        run: python .github/scripts/p0d_678_hir_contexts.py
+        run: |
+          python .github/scripts/p0d_678_hir_contexts_fix.py
+          python .github/scripts/p0d_678_hir_contexts.py
       - name: Format
         run: cargo +stable fmt --all
       - name: Test HIR
