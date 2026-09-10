@@ -62,9 +62,8 @@ fn qualified_exported_function_forms_a_value_but_private_member_does_not() {
         }
     ));
 
-    let bad = parse(
-        "import dep; fn use() -> I64 { let f: fn(I64) -> I64 = dep::private; return f(3); }",
-    );
+    let bad =
+        parse("import dep; fn use() -> I64 { let f: fn(I64) -> I64 = dep::private; return f(3); }");
     assert!(bad.errors().is_empty(), "{:?}", bad.errors());
     let errors = build_typed_hir(&[
         SourceUnit::new(ModuleId::new(1), &bad, &imports),
