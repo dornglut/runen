@@ -10,6 +10,7 @@
 - [Constants](constants.md)
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
+- [Function values and indirect calls](function-values.md)
 - [Generics](generics.md)
 - [Marker traits](traits.md)
 - [Structural ownership](structural-ownership.md)

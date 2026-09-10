@@ -6,7 +6,7 @@ This document owns the represented source semantics for bounded dot field-path s
 
 It consumes lexical identifier keys from [Source lexical foundation](lexical.md), source module identity plus module binding accessibility and qualified/unqualified module lookup from [Source names and modules](names-modules.md), nominal record/field identity, field source types, source type equality, and owned-value duplicability from [Source type foundation](types.md), function signatures and result presence from [Source callables](callables.md), structural source paths and path availability/consumption/frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/lifecycle/assignment mutability from [Source function-local bindings](local-bindings.md), and the canonical direct safe-authority compatibility relation from [Source safe references](references.md). It does not redefine those owners.
 
-The represented `.` spelling, binding-root/producer-receiver grammar, bounded binding-root field-assignment grammar, record-field `export` modifier, direct-call form, record-construction form, and receiving positions are owned by [Source concrete syntax](concrete-syntax.md). Evaluation of a producer receiver, dynamic field-receiver transient lifetime, transient cleanup sequencing, transfer of a successfully produced field result into a local, assignment RHS, direct-call argument, return result, record-construction initializer, conditional, or producer-backed record-pattern scrutinee, and bounded field-assignment replacement ordering are owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct field-accessibility relation defined here at every record-pattern field it selects, including fields of qualified foreign pattern heads, and may receive a completed field-value result as a producer-backed scrutinee; pattern structure, head lookup, no-rest exhaustiveness or rest-authorized omission, binding introduction, and pattern ownership consequences remain owned there.
+The represented `.` spelling, binding-root/producer-receiver grammar, bounded binding-root field-assignment grammar, record-field `export` modifier, call form, record-construction form, and receiving positions are owned by [Source concrete syntax](concrete-syntax.md). Evaluation of a producer receiver, dynamic field-receiver transient lifetime, transient cleanup sequencing, transfer of a successfully produced field result into a local, assignment RHS, call argument, return result, record-construction initializer, conditional, or producer-backed record-pattern scrutinee, and bounded field-assignment replacement ordering are owned by [Source function execution](function-execution.md). [Source patterns](patterns.md) independently consumes the direct field-accessibility relation defined here at every record-pattern field it selects, including fields of qualified foreign pattern heads, and may receive a completed field-value result as a producer-backed scrutinee; pattern structure, head lookup, no-rest exhaustiveness or rest-authorized omission, binding introduction, and pattern ownership consequences remain owned there.
 
 This document does not define structural ownership mathematics, safe-reference authority/reborrow semantics, binding assignment mutability or replacement lifecycle, a general member/postfix system, place/lvalue grammar, general pattern semantics, physical layout, ABI/linkage visibility, or implementation representation.
 
@@ -19,7 +19,7 @@ A represented **field-value use** selects one non-empty structural field path fr
 The represented receiver categories are exactly:
 
 1. a **binding-root receiver**: one active parameter or ordinary local binding selected by one unqualified function-body identifier; or
-2. a **producer receiver**: exactly one represented result-bearing direct call or one represented record construction whose successful result becomes the field receiver.
+2. a **producer receiver**: exactly one represented result-bearing source call (direct or bounded indirect) or one represented record construction whose successful result becomes the field receiver.
 
 Conceptually:
 
@@ -32,11 +32,11 @@ Record { field: value }.other
 dep::Record { field: value }.other
 ```
 
-At least one field selector follows every receiver. A bare identifier therefore remains ordinary whole-binding use, a bare direct call remains a direct-call producer, and a bare record construction remains a record-construction producer.
+At least one field selector follows every receiver. A bare identifier therefore remains ordinary whole-binding use, a bare result-bearing call remains a call producer, and a bare record construction remains a record-construction producer.
 
 A field-value use is one owned-value producer. It is not a source place, lvalue, reference, borrow, storage identity, address, method receiver, field-assignment target, or record pattern.
 
-The producer-receiver category is deliberately not an arbitrary source value/expression receiver. This revision does not admit a literal, bare binding value, another generic expression form, parenthesized value, method result, reference, place, or arbitrary postfix expression as a receiver. Nested composition occurs only through already represented direct-call arguments, record-construction initializers, and the static selector chain of this operation.
+The producer-receiver category is deliberately not an arbitrary source value/expression receiver. This revision does not admit a literal, bare binding value, another generic expression form, parenthesized value, method result, reference, place, or arbitrary postfix expression as a receiver. Nested composition occurs only through already represented call arguments, record-construction initializers, and the static selector chain of this operation.
 
 After static receiver/type/field-path selection, the final selected type's owned-value duplicability selects whether production duplicates that subvalue or consumes/transfers it. Binding-root receivers additionally require the selected path to be fully available in the selected binding and the corresponding canonical direct safe-authority compatibility requirement to hold. Producer receivers instead begin dynamic field selection from one fresh, fully owned receiver transient after successful producer completion and consume no local-root safe-authority compatibility relation merely because that transient exists.
 
@@ -77,14 +77,14 @@ The binding-root category creates no receiver transient. Field-value duplicate/c
 
 ## Producer receiver selection and exact receiver type
 
-A producer receiver is exactly one `DirectCall` or `RecordConstruction` from `concrete-syntax.md` followed by at least one field selector.
+A producer receiver is exactly one `Call` or `RecordConstruction` from `concrete-syntax.md` followed by at least one field selector.
 
 Its receiver source type is selected independently of the surrounding field-value required type:
 
-- for a `DirectCall`, resolve the call target through the existing direct-call lookup relation and require the selected source function signature to have exactly one result value; that declared result type is the receiver type;
+- for a `Call`, apply the direct/indirect target classification from `function-values.md`/`local-bindings.md` and require the statically established callable interface to have exactly one result value; for a direct target that is its resolved/instantiated function result, while for a bounded indirect target it is the exact result of the selected function-value local type; that exact result type is the receiver type;
 - for a `RecordConstruction`, resolve its explicit nominal record target through the accepted construction-target relation, whether unqualified same-module or qualified cross-module; that resolved nominal record type is the receiver type.
 
-A no-result direct call cannot be a source-valid producer receiver because it produces no receiver value.
+A no-result call cannot be a source-valid producer receiver because it produces no receiver value.
 
 The surrounding receiving position does **not** supply its required type to the producer receiver. It requires the final selected field result type instead. The receiver producer is validated against its own statically selected receiver type and its existing argument/initializer requirements.
 
@@ -163,7 +163,7 @@ A selector path or recursive pattern path may cross source-module boundaries mor
 
 Consequently, a same-module record may expose a field whose type is an exported record from another module; a later field-value selector, bounded field-assignment selector, or qualified nested record pattern may enter that foreign record only when the foreign record binding and selected foreign field are both exported. If a later selected field has a record type from the caller's own module, subsequent direct field selection or an unqualified nested pattern on that type again uses the same-module branch of this relation. A third-module nested pattern additionally requires its own applicable qualified head lookup under `patterns.md` and `names-modules.md`.
 
-A qualified direct-call receiver may legally call an exported function from another module. If that function returns an exported foreign record, a selector on that result is permitted exactly when the selected field is exported. A qualified record construction may directly produce such a foreign exported record only when its exhaustive initializer set satisfies this same accessibility relation. Qualified record-pattern heads may directly open such a foreign exported record only when every explicitly selected field satisfies this relation; node-local rest may omit unselected fields without adding a field-accessibility requirement. Target/head/result resolution remains owned by `names-modules.md`, `callables.md`, `concrete-syntax.md`, `patterns.md`, and `function-execution.md`; this field relation does not create qualified field names or another lookup domain.
+A qualified call receiver may legally call an exported function from another module. If that function returns an exported foreign record, a selector on that result is permitted exactly when the selected field is exported. A qualified record construction may directly produce such a foreign exported record only when its exhaustive initializer set satisfies this same accessibility relation. Qualified record-pattern heads may directly open such a foreign exported record only when every explicitly selected field satisfies this relation; node-local rest may omit unselected fields without adding a field-accessibility requirement. Target/head/result resolution remains owned by `names-modules.md`, `callables.md`, `concrete-syntax.md`, `patterns.md`, and `function-execution.md`; this field relation does not create qualified field names or another lookup domain.
 
 ### Exported-field declared-type accessibility
 
@@ -314,7 +314,7 @@ For a producer receiver, that final required type does not become the receiver p
 
 The operation introduces no inference, structural compatibility, subtyping, conversion, coercion, promotion, widening, narrowing, or numeric defaulting.
 
-The represented result may compose with ordinary local initialization, whole-binding or bounded binding-root field-assignment RHS evaluation, direct-call arguments, result-bearing return, record-construction field initializers, represented conditional evaluation when its exact final type is `Bool`, and a producer-backed record-pattern scrutinee whose top pattern head selects exactly the same nominal record type.
+The represented result may compose with ordinary local initialization, whole-binding or bounded binding-root field-assignment RHS evaluation, call arguments, result-bearing return, record-construction field initializers, represented conditional evaluation when its exact final type is `Bool`, and a producer-backed record-pattern scrutinee whose top pattern head selects exactly the same nominal record type.
 
 Those receiving operations retain their existing ordering, transfer, replacement, cleanup, fault, divergence, reference-authority, and conditional/pattern authority under `function-execution.md`, `references.md`, `control-flow.md`, and `patterns.md`.
 
@@ -338,7 +338,7 @@ They do not establish:
 - a source reference or borrow;
 - field-relative safe-reference replacement/access or reborrow;
 - address-taking, pointer provenance, or physical offsets;
-- arbitrary value/expression receivers beyond the explicitly represented direct-call and record-construction producer receivers for field-value use;
+- arbitrary value/expression receivers beyond the explicitly represented call and record-construction producer receivers for field-value use;
 - general postfix chaining, grouping, or an expression precedence system;
 - method, associated-item, extension, trait, or overload lookup; or
 - record-pattern binding semantics.
@@ -371,4 +371,4 @@ Cleanup ordering and transfer into the surrounding consumer or assignment target
 
 ## Further boundaries
 
-This revision does not define arbitrary value/expression receivers beyond the bounded direct-call/record-construction receiver set for field-value use; a general postfix/member, place/lvalue, or expression grammar; assignment targets beyond the bounded bare-binding-root field path; reference-relative field/subregion assignment; raw field/path assignment; package/friend/protected field accessibility; re-exports; qualified field names or nested module paths beyond the represented alias/member pair; methods/associated items or constructor methods; safe-reference formation/reborrow/lifetimes beyond consuming the canonical direct compatibility relation; additional refutable/shorthand patterns; positive record duplicability-selection syntax; general operators/conversions; floating literal formation; loops/backedges or new control-flow joins; custom destructors; structural state splitting beneath a consumed ancestor; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.
+This revision does not define arbitrary value/expression receivers beyond the bounded call/record-construction receiver set for field-value use; a general postfix/member, place/lvalue, or expression grammar; assignment targets beyond the bounded bare-binding-root field path; reference-relative field/subregion assignment; raw field/path assignment; package/friend/protected field accessibility; re-exports; qualified field names or nested module paths beyond the represented alias/member pair; methods/associated items or constructor methods; safe-reference formation/reborrow/lifetimes beyond consuming the canonical direct compatibility relation; additional refutable/shorthand patterns; positive record duplicability-selection syntax; general operators/conversions; floating literal formation; loops/backedges or new control-flow joins; custom destructors; structural state splitting beneath a consumed ancestor; const/static semantics; panic payload/catch syntax; ABI/layout/FFI/linkage; Exec/Model source forms; or runtime/backend representation.

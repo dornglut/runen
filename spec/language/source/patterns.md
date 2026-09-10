@@ -219,7 +219,7 @@ A bare direct root is **not** ordinary whole-binding `IdentifierUse` production 
 
 A producer-backed scrutinee is exactly one syntactically non-bare producer admitted by `concrete-syntax.md`:
 
-- a result-bearing direct call;
+- a result-bearing source call, direct or bounded indirect;
 - a record construction; or
 - a field-value use, using either its binding-root or bounded producer-backed receiver form.
 
@@ -227,7 +227,7 @@ A producer-backed scrutinee is exactly one syntactically non-bare producer admit
 
 The top pattern head's nominal record type is the exact required source type of the **complete scrutinee producer result**. Structural similarity to another record type is insufficient. A qualified construction of a foreign record may therefore satisfy a qualified top pattern exactly when both resolve to the same nominal record and the construction and pattern are independently source-valid.
 
-For a producer-backed field-value scrutinee, that top required type constrains the field-value operation's final selected field result. It does not constrain the field-value operation's internal direct-call or record-construction receiver, whose own exact receiver type remains selected and validated under `field-access.md`. A qualified construction may therefore appear inside such a field-value receiver regardless of whether the final record result consumed by the pattern is same-module or foreign, provided the final selected type exactly equals the resolved top pattern type.
+For a producer-backed field-value scrutinee, that top required type constrains the field-value operation's final selected field result. It does not constrain the field-value operation's internal call or record-construction receiver, whose own exact receiver type remains selected and validated under `field-access.md`. A qualified construction may therefore appear inside such a field-value receiver regardless of whether the final record result consumed by the pattern is same-module or foreign, provided the final selected type exactly equals the resolved top pattern type.
 
 The producer is resolved/evaluated in the lexical environment that exists before any binding introduced by this pattern enters scope.
 

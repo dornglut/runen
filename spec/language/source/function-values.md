@@ -77,7 +77,7 @@ A represented function-value type is admitted directly in this first slice as:
 
 A function-value type is **not** admitted as a nominal record field type in this revision. This restriction keeps record structural shape, record construction, record destructuring, exported-field accessibility, and field structural ownership unchanged. It does not claim that future aggregate storage of function values is fundamentally invalid.
 
-A function-value type is also not admitted as the referent of `SharedRef` or `ExclusiveReplaceRef`, or as the pointee of `RawPtr`, because `concrete-syntax.md` does not add `FunctionType` to `ReferenceReferentType`. This revision therefore introduces no safe-reference-to-function-value, raw-pointer-to-function-value, function-address, pointer conversion, or callable provenance relation.
+A function-value type is also not admitted as the referent of `SharedRef` or `ExclusiveReplaceRef`, or as the pointee of `RawPtr`. `references.md` retains the Shared/replacement referent domain and `raw-pointers-unsafe.md` retains the raw-pointee domain; `concrete-syntax.md` correspondingly does not add `FunctionType` to `ReferenceReferentType`. This revision therefore introduces no safe-reference-to-function-value, raw-pointer-to-function-value, function-address, pointer conversion, or callable provenance relation.
 
 A concrete function-value type may occur directly in the parameter/result/local type surface of a generic source function. That fact does not make the generic function entity itself a function value and does not admit abstract generic parameters inside the function-value type.
 

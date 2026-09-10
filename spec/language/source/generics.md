@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the first represented source generic relation: function type-parameter identity and scope, abstract parametric type expressions, bounded type-argument admission, exact explicit substitution, generic-body capability facts, generic-call substitution composition, generic activation substitution context, validation independence from concrete use sites, and the finite refinement boundary to existing concrete Core functions.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module/function/nominal-type lookup and accessibility from [Source names and modules](names-modules.md), represented concrete source type identity/equality and owned-value duplicability from [Source type foundation](types.md), callable entity/signature structure from [Source callables](callables.md), structural ownership from [Source structural ownership](structural-ownership.md), function-local binding lifecycle and whole-binding use from [Source function-local bindings](local-bindings.md), direct-call execution from [Source function execution](function-execution.md), represented concrete generic declaration/application spelling from [Source concrete syntax](concrete-syntax.md), and first-slice nominal marker trait identity plus exact marker-obligation satisfaction from [Source marker traits](traits.md). Existing concrete Core function semantics are owned by [Core functions and direct calls](../core/functions.md).
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module/function/nominal-type lookup and accessibility from [Source names and modules](names-modules.md), represented concrete source type identity/equality and owned-value duplicability from [Source type foundation](types.md), callable entity/signature structure from [Source callables](callables.md), concrete captureless function-value types and generic-function-value exclusions from [Source function values and indirect calls](function-values.md), structural ownership from [Source structural ownership](structural-ownership.md), function-local binding lifecycle and whole-binding use from [Source function-local bindings](local-bindings.md), direct-call execution from [Source function execution](function-execution.md), represented concrete generic declaration/application spelling from [Source concrete syntax](concrete-syntax.md), and first-slice nominal marker trait identity plus exact marker-obligation satisfaction from [Source marker traits](traits.md). Existing concrete Core function semantics are owned by [Core functions and direct calls](../core/functions.md).
 
 Trait declaration identity, explicit marker implementation propositions, compilation-global coherence, and the concrete/abstract marker-satisfaction relation remain owned only by `traits.md`. This document owns only how existing generic slots carry marker requirements/evidence and when generic application validates those requirements.
 
@@ -86,11 +86,11 @@ An abstract type parameter is not admitted in this revision:
 - as the referent of `SharedRef`, `ExclusiveReplaceRef`, `&`, or `&mut`;
 - as the pointee of `RawPtr` / `raw`;
 - as a nominal record field type;
-- nested in another aggregate or type constructor;
+- nested in another aggregate or type constructor, including a captureless function-value type;
 - as a generic record/type-alias/opaque-type argument because those declaration forms are not represented; or
 - as an ABI, layout, representation, linkage, or target dimension.
 
-Existing concrete non-parametric source types MAY appear in the same generic callable signature/body under their existing owners.
+Existing concrete non-parametric source types MAY appear in the same generic callable signature/body under their existing owners. This includes a concrete function-value type from `function-values.md`, provided that function-value type itself contains no abstract type parameter under that owner's first-slice boundary.
 
 ## Type arguments
 
@@ -100,7 +100,7 @@ A first-slice generic type-argument expression is exactly one of:
 - a represented nominal record source type legally selected at the application site; or
 - when the application occurs inside another generic function body, one in-scope abstract type parameter of that enclosing function.
 
-Safe-reference and raw-pointer types are not generic type arguments in this revision. No nested generic type application exists because this revision defines no generic type constructor.
+Safe-reference, raw-pointer, and function-value types are not generic type arguments in this revision. No nested generic type application exists because this revision defines no generic type constructor.
 
 A concrete nominal-record type argument is resolved at the **application site** using the existing same-module or qualified cross-module type lookup/accessibility relation. The generic callee does not repeat source-name lookup for that concrete record in the callee's defining module.
 
@@ -128,7 +128,7 @@ Substitution performs no:
 - body-derived choice; or
 - target/backend-dependent selection.
 
-Applying a substitution to one parametric callable/local type expression replaces each occurrence of a target type-parameter slot with its mapped argument and leaves existing concrete type expressions unchanged.
+Applying a substitution to one parametric callable/local type expression replaces each occurrence of a target type-parameter slot with its mapped argument and leaves existing concrete type expressions unchanged. A concrete function-value type is therefore left unchanged by first-slice substitution because abstract type parameters are not admitted inside that type constructor.
 
 When an application occurs inside another generic function, a mapped argument may itself be one enclosing abstract type parameter. The resulting instantiated type expression therefore MAY remain abstract. Substitution composition preserves the enclosing semantic slot identity until a later enclosing application/activation supplies the final concrete type.
 
@@ -210,7 +210,7 @@ Marker-obligation failure is part of this pre-argument generic-application valid
 
 There is no inference fallback. Missing type arguments for a generic target remain invalid even when value arguments or a receiving result context would uniquely suggest a concrete type.
 
-A generic direct application remains the same direct-call producer/call-statement semantic category owned by `function-execution.md`; this document adds no indirect call, generic function value, method/associated lookup, or second call mechanism.
+A generic direct application remains the same direct-call producer/call-statement semantic category owned by `function-execution.md`. `function-values.md` independently excludes generic function entities and explicit specializations as function values; a bounded indirect call through a function-value local therefore never consumes this generic-application relation. This document adds no generic function value, method/associated lookup, or second generic call mechanism.
 
 If a generic application appears inside another generic body and its substitution contains enclosing abstract type parameters, the instantiated target signature may remain abstract. Ordinary call validation then uses the exact composed abstract type expressions and equality/capability facts already available in the enclosing generic validation environment. Any marker requirements are discharged from the enclosing abstract argument's declared exact requirement set, not from concrete implementation search for hypothetical future substitutions.
 
