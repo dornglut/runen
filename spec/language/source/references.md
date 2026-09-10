@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source-language safe-reference relation: Shared and replacement-capable exclusive reference types and values, complete-root and bounded Shared/replacement-capable binding-field safe-reference targets, bounded Shared and replacement-capable field-relative child targets, source safe-authority compatibility, reference authority/carrier lifetime, source-validation result provenance, root formation, bounded complete-referent dereference, explicit bounded reborrow, replacement through a replacement-capable reference, parameter/result transfer consequences, external-referent structural ownership, bounded safe-reference result validity, implicit lexical lifetime validity, and source-to-Core refinement for this bounded slice.
 
-It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, ordinary value use, and assignment from [Source function-local bindings](local-bindings.md); structural root/path availability, consumption, replacement reset, bounded non-empty subpath installation, and remaining ownership frontiers from [Source structural ownership](structural-ownership.md); nominal record field identity and direct field accessibility for bounded Shared/replacement-capable binding-field root and Shared/replacement-capable field-relative reborrow selection from [Source field-value access](field-access.md); function entity/parameter/result-contract callable structure from [Source callables](callables.md); direct-call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); represented control-flow state composition from [Source control flow](control-flow.md); the independently owned raw-pointer/unsafe relation from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
+It consumes source type identity and owned-value duplicability from [Source type foundation](types.md); function-local binding identity, scope, lookup, lifecycle, assignment mutability, structural-root lifecycle, ordinary value use, and assignment from [Source function-local bindings](local-bindings.md); structural root/path availability, consumption, replacement reset, bounded non-empty subpath installation, and remaining ownership frontiers from [Source structural ownership](structural-ownership.md); nominal record field identity and direct field accessibility for bounded Shared/replacement-capable binding-field root and Shared/replacement-capable field-relative reborrow selection from [Source field-value access](field-access.md); function entity/parameter/result-contract callable structure from [Source callables](callables.md); the exclusion of safe references to captureless function-value types and bounded indirect target facts from [Source function values and indirect calls](function-values.md); call argument/result evaluation, activation lifetime, lexical/activation cleanup, return, defined-fault propagation, and divergence from [Source function execution](function-execution.md); represented control-flow state composition from [Source control flow](control-flow.md); the independently owned raw-pointer/unsafe relation from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); and represented concrete reference spellings from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
 
 The lower refinement target is the accepted safe-reference relation in [Core references](../core/references.md) and the parameter/result-transfer plus safe-reference result-contract relation in [Core functions and direct calls](../core/functions.md). Core reference identity, `StorageRegion`, reference-authority identity, Core liveness, and proving representation are not source-language authority.
 
@@ -31,18 +31,18 @@ Safe-reference referent edges are semantic indirection rather than direct nomina
 
 A source type `T` is **Shared-referent-admissible** exactly when all of the following hold:
 
-1. `T` is a represented source value type under `types.md`;
+1. `T` is one represented intrinsic scalar or nominal record source type under `types.md`;
 2. `T` is duplicable under the source-semantic duplicability relation from `types.md`; and
 3. the structural source value shape of `T` contains neither a safe-reference type nor a raw-pointer type.
 
-This preserves the previously accepted Shared-reference referent domain.
+This is exactly the previously accepted Shared-reference referent domain. It explicitly does not admit the new captureless function-value type from `function-values.md`; that type's duplicability does not create safe-reference-to-function-value semantics.
 
 A source type `T` is **replacement-reference-referent-admissible** exactly when all of the following hold:
 
 1. `T` is one represented intrinsic scalar or nominal record source type under `types.md`; and
 2. the structural source value shape of `T` contains neither a safe-reference type nor a raw-pointer type.
 
-Replacement-reference referents may therefore be duplicable or non-duplicable nominal values. `SharedRef`, `ExclusiveReplaceRef`, and `RawPtr` are not admissible replacement-reference referents.
+Replacement-reference referents may therefore be duplicable or non-duplicable nominal values. `SharedRef`, `ExclusiveReplaceRef`, `RawPtr`, and captureless function-value types are not admissible replacement-reference referents.
 
 These bounded restrictions preserve the current Core transferable-referent safety boundary. They do not claim that future safe references fundamentally require the same exclusions.
 
@@ -82,7 +82,7 @@ Neither target nor authority identity is program-observable data. They cannot be
 
 A source safe reference is not a raw pointer, Core `ReferenceAuthorityId`, Core `StorageRegion`, Core `LoanId`, static Core `Place`, physical address, lifetime name, module binding, or source structural-ownership path by itself.
 
-Source safe-reference values arise only from root formation, explicit reborrow, ordinary transport of an existing valid safe-reference value, or a successful direct call whose advertised result contract summarizes an authority already created by valid callee execution. No literal, raw-pointer operation, record construction, or implementation convenience fabricates one.
+Source safe-reference values arise only from root formation, explicit reborrow, ordinary transport of an existing valid safe-reference value, or a successful result-bearing source call—direct or bounded indirect—whose advertised result contract summarizes an authority already created by valid callee execution. No literal, raw-pointer operation, record construction, or implementation convenience fabricates one.
 
 ## Source-validation result provenance and activation origins
 
@@ -98,8 +98,8 @@ Within validation of one function body:
 - transfer into an immutable Shared-reference local preserves provenance unchanged;
 - ordinary use of such a local or parameter preserves provenance unchanged;
 - every explicit reborrow creates a fresh authority and therefore fresh **ReborrowOrigin** provenance distinct from the parent's provenance, whether its relative field path is empty or non-empty;
-- a successful `SharedIdentity(j)` direct call produces caller-side provenance exactly equal to the caller argument value supplied to slot `j`; and
-- a successful `SharedDirectChild(j)` direct call produces one fresh caller-side derived-child provenance paired with the fresh summarized child authority whose direct parent is the exact caller authority supplied to slot `j`.
+- a successful `SharedIdentity(j)` source call produces caller-side provenance exactly equal to the caller argument value supplied to slot `j`; and
+- a successful `SharedDirectChild(j)` source call produces one fresh caller-side derived-child provenance paired with the fresh summarized child authority whose direct parent is the exact caller authority supplied to slot `j`.
 
 At activation entry for `SharedIdentity(i)`, the incoming Shared authority/target from slot `i` is the exact activation identity-result origin.
 
@@ -134,7 +134,7 @@ The final selected field/root type, not the outer record type, is the candidate 
 
 Replacement-capable root formation additionally requires the selected binding to be one mutable ordinary local as defined below. Parameters remain eligible only for Shared root formation because represented parameters do not establish ordinary local replacement permission.
 
-No root formation selects a pattern path independently of its root binding, producer transient, direct-call result, record-construction transient, dereference result, arbitrary temporary, grouped value, or general source expression/place/lvalue. No source qualification syntax is introduced inside a field path.
+No root formation selects a pattern path independently of its root binding, producer transient, source-call result, record-construction transient, dereference result, arbitrary temporary, grouped value, or general source expression/place/lvalue. No source qualification syntax is introduced inside a field path.
 
 ### Replacement-capable external referent structural root
 
@@ -404,7 +404,7 @@ Reference validity follows target extent, authority/carrier lifecycle, lexical c
 
 Every safe-reference ordinary local is immutable. Its initializer is evaluated before the local enters scope.
 
-A local may initialize from root formation, ordinary transport of an existing reference, explicit reborrow, or a valid Shared contract-bearing direct-call result as applicable to its exact type.
+A local may initialize from root formation, ordinary transport of an existing reference, explicit reborrow, or a valid Shared contract-bearing source-call result—direct or bounded indirect—as applicable to its exact type.
 
 Reverse lexical cleanup and activation cleanup guarantee that a non-escaping local reference ends before an earlier same-scope or ancestor local target extent. A binding-field root authority, whether Shared or replacement-capable, uses the containing root binding's storage extent; it creates no independently longer-lived field extent. A field-relative child, whether Shared or replacement-capable, likewise uses the continuing parent target's storage extent and creates no separate field lifetime. Replacement-capable child locals likewise end before their parent/target extent under the represented lexical rules.
 
@@ -418,11 +418,11 @@ A replacement-capable parameter receives one moved replacement-capable carrier p
 
 Parameter reference bindings are immutable as bindings. Their permission class governs referent operations independently of parameter binding mutability.
 
-## Direct-call transfer and call-entry authority
+## Call transfer and call-entry authority
 
 Safe-reference parameters remain ordinary owned parameter values. There is no borrowed-call pass mode and no implicit reborrow at a call boundary.
 
-Arguments are evaluated left-to-right and successful produced values are held by `function-execution.md`. After all argument production succeeds and before callee entry, every held safe-reference argument must satisfy both:
+For a bounded indirect call, `function-values.md`/`function-execution.md` evaluate and hold the captureless callee value before ordinary arguments; that callable value contains no safe-reference carrier or referent authority. Ordinary arguments are then evaluated left-to-right and successful produced values are held by `function-execution.md`. After all argument production succeeds and before callee entry, every held safe-reference argument must satisfy both:
 
 1. its complete target/referent structural root is fully available; and
 2. its authority retains the complete capability promised by its exact source reference type.
@@ -495,7 +495,7 @@ The exact complete-target requirement for `SharedDirectChild` remains normative.
 
 ### Caller-side result summary
 
-A successful result-bearing direct call validates from the callee's advertised callable contract without expanding the callee body.
+A successful result-bearing source call, whether direct or bounded indirect, validates from its already-established callable contract without expanding the dynamically selected callee body. For an indirect call the exact function-value type supplies that static contract before callee-value or argument effects.
 
 For `SharedIdentity(i)`, caller-side result authority/provenance is exactly the authority/provenance carried by the successful argument supplied to slot `i`, preserving existing identity behavior and any projected Shared target unchanged.
 
@@ -587,7 +587,7 @@ The existing raw source forms remain complete-root-only. This bounded structural
 This revision does not define:
 
 - a source form for plain Core `Exclusive`;
-- safe-reference record fields or reference-containing aggregates;
+- safe-reference record fields, safe references whose referent is a function-value type, or other reference-containing aggregates;
 - mutable/rebindable reference locals;
 - nested reference referents;
 - direct reference-relative field/subregion value access or dereference such as `*r.field`;

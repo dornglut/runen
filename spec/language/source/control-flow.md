@@ -32,7 +32,7 @@ No truthiness, implicit conversion, coercion, integer-to-Bool relation, structur
 
 Concrete syntax deliberately excludes standalone safe-reference formation/reborrow/dereference and raw-address/raw-move forms from `ConditionalValue`; that grammar restriction is owned by `concrete-syntax.md`. A bounded producer-backed `FieldValueUse` whose receiver is a record construction remains a distinct admitted field-value producer because the mandatory selector is part of that complete field-value spelling. This semantic owner does not widen those grammar restrictions from parser lookahead or type information.
 
-An admitted producer-backed `FieldValueUse` condition MUST have final selected field type exactly `Bool` under `field-access.md`. That requirement applies to the complete field-value result; the internal direct-call or record-construction receiver retains its independently selected exact receiver type.
+An admitted producer-backed `FieldValueUse` condition MUST have final selected field type exactly `Bool` under `field-access.md`. That requirement applies to the complete field-value result; the internal result-bearing call or record-construction receiver retains its independently selected exact receiver type.
 
 A syntactically represented conditional value whose resolved/produced type is not exactly `Bool` is source-invalid.
 

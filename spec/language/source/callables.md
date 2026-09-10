@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source function entity identity, callable-signature structure and equality, contextual parameter/result type admission, the bounded safe-reference result contract, and exported-signature source accessibility.
 
-It consumes module binding identity and accessibility from [Source names and modules](names-modules.md), represented concrete source value type identity and equality from [Source type foundation](types.md), first-slice function type-parameter identity, abstract parametric type expressions, exact substitution, generic-validation equality, and resolved per-slot marker-requirement sets from [Source generics](generics.md), marker trait entity identity from [Source marker traits](traits.md), safe-reference contextual/type/result-contract accessibility facts from [Source safe references](references.md), and the first-slice activation-local raw-pointer callable exclusion plus absence of an unsafe callable dimension from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). Marker implementation/coherence and obligation satisfaction remain owned by `traits.md`. It does not redefine those owners.
+It consumes module binding identity and accessibility from [Source names and modules](names-modules.md), represented concrete source value type identity and equality from [Source type foundation](types.md), captureless concrete function-value type structure from [Source function values and indirect calls](function-values.md), first-slice function type-parameter identity, abstract parametric type expressions, exact substitution, generic-validation equality, and resolved per-slot marker-requirement sets from [Source generics](generics.md), marker trait entity identity from [Source marker traits](traits.md), safe-reference contextual/type/result-contract accessibility facts from [Source safe references](references.md), and the first-slice activation-local raw-pointer callable exclusion plus absence of an unsafe callable dimension from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md). Marker implementation/coherence and obligation satisfaction remain owned by `traits.md`. It does not redefine those owners.
 
-Represented source function body attachment, dynamic activations, direct calls, owned argument/result transfer including safe-reference carrier/result/external-referent consequences, recursion, cleanup, return, divergence, and defined-fault propagation through direct calls are owned by [Source function execution](function-execution.md). The non-observable generic activation substitution context carried by a generic call and marker-obligation validation ordering are owned separately by [Source generics](generics.md). Function-local parameter binding identity, scope, mutability, availability, and ordinary owned use are owned by [Source function-local bindings](local-bindings.md). The represented concrete function-definition, generic parameter/application, parameter, result, safe-reference type, and raw-pointer type spellings are owned by [Source concrete syntax](concrete-syntax.md).
+Represented source function body attachment, dynamic activations, common direct/indirect call execution, owned argument/result transfer including safe-reference carrier/result/external-referent consequences, recursion, cleanup, return, divergence, and defined-fault propagation are owned by [Source function execution](function-execution.md). Direct-versus-bounded-indirect target classification and function-value formation are owned by `function-values.md`. The non-observable generic activation substitution context carried by a generic call and marker-obligation validation ordering are owned separately by [Source generics](generics.md). Function-local parameter binding identity, scope, mutability, availability, and ordinary owned use are owned by [Source function-local bindings](local-bindings.md). The represented concrete function-definition, generic parameter/application, parameter, result, safe-reference type, and raw-pointer type spellings are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not define indirect calls or function values, effects, generic substitution/capability semantics beyond the callable integration stated here, trait implementation/coherence, ABI, source lifetime names, a separate reference pass mode, an unsafe callable contract, or an implementation representation.
+This document does not define function-value payload identity, function-value formation, bounded indirect target classification, effects, generic substitution/capability semantics beyond the callable integration stated here, trait implementation/coherence, ABI, source lifetime names, a separate reference pass mode, an unsafe callable contract, or an implementation representation.
 
 ## Source function entities
 
@@ -50,6 +50,7 @@ Each parameter slot contains exactly one **parameter type expression**. The para
 A parameter type expression is admitted in this revision exactly when it is either:
 
 - one represented intrinsic scalar or nominal record source type admitted by `types.md`;
+- one represented concrete function-value type admitted by `function-values.md`;
 - one represented `SharedRef(T)` satisfying the Shared-reference restrictions from `references.md`;
 - one represented `ExclusiveReplaceRef(T)` satisfying the replacement-reference restrictions from `references.md`; or
 - inside a generic function, one bare in-scope abstract type parameter admitted by `generics.md`.
@@ -62,7 +63,7 @@ Safe-reference parameters remain ordinary source parameter slots. When a paramet
 
 Parameter slots have no lexical identifier key or source binding name under this signature contract. For a concrete function definition under `concrete-syntax.md`, concrete parameter order maps directly to parameter-slot order; `local-bindings.md` owns the corresponding parameter binding keys, identities, scope, mutability, and availability. Generic type-parameter lexical keys remain a distinct type-position lookup domain owned by `generics.md`; those keys do not become parameter-slot names or value bindings.
 
-The ordered parameter sequence is semantic signature structure. `generics.md` owns generic-application list presence, arity, type-argument admission, exact substitution, and marker-obligation validation before any ordinary value-argument producer effects may commit. After the instantiated parameter/result type expressions are supplied, positional direct-call validation, argument evaluation order, owned-value transfer, reference-carrier transfer, call-entry authority, and replacement-capable external-referent consequences are owned by `function-execution.md` and `references.md`; physical register, stack, ABI, storage-layout, or other calling mechanisms remain outside this owner.
+The ordered parameter sequence is semantic signature structure. `generics.md` owns generic-application list presence, arity, type-argument admission, exact substitution, and marker-obligation validation before any ordinary value-argument producer effects may commit. After the instantiated parameter/result type expressions are supplied, positional source-call validation, argument evaluation order, owned-value transfer, reference-carrier transfer, call-entry authority, and replacement-capable external-referent consequences are owned by `function-execution.md` and `references.md`; physical register, stack, ABI, storage-layout, or other calling mechanisms remain outside this owner.
 
 The result specification is exactly one of:
 
@@ -72,6 +73,7 @@ The result specification is exactly one of:
 A result type expression is admitted exactly when it is either:
 
 - one represented intrinsic scalar or nominal record source type already result-admissible;
+- one represented concrete function-value type admitted by `function-values.md`;
 - one represented `SharedRef(T)` satisfying the bounded safe-reference result-contract relation below; or
 - inside a generic function, one bare in-scope abstract type parameter admitted by `generics.md`.
 
@@ -105,7 +107,7 @@ A mixed signature containing one exact `SharedRef(T)` candidate and one or more 
 
 The contract descriptor selects an ordered parameter slot. It is not a source parameter name, generic type-parameter identity, marker trait identity, body-local binding identity, lifetime name, implementation local identifier, dynamic activation identity, storage identity, physical address, or lower Core identifier.
 
-This **bounded result-contract elision** is the represented concrete source way to establish safe-reference result behavior. It is not body-derived origin inference. The advertised contract is established from callable structure before body validation and therefore remains available to independent direct-call validation, nested calls, direct recursion, mutual recursion, and generic application without inspecting or expanding a callee body.
+This **bounded result-contract elision** is the represented concrete source way to establish safe-reference result behavior. It is not body-derived origin inference. The advertised contract is established from callable structure before body validation and therefore remains available to independent source-call validation, nested calls, direct or bounded-indirect recursion, mutual recursion, and generic application without inspecting or expanding a callee body.
 
 For **SharedIdentity(i)**, normal result validity preserves the exact incoming Shared authority/target identity selected by slot `i`.
 
@@ -147,7 +149,7 @@ Under the current bounded elision rule, two otherwise equal represented paramete
 
 Callable-signature equality does not make two source function entities identical.
 
-It also does not establish a first-class function type, function-pointer type, closure type, implicit conversion, trait conformance beyond the separately owned marker requirement structure, overload relation, substitutability relation, or ABI compatibility.
+It also does not establish function-value payload identity or formation, closure type compatibility, implicit conversion, trait conformance beyond the separately owned marker requirement structure, overload relation, substitutability relation, or ABI compatibility. The bounded first-class captureless function-value type is owned separately by `function-values.md`.
 
 ## Exported-signature source accessibility
 
@@ -157,7 +159,10 @@ If a represented function binding is exported, every concrete nominal record sou
 - a nominal record appearing directly as a result type;
 - the direct nominal referent `T` of a parameter type `SharedRef(T)`;
 - the direct nominal referent `T` of a parameter type `ExclusiveReplaceRef(T)`; or
-- the direct nominal referent `T` of a result type `SharedRef(T)`.
+- the direct nominal referent `T` of a result type `SharedRef(T)`; or
+- any nominal record reached by recursively traversing a concrete function-value type that appears directly as a parameter/result type, including nominal records reached through an admitted safe-reference component of that finite function-value interface.
+
+The function-value traversal follows only finite callable-interface parameter/result type syntax. It recursively enters nested concrete function-value types, follows the one direct referent edge of an admitted safe-reference component, and does not traverse fields of a nominal record merely because that record identity has been reached. Function-valued nominal record fields are independently absent in this slice.
 
 If an exported function is generic, every marker trait identity contained in any of its type-parameter requirement sets MUST denote an exported marker trait binding under `names-modules.md`/`traits.md`.
 
@@ -173,7 +178,7 @@ A nominal record source type from another source module is already required to b
 
 The safe-reference result contract itself has no separate accessibility requirement. It selects an ordered ordinary parameter position already present in the callable interface; source parameter binding names and generic type-parameter lexical keys do not become exported interface value names.
 
-This rule follows only the one direct safe-reference referent edge admitted by this slice. Nested references are invalid and record fields cannot contain references, so no broader recursive reference-interface traversal is defined.
+Outside the finite function-value traversal above, this rule follows only the one direct safe-reference referent edge admitted by this slice. Nested references remain invalid and nominal-record fields are not recursively traversed for exported callable-interface accessibility.
 
 This rule does not recursively redefine accessibility of fields contained by a nominal record type; record field/member accessibility remains outside this owner.
 
@@ -206,12 +211,12 @@ The absence of the other dimensions does not imply that represented function bod
 
 ## Execution boundary
 
-`function-execution.md` is the sole source owner for the represented direct-function execution relation built on these function entities and signatures. `generics.md` owns the type-argument/substitution and marker-obligation facts consumed when the selected function is generic, including generic-application validation and the non-observable activation substitution context. This callable owner therefore does not duplicate:
+`function-execution.md` is the sole source owner for the represented source-function execution relation built on these function entities and signatures after direct or bounded-indirect target selection. `generics.md` owns the type-argument/substitution and marker-obligation facts consumed when the selected function is generic, including generic-application validation and the non-observable activation substitution context. This callable owner therefore does not duplicate:
 
 - represented source body attachment;
 - straight-line body execution order;
 - dynamic activation identity or ordinary execution state;
-- direct-call target validity;
+- source-call execution after target selection;
 - generic application presence/arity/type-argument/substitution/marker-obligation validation or generic activation substitution context;
 - argument evaluation order or argument/result ownership transfer;
 - safe-reference argument carrier production/transfer and caller suspension consequences;
@@ -219,19 +224,19 @@ The absence of the other dimensions does not imply that represented function bod
 - replacement-capable external-referent state and normal restoration;
 - safe-reference result-carrier preservation/derived-child transfer consequences;
 - lexical-scope or activation cleanup;
-- direct return or recursion;
-- direct-call divergence; or
+- return or direct/bounded-indirect recursion;
+- source-call divergence; or
 - defined-fault propagation through source activations.
 
-[Source marker traits](traits.md) owns marker trait identity, explicit implementation propositions, compilation-global coherence, and exact marker-obligation satisfaction; no marker evidence becomes a direct-execution value or dispatch relation here.
+[Source marker traits](traits.md) owns marker trait identity, explicit implementation propositions, compilation-global coherence, and exact marker-obligation satisfaction; no marker evidence becomes an execution value or dispatch relation here.
 
 [Source safe references](references.md) owns the reference-specific target/authority/carrier/lifetime, external-referent, call-entry/restoration, and advertised safe-reference result-contract relation consumed by that execution.
 
-[Source raw pointers and unsafe admission](raw-pointers-unsafe.md) owns activation-local raw-pointer target/origin/unsafe semantics. Because raw-pointer parameter/result types are invalid here and generic type arguments cannot be raw pointers, the represented direct-call relation transports no raw-pointer value or pointer-origin provenance across activation boundaries through either ordinary or generic parameters.
+[Source raw pointers and unsafe admission](raw-pointers-unsafe.md) owns activation-local raw-pointer target/origin/unsafe semantics. Because raw-pointer parameter/result types are invalid here and generic type arguments cannot be raw pointers, the represented source-call relation transports no raw-pointer value or pointer-origin provenance across activation boundaries through either ordinary or generic parameters.
 
 [Core faults](../core/faults.md) remains the authority for the currently represented Core fault classification and facts. `function-execution.md` consumes that fault identity to define propagation through represented source activations; broader panic forms, catch boundaries, payloads, and non-source propagation relations remain incomplete until their canonical owners are accepted.
 
-Indirect calls, function values, closures, overload dispatch, methods, external/FFI execution, intrinsic execution, async/task invocation, and other future callable forms are not implied by the direct-call relation or first-slice generic application.
+Function-value payload/formation and bounded indirect target classification remain owned by `function-values.md` rather than this callable-signature owner. Closures, overload dispatch, methods, external/FFI execution, intrinsic execution, async/task invocation, and other future callable forms remain unrepresented and are not implied by the bounded function-value relation or first-slice generic application.
 
 ## Implementation boundary
 
