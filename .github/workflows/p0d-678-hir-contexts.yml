@@ -7,6 +7,7 @@ on:
     paths:
       - .github/scripts/p0d_678_hir_contexts.py
       - .github/scripts/p0d_678_hir_contexts_fix.py
+      - .github/scripts/p0d_678_hir_contexts_compile_fix.py
       - .github/workflows/p0d-678-hir-contexts.yml
 
 permissions:
@@ -24,6 +25,7 @@ jobs:
       - name: Apply resolution context cleanup
         run: |
           python .github/scripts/p0d_678_hir_contexts_fix.py
+          python .github/scripts/p0d_678_hir_contexts_compile_fix.py
           python .github/scripts/p0d_678_hir_contexts.py
       - name: Format
         run: cargo +stable fmt --all
