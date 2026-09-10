@@ -110,7 +110,7 @@ For a qualified record-construction receiver, this means the outer field-value p
 
 A rejected receiver target, no-result call, non-record selector step, inaccessible/unknown field, final required-type mismatch, invalid receiver argument/initializer, or other invalid receiver producer MUST NOT leave speculative receiver-producer ownership or safe-reference consequences committed into later source validation.
 
-This transaction boundary belongs only to this composite producer. It does not redefine the validation transaction of a direct call, record construction, bounded field assignment, or another producer when used in another receiving position.
+This transaction boundary belongs only to this composite producer. It does not redefine the validation transaction of a source call, record construction, bounded field assignment, or another producer when used in another receiving position.
 
 ## Field-path selection
 
@@ -296,7 +296,7 @@ Static receiver/category/type/path/accessibility/result validation is complete b
 
 For a binding-root field-value receiver, field-value production itself is non-faulting and non-diverging. It performs no nested value-producer evaluation and creates no receiver transient.
 
-For a producer receiver, dynamic receiver evaluation is owned by `function-execution.md` and may have exactly the fault/divergence/transient behavior already associated with that direct call or record construction and its nested producers. No field-receiver transient or selected field result exists until the receiver producer succeeds.
+For a producer receiver, dynamic receiver evaluation is owned by `function-execution.md` and may have exactly the fault/divergence/transient behavior already associated with that source call or record construction and its nested producers. No field-receiver transient or selected field result exists until the receiver producer succeeds.
 
 After receiver producer success, establishment of the complete field-receiver transient, static-path selected-field production, canonical remaining-frontier cleanup, and completion of the field-value producer add no new defined-fault or divergence outcome under the current source model.
 

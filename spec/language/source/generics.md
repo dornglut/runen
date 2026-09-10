@@ -67,7 +67,7 @@ During generic declaration/body validation, abstract type equality is exact:
 
 - one abstract type parameter is equal to itself exactly when both uses designate the same semantic slot identity;
 - two distinct type-parameter slots are unequal even when a later application may substitute the same concrete type for both; and
-- an abstract type parameter is unequal to every concrete intrinsic, nominal-record, safe-reference, and raw-pointer source type.
+- an abstract type parameter is unequal to every concrete intrinsic, nominal-record, safe-reference, raw-pointer, and function-value source type.
 
 This abstract equality relation is a generic-validation relation consumed alongside the concrete source type equality owned by `types.md`. It does not redefine equality between concrete source types.
 
