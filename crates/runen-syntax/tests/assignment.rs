@@ -103,7 +103,7 @@ fn identifier_started_statements_distinguish_assignment_and_calls() {
         parsed
             .syntax()
             .descendants()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .filter(|node| node.kind() == SyntaxKind::Call)
             .count(),
         3,
         "two result calls in assignments and the no-result call statement"

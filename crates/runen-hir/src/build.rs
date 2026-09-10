@@ -3691,7 +3691,7 @@ fn validate_record_destructure(
     let producer_node = node.children().find(|child| {
         matches!(
             child.kind(),
-            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+            SyntaxKind::Call | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
         )
     });
     let direct_root_token = producer_node
@@ -3889,7 +3889,7 @@ fn validate_refutable_record_selection(
     let producer_node = node.children().find(|child| {
         matches!(
             child.kind(),
-            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+            SyntaxKind::Call | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
         )
     });
     let direct_root_token = producer_node
@@ -4592,7 +4592,7 @@ fn validate_call_statement(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     let mut candidate = state.clone();
-    let call = direct_child(node, SyntaxKind::DirectCall);
+    let call = direct_child(node, SyntaxKind::Call);
     let validated = validate_call(
         header,
         &call,
@@ -5492,7 +5492,7 @@ fn validate_value_inner(
                                 .map_or(Invalid, |constant| Exact(constant.ty)),
                         }
                     }
-                    SyntaxKind::DirectCall => {
+                    SyntaxKind::Call => {
                         let Some(application) = resolve_call_application(
                             header,
                             node,
@@ -5523,7 +5523,7 @@ fn validate_value_inner(
                         let producer_node = node.children().find(|child| {
                             matches!(
                                 child.kind(),
-                                SyntaxKind::DirectCall | SyntaxKind::RecordConstruction
+                                SyntaxKind::Call | SyntaxKind::RecordConstruction
                             )
                         });
                         let identifiers = node
@@ -5534,7 +5534,7 @@ fn validate_value_inner(
 
                         if let Some(producer_node) = producer_node {
                             let receiver_ty = match producer_node.kind() {
-                                SyntaxKind::DirectCall => {
+                                SyntaxKind::Call => {
                                     let Some(application) = resolve_call_application(
                                         header,
                                         &producer_node,
@@ -5989,7 +5989,7 @@ fn validate_value_inner(
         SyntaxKind::IdentifierUse => {
             validate_identifier_use(header, node, required, context, state, diagnostics)
         }
-        SyntaxKind::DirectCall => {
+        SyntaxKind::Call => {
             let validated =
                 validate_call(header, node, context, value_context, state, diagnostics)?;
             let Some(ty) = validated.result else {
@@ -7059,7 +7059,7 @@ fn validate_field_value_use(
     let producer_node = node.children().find(|child| {
         matches!(
             child.kind(),
-            SyntaxKind::DirectCall | SyntaxKind::RecordConstruction
+            SyntaxKind::Call | SyntaxKind::RecordConstruction
         )
     });
     let identifiers = node
@@ -7071,7 +7071,7 @@ fn validate_field_value_use(
     if let Some(producer_node) = producer_node {
         debug_assert!(!identifiers.is_empty());
         let receiver_ty = match producer_node.kind() {
-            SyntaxKind::DirectCall => {
+            SyntaxKind::Call => {
                 let application = resolve_call_application(
                     header,
                     &producer_node,
@@ -8365,7 +8365,7 @@ fn is_value_node(kind: SyntaxKind) -> bool {
             | SyntaxKind::DecimalIntegerLiteral
             | SyntaxKind::DecimalFloatingLiteral
             | SyntaxKind::IdentifierUse
-            | SyntaxKind::DirectCall
+            | SyntaxKind::Call
             | SyntaxKind::RecordConstruction
             | SyntaxKind::FieldValueUse
     )

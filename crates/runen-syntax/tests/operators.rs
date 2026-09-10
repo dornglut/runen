@@ -100,7 +100,7 @@ fn atoms(root: Flag) {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::BooleanNotValue), 5);
     assert_eq!(count(&parsed, SyntaxKind::RecordConstruction), 1);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
     assert_eq!(count(&parsed, SyntaxKind::FieldValueUse), 1);
     assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 1);
 }
@@ -304,7 +304,7 @@ fn atoms(root: Flag) {
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::BooleanEqualityValue), 4);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
     assert_eq!(count(&parsed, SyntaxKind::FieldValueUse), 1);
     assert_eq!(count(&parsed, SyntaxKind::RecordConstruction), 2);
     assert_eq!(count(&parsed, SyntaxKind::DecimalIntegerLiteral), 2);

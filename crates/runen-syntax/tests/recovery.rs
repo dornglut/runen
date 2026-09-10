@@ -15,7 +15,7 @@ fn parses_nested_direct_call_values_with_trailing_commas() {
         parsed
             .syntax()
             .descendants()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .filter(|node| node.kind() == SyntaxKind::Call)
             .count(),
         2
     );

@@ -90,13 +90,13 @@ fn g() -> Pair { return dep::make(); }
     assert_eq!(
         construction
             .children()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .filter(|node| node.kind() == SyntaxKind::Call)
             .count(),
         0
     );
     assert_eq!(
         root.descendants()
-            .filter(|node| node.kind() == SyntaxKind::DirectCall)
+            .filter(|node| node.kind() == SyntaxKind::Call)
             .count(),
         1
     );

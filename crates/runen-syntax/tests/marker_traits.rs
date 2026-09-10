@@ -48,7 +48,7 @@ fn trait_and_impl_remain_contextual_identifier_keys() {
     assert_eq!(parsed.text(), source);
     assert_eq!(count(&parsed, SyntaxKind::TraitDeclaration), 0);
     assert_eq!(count(&parsed, SyntaxKind::TraitImplementation), 0);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 2);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 2);
 }
 
 #[test]
@@ -127,5 +127,5 @@ fn marker_bounds_do_not_change_direct_call_type_argument_grammar() {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::GenericTypeArgumentList), 1);
     assert_eq!(count(&parsed, SyntaxKind::GenericTypeArgument), 1);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
 }

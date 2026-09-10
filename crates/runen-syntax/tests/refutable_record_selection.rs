@@ -160,7 +160,7 @@ fn reuses_only_the_existing_bounded_scrutinee_categories() {
 
     assert_eq!(parsed.text(), source);
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
     assert_eq!(count(&parsed, SyntaxKind::FieldValueUse), 1);
     assert_eq!(count(&parsed, SyntaxKind::GroupedValue), 0);
 }

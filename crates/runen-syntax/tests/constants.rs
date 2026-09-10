@@ -82,7 +82,7 @@ fn f() -> I64 {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::QualifiedModuleMember), 5);
     assert_eq!(count(&parsed, SyntaxKind::IdentifierUse), 3);
-    assert_eq!(count(&parsed, SyntaxKind::DirectCall), 1);
+    assert_eq!(count(&parsed, SyntaxKind::Call), 1);
     assert_eq!(count(&parsed, SyntaxKind::RecordConstruction), 1);
 
     let mut value_uses = 0_usize;
@@ -99,7 +99,7 @@ fn f() -> I64 {
             .kind()
         {
             SyntaxKind::IdentifierUse => value_uses += 1,
-            SyntaxKind::DirectCall => call_targets += 1,
+            SyntaxKind::Call => call_targets += 1,
             SyntaxKind::RecordConstruction => construction_targets += 1,
             other => panic!("unexpected qualified-member parent {other:?}"),
         }

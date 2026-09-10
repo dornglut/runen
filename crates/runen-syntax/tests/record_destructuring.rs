@@ -86,7 +86,7 @@ fn f(root: Outer) {
     assert!(pattern.text().to_string().trim_start().starts_with("Outer"));
     assert!(!declaration.children().any(|child| matches!(
         child.kind(),
-        SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+        SyntaxKind::Call | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
     )));
 }
 
@@ -307,12 +307,12 @@ fn f(root: Pair, outer: Outer) {
 
     assert!(!declarations[0].children().any(|child| matches!(
         child.kind(),
-        SyntaxKind::DirectCall | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
+        SyntaxKind::Call | SyntaxKind::RecordConstruction | SyntaxKind::FieldValueUse
     )));
     assert!(
         declarations[1]
             .children()
-            .any(|child| child.kind() == SyntaxKind::DirectCall)
+            .any(|child| child.kind() == SyntaxKind::Call)
     );
     assert!(
         declarations[2]
@@ -326,7 +326,7 @@ fn f(root: Pair, outer: Outer) {
     );
     let qualified_call = declarations[4]
         .children()
-        .find(|child| child.kind() == SyntaxKind::DirectCall)
+        .find(|child| child.kind() == SyntaxKind::Call)
         .expect("qualified producer call");
     assert!(
         qualified_call
@@ -341,7 +341,7 @@ fn f(root: Pair, outer: Outer) {
     assert_eq!(
         call_field
             .children()
-            .filter(|child| child.kind() == SyntaxKind::DirectCall)
+            .filter(|child| child.kind() == SyntaxKind::Call)
             .count(),
         1
     );
