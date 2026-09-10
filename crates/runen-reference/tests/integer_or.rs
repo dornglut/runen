@@ -202,7 +202,7 @@ fn zero_is_identity_and_all_ones_is_absorbing_in_represented_domains() {
         ),
     ] {
         assert_eq!(
-            execute_integer_or(scalar, value.clone(), zero).result,
+            execute_integer_or(scalar.clone(), value.clone(), zero).result,
             Some(observed_value),
             "zero must be the OR identity"
         );

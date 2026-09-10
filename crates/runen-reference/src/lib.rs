@@ -1,7 +1,7 @@
 #![forbid(unsafe_code)]
 //! Executable reference semantics for validated Runen Core programs.
 
-use runen_core_ir::{BinaryFloatValue, LoanId, StorageRegion};
+use runen_core_ir::{BinaryFloatValue, FunctionId, LoanId, StorageRegion};
 
 /// Why a write occurred in verification instrumentation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -39,8 +39,9 @@ pub enum ObservedBinaryFloatValue {
 ///
 /// This is deliberately separate from `runen_core_ir::Value`: Core `Value` is the
 /// NaN-free fabricable constant carrier, while execution may produce a floating
-/// NaN-class value. Structural equality on this verification representation does
-/// not define Runen language equality, hashing, ABI identity, or physical layout.
+/// NaN-class value and dedicated function-value formation may produce a callable.
+/// Structural equality on this verification representation does not define Runen
+/// language equality, hashing, ABI identity, or physical layout.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ObservedValue {
     Bool(bool),
@@ -55,6 +56,9 @@ pub enum ObservedValue {
     F16(ObservedBinaryFloatValue),
     F32(ObservedBinaryFloatValue),
     F64(ObservedBinaryFloatValue),
+    /// Verification-only observation of the exact represented function entity.
+    /// This does not define Runen callable equality or expose a code address.
+    Function(FunctionId),
     /// Verification-only fixture identity whose destruction is visible in traces.
     TrackedFixture(u64),
     Struct(Vec<ObservedValue>),

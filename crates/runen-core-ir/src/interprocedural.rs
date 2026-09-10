@@ -1,8 +1,8 @@
 //! Canonical program-level Core MIR for the currently represented proving subset.
 
 use crate::{
-    BasicBlockId, Fault, FunctionId, LoanDecl, LocalDecl, LocalId, Operand, Place, Statement,
-    TypeId, TypeTable,
+    BasicBlockId, CallableInterface, Fault, FunctionId, LoanDecl, LocalDecl, LocalId, Operand,
+    Place, SafeReferenceResultContract, Statement, TypeId, TypeTable,
 };
 
 /// End of one program-level Core basic block.
@@ -16,6 +16,14 @@ pub enum Terminator {
     },
     Call {
         function: FunctionId,
+        arguments: Vec<Operand>,
+        destination: Option<Place>,
+        target: BasicBlockId,
+    },
+    /// Calls the function entity carried by `callee` under one exact callable type.
+    IndirectCall {
+        callable: TypeId,
+        callee: Operand,
         arguments: Vec<Operand>,
         destination: Option<Place>,
         target: BasicBlockId,
@@ -67,18 +75,6 @@ impl Body {
     }
 }
 
-/// Bounded callable contract for a scalar Shared-reference result.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SafeReferenceResultContract {
-    /// No special safe-reference result contract.
-    None,
-    /// Preserve the exact Shared authority and target transferred through `origin`.
-    SharedIdentity { origin: usize },
-    /// Return a direct complete-referent Shared child of the exclusive authority
-    /// transferred through `origin`.
-    SharedDirectChild { origin: usize },
-}
-
 /// One represented Core function entity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Function {
@@ -95,6 +91,21 @@ impl Function {
     pub fn parameter_type(&self, slot: usize) -> Option<TypeId> {
         let local = *self.parameters.get(slot)?;
         Some(self.body.local(local)?.ty)
+    }
+
+    /// Derives this function entity's exact representation-neutral callable interface.
+    #[must_use]
+    pub fn callable_interface(&self) -> Option<CallableInterface> {
+        let parameters = self
+            .parameters
+            .iter()
+            .map(|parameter| self.body.local(*parameter).map(|local| local.ty))
+            .collect::<Option<Vec<_>>>()?;
+        Some(CallableInterface {
+            parameters,
+            result: self.result,
+            safe_reference_result_contract: self.safe_reference_result_contract,
+        })
     }
 }
 

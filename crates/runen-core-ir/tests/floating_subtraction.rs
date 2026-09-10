@@ -42,15 +42,15 @@ fn float_sub_accepts_all_three_scalar_kinds_all_contracts_and_immutable_vacant_d
             NumericContract::Fast,
         ] {
             let mut types = TypeTable::new();
-            let ty = types.push(TypeDef::scalar(format!("float-{index}"), scalar));
+            let ty = types.push(TypeDef::scalar(format!("float-{index}"), scalar.clone()));
             let program = one_block(
                 types,
                 vec![LocalDecl::new("result", ty, false)],
                 vec![Statement::FloatSub {
                     contract,
                     dst: Place::local(LocalId(0)),
-                    left: Operand::Constant(zero_value(scalar)),
-                    right: Operand::Constant(zero_value(scalar)),
+                    left: Operand::Constant(zero_value(scalar.clone())),
+                    right: Operand::Constant(zero_value(scalar.clone())),
                 }],
             );
             validate_program(program)

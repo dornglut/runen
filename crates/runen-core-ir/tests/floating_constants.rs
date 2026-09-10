@@ -4,9 +4,9 @@ use runen_core_ir::{
     ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 
-fn program_initializing(scalar: ScalarType, value: Value) -> Program {
+fn program_initializing(scalar: &ScalarType, value: Value) -> Program {
     let mut types = TypeTable::new();
-    let ty = types.push(TypeDef::scalar("scalar", scalar));
+    let ty = types.push(TypeDef::scalar("scalar", scalar.clone()));
     Program {
         types,
         functions: vec![Function {
@@ -30,7 +30,7 @@ fn program_initializing(scalar: ScalarType, value: Value) -> Program {
     }
 }
 
-fn wrapped(scalar: ScalarType, value: BinaryFloatValue) -> Value {
+fn wrapped(scalar: &ScalarType, value: BinaryFloatValue) -> Value {
     match scalar {
         ScalarType::F16 => Value::F16(value),
         ScalarType::F32 => Value::F32(value),
@@ -39,12 +39,12 @@ fn wrapped(scalar: ScalarType, value: BinaryFloatValue) -> Value {
     }
 }
 
-fn assert_valid(scalar: ScalarType, value: BinaryFloatValue) {
+fn assert_valid(scalar: &ScalarType, value: BinaryFloatValue) {
     validate_program(program_initializing(scalar, wrapped(scalar, value)))
         .expect("matching semantic floating constant must validate");
 }
 
-fn assert_invalid(scalar: ScalarType, value: BinaryFloatValue) {
+fn assert_invalid(scalar: &ScalarType, value: BinaryFloatValue) {
     let error = validate_program(program_initializing(scalar, wrapped(scalar, value)))
         .expect_err("malformed semantic floating constant must be rejected");
     assert_eq!(
@@ -63,18 +63,18 @@ fn signed_zero_and_infinity_validate_and_remain_distinct() {
         let positive_infinity = BinaryFloatValue::Infinity(BinaryFloatSign::Positive);
         let negative_infinity = BinaryFloatValue::Infinity(BinaryFloatSign::Negative);
 
-        assert_valid(scalar, positive_zero);
-        assert_valid(scalar, negative_zero);
-        assert_valid(scalar, positive_infinity);
-        assert_valid(scalar, negative_infinity);
+        assert_valid(&scalar, positive_zero);
+        assert_valid(&scalar, negative_zero);
+        assert_valid(&scalar, positive_infinity);
+        assert_valid(&scalar, negative_infinity);
 
         assert_ne!(
-            wrapped(scalar, positive_zero),
-            wrapped(scalar, negative_zero)
+            wrapped(&scalar, positive_zero),
+            wrapped(&scalar, negative_zero)
         );
         assert_ne!(
-            wrapped(scalar, positive_infinity),
-            wrapped(scalar, negative_infinity)
+            wrapped(&scalar, positive_infinity),
+            wrapped(&scalar, negative_infinity)
         );
     }
 }
@@ -112,7 +112,7 @@ fn exact_floating_format_boundaries_validate() {
                 exponent: emax,
             },
         ] {
-            assert_valid(scalar, value);
+            assert_valid(&scalar, value);
         }
     }
 }
@@ -159,7 +159,7 @@ fn malformed_floating_payloads_reject_at_existing_type_boundary() {
                 exponent: emax + 1,
             },
         ] {
-            assert_invalid(scalar, value);
+            assert_invalid(&scalar, value);
         }
     }
 }
@@ -177,7 +177,7 @@ fn floating_constant_matching_is_exact_across_formats() {
     ];
 
     for (scalar, value) in cases {
-        let error = validate_program(program_initializing(scalar, value))
+        let error = validate_program(program_initializing(&scalar, value))
             .expect_err("valid payload in the wrong format wrapper must be rejected");
         assert_eq!(
             error.kind,

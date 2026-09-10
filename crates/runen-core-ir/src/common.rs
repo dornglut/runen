@@ -81,8 +81,46 @@ impl ReferencePermission {
     }
 }
 
-/// Scalar or leaf kinds represented by the Core proving kernel.
+/// Bounded callable contract for a scalar Shared-reference result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SafeReferenceResultContract {
+    /// No special safe-reference result contract.
+    None,
+    /// Preserve the exact Shared authority and target transferred through `origin`.
+    SharedIdentity { origin: usize },
+    /// Return a direct complete-referent Shared child of the exclusive authority
+    /// transferred through `origin`.
+    SharedDirectChild { origin: usize },
+}
+
+/// Exact representation-neutral callable interface carried by a Core callable type.
+///
+/// Parameter/result type references are semantic signature edges rather than structural
+/// containment edges. Equal interfaces do not imply equal [`TypeId`] identity.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CallableInterface {
+    pub parameters: Vec<TypeId>,
+    pub result: Option<TypeId>,
+    pub safe_reference_result_contract: SafeReferenceResultContract,
+}
+
+impl CallableInterface {
+    #[must_use]
+    pub fn new(
+        parameters: Vec<TypeId>,
+        result: Option<TypeId>,
+        safe_reference_result_contract: SafeReferenceResultContract,
+    ) -> Self {
+        Self {
+            parameters,
+            result,
+            safe_reference_result_contract,
+        }
+    }
+}
+
+/// Scalar or leaf kinds represented by the Core proving kernel.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScalarType {
     Bool,
     I8,
@@ -110,6 +148,11 @@ pub enum ScalarType {
         referent: TypeId,
         permission: ReferencePermission,
     },
+    /// Captureless first-class callable value under one exact semantic interface.
+    ///
+    /// Interface type references are semantic signature edges rather than structural
+    /// containment edges.
+    Callable(CallableInterface),
     /// Verification-only non-copy scalar used to make destruction observable to tests.
     /// This is not a Runen language scalar primitive.
     TrackedFixture,
@@ -226,6 +269,11 @@ impl TypeDef {
     }
 
     #[must_use]
+    pub fn callable(name: impl Into<String>, interface: CallableInterface) -> Self {
+        Self::scalar(name, ScalarType::Callable(interface))
+    }
+
+    #[must_use]
     pub fn structure(name: impl Into<String>, fields: Vec<Field>) -> Self {
         Self {
             name: name.into(),
@@ -303,6 +351,14 @@ impl TypeTable {
     }
 
     #[must_use]
+    pub fn callable(&self, ty: TypeId) -> Option<&CallableInterface> {
+        match &self.get(ty)?.kind {
+            TypeKind::Scalar(ScalarType::Callable(interface)) => Some(interface),
+            TypeKind::Scalar(_) | TypeKind::Struct(_) => None,
+        }
+    }
+
+    #[must_use]
     pub fn reference_type_id(
         &self,
         referent: TypeId,
@@ -338,6 +394,7 @@ impl TypeTable {
                 | ScalarType::F32
                 | ScalarType::F64
                 | ScalarType::RawPointer(_)
+                | ScalarType::Callable(_)
                 | ScalarType::Reference {
                     permission: ReferencePermission::Shared,
                     ..
@@ -416,9 +473,9 @@ impl TypeTable {
 
     /// Checks whether a MIR constant has the declared structural type.
     ///
-    /// Non-null raw pointers and safe references are intentionally absent from [`Value`] and
-    /// therefore cannot be fabricated as constants. They are initially formed by their
-    /// dedicated dynamic-storage operations and may then be transported by ordinary moves.
+    /// Non-null raw pointers, safe references, and callable values are intentionally absent from
+    /// [`Value`] and therefore cannot be fabricated as ordinary constants. They are formed by
+    /// their dedicated semantic producers and may then be transported by ordinary moves.
     #[must_use]
     pub fn value_matches(&self, ty: TypeId, value: &Value) -> bool {
         let Some(def) = self.get(ty) else {
@@ -452,9 +509,14 @@ impl TypeTable {
                         .zip(values)
                         .all(|(field, value)| self.value_matches(field.ty, value))
             }
-            (TypeKind::Scalar(ScalarType::RawPointer(_) | ScalarType::Reference { .. }), _) => {
-                false
-            }
+            (
+                TypeKind::Scalar(
+                    ScalarType::RawPointer(_)
+                    | ScalarType::Reference { .. }
+                    | ScalarType::Callable(_),
+                ),
+                _,
+            ) => false,
             _ => false,
         }
     }
@@ -463,7 +525,8 @@ impl TypeTable {
 /// Constant value representation used by Core proving MIR and verification fixtures.
 ///
 /// Dynamic raw-pointer and safe-reference values are deliberately not represented here because
-/// their storage/authority identity exists only during execution.
+/// their storage/authority identity exists only during execution. Callable values are likewise
+/// formed through the dedicated function-value operand because their validity is program-relative.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Value {
     Bool(bool),
@@ -654,6 +717,8 @@ impl LocalDecl {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operand {
     Constant(Value),
+    /// Forms one captureless callable value naming an existing same-program function entity.
+    FunctionValue(FunctionId),
     /// Ownership transfer. The source stored-value lifetime ends.
     Move(PlaceAccess),
     /// Unsafe ownership transfer through a stored raw-pointer value.

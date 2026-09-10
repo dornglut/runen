@@ -110,6 +110,7 @@ enum RuntimeValue {
     F16(RuntimeFloatValue),
     F32(RuntimeFloatValue),
     F64(RuntimeFloatValue),
+    Function(FunctionId),
     RawPointer(RawPointerValue),
     SafeReference(SafeReferenceValue),
     TrackedFixture(u64),
@@ -368,6 +369,7 @@ impl RuntimeValue {
             Self::F16(value) => ObservedValue::F16(value.into_observed()),
             Self::F32(value) => ObservedValue::F32(value.into_observed()),
             Self::F64(value) => ObservedValue::F64(value.into_observed()),
+            Self::Function(function) => ObservedValue::Function(function),
             Self::TrackedFixture(value) => ObservedValue::TrackedFixture(value),
             Self::Struct(values) => {
                 ObservedValue::Struct(values.into_iter().map(Self::into_observed_value).collect())
@@ -555,27 +557,42 @@ impl Machine {
                     destination,
                     target,
                 } => {
-                    let mut values = Vec::with_capacity(arguments.len());
-                    for argument in &arguments {
-                        match self.evaluate_operand(frame_index, argument) {
-                            Ok(value) => values.push(value),
-                            Err(kind) => {
-                                return Err(UndefinedBehavior {
-                                    kind,
-                                    verification_events: self.verification_events,
-                                });
-                            }
-                        }
+                    if let Err(kind) =
+                        self.start_call(frame_index, function, &arguments, destination, target)
+                    {
+                        return Err(UndefinedBehavior {
+                            kind,
+                            verification_events: self.verification_events,
+                        });
                     }
-                    let callee = self.create_frame(
-                        function,
-                        values,
-                        Some(Continuation {
-                            destination,
-                            target,
-                        }),
-                    );
-                    self.frames.push(callee);
+                }
+                Terminator::IndirectCall {
+                    callable: _,
+                    callee,
+                    arguments,
+                    destination,
+                    target,
+                } => {
+                    let function = match self.evaluate_operand(frame_index, &callee) {
+                        Ok(RuntimeValue::Function(function)) => function,
+                        Ok(_) => unreachable!(
+                            "validated indirect call callee has its exact callable type"
+                        ),
+                        Err(kind) => {
+                            return Err(UndefinedBehavior {
+                                kind,
+                                verification_events: self.verification_events,
+                            });
+                        }
+                    };
+                    if let Err(kind) =
+                        self.start_call(frame_index, function, &arguments, destination, target)
+                    {
+                        return Err(UndefinedBehavior {
+                            kind,
+                            verification_events: self.verification_events,
+                        });
+                    }
                 }
                 Terminator::Return(result) => {
                     let result = if let Some(operand) = &result {
@@ -650,6 +667,30 @@ impl Machine {
                 }
             }
         }
+    }
+
+    fn start_call(
+        &mut self,
+        frame_index: usize,
+        function: FunctionId,
+        arguments: &[Operand],
+        destination: Option<Place>,
+        target: BasicBlockId,
+    ) -> Result<(), UndefinedBehaviorKind> {
+        let mut values = Vec::with_capacity(arguments.len());
+        for argument in arguments {
+            values.push(self.evaluate_operand(frame_index, argument)?);
+        }
+        let callee = self.create_frame(
+            function,
+            values,
+            Some(Continuation {
+                destination,
+                target,
+            }),
+        );
+        self.frames.push(callee);
+        Ok(())
     }
 
     fn create_frame(
@@ -1161,6 +1202,7 @@ impl Machine {
     ) -> Result<RuntimeValue, UndefinedBehaviorKind> {
         match operand {
             Operand::Constant(value) => Ok(RuntimeValue::from_constant(value)),
+            Operand::FunctionValue(function) => Ok(RuntimeValue::Function(*function)),
             Operand::Move(src) => {
                 let src = self.resolve_access(frame_index, src);
                 let src_ty = self.place_type(frame_index, &src);
@@ -1712,6 +1754,11 @@ fn write_value(types: &TypeTable, ty: TypeId, state: &mut ObjectState, value: Ru
         (TypeKind::Scalar(ScalarType::F64), ObjectState::Leaf(leaf), RuntimeValue::F64(value)) => {
             *leaf = LeafState::Live(RuntimeValue::F64(value));
         }
+        (
+            TypeKind::Scalar(ScalarType::Callable(_)),
+            ObjectState::Leaf(leaf),
+            RuntimeValue::Function(function),
+        ) => *leaf = LeafState::Live(RuntimeValue::Function(function)),
         (
             TypeKind::Scalar(ScalarType::RawPointer(_)),
             ObjectState::Leaf(leaf),
