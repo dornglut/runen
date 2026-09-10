@@ -1,0 +1,121 @@
+name: Temporary P0-D 676 semantic cleanup
+
+on:
+  push:
+    branches:
+      - p0d-676-source-function-values-spec
+    paths:
+      - .github/workflows/p0d-676-semantic-cleanup.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-676-source-function-values-spec
+      - name: Apply exact semantic cleanup
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+
+          def edit(path, replacements):
+              p = Path(path)
+              s = p.read_text()
+              for label, old, new in replacements:
+                  count = s.count(old)
+                  if count != 1:
+                      raise SystemExit(f"{path} / {label}: expected one match, found {count}")
+                  s = s.replace(old, new, 1)
+              p.write_text(s)
+
+          edit("spec/language/source/concrete-syntax.md", [
+              ("execution dependency",
+               "from [Source patterns](patterns.md); direct-call, represented operator operand validation/evaluation,",
+               "from [Source patterns](patterns.md); source-call, represented operator operand validation/evaluation,"),
+              ("conditional qualified atom",
+               "A bare `QualifiedModuleMember` in `ConditionalValueAtom` is the qualified branch of the bounded `ConstReference` relation below and is source-valid as a constant only when qualified lookup selects an exported constant; under an exact required function-value type it may instead form an exported non-generic function value through `function-values.md`. The same two-part token shape followed by an ordinary call argument list (and optional direct-call generic argument list) remains a `Call`, and followed by a record-construction body remains a `RecordConstruction` where that production is admitted. This conditional atom does not create a general qualified value/path/member category.",
+               "A bare `QualifiedModuleMember` in `ConditionalValueAtom` is the qualified branch of the bounded `ConstReference` relation below and is source-valid only when qualified lookup selects an exported constant. The direct conditional position requires `Bool` rather than a function-value type, so bare qualified function-value formation is not selected there. The same two-part token shape followed by an ordinary call argument list (and optional direct-call generic argument list) remains a `Call`, and followed by a record-construction body remains a `RecordConstruction` where that production is admitted. A function value may still be formed in an ordinary `Value` nested inside an admitted call argument or another ordinary receiving position that supplies an exact function-value type. This conditional atom does not create a general qualified value/path/member category."),
+              ("conditional call semantics",
+               "A `Call` conditional atom retains both represented target categories and inherits the optional explicit generic type-argument list from the `Call` production below, so forms such as `pred(value)`, `dep::pred(value)`, `pred[I64] (value)`, and `dep::pred[I64] (value)` remain one call category when their semantic generic/non-generic requirements hold. A `FieldValueUse` may use either its binding-root or bounded producer-backed receiver grammar. An unqualified `IdentifierUse` may denote an active local or, only after local lookup fails, a same-module constant. A bare `QualifiedModuleMember` conditional atom may denote only an exported constant under the new constant-reference category. All lookup, constant, generic application, receiver-transient, operator-operand, grouping-transparency, and producer rules remain owned by their existing semantic owners. Because direct-call arguments are ordinary `Value`s,",
+               "A `Call` conditional atom retains the neutral call spelling from the `Call` production below. An unqualified target may therefore select either a bounded indirect call through a function-value local/parameter or, only when no local resolves, the existing direct module-function call; qualified calls remain direct. Optional explicit generic type arguments remain valid only for the direct generic-call relation, so forms such as `pred(value)`, `dep::pred(value)`, `pred[I64] (value)`, and `dep::pred[I64] (value)` remain represented when their semantic target/generic requirements hold. A `FieldValueUse` may use either its binding-root or bounded producer-backed receiver grammar. An unqualified `IdentifierUse` may denote an active local or, only after local lookup fails, a same-module constant. A bare `QualifiedModuleMember` conditional atom may denote only an exported constant under the constant-reference category. All lookup, function-value, constant, generic application, receiver-transient, operator-operand, grouping-transparency, and producer rules remain owned by their existing semantic owners. Because call arguments are ordinary `Value`s,"),
+              ("pattern producer call",
+               "The producer-backed alternatives reuse their existing concrete forms. A direct call may be unqualified or qualified and may carry its optional explicit generic type-argument list according to `Call`; semantic generic/non-generic list presence, substitution, and marker-obligation validation remain owned by `generics.md`. A record construction may use its represented unqualified same-module target or qualified `alias::Record` target and remains named-field/exhaustive. Field-value use may be binding-rooted or use the bounded direct-call/record-construction producer receiver defined below. Pattern rest does not authorize constructor field omission, update, or spread.",
+               "The producer-backed alternatives reuse their existing concrete forms. A `Call` may be a bounded indirect call through one unqualified function-value local/parameter or an existing direct call; only a direct generic-function target may carry the optional explicit generic type-argument list, whose presence, substitution, and marker-obligation validation remain owned by `generics.md`. A record construction may use its represented unqualified same-module target or qualified `alias::Record` target and remains named-field/exhaustive. Field-value use may be binding-rooted or use the bounded call/record-construction producer receiver defined below. Pattern rest does not authorize constructor field omission, update, or spread."),
+              ("generic argument source order",
+               "Argument source order is the direct-call ordinary argument order consumed by `function-execution.md`. A trailing comma is permitted. For a valid generic target, the exact instantiated ordinary parameter types supplied by `generics.md` are the required types used by the unchanged direct-call argument relation.",
+               "Argument source order is the common source-call ordinary argument order consumed by `function-execution.md`. A trailing comma is permitted. For a valid generic direct target, the exact instantiated ordinary parameter types supplied by `generics.md` are the required types used by that same common argument relation."),
+              ("result-bearing calls",
+               "A result-bearing direct call uses the same `Call` grammar regardless of whether its callable result is ordinary, abstract before substitution, or the bounded contract-bearing `SharedReferenceType`. For a generic call, `generics.md` first validates its marker obligations and supplies the exact instantiated result type expression; the callable signature and existing result contract then determine the produced result. `references.md` and `function-execution.md` own the exact identity or direct-parent/target relation, caller-side result provenance, normal restoration, and cleanup consequences. Replacement-capable and raw-pointer result types remain rejected by `callables.md`; no call-site lifetime argument, result-contract selector, result-origin selector, implicit reborrow marker, raw-pointer escape selector, marker-witness argument, or alternate result syntax is introduced.",
+               "A result-bearing `Call` uses the same grammar for both represented target-selection forms. A direct call obtains its result from the resolved and, when generic, instantiated target callable signature; `generics.md` first validates marker obligations and supplies any exact instantiated result type expression. A bounded indirect call instead obtains its exact result type and safe-reference result contract from the selected function-value local/parameter type and admits no generic type-argument list. `references.md` and `function-execution.md` then own the common exact identity or direct-parent/target relation, caller-side result provenance, normal restoration, and cleanup consequences. Replacement-capable and raw-pointer result types remain rejected by `callables.md`; no call-site lifetime argument, result-contract selector, result-origin selector, implicit reborrow marker, raw-pointer escape selector, marker-witness argument, or alternate result syntax is introduced."),
+              ("generic list production",
+               "The bracketed type-argument list is part of this direct-call production rather than a general postfix.",
+               "The bracketed type-argument list is represented only inside the neutral `Call` grammar and is semantically admitted only by the existing direct generic-call relation; it is not a general postfix."),
+              ("call statement result",
+               "A result-bearing direct call cannot be used as a statement under this grammar because this subset defines no arbitrary produced-value discard relation.",
+               "A result-bearing `Call`, direct or bounded indirect, cannot be used as a statement under this grammar because this subset defines no arbitrary produced-value discard relation."),
+              ("qualified construction disambiguation",
+               "and bare `alias::member` in an ordinary/conditional value atom is a qualified constant-reference candidate.",
+               "and bare `alias::member` in an ordinary value atom is a qualified constant-or-context-typed-function-value candidate, while the direct conditional atom remains constant-only."),
+              ("field receiver bare call",
+               "- a bare `Call` remains the existing direct-call producer; and",
+               "- a bare result-bearing `Call` remains the existing call producer; and"),
+              ("field receiver qualified candidate",
+               "A qualified bare module member does not become a field receiver merely by being a constant reference.",
+               "A qualified bare module member does not become a field receiver merely by being a constant reference or a context-typed function-value candidate."),
+              ("value atom mapping",
+               "The non-wrapper `ValueAtom` alternatives consist of the pre-existing literal/identifier/call/construction/field-value producers, the new qualified constant-reference shape plus the bounded local-first unqualified constant interpretation of `IdentifierUse`,",
+               "The non-wrapper `ValueAtom` alternatives consist of the pre-existing literal/identifier/call/construction/field-value producers, the qualified constant-reference shape plus the bounded local-first unqualified constant interpretation of `IdentifierUse`, and the context-typed non-generic function-value formation relation from `function-values.md` over the same bare/qualified identifier token shapes when an exact function-value type is required,"),
+              ("call as value",
+               "A `Call` may be used as a `Value` only when its resolved and, for a generic call, marker-validated/instantiated callable signature specifies one result value. The successful call result is the owned value produced by `function-execution.md`, with `generics.md` supplying the exact instantiated result type for a generic target before ordinary call execution. When that result is the bounded contract-bearing `SharedReferenceType`, the same concrete call produces the Shared-reference result summarized by the callee's advertised safe-reference result contract. `SharedIdentity` preserves the designated incoming Shared authority and caller provenance; `SharedDirectChild` exposes the already-preserved Shared direct child of the designated replacement-capable authority under the exact caller-summary ordering owned by `references.md` and `function-execution.md`. The concrete call form itself creates no alternate result syntax or call-site reborrow. `ReplacementReferenceType` and `RawPointerType` results are semantically rejected and therefore no direct call produces either value in this slice. The same result-bearing concrete call form may also appear as the receiver of a `ProducerFieldValueUse` or in the dedicated producer-backed record-pattern scrutinee position when its result type satisfies those independently owned categories. Grouping or selecting a call for an ordinary receiving position does not create an indirect/grouped call target or widen either dedicated category; a selector whose root is the call is source-invalid because direct call is not a currently governed numeric operation.",
+               "A `Call` may be used as a `Value` only when its statically established callable interface specifies one result value. For a direct generic target, `generics.md` first supplies the marker-validated instantiated result type; for a bounded indirect target, the selected function-value local/parameter type supplies the exact result type and result contract before callee evaluation. The successful result is then the owned value produced by the common call execution relation in `function-execution.md`. When that result is the bounded contract-bearing `SharedReferenceType`, `SharedIdentity` preserves the designated incoming Shared authority and caller provenance while `SharedDirectChild` exposes the valid Shared direct child of the designated replacement-capable authority under the exact caller-summary ordering owned by `references.md` and `function-execution.md`. The concrete call form itself creates no alternate result syntax or call-site reborrow. `ReplacementReferenceType` and `RawPointerType` results are semantically rejected and therefore no represented source call produces either value in this slice. The same result-bearing call form may also appear as the receiver of a `ProducerFieldValueUse` or in the dedicated producer-backed record-pattern scrutinee position when its result type satisfies those independently owned categories. Grouping or selecting a call for an ordinary receiving position does not create a grouped/arbitrary-expression call target or widen either dedicated category; a numeric-contract selector whose root is the call is source-invalid because a call is not a currently governed numeric operation."),
+              ("arbitrary receiver exclusion",
+               "arbitrary-receiver member/postfix access beyond the explicit binding-root/direct-call/record-construction field-value forms",
+               "arbitrary-receiver member/postfix access beyond the explicit binding-root/call/record-construction field-value forms"),
+          ])
+
+          edit("spec/language/source/function-execution.md", [
+              ("intro fault propagation",
+               "bounded-loop body execution/cleanup sequencing, recursion/divergence, and defined-fault propagation through direct source calls.",
+               "bounded-loop body execution/cleanup sequencing, recursion/divergence, and defined-fault propagation through represented source calls."),
+              ("shared result relation",
+               "transferred to the caller under the direct-call result relation below.",
+               "transferred to the caller under the source-call result relation below."),
+              ("result boundary",
+               "so neither replacement-capable reference carriers nor raw-pointer provenance can cross a direct-call return boundary as results.",
+               "so neither replacement-capable reference carriers nor raw-pointer provenance can cross a represented source-call return boundary as results."),
+              ("divergent result",
+               "If the callee diverges, the caller remains suspended at the call; no direct-call result value, result carrier, provenance, direct-child result relation, receiving-position initialization, restoration, or synthetic cleanup is produced merely because execution continues.",
+               "If the callee diverges, the caller remains suspended at the call; no source-call result value, result carrier, provenance, direct-child result relation, receiving-position initialization, restoration, or synthetic cleanup is produced merely because execution continues."),
+              ("raw/function cleanup separation",
+               "For a raw-pointer value, cleaning ends only ownership of that pointer value and any non-observable source provenance retained with it. It does not read, move, mutate, destroy, restore, retarget, or otherwise affect the pointee and creates/ends no safe authority.\n\nFor a captureless function value, cleaning ends only ownership of that function value. It does not call the target, end or create an activation, release an environment, observe an address, or perform another function-specific cleanup action. The same rule applies to the bounded-indirect callee transient when target selection or an abnormal pre-activation path ends its ownership. A raw-pointer local's stored origin therefore ceases to matter when that pointer value's binding ownership ends; no pointee cleanup is induced.",
+               "For a raw-pointer value, cleaning ends only ownership of that pointer value and any non-observable source provenance retained with it. It does not read, move, mutate, destroy, restore, retarget, or otherwise affect the pointee and creates/ends no safe authority. A raw-pointer local's stored origin therefore ceases to matter when that pointer value's binding ownership ends; no pointee cleanup is induced.\n\nFor a captureless function value, cleaning ends only ownership of that function value. It does not call the target, end or create an activation, release an environment, observe an address, or perform another function-specific cleanup action. The same rule applies to the bounded-indirect callee transient when target selection or an abnormal pre-activation path ends its ownership."),
+          ])
+
+          edit("spec/language/source/local-bindings.md", [
+              ("execution dependency",
+               "Represented source body attachment, dynamic activations, direct calls, owned argument/result transfer including safe-reference carriers and replacement-capable external referents,",
+               "Represented source body attachment, dynamic activations, direct and bounded indirect calls, owned argument/result transfer including safe-reference carriers and replacement-capable external referents,"),
+          ])
+
+          # Only the three normative files above may change in this cleanup.
+          changed = set(subprocess.check_output(["git", "diff", "--name-only"]).decode().splitlines())
+          expected = {
+              "spec/language/source/concrete-syntax.md",
+              "spec/language/source/function-execution.md",
+              "spec/language/source/local-bindings.md",
+          }
+          if changed != expected:
+              raise SystemExit(f"unexpected changed files: {sorted(changed)}")
+      - name: Commit normative cleanup only
+        run: |
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git add spec/language/source/concrete-syntax.md spec/language/source/function-execution.md spec/language/source/local-bindings.md
+          git diff --cached --check
+          git commit -m "spec: resolve source callable integration contradictions"
+          git push origin HEAD:p0d-676-source-function-values-spec
