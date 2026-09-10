@@ -1,0 +1,28 @@
+name: Temporary P0-D 678 HIR audit
+
+on:
+  push:
+    branches:
+      - p0d-678-source-function-values-impl
+    paths:
+      - crates/runen-hir/**
+      - .github/workflows/p0d-678-hir-audit.yml
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out implementation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: p0d-678-source-function-values-impl
+          fetch-depth: 1
+      - name: Check formatting
+        run: cargo +stable fmt --all -- --check
+      - name: Test HIR crate
+        run: cargo +stable test -p runen-hir
+      - name: Clippy HIR all targets
+        run: cargo +stable clippy -p runen-hir --all-targets -- -D warnings
