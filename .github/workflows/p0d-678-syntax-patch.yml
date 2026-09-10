@@ -6,6 +6,7 @@ on:
       - p0d-678-source-function-values-impl
     paths:
       - .github/scripts/p0d_678_syntax_patch.py
+      - .github/scripts/p0d_678_syntax_nested_fn_fix.py
       - .github/workflows/p0d-678-syntax-patch.yml
 
 permissions:
@@ -21,7 +22,9 @@ jobs:
           ref: p0d-678-source-function-values-impl
           fetch-depth: 1
       - name: Apply bounded syntax patch
-        run: python .github/scripts/p0d_678_syntax_patch.py
+        run: |
+          python .github/scripts/p0d_678_syntax_patch.py
+          python .github/scripts/p0d_678_syntax_nested_fn_fix.py
       - name: Format affected Rust code
         run: cargo +stable fmt --all
       - name: Test syntax crate
