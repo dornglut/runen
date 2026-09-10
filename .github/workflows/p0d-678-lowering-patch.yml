@@ -19,6 +19,28 @@ jobs:
         with:
           ref: p0d-678-source-function-values-impl
           fetch-depth: 1
+      - name: Correct nested-callable conformance assertion
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('crates/runen-core-lowering/tests/function_values.rs')
+          s = p.read_text()
+          old = '''    assert_eq!(outer.result, Some(
+                  function(program, "higher")
+                      .result
+                      .expect("higher callable parameter's interface returns I64")
+              ));
+          '''
+          new = '''    let inner = &callables
+                  .iter()
+                  .find(|(id, _)| *id == inner_id)
+                  .expect("nested callable mapping exists")
+                  .1;
+              assert_eq!(outer.result, inner.result);
+          '''
+          assert s.count(old) == 1, f'nested callable assertion matches: {s.count(old)}'
+          p.write_text(s.replace(old, new, 1))
+          PY
       - name: Format focused conformance
         run: cargo +stable fmt --all
       - name: Focused function-value lowering/reference conformance
@@ -33,15 +55,12 @@ jobs:
         run: cargo +stable test -p runen-hir
       - name: HIR Clippy all targets
         run: cargo +stable clippy -p runen-hir --all-targets -- -D warnings
-      - name: Commit rustfmt-only conformance changes
+      - name: Commit focused conformance corrections
         run: |
           set -euo pipefail
           git config user.name "Aschenrot"
           git config user.email "128308156+aschenrot@users.noreply.github.com"
           git add crates/runen-core-lowering/tests/function_values.rs crates/runen-hir/tests/function_value_edges.rs
-          if git diff --cached --quiet; then
-            echo "No rustfmt changes needed"
-            exit 0
-          fi
-          git commit -m "P0-D: format function-value conformance"
+          git diff --cached --quiet && { echo "No conformance changes produced" >&2; exit 1; }
+          git commit -m "P0-D: complete function-value conformance"
           git push origin HEAD:p0d-678-source-function-values-impl
