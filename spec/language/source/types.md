@@ -47,7 +47,7 @@ The represented source type set additionally contains the bounded safe-reference
 - `SharedRef(T)`, concretely `&T`; and
 - `ExclusiveReplaceRef(T)`, concretely `&mut T`.
 
-`SharedRef(T)` exists only when `T` satisfies the Shared-referent-admission relation from `references.md`: `T` is represented, source-duplicable, and its structural source value shape contains neither safe references nor raw pointers.
+`SharedRef(T)` exists only when `T` satisfies the Shared-referent-admission relation from `references.md`: `T` is one represented intrinsic scalar or nominal record source type, is source-duplicable, and its structural source value shape contains neither safe references nor raw pointers. Captureless function-value types are therefore not Shared referents in this slice even though they are duplicable.
 
 `ExclusiveReplaceRef(T)` exists only when `T` satisfies the replacement-reference-referent-admission relation from `references.md`: `T` is one represented intrinsic scalar or nominal record type, and its structural source value shape contains neither safe references nor raw pointers. The referent may be duplicable or non-duplicable.
 
