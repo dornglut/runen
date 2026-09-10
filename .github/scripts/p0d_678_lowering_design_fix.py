@@ -30,14 +30,10 @@ old = "s = once(s, '    fn get(&self, ty: hir::Type) -> Result<core::TypeId, Low
 new = "get_anchor = '''    fn get(&self, ty: hir::Type) -> Result<core::TypeId, LoweringError> {\n        self.mapped\n'''\ns = once(s, get_anchor, insert + get_anchor, 'function type lowering helpers')"
 once(old, new, 'TypeMap helper anchor')
 
-# Replace the earlier all-table safe-reference scan with a root collector plus recursive closure.
-old_block = '''# Function-type safe references may only occur nested inside the canonical table; collect them up front.
-s = once(s,
-''' + "'''    for function in &compilation.functions {\n'''" + ''',
-''' + "'''    for function_type in &compilation.function_types {\n        for ty in function_type.parameters.iter().chain(function_type.result.iter()) {\n            if let hir::Type::SafeReference {\n                referent,\n                permission,\n            } = ty\n            {\n                references.insert((*referent, *permission));\n            }\n        }\n    }\n    for function in &compilation.functions {\n'''" + ''', 'nested callable safe-reference collection')
-
-'''
-new_block = r'''# Discover only function-value types that are actually present in source/HIR type positions,
+# Replace the earlier all-table callable-reference scan with usage-root discovery plus nested closure.
+ref_start = text.index('# Function-type safe references may only occur nested inside the canonical table; collect them up front.\n')
+ref_end = text.index('# Statement call lowering uses the shared target relation.', ref_start)
+new_block = r"""# Discover only function-value types actually present in source/HIR type positions,
 # then close transitively over nested canonical callable components. This preserves the
 # existing direct-call Core type table when the feature is unused.
 collector_anchor = '''fn collect_used_safe_reference_types(
@@ -147,8 +143,8 @@ fn collect_used_safe_reference_types(
 '''
 s = once(s, collector_anchor, collector, 'used callable roots and callable safe-reference components')
 
-'''
-once(old_block, new_block, 'replace all-table callable reference scan')
+"""
+text = text[:ref_start] + new_block + text[ref_end:]
 
 path.write_text(text)
 print('rewrote #678 lowering patch to usage-driven callable mapping with no new HIR enumeration API')
