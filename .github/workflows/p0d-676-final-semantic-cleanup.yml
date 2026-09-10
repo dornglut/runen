@@ -27,6 +27,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          sed -i 's/the accepted Core/The accepted Core/g' .github/scripts/p0d_676_final_cleanup.py
           python3 .github/scripts/p0d_676_final_cleanup.py
           git diff --check
       - name: Commit normative cleanup
