@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source-semantic relation for structural owned-value roots, structural source paths, structural ownership state, path availability, consuming and non-consuming path-use requirements, structural root replacement reset, bounded structural subpath installation/replacement/reinitialization state, and deterministic remaining-ownership frontiers.
 
-It consumes represented concrete source type identity, nominal record identity, record field identity and source structural field order from [Source type foundation](types.md), plus the first function-local abstract type-parameter type-expression and capability boundary from [Source generics](generics.md). It does not redefine those owners.
+It consumes represented concrete source type identity, nominal record identity, record field identity and source structural field order from [Source type foundation](types.md), the first function-local abstract type-parameter type-expression and capability boundary from [Source generics](generics.md), and opaque closure-site root identity/path opacity from [Source closures and explicit by-value capture](closures.md). It does not redefine those owners.
 
-[Source function-local bindings](local-bindings.md) instantiates this relation for each represented parameter/local binding and owns binding identity, lexical scope, lookup, assignment mutability, declaration lifecycle, ordinary whole-binding owned-value use, whole-binding and bounded binding-root field assignment legality, and binding reset points. [Source safe references](references.md) instantiates this relation for each replacement-capable parameter's non-binding external referent root and owns the reference operations that consume or restore that root. [Source field-value access](field-access.md) consumes this relation for binding-rooted selected paths and for the structural ownership state/frontier of a producer-backed field-receiver transient. [Source patterns](patterns.md) consumes this relation for direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding, external-referent replacement, bounded binding-root field replacement, or transient ownership ends. [Source control flow](control-flow.md) consumes complete binding and external-referent structural ownership states to establish definite represented conditional successors and bounded-loop transfer/backedge states.
+[Source function-local bindings](local-bindings.md) instantiates this relation for each represented source-function parameter/local/pattern binding and for each represented dedicated closure binding or closure-activation capture binding, and owns binding identity, lexical scope, lookup, assignment mutability, declaration/activation lifecycle, ordinary whole-binding owned-value use, whole-binding and bounded binding-root field assignment legality, and binding reset points. [Source safe references](references.md) instantiates this relation for each replacement-capable parameter's non-binding external referent root and owns the reference operations that consume or restore that root. [Source field-value access](field-access.md) consumes this relation for admitted binding-rooted selected paths and for the structural ownership state/frontier of a producer-backed field-receiver transient. [Source patterns](patterns.md) consumes this relation for admitted direct binding-root pattern paths and for the structural ownership state of a producer-backed pattern scrutinee transient. [Source closures and explicit by-value capture](closures.md) consumes complete-root ownership for dedicated opaque closure bindings and the ordinary concrete-root relation for activation-local capture bindings. [Source function execution](function-execution.md) consumes remaining-ownership frontiers when represented binding, external-referent replacement, bounded binding-root field replacement, or transient ownership ends. [Source control flow](control-flow.md) consumes complete active binding and external-referent structural ownership states to establish definite represented conditional successors and bounded-loop transfer/backedge states.
 
-This document does not define lexical bindings, names, mutability, concrete type duplicability selection, generic substitution/capability semantics, field lookup/accessibility, pattern syntax, reference authority/reborrow/lifetime, conditional or loop selection, custom destruction, a source place/lvalue category, physical storage, layout, Core MIR liveness, or an implementation representation.
+This document does not define lexical bindings, closure capture/invocation, names, mutability, concrete type duplicability selection, generic substitution/capability semantics, field lookup/accessibility, pattern syntax, reference authority/reborrow/lifetime, conditional or loop selection, custom destruction, a source place/lvalue category, physical storage, layout, Core MIR liveness, or an implementation representation.
 
 ## Structural owned-value roots
 
@@ -19,12 +19,12 @@ A **structural owned-value root** consists of:
 
 A root type expression is either:
 
-- one represented concrete source value type under `types.md`; or
+- one represented concrete source value type under `types.md`, including an opaque closure-site type where `closures.md` establishes such a binding root; or
 - for a parameter/local inside a generic function, one bare abstract type-parameter expression admitted by `generics.md`.
 
-A structural owned-value root is a source-semantic ownership domain over the structural subvalues of one value whose complete source type expression is the root type expression. When established with an empty consumed-path set it owns the complete root value; later valid consumption may leave only a proper subset of structural subvalues owned, or no remaining owned subvalue. An abstract generic root is deliberately opaque: its complete value is owned, but no concrete record shape is available to generic-body validation. The relation does not require the root to have a lexical identifier, source binding identity, physical address, storage identity, HIR local, Core local, generic runtime type object, or another source-observable identity.
+A structural owned-value root is a source-semantic ownership domain over the structural subvalues of one value whose complete source type expression is the root type expression. When established with an empty consumed-path set it owns the complete root value; later valid consumption may leave only a proper subset of structural subvalues owned, or no remaining owned subvalue. An abstract generic root is deliberately opaque: its complete value is owned, but no concrete record shape is available to generic-body validation. An opaque closure root is likewise deliberately path-opaque at source level even though `closures.md` assigns it a semantic capture environment. The relation does not require the root to have a lexical identifier, source binding identity, physical address, storage identity, HIR local, Core local, generic runtime type object, closure environment field identity, or another source-observable identity.
 
-Represented parameter/local bindings instantiate persistent structural owned-value roots through `local-bindings.md`; those bindings may use an abstract root type expression in the first generic slice. Every replacement-capable safe-reference parameter instantiates one persistent non-binding external referent structural root through `references.md`. A successful producer-backed field-value receiver instantiates one non-binding transient structural owned-value root through `field-access.md` and `function-execution.md`. A successful producer-backed record-pattern scrutinee instantiates one non-binding transient structural owned-value root through `patterns.md` and `function-execution.md`. External-referent and represented transient roots remain concrete under the current reference/pattern/field type boundaries.
+Represented source-function parameter/local/pattern bindings instantiate persistent structural owned-value roots through `local-bindings.md`; those bindings may use an abstract root type expression in the first generic slice. A dedicated closure binding instantiates one persistent opaque closure root, and every closure-activation capture binding instantiates one persistent root of its exact captured concrete type. Every replacement-capable safe-reference parameter instantiates one persistent non-binding external referent structural root through `references.md`. A successful producer-backed field-value receiver instantiates one non-binding transient structural owned-value root through `field-access.md` and `function-execution.md`. A successful producer-backed record-pattern scrutinee instantiates one non-binding transient structural owned-value root through `patterns.md` and `function-execution.md`. External-referent and represented transient roots remain concrete under the current reference/pattern/field type boundaries.
 
 The root relation itself does not decide how a value is produced, when a binding/external-referent/transient root begins or ends, or which source operation is permitted to use a path. Those are owned by the applicable lifecycle or operation owner.
 
@@ -36,19 +36,21 @@ The empty path `[]` denotes the complete root value and is structurally valid fo
 
 For an abstract type-parameter root under `generics.md`, `[]` is the **only** structurally valid path. The abstract root exposes no represented non-empty structural path because generic-body validation has no concrete nominal-record shape fact. A later concrete substitution MUST NOT retroactively add source paths to the already validated generic body.
 
-For a concrete root type, a non-empty path `[f0, f1, ..., fn]` is structurally valid exactly when:
+For an opaque closure-site root under `closures.md`, `[]` is likewise the **only** source-visible structurally valid path. Capture environment slots are not nominal-record fields and never become source structural paths, even when lowering uses a Core aggregate environment.
+
+For any other concrete root type, a non-empty path `[f0, f1, ..., fn]` is structurally valid exactly when:
 
 1. the root type is a nominal record type containing field identity `f0`;
 2. for every later field `fi`, the source type reached by the preceding path prefix is a nominal record type containing `fi`; and
 3. each path step uses that selected field's declared source type from `types.md` as the type reached by the extended prefix.
 
-For every structurally valid path `p`, define `type(p)` as the source type expression reached by the complete path. `type([])` is the root type expression. Every non-empty valid path has one concrete source type because abstract roots admit no such path and nominal record fields do not contain abstract type parameters in this slice.
+For every structurally valid path `p`, define `type(p)` as the source type expression reached by the complete path. `type([])` is the root type expression. Every non-empty valid path has one concrete source type because abstract and opaque closure roots admit no such path and nominal record fields do not contain those categories in this slice.
 
-Structural paths use source-semantic nominal record and field identity. They are not identifier spellings, parser nodes, compiler field indices, Core projections, byte offsets, addresses, physical storage regions, ABI layout, or concrete-specialization-discovered paths.
+Structural paths use source-semantic nominal record and field identity. They are not closure capture slots, identifier spellings, parser nodes, compiler field indices, Core projections, byte offsets, addresses, physical storage regions, ABI layout, or concrete-specialization-discovered paths.
 
 A path `a` is an **ancestor** of path `b` exactly when `a` is a proper prefix of `b`. Two paths are **structurally disjoint** exactly when they are unequal and neither is an ancestor of the other.
 
-The empty path is therefore an ancestor of every non-empty path. An abstract generic root has no proper descendant path under the first-slice relation.
+The empty path is therefore an ancestor of every non-empty path. An abstract generic root and an opaque closure root have no proper descendant path under the first-slice relation.
 
 ## Structural ownership state
 
@@ -56,9 +58,9 @@ Each structural owned-value root has one finite **consumed-path set** containing
 
 The consumed-path set MUST be prefix-free: no two members are ancestor/descendant or otherwise prefix-comparable.
 
-An empty consumed-path set denotes complete initial ownership of the root value. The applicable lifecycle owner establishes when one complete owned value begins. `local-bindings.md`, `references.md`, `field-access.md`, and `patterns.md` define the represented initial-state boundaries that consume this relation.
+An empty consumed-path set denotes complete initial ownership of the root value. The applicable lifecycle owner establishes when one complete owned value begins. `local-bindings.md`, `closures.md`, `references.md`, `field-access.md`, and `patterns.md` define the represented initial-state boundaries that consume this relation.
 
-For an abstract generic root, the only possible consumed-path sets are the empty set and `{[]}` because no non-empty path is structurally valid. Thus such a root is either completely owned or completely consumed; this is a structural consequence of opacity, not a concrete non-duplicability classification.
+For an abstract generic root or an opaque closure root, the only possible consumed-path sets are the empty set and `{[]}` because no non-empty path is structurally valid. Thus such a root is either completely owned or completely consumed. For the generic case this is a structural consequence of abstraction; for the closure case it is the source-visible whole-environment ownership boundary selected by `closures.md`, not a claim that the semantic environment has no components.
 
 Consumed paths are source-validation facts. They are not runtime moved-value flags, dynamic faults, Core liveness facts, physical destruction markers, storage occupancy, concrete specialization facts, or implementation bookkeeping authority.
 
@@ -87,7 +89,7 @@ Consequently, the complete root path `[]` is:
 - unavailable exactly when `C` contains `[]`; and
 - partially available otherwise.
 
-An abstract generic root can never be partially available in this slice because it has no valid non-empty descendant path.
+An abstract generic root and an opaque closure root can never be partially available in this slice because neither has a valid non-empty descendant source path.
 
 A partially available concrete record path may contain fully available descendants that are structurally disjoint from every consumed descendant. Static traversal through a partially available ancestor does not itself recreate or observe the complete ancestor value.
 
@@ -109,9 +111,9 @@ After successful consumption:
 - every proper ancestor of `p` is partially available unless another accepted operation later replaces or ends that structural root; and
 - every structurally disjoint path retains its prior availability classification.
 
-For an abstract generic root, only `p = []` can be consumed. Successful generic whole-value Move therefore changes the root from the empty consumed-path set to `{[]}` and leaves no remaining owned subvalue.
+For an abstract generic root or opaque closure root, only `p = []` can be consumed. Successful whole-value Move therefore changes the root from the empty consumed-path set to `{[]}` and leaves no remaining source-owned subvalue. For an opaque closure, `closures.md` determines when invocation or later capture selects that Move.
 
-This relation does not decide when an operation chooses consumption. Concrete owned-value duplicability is owned by `types.md`; the first generic capability-conservative whole-value selection is owned by `generics.md`; and the applicable operation owner performs the selected duplicate-versus-consume behavior.
+This relation does not decide when an operation chooses consumption. Concrete owned-value duplicability is owned by `types.md`; closure duplicability is owned by `closures.md`; the first generic capability-conservative whole-value selection is owned by `generics.md`; and the applicable operation owner performs the selected duplicate-versus-consume behavior.
 
 ## Non-consuming duplicate use
 
@@ -119,7 +121,7 @@ When another accepted source owner has selected a non-consuming owned-value dupl
 
 Successful duplicate production leaves the consumed-path set unchanged.
 
-This document does not define which concrete source types are duplicable or whether an abstract generic value has positive duplication evidence. `types.md` owns represented concrete owned-value duplicability, `generics.md` owns the absence of positive duplicability evidence for an unconstrained abstract type parameter, and the operation-specific owner determines whether and how a duplicate capability applies.
+This document does not define which concrete source types are duplicable or whether an abstract generic value has positive duplication evidence. `types.md` owns represented concrete owned-value duplicability integration, `closures.md` owns the all-captures rule for opaque closure types, `generics.md` owns the absence of positive duplicability evidence for an unconstrained abstract type parameter, and the operation-specific owner determines whether and how a duplicate capability applies.
 
 A non-consuming duplicate of one path does not make an unavailable or partially available path available and does not change ownership of any ancestor, descendant, or sibling path.
 
@@ -140,9 +142,9 @@ The remaining ownership frontier of the complete structural root is `frontier([]
 
 Every frontier member is a maximal fully available source subvalue under the selected path. Frontier members are pairwise structurally disjoint. No consumed subvalue is a frontier member, and every still-owned structural subvalue lies within exactly one frontier member.
 
-For an abstract generic root, the complete-root frontier therefore contains exactly `[]` while the root is fully available and is empty after `[]` is consumed. No recursive descent is possible or required.
+For an abstract generic root or opaque closure root, the complete-root frontier therefore contains exactly `[]` while the root is fully available and is empty after `[]` is consumed. No recursive source-path descent is possible or required. `closures.md` separately owns reverse capture-value cleanup inside a still-intact closure environment when ending that opaque complete value.
 
-The structural frontier is source-semantic cleanup/replacement selection. The applicable lifecycle/execution owner decides when the frontier is selected and when each member's ownership ends. This document fixes frontier member order where recursive concrete record descent occurs but does not define lexical-scope ordering between distinct bindings or ordering between different transient/external owners.
+The structural frontier is source-semantic cleanup/replacement selection. The applicable lifecycle/execution owner decides when the frontier is selected and when each member's ownership ends. This document fixes frontier member order where recursive concrete record descent occurs but does not define lexical-scope ordering between distinct bindings, capture-list cleanup inside one opaque closure value, or ordering between different transient/external owners.
 
 ## Complete, mixed, and empty frontiers
 
@@ -153,9 +155,9 @@ The recursive frontier relation yields these general consequences without a seco
 - when the complete root path `[]` is consumed, the frontier is empty;
 - when separate exhaustive operations consume every structurally owned subvalue below a concrete record root without consuming `[]` itself, the complete-root frontier may nevertheless be empty; an empty frontier does not imply or synthesize a whole-root consumption event.
 
-Pattern presentation order, source lexical declaration order, and execution order do not replace record structural declaration order for recursive frontier selection.
+Pattern presentation order, source lexical declaration order, closure capture-list order, and execution order do not replace record structural declaration order for recursive record frontier selection. Closure capture-list cleanup is a distinct whole-closure lifecycle consequence owned by `closures.md`.
 
-An abstract generic root has no mixed/partial frontier case under this slice.
+An abstract generic root and opaque closure root have no mixed/partial frontier case under this slice.
 
 ## Zero-field and zero-leaf values
 
@@ -171,7 +173,7 @@ Therefore a zero-field or recursively zero-leaf value may be:
 - selected as a remaining-frontier member; or
 - have its source ownership ended by an applicable execution owner.
 
-These source facts MUST NOT be reconstructed from whether a Core or backend representation has a scalar destruction effect.
+These source facts MUST NOT be reconstructed from whether a Core or backend representation has a scalar destruction effect. The same principle applies when a closure captures a zero-field/zero-leaf value: the capture remains a real source ownership component even if lower cleanup erases physically.
 
 Ending ownership of one zero-leaf source frontier member may faithfully refine to no lower scalar destruction operation when the applicable Core destruction domain is empty. That lower erasure does not retroactively remove or change source ownership state.
 
@@ -183,13 +185,13 @@ This structural owner does not itself authorize assignment or another replacemen
 
 A consuming owner may replace a structural root only when its own semantics explicitly authorize replacement. When such an owner establishes a new complete owned root value, it establishes a fresh empty consumed-path set for that root.
 
-`local-bindings.md` uses this boundary for successful whole-binding assignment/reinitialization, including a whole abstract generic root. `references.md` uses it for successful complete-referent `*r = value` replacement, whether the selected target is a local binding root or a replacement-capable parameter's external referent root. `raw-pointers-unsafe.md` uses it for successful raw replacement of a local-root pointee. Field-receiver and pattern-scrutinee transients are not replaceable under their represented relations.
+`local-bindings.md` uses this boundary for successful whole-binding assignment/reinitialization, including a whole abstract generic root. Dedicated closure bindings and closure-activation capture bindings are immutable under `closures.md`/`local-bindings.md` and therefore do not gain ordinary whole-binding replacement merely by instantiating this root relation. `references.md` uses it for successful complete-referent `*r = value` replacement, whether the selected target is a local binding root or a replacement-capable parameter's external referent root. `raw-pointers-unsafe.md` uses it for successful raw replacement of an admitted activation-local pointee root, including admissible capture storage under that owner's unsafe relation. Field-receiver and pattern-scrutinee transients are not replaceable under their represented relations.
 
 Replacement selects the then-current remaining frontier at the commit point defined by the operation owner; this document does not move that selection earlier.
 
 ### Bounded non-empty subpath installation
 
-For one structurally valid **non-empty** path `p`, an accepted operation owner may install one complete new value of exact concrete source type `type(p)` at `p` only through this relation. An abstract generic root cannot participate because it has no structurally valid non-empty path.
+For one structurally valid **non-empty** path `p`, an accepted operation owner may install one complete new value of exact concrete source type `type(p)` at `p` only through this relation. Abstract generic and opaque closure roots cannot participate because they have no structurally valid non-empty path.
 
 Let `C` be the root's consumed-path set on the operation's normal successful continuation immediately before replacement commits. The installation is structurally admitted exactly when no member of `C` is a strict ancestor of `p`.
 
@@ -220,7 +222,7 @@ The operation owner decides how the target path is selected, which mutation/repl
 
 Structural availability is statically required source validity for operations that consume or duplicate a path through this relation. Structural subpath installation likewise requires its operation owner to prove the exact admitted pre-commit state; an invalid installation is not converted into a defined runtime moved-state fault merely because a physical implementation could track moves dynamically.
 
-[Source control flow](control-flow.md) owns represented multi-path and cyclic consumers. It treats every continuing binding structural root and every continuing replacement-capable external referent root as definite structural state.
+[Source control flow](control-flow.md) owns represented multi-path and cyclic consumers. It treats every continuing active binding structural root—including dedicated closure and capture bindings when present—and every continuing replacement-capable external referent root as definite structural state.
 
 For a normally completing represented conditional:
 
@@ -236,17 +238,17 @@ For represented bounded `while`, let `H` be the complete enclosing state immedia
 - `break` MUST satisfy the exact loop-exit state required by `C`; and
 - a body with no applicable normal transfer contributes no corresponding state comparison.
 
-These control-flow rules consume this structural state relation; they do not add a union, intersection, normalization, maybe-owned state, runtime flag, automatic edge repair/reset, widening operation, or general fixed-point inference. A generic activation's substitution context is fixed for that activation under `generics.md` and does not add a branch-varying structural state dimension.
+These control-flow rules consume this structural state relation; they do not add a union, intersection, normalization, maybe-owned state, runtime flag, automatic edge repair/reset, widening operation, or general fixed-point inference. A generic activation's substitution context is fixed for that activation under `generics.md` and does not add a branch-varying structural state dimension. A non-duplicable dedicated closure consumed on only one continuing branch or loop backedge therefore fails the same exact-state requirements rather than acquiring closure-specific state merging.
 
 Future refutable matches, catch/recovery forms, additional loop forms, or other multi-path control-flow owners MUST independently define how structural ownership is made definite at their applicable successors. Their rules are not implied by the represented conditional/loop relations.
 
 ## Direct consumers
 
-### Function-local bindings
+### Function-local and closure bindings
 
-`local-bindings.md` associates one structural owned-value root with every in-scope represented parameter/local binding.
+`local-bindings.md` associates one structural owned-value root with every in-scope represented source-function parameter/local/pattern binding and every active dedicated closure/capture binding.
 
-For a binding whose declared type expression is an abstract generic parameter, that root uses the opaque complete-root relation above and exposes no non-empty structural path. Binding lifecycle establishes when all binding state begins, persists, resets, or ends. Successful whole-binding replacement uses the complete-root replacement boundary above. Successful bounded direct binding-root field assignment uses the non-empty subpath-installation relation above at its operation-defined post-RHS commit point and therefore applies only to a concrete record-shaped binding. This owner supplies only the structural mathematics applied to that state.
+For a binding whose declared type expression is an abstract generic parameter, that root uses the opaque complete-root relation above and exposes no non-empty structural path. A dedicated closure binding likewise uses the opaque closure complete-root relation above; capture bindings use the ordinary concrete root relation for their exact captured types, so a nominal-record capture binding retains its normal record paths while an opaque-closure-valued capture binding remains path-opaque. Binding lifecycle establishes when all binding state begins, persists, resets, or ends. Successful whole-binding replacement uses the complete-root replacement boundary above only for binding categories whose canonical owner admits assignment. Successful bounded direct binding-root field assignment uses the non-empty subpath-installation relation above at its operation-defined post-RHS commit point and therefore applies only to an admitted mutable ordinary concrete record binding. This owner supplies only the structural mathematics applied to that state.
 
 ### Replacement-capable external referents
 
@@ -258,40 +260,40 @@ First-slice generic type parameters cannot be safe-reference referents or generi
 
 ### Field-value access
 
-For a binding-root receiver, `field-access.md` resolves one non-empty structural path from the selected binding root, requires its final selected path to be fully available, and selects duplicate or consume according to the final field type's duplicability. An abstract generic root cannot supply such a path. Field lookup/accessibility, safe-authority compatibility, and producer semantics remain owned there and in `references.md`.
+For an admitted binding-root receiver, `field-access.md` resolves one non-empty structural path from the selected binding root, requires its final selected path to be fully available, and selects duplicate or consume according to the final field type's duplicability. An abstract generic root or opaque closure root cannot supply such a path. A nominal-record closure capture binding may supply it because that capture binding's root type is the exact nominal record type. Field lookup/accessibility, safe-authority compatibility, and producer semantics remain owned there and in `references.md`.
 
 For a producer-backed receiver, successful receiver production establishes one non-binding field-receiver transient structural root with an empty consumed-path set. `field-access.md` applies the source-selected duplicate-or-consume consequence to its resolved path and selects the transient's remaining frontier through this document; `function-execution.md` owns the transient's dynamic ending and cleanup order.
 
-For bounded direct binding-root field assignment, `field-access.md` supplies the existing nominal field-resolution/accessibility relation while `local-bindings.md` and `function-execution.md` own assignment permission, RHS production, and commit ordering. This document supplies only the selected non-empty path's structural installation state.
+For bounded direct binding-root field assignment, `field-access.md` supplies the existing nominal field-resolution/accessibility relation while `local-bindings.md` and `function-execution.md` own assignment permission, RHS production, and commit ordering. This document supplies only the selected non-empty path's structural installation state. Immutable capture bindings and dedicated closure bindings do not become assignment targets through this relation.
 
 ### Record patterns
 
 `patterns.md` resolves structural binding-leaf paths.
 
-For a direct binding-root pattern, those paths use the root binding's structural ownership state plus the direct safe-authority compatibility requirement consumed from `references.md`. A root declared as an abstract generic type cannot satisfy the pattern's exact nominal-record type requirement under `generics.md`/`types.md` and therefore introduces no generic structural pattern path.
+For an admitted direct binding-root pattern, those paths use the root binding's structural ownership state plus the direct safe-authority compatibility requirement consumed from `references.md`. A root declared as an abstract generic type or opaque closure type cannot satisfy the pattern's exact nominal-record type requirement under `generics.md`/`types.md`; a nominal-record closure capture binding can satisfy it under `patterns.md`.
 
 For a successful producer-backed pattern, the produced transient begins as one complete structural owned-value root with an empty consumed-path set, pattern leaf production applies selected duplicate/consume transitions to that transient, and its remaining ownership frontier is selected through this document before the transient ends.
 
-### Function execution and cleanup
+### Function/closure execution and cleanup
 
-`function-execution.md` decides when represented binding/transient ownership ends and when complete-root or bounded subpath replacement frontiers are ended. It also owns ordering between distinct bindings, lexical scopes, activations, producer transients, safe-reference replacement, raw replacement, and bounded binding-root field replacement. Cleanup of a still-owned opaque generic root therefore ends its one complete frontier member at the ordinary binding cleanup point; this document does not require concrete shape discovery to select a finer source frontier.
+`function-execution.md` decides when represented binding/transient ownership ends and when complete-root or bounded subpath replacement frontiers are ended; `closures.md` supplies closure-specific held-environment and capture-establishment/whole-environment cleanup consequences. The integrated execution relations own ordering between distinct bindings, lexical scopes, source-function/closure activations, producer transients, safe-reference replacement, raw replacement, and bounded binding-root field replacement. Cleanup of a still-owned opaque generic root therefore ends its one complete frontier member at the ordinary binding cleanup point; cleanup of a dedicated opaque closure root ends that whole value and then `closures.md` determines reverse capture cleanup within the environment. This document does not require concrete shape discovery to select a finer source frontier for either opaque category.
 
 ### Conditional and bounded-loop control flow
 
-`control-flow.md` compares complete structural ownership states of continuing binding and external-referent roots across normal conditional outcomes and validates bounded-loop backedge/continue/break targets against their exact required states.
+`control-flow.md` compares complete structural ownership states of continuing active binding and external-referent roots across normal conditional outcomes and validates bounded-loop backedge/continue/break targets against their exact required states.
 
 This document supplies the state being compared. It does not select arms or loop outcomes, define lexical scopes, or decide control-flow validity beyond the structural relations consumed by `control-flow.md`.
 
 ## Source/Core separation
 
-Source structural ownership is independent of Core proving representation and concrete generic specialization strategy.
+Source structural ownership is independent of Core proving representation, closure-conversion environment representation, and concrete generic specialization strategy.
 
-Core path state, `Live`/`Dead`, Never-initialized state, scalar copyability, destruction domains, local identifiers, projections, Core external-referent state, and the concrete type chosen by one generic activation are not source structural ownership authority.
+Core path state, `Live`/`Dead`, Never-initialized state, scalar copyability, destruction domains, local identifiers, projections, generated closure-environment fields, Core external-referent state, and the concrete type chosen by one generic activation are not source structural ownership authority.
 
-A faithful lowering MAY map resolved concrete source paths to Core structural projections after source validation and MAY omit lower destruction for source-owned zero-leaf frontier members where Core has no scalar destruction domain. For an accepted direct binding-root subpath assignment, it MAY refine the selected source path to an existing projected Core ordinary-assignment destination only after the source owner has proved the structural installation relation above. It MUST preserve replacement-capable external-referent Move/restore and normal-return obligations through the accepted Core reference/direct-call relation. For an abstract generic binding, a concrete lowering MAY know the substituted concrete type and its Core copyability/shape, but it MUST preserve the source generic body's selected whole-root Move and MUST NOT use that later knowledge to create source-level subpaths, duplicates, or alternate remaining frontiers that were unavailable during generic validation. It MUST NOT use lower liveness or copyability to reconstruct source path availability, subpath-installation admission, consumed-path reset, duplicate-versus-consume selection, remaining-frontier membership, represented control-flow validity, or source normal-completion restoration.
+A faithful lowering MAY map resolved concrete source paths to Core structural projections after source validation and MAY omit lower destruction for source-owned zero-leaf frontier members where Core has no scalar destruction domain. For an accepted direct binding-root subpath assignment, it MAY refine the selected source path to an existing projected Core ordinary-assignment destination only after the source owner has proved the structural installation relation above. It MUST preserve replacement-capable external-referent Move/restore and normal-return obligations through the accepted Core reference/direct-call relation. For an abstract generic binding, a concrete lowering MAY know the substituted concrete type and its Core copyability/shape, but it MUST preserve the source generic body's selected whole-root Move and MUST NOT use that later knowledge to create source-level subpaths, duplicates, or alternate remaining frontiers that were unavailable during generic validation. For an opaque closure binding, a lowerer MAY know the generated environment aggregate fields but MUST preserve the source whole-root path opacity and source-selected closure Copy/Move mode from `closures.md`. It MUST NOT use lower liveness, copyability, generated environment shape, or field projections to reconstruct source path availability, subpath-installation admission, consumed-path reset, duplicate-versus-consume selection, remaining-frontier membership, represented control-flow validity, or source normal-completion restoration.
 
 ## Further boundaries
 
-This revision does not define general source places/lvalues, structural projection through an unconstrained generic type parameter, direct reference-relative field/subregion value access or assignment spelling, arbitrary safe-reference child target forms beyond the bounded accepted selector relation, named lifetimes, pointer provenance, interior mutability, custom destructors, must-consume policy, arbitrary temporary lifetime extension, structural state splitting beneath a consumed ancestor, unequal-state/path-dependent conditional joins, additional loop forms or general loop fixed-point inference, refutable-match joins, exception/catch state merges, ABI/layout, parser/HIR/Core MIR representation, runtime moved-state flags, or backend storage.
+This revision does not define general source places/lvalues, source-visible closure capture-field paths, structural projection through an unconstrained generic type parameter, direct reference-relative field/subregion value access or assignment spelling, arbitrary safe-reference child target forms beyond the bounded accepted selector relation, named lifetimes, pointer provenance, interior mutability, custom destructors, must-consume policy, arbitrary temporary lifetime extension, structural state splitting beneath a consumed ancestor, unequal-state/path-dependent conditional joins, additional loop forms or general loop fixed-point inference, refutable-match joins, exception/catch state merges, ABI/layout, parser/HIR/Core MIR representation, runtime moved-state flags, or backend storage.
 
 Those concerns require their own accepted owners and may consume this structural relation only when their canonical semantics explicitly say so.

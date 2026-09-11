@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the first represented source generic relation: function type-parameter identity and scope, abstract parametric type expressions, bounded type-argument admission, exact explicit substitution, generic-body capability facts, generic-call substitution composition, generic activation substitution context, validation independence from concrete use sites, and the finite refinement boundary to existing concrete Core functions.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module/function/nominal-type lookup and accessibility from [Source names and modules](names-modules.md), represented concrete source type identity/equality and owned-value duplicability from [Source type foundation](types.md), callable entity/signature structure from [Source callables](callables.md), concrete captureless function-value types and generic-function-value exclusions from [Source function values and indirect calls](function-values.md), structural ownership from [Source structural ownership](structural-ownership.md), function-local binding lifecycle and whole-binding use from [Source function-local bindings](local-bindings.md), direct-call execution from [Source function execution](function-execution.md), represented concrete generic declaration/application spelling from [Source concrete syntax](concrete-syntax.md), and first-slice nominal marker trait identity plus exact marker-obligation satisfaction from [Source marker traits](traits.md). Existing concrete Core function semantics are owned by [Core functions and direct calls](../core/functions.md).
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module/function/nominal-type lookup and accessibility from [Source names and modules](names-modules.md), represented concrete source type identity/equality and owned-value duplicability from [Source type foundation](types.md), callable entity/signature structure from [Source callables](callables.md), concrete captureless function-value types and generic-function-value exclusions from [Source function values and indirect calls](function-values.md), bounded opaque closure-site types and the no-generic-closure-declaration boundary from [Source closures and explicit by-value capture](closures.md), structural ownership from [Source structural ownership](structural-ownership.md), function-local binding lifecycle and whole-binding use from [Source function-local bindings](local-bindings.md), direct-call execution from [Source function execution](function-execution.md), represented concrete generic declaration/application spelling from [Source concrete syntax](concrete-syntax.md), and first-slice nominal marker trait identity plus exact marker-obligation satisfaction from [Source marker traits](traits.md). Existing concrete Core function semantics are owned by [Core functions and direct calls](../core/functions.md).
 
 Trait declaration identity, explicit marker implementation propositions, compilation-global coherence, and the concrete/abstract marker-satisfaction relation remain owned only by `traits.md`. This document owns only how existing generic slots carry marker requirements/evidence and when generic application validates those requirements.
 
-This document does not redefine concrete source type identity, concrete duplicability, module binding identity, value-binding lookup, structural ownership mathematics, direct-call execution ordering, concrete syntax, marker trait identity/coherence, or Core generic semantics. The coupled source owners integrate this relation only at their existing responsibility boundaries.
+This document does not redefine concrete source type identity, concrete duplicability, closure site/capture semantics, module binding identity, value-binding lookup, structural ownership mathematics, direct-call execution ordering, concrete syntax, marker trait identity/coherence, or Core generic semantics. The coupled source owners integrate this relation only at their existing responsibility boundaries.
 
 ## Generic function relation
 
@@ -55,7 +55,7 @@ Qualified `alias::member` type lookup remains the existing module relation and M
 
 Marker trait references attached to a type-parameter declaration use the module declaration/qualified lookup domain consumed by `traits.md`; they do not participate in this function-local type-parameter lookup domain. Therefore a bound-side name in `fn f[T: T] (...)` may denote a same-module marker trait binding `T` while admitted type-position uses of the generic slot inside the function denote the function-local type parameter. Marker lookup never consults or falls back through this generic slot domain.
 
-The type-parameter lookup domain participates only in type positions. It does not participate in function-local value-binding lookup, module value lookup, direct-call target lookup, record/pattern-head lookup, marker trait lookup, field lookup, or another name domain. A parameter/local value binding MAY therefore have the same lexical key as an in-scope type parameter without ambiguity: the receiving syntactic/semantic position selects the applicable name domain.
+The type-parameter lookup domain participates only in type positions. It does not participate in function-local value-binding lookup, module value lookup, direct-call target lookup, closure capture lookup, record/pattern-head lookup, marker trait lookup, field lookup, or another name domain. A parameter/local value binding MAY therefore have the same lexical key as an in-scope type parameter without ambiguity: the receiving syntactic/semantic position selects the applicable name domain.
 
 A same-module declaration MAY likewise have the same key as a function type parameter. The function-local type parameter shadows that declaration only in the admitted bare type positions above; it creates no general module-binding shadowing rule. Category/admission rejection after that selection does not revive the shadowed module declaration.
 
@@ -67,7 +67,7 @@ During generic declaration/body validation, abstract type equality is exact:
 
 - one abstract type parameter is equal to itself exactly when both uses designate the same semantic slot identity;
 - two distinct type-parameter slots are unequal even when a later application may substitute the same concrete type for both; and
-- an abstract type parameter is unequal to every concrete intrinsic, nominal-record, safe-reference, raw-pointer, and function-value source type.
+- an abstract type parameter is unequal to every concrete intrinsic, nominal-record, safe-reference, raw-pointer, function-value, and opaque closure-site source type.
 
 This abstract equality relation is a generic-validation relation consumed alongside the concrete source type equality owned by `types.md`. It does not redefine equality between concrete source types.
 
@@ -87,10 +87,11 @@ An abstract type parameter is not admitted in this revision:
 - as the pointee of `RawPtr` / `raw`;
 - as a nominal record field type;
 - nested in another aggregate or type constructor, including a captureless function-value type;
-- as a generic record/type-alias/opaque-type argument because those declaration forms are not represented; or
+- as a generic record/type-alias/general-opaque-type argument because those declaration forms are not represented;
+- as an opaque closure capture/environment component because closure declarations are invalid in generic source-function bodies under `closures.md`; or
 - as an ABI, layout, representation, linkage, or target dimension.
 
-Existing concrete non-parametric source types MAY appear in the same generic callable signature/body under their existing owners. This includes a concrete function-value type from `function-values.md`, provided that function-value type itself contains no abstract type parameter under that owner's first-slice boundary.
+Existing concrete non-parametric source types MAY appear in the same generic callable signature/body under their existing owners. This includes a concrete function-value type from `function-values.md`, provided that function-value type itself contains no abstract type parameter under that owner's first-slice boundary. Opaque closure-site types cannot arise as ordinary declared generic-body types because they have no general `Type` spelling and closure declarations are not admitted in generic source-function bodies.
 
 ## Type arguments
 
@@ -100,7 +101,7 @@ A first-slice generic type-argument expression is exactly one of:
 - a represented nominal record source type legally selected at the application site; or
 - when the application occurs inside another generic function body, one in-scope abstract type parameter of that enclosing function.
 
-Safe-reference, raw-pointer, and function-value types are not generic type arguments in this revision. No nested generic type application exists because this revision defines no generic type constructor.
+Safe-reference, raw-pointer, function-value, and opaque closure-site types are not generic type arguments in this revision. No nested generic type application exists because this revision defines no generic type constructor.
 
 A concrete nominal-record type argument is resolved at the **application site** using the existing same-module or qualified cross-module type lookup/accessibility relation. The generic callee does not repeat source-name lookup for that concrete record in the callee's defining module.
 
@@ -128,7 +129,7 @@ Substitution performs no:
 - body-derived choice; or
 - target/backend-dependent selection.
 
-Applying a substitution to one parametric callable/local type expression replaces each occurrence of a target type-parameter slot with its mapped argument and leaves existing concrete type expressions unchanged. A concrete function-value type is therefore left unchanged by first-slice substitution because abstract type parameters are not admitted inside that type constructor.
+Applying a substitution to one parametric callable/local type expression replaces each occurrence of a target type-parameter slot with its mapped argument and leaves existing concrete type expressions unchanged. A concrete function-value type is therefore left unchanged by first-slice substitution because abstract type parameters are not admitted inside that type constructor. Opaque closure-site types are not substitution targets or generic arguments in this slice.
 
 When an application occurs inside another generic function, a mapped argument may itself be one enclosing abstract type parameter. The resulting instantiated type expression therefore MAY remain abstract. Substitution composition preserves the enclosing semantic slot identity until a later enclosing application/activation supplies the final concrete type.
 
@@ -140,7 +141,7 @@ Exact substitution and marker-obligation validation are distinct relations. Cons
 
 Concrete source owned-value duplicability remains owned only by `types.md`. This generic relation does not create a second duplicability classification or infer operational capability from later concrete specialization.
 
-An abstract type parameter has **no positive duplicability evidence or other concrete operational capability merely from arbitrary first-slice marker requirements**. Marker membership is an application-validity predicate under `traits.md`; it does not establish record shape, intrinsic/scalar category, safe-reference/raw-pointer category, duplicability, operator support, field access, construction, or another represented operation.
+An abstract type parameter has **no positive duplicability evidence or other concrete operational capability merely from arbitrary first-slice marker requirements**. Marker membership is an application-validity predicate under `traits.md`; it does not establish record shape, intrinsic/scalar category, safe-reference/raw-pointer/function-value/closure category, duplicability, operator support, field access, construction, or another represented operation.
 
 For a parameter or ordinary local whose declared type is one abstract type parameter:
 
@@ -150,13 +151,13 @@ For a parameter or ordinary local whose declared type is one abstract type param
 - successful whole-binding transfer consumes that complete root;
 - ordinary parameter transfer, local initialization, whole-binding assignment where otherwise admitted, return, and cleanup MAY transport/destroy the complete opaque owned value through their existing relations;
 - non-consuming owned duplication is not available merely from the abstract type or marker requirements;
-- field selection, record construction/destructuring, scalar operators/comparisons, safe-reference/raw-pointer formation or access, and every other operation requiring a concrete type category, concrete structural shape, or other unproven capability are invalid when their only supporting type fact would be the abstract parameter and its arbitrary marker requirements.
+- field selection, record construction/destructuring, scalar operators/comparisons, safe-reference/raw-pointer formation or access, closure capture/formation, and every other operation requiring a concrete type category, concrete structural shape, or other unproven capability are invalid when their only supporting type fact would be the abstract parameter and its arbitrary marker requirements.
 
 The rule above is a validation-capability rule for the generic body. It does **not** classify any later substituted concrete type as non-duplicable.
 
 If a concrete application substitutes a duplicable intrinsic or nominal-record type for an abstract parameter, the already validated generic-body Move MUST remain a Move. Concrete specialization MUST NOT reconstruct that operation as Copy merely because the substituted type has positive duplicability.
 
-Likewise, later substitution MUST NOT make previously invalid abstract field/operator/reference behavior valid by revealing a convenient concrete category or shape. A generic body is accepted or rejected from its declared abstract contract, not from an opportunistic use site.
+Likewise, later substitution MUST NOT make previously invalid abstract field/operator/reference/closure behavior valid by revealing a convenient concrete category or shape. A generic body is accepted or rejected from its declared abstract contract, not from an opportunistic use site.
 
 Likewise, an implementation proposition satisfying one of the parameter's marker requirements at a concrete use site MUST NOT retroactively grant the generic body an operation not established by its accepted abstract capability environment. A marker trait's lexical spelling has no privileged operational meaning.
 
@@ -169,6 +170,14 @@ At an application site, each ordinary value argument is produced under the calle
 After that produced value transfers into a generic activation parameter whose declared type is abstract in the generic body, use of that parameter follows the operation mode selected under generic-body validation. For example, a caller may Copy an `I64` value to form an argument while the generic body later Moves the activation-local parameter value to its result.
 
 Caller-side production mode and generic-body use mode are distinct semantic steps and MUST NOT be conflated by validation or lowering.
+
+## Closure declaration boundary inside generic bodies
+
+A `ClosureDeclaration` occurring anywhere inside a generic source-function body is source-invalid in this first closure slice, regardless of whether the written captures and explicit closure interface happen to use only concrete-looking types.
+
+This boundary is owned semantically by `closures.md` and consumed here because generic-body scope/capability rules would otherwise appear to admit such a body statement. No generic substitution is constructed for a closure site, no abstract capture environment exists, and an enclosing generic activation never specializes or revalidates a closure declaration after substitution.
+
+This restriction does not prohibit a non-generic closure body from making an independently valid explicit concrete generic direct call. Such a call consumes this document's ordinary generic-application relation with concrete type arguments; the closure itself remains non-generic and its opaque type remains outside the generic type-argument domain.
 
 ## Generic callable validation
 
@@ -206,11 +215,11 @@ For one resolved direct-call target, before any ordinary value-argument producer
 8. instantiate the target's parametric parameter/result type expressions under that substitution; and
 9. provide those exact instantiated types to the existing ordinary direct-call argument/result validation relations.
 
-Marker-obligation failure is part of this pre-argument generic-application validation. It MUST NOT commit ordinary value-argument ownership, safe-reference authority/carrier, raw-pointer, or other producer state effects.
+Marker-obligation failure is part of this pre-argument generic-application validation. It MUST NOT commit ordinary value-argument ownership, safe-reference authority/carrier, raw-pointer, closure snapshot, or other producer state effects.
 
 There is no inference fallback. Missing type arguments for a generic target remain invalid even when value arguments or a receiving result context would uniquely suggest a concrete type.
 
-A generic direct application remains the same direct-call producer/call-statement semantic category owned by `function-execution.md`. `function-values.md` independently excludes generic function entities and explicit specializations as function values; a bounded indirect call through a function-value local therefore never consumes this generic-application relation. This document adds no generic function value, method/associated lookup, or second generic call mechanism.
+A generic direct application remains the same direct-call producer/call-statement semantic category owned by `function-execution.md`. `function-values.md` independently excludes generic function entities and explicit specializations as function values; a bounded indirect call through a function-value binding therefore never consumes this generic-application relation. `closures.md` independently rejects generic type arguments on a selected dedicated closure target before closure/argument effects. This document adds no generic function value, generic closure, method/associated lookup, or second generic call mechanism.
 
 If a generic application appears inside another generic body and its substitution contains enclosing abstract type parameters, the instantiated target signature may remain abstract. Ordinary call validation then uses the exact composed abstract type expressions and equality/capability facts already available in the enclosing generic validation environment. Any marker requirements are discharged from the enclosing abstract argument's declared exact requirement set, not from concrete implementation search for hypothetical future substitutions.
 
@@ -220,7 +229,7 @@ Every successful dynamic direct call of a generic function carries one exact sub
 
 For each abstract type occurrence in that activation, the substitution context determines the corresponding concrete runtime/source value type once the outer application chain is concrete. This context does not change generic-body operation modes selected during abstract validation.
 
-Activation substitution identity is not source-observable data. It does not create a runtime type object, reflection value, hidden source parameter, module binding, ABI argument, dictionary, trait witness, physical code address, or calling-convention dimension.
+Activation substitution identity is not source-observable data. It does not create a runtime type object, reflection value, hidden source parameter, closure environment, module binding, ABI argument, dictionary, trait witness, physical code address, or calling-convention dimension.
 
 A successfully discharged marker obligation likewise contributes no source-observable activation witness, hidden value, dictionary, dispatch identity, or runtime trait state.
 
@@ -238,6 +247,8 @@ For one supplied finite source compilation under this revision:
 - the set of represented nominal record declarations is finite; and
 - generic type arguments add no new type constructor and are restricted to those plain concrete type identities once an outer application is concrete.
 
+Opaque closure-site types do not enlarge this substitution domain because they are not generic type arguments and closure declarations do not occur in generic source-function bodies in this slice.
+
 Therefore the concrete substitution domain for every finite generic arity is finite.
 
 A faithful source-to-Core refinement MAY realize the represented generic source program as a finite family of existing **concrete** Core function entities and direct calls obtained after exact substitution, provided it preserves all accepted source semantics, including the generic-body-selected ownership operation modes and the source call/recursion graph behavior.
@@ -252,9 +263,9 @@ The number, identity, sharing, caching, timing, or physical representation of sp
 
 ## Concrete-syntax boundary
 
-The represented square-bracket declaration/application spelling, inline marker-requirement spelling, and list grammar are owned only by `concrete-syntax.md`.
+The represented square-bracket generic declaration/application spelling, inline marker-requirement spelling, and list grammar are owned only by `concrete-syntax.md`. The same punctuation tokens also have the separately bounded closure-capture role owned by `concrete-syntax.md`/`closures.md`; that additional role does not alter generic syntax here.
 
-This document consumes the resulting ordered type-parameter/type-argument sequences and resolved per-slot marker-requirement sets. It does not independently assign punctuation meaning, tokenization, trivia behavior, comma policy, marker separators, parser recovery, or array/index syntax.
+This document consumes the resulting ordered type-parameter/type-argument sequences and resolved per-slot marker-requirement sets. It does not independently assign punctuation meaning, tokenization, trivia behavior, comma policy, marker separators, closure capture syntax, parser recovery, or array/index syntax.
 
 ## Explicitly absent generic dimensions
 
@@ -262,14 +273,14 @@ This revision does not define:
 
 - trait methods, associated items/types/constants, supertraits, trait implication, operational/capability-bearing trait bounds, where clauses, runtime witnesses, or trait-derived duplicability beyond the marker-only relation owned by `traits.md`;
 - a distinguished duplicability bound or other generic capability-bound syntax;
-- generic records, type aliases, opaque types, enums, unions, or another generic nominal declaration;
-- generic safe-reference/raw-pointer constructors or safe-reference/raw-pointer generic arguments;
+- generic records, type aliases, general/module opaque types, enums, unions, or another generic nominal declaration;
+- generic safe-reference/raw-pointer/function-value/closure constructors or safe-reference/raw-pointer/function-value/opaque-closure generic arguments;
 - lifetime, value, const, pack, effect, placement, target, or numeric-contract generic parameters;
 - type inference, omitted/default type arguments, named type arguments, partial application, or higher-kinded parameters;
 - subtyping, variance, coercion, conversion, or promotion through generic substitution;
 - methods, associated items/types, extension lookup, overload sets, dynamic dispatch, trait objects, generic/blanket implementations, specialization, or negative implementations;
-- generic function values, indirect generic calls, closures/captures, or generic closure environments;
-- reflection/reification of type parameters, marker evidence, or activation substitutions;
+- generic function values, indirect generic calls, generic/polymorphic closures, abstract captures, or generic closure environments; the bounded non-generic closure relation is separately owned by `closures.md`;
+- reflection/reification of type parameters, marker evidence, activation substitutions, or closure-site types;
 - generic ABI/layout/FFI/linkage/package/separate-compilation policy; or
 - a generic Core semantic layer.
 
@@ -279,6 +290,6 @@ Those are open specification items, not implementation-defined behavior and not 
 
 A frontend representation of this slice MUST retain semantic type-parameter slot identity independently of lexical spelling, exact resolved marker-requirement identities for every slot, exact abstract type occurrences, explicit ordered type-argument applications, and composed substitutions where needed for independent validation/lowering.
 
-A frontend or lowerer MUST NOT recover type-parameter identity from coincident lexical names across functions, recover marker requirements from lexical spelling instead of resolved trait identity, reconstruct generic-body Copy/structure/operator capability from a marker requirement or concrete specialization, infer omitted type arguments, treat physical specialization identity as source function identity, or manufacture a generic/trait Core semantic operation.
+A frontend or lowerer MUST NOT recover type-parameter identity from coincident lexical names across functions, recover marker requirements from lexical spelling instead of resolved trait identity, reconstruct generic-body Copy/structure/operator/closure capability from a marker requirement or concrete specialization, infer omitted type arguments, treat physical specialization identity as source function identity, or manufacture a generic/trait/closure Core semantic operation.
 
 Parser/HIR/lowering representation is otherwise non-normative and remains outside this specification owner.
