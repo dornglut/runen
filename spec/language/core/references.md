@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the currently represented Core semantics for first-class safe-reference types and values, reference permission classes, reference-backed alias authority, reference-carrier lifetime, root reference formation, reference reborrowing, reference-relative storage access, cross-activation safe-reference value-transport consequences, and the validity requirements that keep represented safe references non-dangling.
 
-It consumes structural storage regions, storage extent, stored-value lifetime, initialization state, ordinary replacement permission, interior mutability, destruction, and cleanup from [Core value and storage semantics](value-storage.md); structural overlap and the shared/exclusive alias-authority law from [Core borrowing](borrowing.md); and parameter/result transfer boundaries and activation lifetime from [Core functions and direct calls](functions.md). Raw-pointer values and provenance remain separately owned by [Core pointers and provenance](pointers.md).
+It consumes activation-local structural storage regions, storage extent, stored-value lifetime, initialization state, ordinary replacement permission, interior mutability, destruction, and cleanup from [Core value and storage semantics](value-storage.md); execution-persistent scalar storage regions and their execution extent from [Core execution-persistent storage](persistent-storage.md); structural overlap and the shared/exclusive alias-authority law from [Core borrowing](borrowing.md); and parameter/result transfer boundaries and activation lifetime from [Core functions and direct calls](functions.md). Raw-pointer values and provenance remain separately owned by [Core pointers and provenance](pointers.md).
 
 A safe reference is not a raw pointer, a proving-MIR `LoanId`, a static `Place`, a dynamic storage-instance identity, a physical address, an ABI representation, or a provenance token. This document does not define source-language reference or lifetime syntax.
 
@@ -74,7 +74,7 @@ Interior mutability remains separate from all three permission classes. An inter
 
 A represented safe-reference value contains exactly the semantic facts required by this relation:
 
-- one target `StorageRegion`, using the dynamic storage-instance identity and structural projection relation from [Core value and storage semantics](value-storage.md); and
+- one target `StorageRegion`, using the applicable dynamic storage-instance identity and structural projection relation from `value-storage.md` or the complete execution-persistent root identity from `persistent-storage.md`; and
 - one opaque dynamic **reference-authority identity** selecting the reference-backed authority interval that authorizes access to that target.
 
 The value's Core reference type separately fixes its exact referent type and permission class.
@@ -151,30 +151,43 @@ A reference-backed authority is not declared by a body-local `LoanId`. It is cre
 
 ## Root reference formation
 
-The first represented reference slice permits root safe-reference formation only from **direct Core storage** in the current activation.
+The represented reference slice has exactly two root-storage categories:
 
-Root formation conceptually produces one owned safe-reference value of exact reference type `R` from one direct source place `p`.
+1. existing direct activation-local Core storage; and
+2. the complete root of one live execution-persistent scalar instance from `persistent-storage.md`.
 
-Let `T` be the exact type reached by `p`, and let `R` have referent type `U` and permission `K`. Formation is language-valid only when:
+### Activation-local root
+
+Root formation from one direct activation-local source place `p` retains the existing Shared, Exclusive, and ExclusiveReplace relation.
+
+Let `T` be the exact type reached by `p`, and let requested reference type `R` have referent type `U` and permission `K`. Formation is language-valid only when:
 
 1. `T` and `U` are the same exact Core type identity;
 2. the complete target place `p` is fully Live at formation;
 3. the target storage extent exists;
-4. alias admission succeeds against every currently active explicit loan and reference-backed authority under the shared/exclusive conflict law consumed from [Core borrowing](borrowing.md); and
-5. when `K` is ExclusiveReplace, `p` additionally has the ordinary direct-storage assignment permission required by [Core value and storage semantics](value-storage.md).
+4. alias admission succeeds against every currently active explicit loan and reference-backed authority under the shared/exclusive conflict law consumed from `borrowing.md`; and
+5. when `K` is ExclusiveReplace, `p` additionally has the ordinary direct-storage assignment permission required by `value-storage.md`.
 
 For Shared formation, alias admission uses the shared requirement. For Exclusive or ExclusiveReplace formation, alias admission uses the exclusive requirement.
 
-Successful formation:
+Successful formation resolves `p` to its semantic target `StorageRegion`, creates one fresh root reference-authority identity with the selected shared/exclusive authority, creates one carrier naming that authority, and produces the resulting reference value without reading, copying, moving, mutating, destroying, or replacing the target value.
 
-1. resolves `p` to its semantic target `StorageRegion`;
-2. creates one fresh root reference-authority identity with the selected shared/exclusive authority over that target;
-3. creates one carrier naming that authority; and
-4. produces the resulting safe-reference value without reading, copying, moving, mutating, destroying, or replacing the target value.
+### Execution-persistent Shared root
 
-Formation requires the target to be fully Live because a safe reference initially denotes a valid currently owned value region. After formation, later operation-specific liveness rules remain controlling as described below.
+Root formation from execution-persistent storage is admitted only for permission **Shared** and only for the complete persistent scalar root.
 
-Root reference formation from `PlaceAccess::Loan`, from another reference, or from a raw pointer is not represented by this root relation. Reference-to-reference derivation uses the explicit reborrow relation below.
+Let persistent declaration/instance `s` have exact Core scalar type `T`, and let requested reference type `R` have referent type `U`. Formation is valid only when:
+
+1. `T` and `U` are the same exact Core type identity;
+2. `s` exists in the current represented execution and its persistent storage extent is active;
+3. its scalar stored value is Live; and
+4. Shared alias admission succeeds against every overlapping active explicit loan and reference-backed authority.
+
+Successful formation resolves `s` to its complete semantic persistent `StorageRegion`, creates one fresh Shared root reference-authority identity and one carrier, and produces the safe-reference value. It performs no persistent scalar read and no target value transition.
+
+No Exclusive or ExclusiveReplace persistent root is represented. A persistent root has no `LocalDecl.mutable` fact and does not acquire one. This reference relation also does not make persistent storage a raw-pointer `AddressOf` target.
+
+Root reference formation from `PlaceAccess::Loan`, from another safe reference, or from a raw pointer remains outside this root relation. Reference-to-reference derivation uses the explicit reborrow relation below.
 
 ## Reference access
 
@@ -187,7 +200,7 @@ The reference value's target region is then extended by the requested relative s
 Reference access is distinct from `PlaceAccess::Loan`:
 
 - it is authorized by the dynamic reference-authority identity carried by the stored reference value;
-- it may resolve to storage in a still-live suspended ancestor activation;
+- it may resolve to storage in a still-live suspended ancestor activation or to still-live execution-persistent storage;
 - it does not require the current function body to declare the authority as a `LoanId`; and
 - it does not convert the reference into a raw pointer or physical address.
 
@@ -304,7 +317,7 @@ This requirement applies even when no later dereference would execute. Valid Cor
 
 Because [Core value and storage semantics](value-storage.md) ends each local storage extent only after that local's cleanup completes, ordinary reverse local/field destruction may itself remove reference carriers before the target extent ends. A valid program may therefore rely on the already defined cleanup order when that order provably destroys all target-dependent carriers before the target local's extent ends.
 
-The requirement also permits a callee reference parameter to target storage belonging to a still-live suspended caller or another still-live ancestor activation. Suspension does not end those storage extents.
+The requirement also permits a callee reference parameter to target storage belonging to a still-live suspended caller/ancestor activation **or** execution-persistent storage whose execution extent remains active. Suspension does not end activation-local storage extents, and nested calls do not end the persistent execution extent.
 
 A reference to a callee-local storage region cannot escape into a normally resumed caller through the bounded result contracts owned by [Core functions and direct calls](functions.md). An identity-preserving Shared result keeps the exact target and authority of its designated incoming Shared parameter origin. A derived complete-child Shared result has an exact target equal to its designated incoming `Exclusive` or `ExclusiveReplace` parameter target and an authority directly descended from that incoming external authority. In both cases the result target belongs to still-live external storage rather than a callee local. Ordinary result forms remain reference-free, and storage reachable through a transferred safe-reference parameter still contains no safe-reference leaf. Passing a callee-local reference further into a nested call does not extend the callee-local target beyond its owning activation unless that owning activation itself remains live; every nested activation must terminate before the owning activation can return normally, unless it diverges or faults instead.
 
@@ -369,7 +382,7 @@ For this first transfer slice, the structural value stored in the target of each
 - a raw-pointer leaf; nor
 - another safe-reference leaf.
 
-The raw-pointer exclusion prevents extraction of a raw-pointer value from suspended ancestor storage. The safe-reference exclusion prevents a callee from creating, destroying, moving, copying, or replacing nested reference carriers/authority identities in suspended ancestor storage without a callable authority/effect contract, and prevents storing a newly formed callee-local reference into transferred caller storage.
+The raw-pointer exclusion prevents extraction of a raw-pointer value from transferred external storage. The safe-reference exclusion prevents a callee from creating, destroying, moving, copying, or replacing nested reference carriers/authority identities in external storage without a callable authority/effect contract, and prevents storing a newly formed callee-local reference into transferred external storage. First-slice persistent storage is scalar and contains neither category, but it participates in the same bounded transfer predicate rather than creating an exception.
 
 Richer reference parameters whose referents contain safe references require a later callable contract capable of describing nested authority origins/effects and caller continuation state. This revision does not infer that contract from recursive callee analysis.
 
@@ -412,7 +425,7 @@ A realization may preserve the semantic reference relation using physical addres
 
 ## Separate semantic owners and deliberate exclusions
 
-[Core borrowing](borrowing.md) owns structural overlap and the common alias-conflict consequences shared by explicit loans and reference-backed authorities. [Core value and storage semantics](value-storage.md) owns storage extent, stored-value lifecycle, ordinary replacement, interior mutability, destruction domain/order, and function-local cleanup. [Core functions and direct calls](functions.md) owns parameter/result transfer predicates, callable safe-reference result-origin policy, bounded transferred-referent entry/normal-return state, and activation/call behavior. [Core pointers and provenance](pointers.md) owns raw-pointer values and provenance. [Core unsafe semantics](unsafe.md) owns unsafe-operation preconditions and undefined-behavior classification.
+[Core borrowing](borrowing.md) owns structural overlap and the common alias-conflict consequences shared by explicit loans and reference-backed authorities. [Core value and storage semantics](value-storage.md) owns activation-local storage extent, stored-value lifecycle, ordinary replacement, interior mutability, destruction domain/order, and function-local cleanup. [Core execution-persistent storage](persistent-storage.md) owns persistent declaration/instance identity, execution extent, immutable persistent reads, and terminal persistent cleanup. [Core functions and direct calls](functions.md) owns parameter/result transfer predicates, callable safe-reference result-origin policy, bounded transferred-referent entry/normal-return state, and activation/call behavior. [Core pointers and provenance](pointers.md) owns raw-pointer values and provenance. [Core unsafe semantics](unsafe.md) owns unsafe-operation preconditions and undefined-behavior classification.
 
 This revision deliberately does not define:
 
@@ -430,7 +443,7 @@ This revision deliberately does not define:
 - representation validity, physical address stability, relocation guarantees, or pinning;
 - generics, traits, variance, subtyping, or coercion;
 - closures or captures;
-- const/static semantics;
+- source constant/static syntax and source lookup semantics (Core persistent storage itself is owned by `persistent-storage.md`);
 - safe-public-contract source checking;
 - heap allocation/deallocation;
 - custom destructor bodies; or

@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the currently represented Core semantics for finite function programs, function identity, the canonical callable-interface relation, owned-value parameter slots, direct-call target selection, common function-call destination/argument/activation semantics after a callable interface is established, result transfer, recursion, divergence, and defined-fault propagation through calls.
 
-It consumes local storage, initialization state, owned move/copy, destruction domains, and function-termination cleanup from [Core value and storage semantics](value-storage.md); access authority and explicit-loan termination from [Core borrowing](borrowing.md); safe-reference values, reference-backed authority, carrier lifecycle, and reference access from [Core references](references.md); raw-pointer value and provenance semantics from [Core pointers and provenance](pointers.md); and defined-fault classification from [Core faults](faults.md). First-class callable scalar types/values, static function-value formation, indirect-call callee evaluation, and dynamic target selection are owned by [Core callable values and indirect calls](callable-values.md); after an indirect target is selected, that owner reuses the common call relations defined here rather than redefining them.
+It consumes local storage, initialization state, owned move/copy, destruction domains, and function-termination cleanup from [Core value and storage semantics](value-storage.md); execution-persistent declaration/instance identity and terminal persistent cleanup from [Core execution-persistent storage](persistent-storage.md); access authority and explicit-loan termination from [Core borrowing](borrowing.md); safe-reference values, reference-backed authority, carrier lifecycle, and reference access from [Core references](references.md); raw-pointer value and provenance semantics from [Core pointers and provenance](pointers.md); and defined-fault classification from [Core faults](faults.md). First-class callable scalar types/values, static function-value formation, indirect-call callee evaluation, and dynamic target selection are owned by [Core callable values and indirect calls](callable-values.md); after an indirect target is selected, that owner reuses the common call relations defined here rather than redefining them.
 
 This relation is independent of source syntax, source name resolution, ABI, calling convention, physical stack layout, backend realization, or a particular compiler representation.
 
@@ -12,8 +12,9 @@ This relation is independent of source syntax, source name resolution, ABI, call
 
 A represented Core program contains:
 
-- one finite Core type-identity domain; and
-- one finite sequence of represented Core function entities.
+- one finite Core type-identity domain;
+- one finite sequence of represented Core function entities; and
+- one finite sequence of execution-persistent storage declarations owned by `persistent-storage.md`.
 
 Each represented function entity has one identity within that program. Function identity is semantic within the represented Core program but does not require a stable numeric encoding, serialized identifier, symbol name, physical address, or source declaration identity.
 
@@ -27,7 +28,7 @@ A canonical Core **callable interface** consists of exactly:
 
 For a represented function entity, the callable-interface parameter `TypeId` sequence is derived in parameter-slot order from the designated parameter locals defined below. The function's result specification and safe-reference result contract complete the derived interface. The semantic interface therefore contains no second independent function-parameter type source.
 
-The program-wide type domain is shared by every function body and callable interface in that program. A type identity used by two different functions therefore denotes the same represented Core type.
+The program-wide type domain is shared by every function body, callable interface, and persistent-storage declaration in that program. A type identity used by two different functions or by a function and persistent declaration therefore denotes the same represented Core type.
 
 `callable-values.md` may attach this same canonical interface relation to callable scalar types. It does not create a second signature/interface validity relation.
 
@@ -281,7 +282,7 @@ The represented ordinary argument operand set in this revision does not itself a
 
 ## Reference-parameter referent state
 
-Each safe-reference carrier transferred into a parameter denotes one **external referent domain** for that activation: the carrier's existing target storage region in a still-live activation plus the exact referent type and authority already carried by the value.
+Each safe-reference carrier transferred into a parameter denotes one **external referent domain** for that activation: the carrier's existing target storage region whose storage extent remains live across the call, plus the exact referent type and authority already carried by the value. That target may belong to a still-live suspended activation or, for an admitted Shared reference, to execution-persistent storage under `persistent-storage.md`.
 
 At callee body entry, every such external referent domain is fully Live by call admission. The callee validates operations on that domain using the ordinary reference permissions, structural path-state rules, and stored-value lifecycle. This is an abstract semantic storage domain for function validation; it is not a new parameter slot, `LoanId`, allocation, physical stack location, or hidden runtime copy of the caller's storage.
 
@@ -353,7 +354,7 @@ A moved return source is already Dead before termination cleanup and therefore i
 
 A safe-reference value may escape through a normal result only when it satisfies the function's selected safe-reference result contract. An unpreserved temporary reborrow follows ordinary callee cleanup: when its remaining callee-owned carriers and descendants end, its authority ends and delegated parent capability is restored according to `references.md`. A preserved direct-child result instead keeps its parent authority delegated after Return for as long as that child branch remains active.
 
-The outer consumer of a represented Core function execution receives the same optional result structure: no-result normal completion yields no value, an ordinary result-bearing normal completion yields the preserved owned result value, and a contract-bearing Shared-reference result preserves the exact authority/target/ancestry relation guaranteed by the selected callable interface. This fact defines Core execution structure and does not establish source entry-point semantics.
+When the normally returning activation is the outermost represented Core activation, its optional result is preserved while activation-local termination completes. Before that preserved optional result is delivered to the outer consumer, `persistent-storage.md` performs execution-terminal persistent cleanup and ends the persistent storage extents. Only then does the outer consumer receive the same optional result structure: no-result normal completion yields no value, an ordinary result-bearing normal completion yields the preserved owned result value, and a contract-bearing Shared-reference result preserves the exact authority/target/ancestry relation guaranteed by the selected callable interface. Persistent cleanup cannot legitimize a result reference whose target extent would end there; existing result contracts remain parameter-origin-only and storage-extent validity must hold. This fact defines Core execution structure and does not establish source entry-point semantics.
 
 ## Contract-bearing Shared-reference result at the caller
 
