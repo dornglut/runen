@@ -81,6 +81,29 @@ fn one_hir_static_becomes_one_exact_persistent_declaration_and_read() {
 }
 
 #[test]
+fn same_valued_source_statics_lower_to_distinct_persistent_identities() {
+    let lowered = lower_source(
+        "static LEFT: I64 = 7; static RIGHT: I64 = 7; \
+         fn left() -> I64 { return LEFT; } \
+         fn right() -> I64 { return RIGHT; }",
+    );
+    let program = lowered.as_program();
+    assert_eq!(program.persistent.len(), 2);
+    assert_eq!(program.persistent[0].initial, Value::I64(7));
+    assert_eq!(program.persistent[1].initial, Value::I64(7));
+    assert!(
+        operands(function(program, "left"))
+            .iter()
+            .any(|operand| matches!(operand, Operand::PersistentRead(PersistentId(0))))
+    );
+    assert!(
+        operands(function(program, "right"))
+            .iter()
+            .any(|operand| matches!(operand, Operand::PersistentRead(PersistentId(1))))
+    );
+}
+
+#[test]
 fn qualified_static_read_keeps_declaration_identity_without_module_runtime_metadata() {
     let lowered = lower_qualified(
         "export static ANSWER: U64 = 18446744073709551615;",
@@ -116,4 +139,26 @@ fn shared_static_root_lowers_to_persistent_root_and_identity_roundtrip_executes(
     let report = execute_source(source, "entry");
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(ObservedValue::I64(42)));
+}
+
+#[test]
+fn generic_and_closure_static_reads_lower_to_the_same_persistent_identity() {
+    let lowered = lower_source(
+        "static VALUE: I64 = 9; \
+         fn generic[T](ignored: T) -> I64 { return VALUE; } \
+         fn entry(dummy: I64) -> I64 { \
+             let c = fn[dummy]() -> I64 { return VALUE; }; \
+             let via_generic: I64 = generic[I64](dummy); \
+             return c() + via_generic; \
+         }",
+    );
+    let program = lowered.as_program();
+    assert_eq!(program.persistent.len(), 1);
+    let persistent_reads = program
+        .functions
+        .iter()
+        .flat_map(operands)
+        .filter(|operand| matches!(operand, Operand::PersistentRead(PersistentId(0))))
+        .count();
+    assert_eq!(persistent_reads, 2);
 }
