@@ -135,7 +135,6 @@ fn constant_value_shape_does_not_widen_targets_or_general_members() {
         "fn f() { dep::VALUE = 1; }",
         "fn f() { let x: I64 = dep::VALUE.field; }",
         "fn f() { let x: I64 = dep::nested::VALUE; }",
-        "fn f() { let x: &I64 = &dep::VALUE; }",
         "fn f() { let x: raw I64 = raw &dep::VALUE; }",
     ] {
         let parsed = parse(source);

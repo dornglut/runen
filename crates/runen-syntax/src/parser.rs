@@ -57,6 +57,9 @@ impl Parser<'_> {
                 Some(SyntaxKind::KwExport) if self.at_contextual_ident(1, "const") => {
                     self.parse_const_declaration(true);
                 }
+                Some(SyntaxKind::KwExport) if self.at_contextual_ident(1, "static") => {
+                    self.parse_static_declaration(true);
+                }
                 Some(SyntaxKind::KwExport) => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::KwRecord) => self.parse_record_definition(true),
                     Some(SyntaxKind::KwFn) => self.parse_function_definition(true),
@@ -75,6 +78,9 @@ impl Parser<'_> {
                 }
                 Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "const") => {
                     self.parse_const_declaration(false);
+                }
+                Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "static") => {
+                    self.parse_static_declaration(false);
                 }
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Item));
@@ -97,17 +103,30 @@ impl Parser<'_> {
     }
 
     fn parse_const_declaration(&mut self, exported: bool) {
-        debug_assert!(self.at_contextual_ident(usize::from(exported), "const"));
-        self.builder.start_node(SyntaxKind::ConstDeclaration.into());
+        self.parse_literal_declaration(exported, "const", SyntaxKind::ConstDeclaration);
+    }
+
+    fn parse_static_declaration(&mut self, exported: bool) {
+        self.parse_literal_declaration(exported, "static", SyntaxKind::StaticDeclaration);
+    }
+
+    fn parse_literal_declaration(
+        &mut self,
+        exported: bool,
+        introducer: &str,
+        node_kind: SyntaxKind,
+    ) {
+        debug_assert!(self.at_contextual_ident(usize::from(exported), introducer));
+        self.builder.start_node(node_kind.into());
         if exported {
             self.expect(SyntaxKind::KwExport, ExpectedSyntax::Item);
         }
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Item);
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
-        self.parse_const_type();
+        self.parse_literal_declaration_type();
         self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
-        if !self.parse_const_literal() {
+        if !self.parse_declaration_literal() {
             self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Value));
             if self.current().is_some() && !self.at(SyntaxKind::Semicolon) {
                 self.recover_one();
@@ -117,7 +136,7 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_const_type(&mut self) {
+    fn parse_literal_declaration_type(&mut self) {
         self.builder.start_node(SyntaxKind::TypeRef.into());
         if self.current().is_some_and(is_intrinsic_type_start) {
             self.bump();
@@ -130,7 +149,7 @@ impl Parser<'_> {
         self.builder.finish_node();
     }
 
-    fn parse_const_literal(&mut self) -> bool {
+    fn parse_declaration_literal(&mut self) -> bool {
         match self.current() {
             Some(SyntaxKind::KwTrue | SyntaxKind::KwFalse) => {
                 self.builder.start_node(SyntaxKind::BooleanLiteral.into());
@@ -517,7 +536,6 @@ impl Parser<'_> {
             }
             self.bump_trivia();
         }
-
         if !missing_close {
             self.expect(SyntaxKind::RBrace, ExpectedSyntax::RightBrace);
         }
@@ -1558,11 +1576,19 @@ impl Parser<'_> {
         self.builder
             .start_node(SyntaxKind::SafeReferenceValue.into());
         self.expect(SyntaxKind::Amp, ExpectedSyntax::Value);
-        self.eat(SyntaxKind::KwMut);
-        self.eat(SyntaxKind::Star);
-        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
-        if self.at(SyntaxKind::Dot) {
-            self.parse_field_selectors();
+        let mutable = self.eat(SyntaxKind::KwMut);
+        let dereferenced = self.eat(SyntaxKind::Star);
+        if !mutable
+            && !dereferenced
+            && self.at(SyntaxKind::Ident)
+            && self.peek_nontrivia(1) == Some(SyntaxKind::ColonColon)
+        {
+            self.parse_qualified_module_member();
+        } else {
+            self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+            if self.at(SyntaxKind::Dot) {
+                self.parse_field_selectors();
+            }
         }
         self.builder.finish_node();
     }
