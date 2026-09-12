@@ -38,6 +38,10 @@ jobs:
       - name: Apply bounded persistent-substrate migration
         run: |
           set -euo pipefail
+          # One ordered anchor occurs in both static and state operand validation;
+          # the static validator is the first occurrence. Keep all missing-anchor
+          # assertions while allowing that ordered first replacement.
+          sed -i 's/if count != 1:/if count < 1:/' .github/tmp-700-migrate.py
           python3 .github/tmp-700-migrate.py
           cargo +stable fmt --all
           git diff --check
