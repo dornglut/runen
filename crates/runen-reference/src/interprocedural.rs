@@ -469,6 +469,15 @@ struct ResolvedReferenceAccess {
     selected_ty: TypeId,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ExecutionStep {
+    Continue,
+    Terminal {
+        terminal: TerminalStatus,
+        result: Option<RuntimeValue>,
+    },
+}
+
 /// Executable abstract machine for validated interprocedural Core programs.
 pub struct Machine {
     program: ValidatedProgram,
@@ -541,172 +550,147 @@ impl Machine {
     /// A cyclic call/control-flow graph may diverge and therefore never return.
     pub fn execute(mut self) -> Result<ExecutionReport, UndefinedBehavior> {
         loop {
-            let frame_index = self
-                .frames
-                .len()
-                .checked_sub(1)
-                .expect("machine always has an active frame while executing");
-            let function_id = self.frames[frame_index].function;
-            let current = self.frames[frame_index].current;
-            let block = self
-                .program
-                .as_program()
-                .function(function_id)
-                .expect("validated frame references a known function")
-                .body
-                .block(current)
-                .expect("validated frame reaches only known basic blocks")
-                .clone();
-
-            for statement in &block.statements {
-                if let Err(kind) = self.execute_statement(frame_index, statement) {
+            match self.step_once() {
+                Ok(ExecutionStep::Continue) => {}
+                Ok(ExecutionStep::Terminal { terminal, result }) => {
+                    return Ok(ExecutionReport {
+                        terminal,
+                        result: result.map(RuntimeValue::into_observed_value),
+                        verification_events: self.verification_events,
+                    });
+                }
+                Err(kind) => {
                     return Err(UndefinedBehavior {
                         kind,
                         verification_events: self.verification_events,
                     });
                 }
             }
+        }
+    }
 
-            match block.terminator {
-                Terminator::Goto(target) => self.frames[frame_index].current = target,
-                Terminator::Branch {
-                    condition,
-                    true_target,
-                    false_target,
-                } => {
-                    let value = match self.evaluate_operand(frame_index, &condition) {
-                        Ok(value) => value,
-                        Err(kind) => {
-                            return Err(UndefinedBehavior {
-                                kind,
-                                verification_events: self.verification_events,
-                            });
-                        }
-                    };
-                    self.frames[frame_index].current = match value {
-                        RuntimeValue::Bool(true) => true_target,
-                        RuntimeValue::Bool(false) => false_target,
-                        _ => unreachable!("validated Branch condition is Bool-valued"),
-                    };
-                }
-                Terminator::Call {
-                    function,
-                    arguments,
-                    destination,
-                    target,
-                } => {
-                    if let Err(kind) =
-                        self.start_call(frame_index, function, &arguments, destination, target)
-                    {
-                        return Err(UndefinedBehavior {
-                            kind,
-                            verification_events: self.verification_events,
-                        });
-                    }
-                }
-                Terminator::IndirectCall {
-                    callable: _,
-                    callee,
-                    arguments,
-                    destination,
-                    target,
-                } => {
-                    let function = match self.evaluate_operand(frame_index, &callee) {
-                        Ok(RuntimeValue::Function(function)) => function,
-                        Ok(_) => unreachable!(
-                            "validated indirect call callee has its exact callable type"
-                        ),
-                        Err(kind) => {
-                            return Err(UndefinedBehavior {
-                                kind,
-                                verification_events: self.verification_events,
-                            });
-                        }
-                    };
-                    if let Err(kind) =
-                        self.start_call(frame_index, function, &arguments, destination, target)
-                    {
-                        return Err(UndefinedBehavior {
-                            kind,
-                            verification_events: self.verification_events,
-                        });
-                    }
-                }
-                Terminator::Return(result) => {
-                    let result = if let Some(operand) = &result {
-                        match self.evaluate_operand(frame_index, operand) {
-                            Ok(value) => Some(value),
-                            Err(kind) => {
-                                return Err(UndefinedBehavior {
-                                    kind,
-                                    verification_events: self.verification_events,
-                                });
-                            }
-                        }
-                    } else {
-                        None
-                    };
-                    let continuation = self.frames[frame_index].return_to.clone();
-                    self.cleanup_frame(frame_index);
-                    self.frames.pop();
+    fn step_once(&mut self) -> Result<ExecutionStep, UndefinedBehaviorKind> {
+        let frame_index = self
+            .frames
+            .len()
+            .checked_sub(1)
+            .expect("machine always has an active frame while executing");
+        let function_id = self.frames[frame_index].function;
+        let current = self.frames[frame_index].current;
+        let block = self
+            .program
+            .as_program()
+            .function(function_id)
+            .expect("validated frame references a known function")
+            .body
+            .block(current)
+            .expect("validated frame reaches only known basic blocks")
+            .clone();
 
-                    if let Some(continuation) = continuation {
-                        let caller_index = self
-                            .frames
-                            .len()
-                            .checked_sub(1)
-                            .expect("callee continuation has one suspended caller");
-                        match (continuation.destination, result) {
-                            (Some(destination), Some(value)) => {
-                                let ty = self.place_type(caller_index, &destination);
-                                {
-                                    let types = &self.program.as_program().types;
-                                    let frame = &mut self.frames[caller_index];
-                                    write_value(
-                                        types,
-                                        ty,
-                                        place_state_mut(&mut frame.locals, &destination),
-                                        value,
-                                    );
-                                }
-                                self.record(
-                                    caller_index,
-                                    VerificationEventKind::Write {
-                                        place: destination,
-                                        kind: VerificationWriteKind::Init,
-                                    },
+        for statement in &block.statements {
+            self.execute_statement(frame_index, statement)?;
+        }
+
+        match block.terminator {
+            Terminator::Goto(target) => self.frames[frame_index].current = target,
+            Terminator::Branch {
+                condition,
+                true_target,
+                false_target,
+            } => {
+                let value = self.evaluate_operand(frame_index, &condition)?;
+                self.frames[frame_index].current = match value {
+                    RuntimeValue::Bool(true) => true_target,
+                    RuntimeValue::Bool(false) => false_target,
+                    _ => unreachable!("validated Branch condition is Bool-valued"),
+                };
+            }
+            Terminator::Call {
+                function,
+                arguments,
+                destination,
+                target,
+            } => {
+                self.start_call(frame_index, function, &arguments, destination, target)?;
+            }
+            Terminator::IndirectCall {
+                callable: _,
+                callee,
+                arguments,
+                destination,
+                target,
+            } => {
+                let function = match self.evaluate_operand(frame_index, &callee)? {
+                    RuntimeValue::Function(function) => function,
+                    _ => unreachable!("validated indirect call callee has its exact callable type"),
+                };
+                self.start_call(frame_index, function, &arguments, destination, target)?;
+            }
+            Terminator::Return(result) => {
+                let result = result
+                    .as_ref()
+                    .map(|operand| self.evaluate_operand(frame_index, operand))
+                    .transpose()?;
+                let continuation = self.frames[frame_index].return_to.clone();
+                self.cleanup_frame(frame_index);
+                self.frames.pop();
+
+                if let Some(continuation) = continuation {
+                    let caller_index = self
+                        .frames
+                        .len()
+                        .checked_sub(1)
+                        .expect("callee continuation has one suspended caller");
+                    match (continuation.destination, result) {
+                        (Some(destination), Some(value)) => {
+                            let ty = self.place_type(caller_index, &destination);
+                            {
+                                let types = &self.program.as_program().types;
+                                let frame = &mut self.frames[caller_index];
+                                write_value(
+                                    types,
+                                    ty,
+                                    place_state_mut(&mut frame.locals, &destination),
+                                    value,
                                 );
                             }
-                            (None, None) => {}
-                            _ => unreachable!(
-                                "validated call destination and callee result structures agree"
-                            ),
+                            self.record(
+                                caller_index,
+                                VerificationEventKind::Write {
+                                    place: destination,
+                                    kind: VerificationWriteKind::Init,
+                                },
+                            );
                         }
-                        self.frames[caller_index].current = continuation.target;
-                    } else {
-                        self.cleanup_persistent();
-                        return Ok(ExecutionReport {
-                            terminal: TerminalStatus::Returned,
-                            result: result.map(RuntimeValue::into_observed_value),
-                            verification_events: self.verification_events,
-                        });
+                        (None, None) => {}
+                        _ => unreachable!(
+                            "validated call destination and callee result structures agree"
+                        ),
                     }
-                }
-                Terminator::Fault(fault) => {
-                    while !self.frames.is_empty() {
-                        let index = self.frames.len() - 1;
-                        self.cleanup_frame(index);
-                        self.frames.pop();
-                    }
+                    self.frames[caller_index].current = continuation.target;
+                } else {
                     self.cleanup_persistent();
-                    return Ok(ExecutionReport {
-                        terminal: TerminalStatus::Faulted(fault.code),
-                        result: None,
-                        verification_events: self.verification_events,
+                    return Ok(ExecutionStep::Terminal {
+                        terminal: TerminalStatus::Returned,
+                        result,
                     });
                 }
             }
+            Terminator::Fault(fault) => {
+                while !self.frames.is_empty() {
+                    let index = self.frames.len() - 1;
+                    self.cleanup_frame(index);
+                    self.frames.pop();
+                }
+                self.cleanup_persistent();
+                return Ok(ExecutionStep::Terminal {
+                    terminal: TerminalStatus::Faulted(fault.code),
+                    result: None,
+                });
+            }
         }
+
+        Ok(ExecutionStep::Continue)
     }
 
     fn start_call(
@@ -2033,5 +2017,57 @@ fn drop_live_values(
             }
         }
         _ => unreachable!("validated Core MIR guarantees state shape matches its type"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use runen_core_ir::{
+        BasicBlock, Body, Function, PersistentDecl, Program, SafeReferenceResultContract,
+        ScalarType, TypeDef, TypeTable, validate_program,
+    };
+
+    #[test]
+    fn diverging_execution_prefix_retains_persistent_extent() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let function = Function {
+            name: "diverge".into(),
+            parameters: Vec::new(),
+            result: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
+            body: Body {
+                locals: Vec::new(),
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Goto(BasicBlockId(0)),
+                )],
+            },
+        };
+        let validated = validate_program(Program {
+            types,
+            persistent: vec![PersistentDecl::new(i64_ty, Value::I64(13))],
+            functions: vec![function],
+        })
+        .expect("stable self-loop with persistent storage is valid");
+        let mut machine = Machine::new(validated, FunctionId(0)).expect("zero-parameter entry");
+        let instance = machine
+            .persistent_storage_instance(PersistentId(0))
+            .expect("persistent instance exists before execution");
+        let expected = ObjectState::Leaf(LeafState::Live(RuntimeValue::I64(13)));
+
+        for _ in 0..8 {
+            assert_eq!(machine.step_once(), Ok(ExecutionStep::Continue));
+            assert_eq!(
+                machine.persistent_storage_instance(PersistentId(0)),
+                Some(instance)
+            );
+            assert_eq!(machine.persistent[0].state, expected);
+            assert_eq!(machine.frames.len(), 1);
+            assert_eq!(machine.frames[0].current, BasicBlockId(0));
+        }
     }
 }
