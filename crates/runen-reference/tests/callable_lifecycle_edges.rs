@@ -125,6 +125,7 @@ fn callable_copy_move_reinitialization_and_dispatch_preserve_exact_function_iden
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![
             entry,

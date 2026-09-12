@@ -48,6 +48,7 @@ fn execute_integer_or(scalar: ScalarType, left: Value, right: Value) -> Executio
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })

@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, NumericContract, Operand, Place,
-    PlaceAccess, Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement,
+    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, NumericContract, Operand, PersistentId,
+    Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement,
     StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram,
     Value,
 };
@@ -426,6 +426,13 @@ struct LocalStorage {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+struct PersistentStorage {
+    instance: StorageInstanceId,
+    ty: TypeId,
+    state: ObjectState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ActiveLoan {
     kind: BorrowKind,
     place: Place,
@@ -465,6 +472,7 @@ struct ResolvedReferenceAccess {
 /// Executable abstract machine for validated interprocedural Core programs.
 pub struct Machine {
     program: ValidatedProgram,
+    persistent: Vec<PersistentStorage>,
     frames: Vec<Frame>,
     reference_authorities: Vec<Option<ActiveReferenceAuthority>>,
     next_activation: u64,
@@ -484,18 +492,48 @@ impl Machine {
             return Err(EntryError::EntryHasParameters(entry));
         }
 
+        let mut next_storage_instance = 1_u64;
+        let mut persistent = Vec::with_capacity(program.as_program().persistent.len());
+        for declaration in &program.as_program().persistent {
+            let instance = StorageInstanceId(next_storage_instance);
+            next_storage_instance = next_storage_instance
+                .checked_add(1)
+                .expect("reference storage-instance identity exhausted");
+            let mut state = ObjectState::uninitialized(&program.as_program().types, declaration.ty);
+            write_value(
+                &program.as_program().types,
+                declaration.ty,
+                &mut state,
+                RuntimeValue::from_constant(&declaration.initial),
+            );
+            persistent.push(PersistentStorage {
+                instance,
+                ty: declaration.ty,
+                state,
+            });
+        }
+
         let mut machine = Self {
             program,
+            persistent,
             frames: Vec::new(),
             reference_authorities: Vec::new(),
             next_activation: 1,
-            next_storage_instance: 1,
+            next_storage_instance,
             next_reference_authority: 0,
             verification_events: Vec::new(),
         };
         let frame = machine.create_frame(entry, Vec::new(), None);
         machine.frames.push(frame);
         Ok(machine)
+    }
+
+    /// Verification-only dynamic storage identity for one execution-persistent declaration.
+    #[must_use]
+    pub fn persistent_storage_instance(&self, id: PersistentId) -> Option<StorageInstanceId> {
+        self.persistent
+            .get(id.0 as usize)
+            .map(|storage| storage.instance)
     }
 
     /// Execute until normal return, defined fault, or detected undefined behavior.
@@ -646,6 +684,7 @@ impl Machine {
                         }
                         self.frames[caller_index].current = continuation.target;
                     } else {
+                        self.cleanup_persistent();
                         return Ok(ExecutionReport {
                             terminal: TerminalStatus::Returned,
                             result: result.map(RuntimeValue::into_observed_value),
@@ -659,6 +698,7 @@ impl Machine {
                         self.cleanup_frame(index);
                         self.frames.pop();
                     }
+                    self.cleanup_persistent();
                     return Ok(ExecutionReport {
                         terminal: TerminalStatus::Faulted(fault.code),
                         result: None,
@@ -1092,9 +1132,8 @@ impl Machine {
 
     fn reference_read(&self, actor_frame: usize, src: &ReferenceAccess) {
         let resolved = self.resolve_reference_access(actor_frame, src);
-        let (target_frame, target_place) = self.frame_place_for_storage_region(&resolved.target);
         assert!(
-            place_state(&self.frames[target_frame].locals, &target_place).fully_live(),
+            self.storage_region_fully_live(&resolved.target),
             "validated reference read reaches a fully-live referent"
         );
     }
@@ -1202,6 +1241,37 @@ impl Machine {
     ) -> Result<RuntimeValue, UndefinedBehaviorKind> {
         match operand {
             Operand::Constant(value) => Ok(RuntimeValue::from_constant(value)),
+            Operand::PersistentRead(persistent) => {
+                let target = self.persistent_region(*persistent);
+                debug_assert!(self.reference_authorities.iter().all(|active| {
+                    active.as_ref().is_none_or(|active| {
+                        !active.target.overlaps(&target)
+                            || active.permission.alias_kind() == BorrowKind::Shared
+                    })
+                }));
+                let index = persistent.0 as usize;
+                let ty = self.persistent[index].ty;
+                let types = &self.program.as_program().types;
+                let (persistent, authorities) = (&self.persistent, &mut self.reference_authorities);
+                Ok(clone_value(
+                    types,
+                    ty,
+                    &persistent[index].state,
+                    authorities,
+                ))
+            }
+            Operand::PersistentSharedRoot(persistent) => {
+                let target = self.persistent_region(*persistent);
+                let authority = self.allocate_reference_authority(
+                    target.clone(),
+                    ReferencePermission::Shared,
+                    None,
+                );
+                Ok(RuntimeValue::SafeReference(SafeReferenceValue {
+                    target,
+                    authority,
+                }))
+            }
             Operand::FunctionValue(function) => Ok(RuntimeValue::Function(*function)),
             Operand::Move(src) => {
                 let src = self.resolve_access(frame_index, src);
@@ -1296,16 +1366,7 @@ impl Machine {
             }
             Operand::ReferenceCopy(src) => {
                 let resolved = self.resolve_reference_access(frame_index, src);
-                let (target_frame, target_place) =
-                    self.frame_place_for_storage_region(&resolved.target);
-                let types = &self.program.as_program().types;
-                let state = place_state(&self.frames[target_frame].locals, &target_place);
-                Ok(clone_value(
-                    types,
-                    resolved.selected_ty,
-                    state,
-                    &mut self.reference_authorities,
-                ))
+                Ok(self.clone_storage_region_value(&resolved.target, resolved.selected_ty))
             }
         }
     }
@@ -1452,6 +1513,48 @@ impl Machine {
         }
     }
 
+    fn persistent_region(&self, id: PersistentId) -> StorageRegion {
+        let storage = self
+            .persistent
+            .get(id.0 as usize)
+            .expect("validated persistent operand names an execution-owned declaration");
+        StorageRegion {
+            instance: storage.instance,
+            projections: Vec::new(),
+        }
+    }
+
+    fn storage_region_fully_live(&self, region: &StorageRegion) -> bool {
+        if let Some(storage) = self
+            .persistent
+            .iter()
+            .find(|storage| storage.instance == region.instance)
+        {
+            debug_assert!(region.projections.is_empty());
+            return storage.state.fully_live();
+        }
+        let (frame, place) = self.frame_place_for_storage_region(region);
+        place_state(&self.frames[frame].locals, &place).fully_live()
+    }
+
+    fn clone_storage_region_value(&mut self, region: &StorageRegion, ty: TypeId) -> RuntimeValue {
+        if let Some(index) = self
+            .persistent
+            .iter()
+            .position(|storage| storage.instance == region.instance)
+        {
+            debug_assert!(region.projections.is_empty());
+            debug_assert_eq!(self.persistent[index].ty, ty);
+            let types = &self.program.as_program().types;
+            let (persistent, authorities) = (&self.persistent, &mut self.reference_authorities);
+            return clone_value(types, ty, &persistent[index].state, authorities);
+        }
+        let (frame, place) = self.frame_place_for_storage_region(region);
+        let types = &self.program.as_program().types;
+        let state = place_state(&self.frames[frame].locals, &place);
+        clone_value(types, ty, state, &mut self.reference_authorities)
+    }
+
     /// Resolve a safe-reference target across every currently active frame.
     fn frame_place_for_storage_region(&self, region: &StorageRegion) -> (usize, Place) {
         self.frames
@@ -1488,6 +1591,29 @@ impl Machine {
         Place {
             local: LocalId(u32::try_from(local_index).expect("local index exceeds u32::MAX")),
             projections: region.projections.clone(),
+        }
+    }
+
+    fn cleanup_persistent(&mut self) {
+        for storage in &self.persistent {
+            assert!(
+                !self.reference_authorities.iter().any(|active| active
+                    .as_ref()
+                    .is_some_and(|active| active.target.instance == storage.instance)),
+                "validated Core terminal cleanup cannot end persistent storage targeted by a surviving reference authority"
+            );
+        }
+        for storage in &mut self.persistent {
+            debug_assert!(matches!(storage.state, ObjectState::Leaf(_)));
+            match &mut storage.state {
+                ObjectState::Leaf(leaf @ LeafState::Live(_)) => *leaf = LeafState::Dead,
+                ObjectState::Leaf(LeafState::NeverInitialized | LeafState::Dead) => {
+                    unreachable!("validated persistent storage remains live until terminal cleanup")
+                }
+                ObjectState::Aggregate(_) => {
+                    unreachable!("validated persistent storage is scalar")
+                }
+            }
         }
     }
 

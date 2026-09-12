@@ -104,6 +104,7 @@ impl<'a> Lowerer<'a> {
         }
 
         let program = core::Program {
+            persistent: vec![],
             types: self.types.types,
             functions,
         };

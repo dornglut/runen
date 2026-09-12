@@ -85,6 +85,7 @@ fn callable_leaf_inside_aggregate_uses_ordinary_copy_move_and_cleanup() {
     };
 
     let report = execute(Program {
+        persistent: vec![],
         types,
         functions: vec![entry, no_result_target()],
     });
@@ -139,6 +140,7 @@ fn callable_value_passes_and_returns_through_existing_call_transfer() {
     };
 
     let report = execute(Program {
+        persistent: vec![],
         types,
         functions: vec![entry, identity, no_result_target()],
     });

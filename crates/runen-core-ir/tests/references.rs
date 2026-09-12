@@ -78,6 +78,7 @@ fn duplicate_reference_type_pair_is_rejected_by_program_validation() {
 
     assert!(
         validate_program(Program {
+            persistent: vec![],
             types,
             functions: Vec::new(),
         })
@@ -101,6 +102,7 @@ fn reference_referent_edge_is_not_structural_recursion() {
 
     assert_eq!(shared_node, TypeId(1));
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: Vec::new(),
     })
@@ -234,6 +236,7 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![wrong_type],
     })
@@ -268,6 +271,7 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![uninitialized],
     })
@@ -307,6 +311,7 @@ fn root_reference_formation_requires_live_exact_referent_and_replace_permission(
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![immutable_replace],
     })
@@ -363,6 +368,7 @@ fn reference_root_and_explicit_borrow_share_one_conflict_domain() {
         },
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![reference_after_loan],
     })
@@ -411,6 +417,7 @@ fn reference_root_and_explicit_borrow_share_one_conflict_domain() {
         },
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![loan_after_reference],
     })
@@ -466,6 +473,7 @@ fn direct_access_observes_active_reference_authority() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -517,6 +525,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![shared_move],
     })
@@ -545,6 +554,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![shared_drop],
     })
@@ -574,6 +584,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![exclusive_assign],
     })
@@ -616,6 +627,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         ),
     };
     validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![replace_assign],
     })
@@ -661,6 +673,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         ),
     };
     validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![shared_interior_assign],
     })
@@ -686,6 +699,7 @@ fn reference_permission_matrix_keeps_move_drop_assign_and_interior_assign_distin
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![shared_plain_interior_assign],
     })
@@ -740,6 +754,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![strengthen_shared],
     })
@@ -773,6 +788,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![strengthen_exclusive],
     })
@@ -844,6 +860,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         ),
     };
     validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![disjoint],
     })
@@ -897,6 +914,7 @@ fn reborrow_permission_never_strengthens_and_delegation_is_structural() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![overlapping_move],
     })
@@ -943,6 +961,7 @@ fn cleanup_enforces_storage_extent_and_accepts_zero_leaf_reference_targets() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![bad_order],
     })
@@ -986,6 +1005,7 @@ fn cleanup_enforces_storage_extent_and_accepts_zero_leaf_reference_targets() {
         ),
     };
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![zero_leaf],
     })
@@ -1052,6 +1072,7 @@ fn reborrow_drop_loop_has_finite_canonical_authority_state() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })

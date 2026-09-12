@@ -68,6 +68,7 @@ fn shared_reference_copy_keeps_authority_alive_after_original_carrier_drops() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -146,6 +147,7 @@ fn aggregate_shared_reference_copy_recursively_tracks_carriers() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -225,6 +227,7 @@ fn reference_assign_evaluates_reference_copy_source_before_old_carrier_destructi
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -312,6 +315,7 @@ fn ending_shared_reborrow_restores_exclusive_replace_parent() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -379,6 +383,7 @@ fn raw_read_coexists_with_overlapping_shared_reference_authority() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -443,6 +448,7 @@ fn raw_read_reports_overlapping_exclusive_reference_authority() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -512,6 +518,7 @@ fn raw_move_reports_overlapping_shared_reference_authority() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -579,6 +586,7 @@ fn raw_assign_reports_overlapping_shared_reference_authority() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })

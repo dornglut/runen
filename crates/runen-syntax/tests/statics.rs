@@ -15,16 +15,17 @@ fn count(parsed: &Parse, kind: SyntaxKind) -> usize {
 #[test]
 fn static_syntax_kind_appends_without_renumbering_existing_kinds() {
     assert_eq!(rowan::SyntaxKind::from(SyntaxKind::ClosureCaptures).0, 135);
-    assert_eq!(rowan::SyntaxKind::from(SyntaxKind::StaticDeclaration).0, 136);
+    assert_eq!(
+        rowan::SyntaxKind::from(SyntaxKind::StaticDeclaration).0,
+        136
+    );
 }
 
 #[test]
 fn static_remains_a_contextual_user_identifier() {
     assert_eq!(user_identifier_key("static").as_deref(), Some("static"));
 
-    let parsed = parse(
-        "static static: I64 = 1; fn static(static: I64) -> I64 { return static; }",
-    );
+    let parsed = parse("static static: I64 = 1; fn static(static: I64) -> I64 { return static; }");
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     assert_eq!(count(&parsed, SyntaxKind::StaticDeclaration), 1);
     assert_eq!(count(&parsed, SyntaxKind::FunctionDefinition), 1);

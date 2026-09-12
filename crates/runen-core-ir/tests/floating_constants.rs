@@ -8,6 +8,7 @@ fn program_initializing(scalar: &ScalarType, value: Value) -> Program {
     let mut types = TypeTable::new();
     let ty = types.push(TypeDef::scalar("scalar", scalar.clone()));
     Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -209,6 +210,7 @@ fn structural_constants_recursively_preserve_mixed_floating_formats() {
         }),
     ]);
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),

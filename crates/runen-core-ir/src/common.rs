@@ -742,6 +742,10 @@ impl LocalDecl {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Operand {
     Constant(Value),
+    /// Non-consuming read of one complete execution-persistent scalar declaration.
+    PersistentRead(PersistentId),
+    /// Forms one Shared safe-reference authority to a complete persistent scalar root.
+    PersistentSharedRoot(PersistentId),
     /// Forms one captureless callable value naming an existing same-program function entity.
     FunctionValue(FunctionId),
     /// Ownership transfer. The source stored-value lifetime ends.

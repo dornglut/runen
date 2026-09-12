@@ -70,6 +70,7 @@ fn callable_reference_cycle_and_no_result_none_are_valid() {
     assert_eq!(shared_callable, TypeId(1));
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: Vec::new(),
     })
@@ -89,6 +90,7 @@ fn callable_interfaces_reject_unknown_parameter_and_result_types() {
         ),
     ));
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: Vec::new(),
     })
@@ -109,6 +111,7 @@ fn callable_interfaces_reject_unknown_parameter_and_result_types() {
         ),
     ));
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: Vec::new(),
     })
@@ -129,6 +132,7 @@ fn callable_interfaces_reject_unsafe_results_and_invalid_reference_contracts() {
         CallableInterface::new(Vec::new(), Some(raw_i64), SafeReferenceResultContract::None),
     ));
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: Vec::new(),
     })
@@ -154,6 +158,7 @@ fn callable_interfaces_reject_unsafe_results_and_invalid_reference_contracts() {
         ),
     ));
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: Vec::new(),
     })
@@ -179,6 +184,7 @@ fn callable_interfaces_reject_unsafe_results_and_invalid_reference_contracts() {
         ),
     ));
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: Vec::new(),
     })
@@ -212,6 +218,7 @@ fn indirect_calls_require_callable_type_and_exact_result_destination_shape() {
         ],
     );
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, no_result_target("target")],
     })
@@ -246,6 +253,7 @@ fn indirect_calls_require_callable_type_and_exact_result_destination_shape() {
         ],
     );
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, i64_target("target", i64_ty)],
     })
@@ -277,6 +285,7 @@ fn indirect_calls_require_callable_type_and_exact_result_destination_shape() {
         ],
     );
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, no_result_target("target")],
     })
@@ -312,6 +321,7 @@ fn indirect_calls_require_callable_type_and_exact_result_destination_shape() {
         ],
     );
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, i64_target("target", i64_ty)],
     })
@@ -355,6 +365,7 @@ fn indirect_call_arguments_use_exact_interface_types() {
         vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
     );
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, target],
     })
@@ -432,6 +443,7 @@ fn indirect_arguments_are_left_to_right_before_final_reference_admission() {
     );
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -470,6 +482,7 @@ fn indirect_static_validation_checks_arguments_before_normal_continuation() {
     );
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, target],
     })

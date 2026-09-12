@@ -48,6 +48,7 @@ fn execute_integer_xor(scalar: ScalarType, left: Value, right: Value) -> Executi
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })

@@ -3,7 +3,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use crate::interprocedural::{Body, Function, Program, Terminator};
 use crate::{
     BasicBlockId, BorrowKind, CallableInterface, FunctionId, LoanDecl, LoanId, LocalId, Operand,
-    Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission,
+    PersistentId, Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission,
     SafeReferenceResultContract, ScalarType, Statement, TypeId, TypeKind, TypeTable, Value,
 };
 
@@ -27,6 +27,15 @@ pub enum MirLocation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MirValidationErrorKind {
     InvalidFunction(FunctionId),
+    InvalidPersistent(PersistentId),
+    InvalidPersistentType {
+        persistent: PersistentId,
+        ty: TypeId,
+    },
+    PersistentInitializerTypeMismatch {
+        persistent: PersistentId,
+        ty: TypeId,
+    },
     InvalidEntryBlock(BasicBlockId),
     InvalidTargetBlock(BasicBlockId),
     InvalidLocal(LocalId),
@@ -179,6 +188,7 @@ impl ValidatedProgram {
 /// callable structure; call-graph cycles are never recursively expanded or rejected.
 pub fn validate_program(program: Program) -> Result<ValidatedProgram, MirValidationError> {
     validate_type_table(&program.types)?;
+    validate_persistent_declarations(&program)?;
 
     for (index, function) in program.functions.iter().enumerate() {
         validate_function_declarations(&program.types, function_id(index), function)?;
@@ -193,6 +203,57 @@ pub fn validate_program(program: Program) -> Result<ValidatedProgram, MirValidat
     }
 
     Ok(ValidatedProgram { program })
+}
+
+fn validate_persistent_declarations(program: &Program) -> Result<(), MirValidationError> {
+    for (index, declaration) in program.persistent.iter().enumerate() {
+        let persistent = PersistentId(
+            u32::try_from(index).expect("persistent declaration index exceeds u32::MAX"),
+        );
+        let Some(definition) = program.types.get(declaration.ty) else {
+            return Err(program_error(MirValidationErrorKind::UnknownType(
+                declaration.ty,
+            )));
+        };
+        let admitted = !definition.interior_mutable
+            && matches!(
+                definition.kind,
+                TypeKind::Scalar(
+                    ScalarType::Bool
+                        | ScalarType::I8
+                        | ScalarType::I16
+                        | ScalarType::I32
+                        | ScalarType::I64
+                        | ScalarType::U8
+                        | ScalarType::U16
+                        | ScalarType::U32
+                        | ScalarType::U64
+                        | ScalarType::F16
+                        | ScalarType::F32
+                        | ScalarType::F64
+                )
+            );
+        if !admitted {
+            return Err(program_error(
+                MirValidationErrorKind::InvalidPersistentType {
+                    persistent,
+                    ty: declaration.ty,
+                },
+            ));
+        }
+        if !program
+            .types
+            .value_matches(declaration.ty, &declaration.initial)
+        {
+            return Err(program_error(
+                MirValidationErrorKind::PersistentInitializerTypeMismatch {
+                    persistent,
+                    ty: declaration.ty,
+                },
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn validate_type_table(types: &TypeTable) -> Result<(), MirValidationError> {
@@ -644,6 +705,24 @@ fn validate_branch_condition(
     let bool_valued = match operand {
         Operand::Constant(Value::Bool(_)) => true,
         Operand::Constant(_) => false,
+        Operand::PersistentRead(persistent) => {
+            let declaration = program.persistent(*persistent).ok_or_else(|| {
+                point_error(
+                    point,
+                    MirValidationErrorKind::InvalidPersistent(*persistent),
+                )
+            })?;
+            is_bool_type(types, declaration.ty)
+        }
+        Operand::PersistentSharedRoot(persistent) => {
+            program.persistent(*persistent).ok_or_else(|| {
+                point_error(
+                    point,
+                    MirValidationErrorKind::InvalidPersistent(*persistent),
+                )
+            })?;
+            false
+        }
         Operand::FunctionValue(function) => {
             if program.function(*function).is_none() {
                 return Err(point_error(
@@ -1041,6 +1120,37 @@ fn validate_operand_type(
                 ))
             }
         }
+        Operand::PersistentRead(persistent) => {
+            let declaration = program.persistent(*persistent).ok_or_else(|| {
+                point_error(
+                    point,
+                    MirValidationErrorKind::InvalidPersistent(*persistent),
+                )
+            })?;
+            require_type_match(declaration.ty, expected, point)
+        }
+        Operand::PersistentSharedRoot(persistent) => {
+            let declaration = program.persistent(*persistent).ok_or_else(|| {
+                point_error(
+                    point,
+                    MirValidationErrorKind::InvalidPersistent(*persistent),
+                )
+            })?;
+            let Some((referent, permission)) = types.reference(expected) else {
+                return Err(point_error(
+                    point,
+                    MirValidationErrorKind::TypeMismatch { expected },
+                ));
+            };
+            if referent == declaration.ty && permission == ReferencePermission::Shared {
+                Ok(())
+            } else {
+                Err(point_error(
+                    point,
+                    MirValidationErrorKind::TypeMismatch { expected },
+                ))
+            }
+        }
         Operand::FunctionValue(function) => {
             let target = program.function(*function).ok_or_else(|| {
                 point_error(point, MirValidationErrorKind::InvalidFunction(*function))
@@ -1372,6 +1482,7 @@ struct ValidationReferenceAuthorityId(u32);
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum ValidationRegionRoot {
     Local(LocalId),
+    Persistent(PersistentId),
     External(ExternalRegionId),
 }
 
@@ -1386,6 +1497,13 @@ impl ValidationRegion {
         Self {
             root: ValidationRegionRoot::Local(place.local),
             projections: place.projections.clone(),
+        }
+    }
+
+    fn persistent(id: PersistentId) -> Self {
+        Self {
+            root: ValidationRegionRoot::Persistent(id),
+            projections: Vec::new(),
         }
     }
 
@@ -1501,6 +1619,12 @@ impl ObjectState {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+struct PersistentRegionState {
+    ty: TypeId,
+    state: ObjectState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 struct ExternalRegionState {
     ty: TypeId,
     state: ObjectState,
@@ -1532,6 +1656,7 @@ enum AccessRequirement {
 struct ValidationState {
     current: BasicBlockId,
     locals: Vec<ObjectState>,
+    persistent_regions: Vec<PersistentRegionState>,
     external_regions: Vec<ExternalRegionState>,
     active_loans: Vec<Option<ActiveLoan>>,
     reference_authorities: Vec<Option<ActiveReferenceAuthority>>,
@@ -1550,6 +1675,14 @@ fn validate_path_state(
             .locals
             .iter()
             .map(|local| ObjectState::uninitialized(types, local.ty))
+            .collect(),
+        persistent_regions: program
+            .persistent
+            .iter()
+            .map(|declaration| PersistentRegionState {
+                ty: declaration.ty,
+                state: ObjectState::fully_live_unknown(types, declaration.ty),
+            })
             .collect(),
         external_regions: Vec::new(),
         active_loans: vec![None; body.loans.len()],
@@ -2383,6 +2516,42 @@ fn validate_operand_state(
         Operand::Constant(value) => {
             Ok(DefinedStep::Continue(validation_value_from_constant(value)))
         }
+        Operand::PersistentRead(persistent) => {
+            let target = ValidationRegion::persistent(*persistent);
+            require_region_fully_live(state, &target, point)?;
+            debug_assert!(state.reference_authorities.iter().all(|active| {
+                active.as_ref().is_none_or(|active| {
+                    !active.target.overlaps(&target)
+                        || active.permission.alias_kind() == BorrowKind::Shared
+                })
+            }));
+            Ok(DefinedStep::Continue(ValidationValue::Scalar(
+                ValidationScalar::NonPointer,
+            )))
+        }
+        Operand::PersistentSharedRoot(persistent) => {
+            let target = ValidationRegion::persistent(*persistent);
+            require_region_fully_live(state, &target, point)?;
+            debug_assert!(state.reference_authorities.iter().all(|active| {
+                active.as_ref().is_none_or(|active| {
+                    !active.target.overlaps(&target)
+                        || active.permission.alias_kind() == BorrowKind::Shared
+                })
+            }));
+            let authority = allocate_reference_authority(
+                &mut state.reference_authorities,
+                ActiveReferenceAuthority {
+                    target,
+                    permission: ReferencePermission::Shared,
+                    parent: None,
+                    carriers: 1,
+                    is_result_origin: false,
+                },
+            );
+            Ok(DefinedStep::Continue(ValidationValue::Scalar(
+                ValidationScalar::Reference(authority),
+            )))
+        }
         Operand::FunctionValue(_) => Ok(DefinedStep::Continue(ValidationValue::Scalar(
             ValidationScalar::NonPointer,
         ))),
@@ -2781,6 +2950,11 @@ fn destroy_region_live(
             let (locals, authorities) = (&mut state.locals, &mut state.reference_authorities);
             destroy_object_live(types, ty, place_state_mut(locals, &place), authorities);
         }
+        ValidationRegionRoot::Persistent(_) => {
+            unreachable!(
+                "Shared-only persistent storage cannot be destroyed through a reference region"
+            )
+        }
         ValidationRegionRoot::External(id) => {
             let index = id.0 as usize;
             let (external_regions, authorities) = (
@@ -2889,6 +3063,9 @@ fn write_region_value(
             };
             write_validation_value(types, ty, place_state_mut(&mut state.locals, &place), value);
         }
+        ValidationRegionRoot::Persistent(_) => {
+            unreachable!("Shared-only persistent storage cannot be a write target")
+        }
         ValidationRegionRoot::External(id) => {
             let external = &mut state.external_regions[id.0 as usize];
             let object = projected_state_mut(&mut external.state, &region.projections);
@@ -2912,6 +3089,9 @@ fn take_region_value(
                 projections: region.projections.clone(),
             };
             take_validation_value(types, ty, place_state_mut(&mut state.locals, &place))
+        }
+        ValidationRegionRoot::Persistent(_) => {
+            unreachable!("Shared-only persistent storage cannot be an ownership-move target")
         }
         ValidationRegionRoot::External(id) => {
             let external = &mut state.external_regions[id.0 as usize];
@@ -2941,6 +3121,17 @@ fn clone_region_value(
             let (locals, authorities) = (&state.locals, &mut state.reference_authorities);
             clone_validation_value(types, ty, place_state(locals, &place), authorities)
         }
+        ValidationRegionRoot::Persistent(id) => {
+            let index = id.0 as usize;
+            let (persistent_regions, authorities) =
+                (&state.persistent_regions, &mut state.reference_authorities);
+            clone_validation_value(
+                types,
+                ty,
+                projected_state(&persistent_regions[index].state, &region.projections),
+                authorities,
+            )
+        }
         ValidationRegionRoot::External(id) => {
             let index = id.0 as usize;
             let (external_regions, authorities) =
@@ -2967,6 +3158,7 @@ fn region_type(
                 .expect("validated local region names a current-function local")
                 .ty
         }
+        ValidationRegionRoot::Persistent(id) => state.persistent_regions[id.0 as usize].ty,
         ValidationRegionRoot::External(id) => state.external_regions[id.0 as usize].ty,
     };
     types
@@ -2983,6 +3175,10 @@ fn region_state<'a>(state: &'a ValidationState, region: &ValidationRegion) -> &'
             };
             place_state(&state.locals, &place)
         }
+        ValidationRegionRoot::Persistent(id) => projected_state(
+            &state.persistent_regions[id.0 as usize].state,
+            &region.projections,
+        ),
         ValidationRegionRoot::External(id) => projected_state(
             &state.external_regions[id.0 as usize].state,
             &region.projections,
@@ -3002,6 +3198,10 @@ fn region_state_mut<'a>(
             };
             place_state_mut(&mut state.locals, &place)
         }
+        ValidationRegionRoot::Persistent(id) => projected_state_mut(
+            &mut state.persistent_regions[id.0 as usize].state,
+            &region.projections,
+        ),
         ValidationRegionRoot::External(id) => projected_state_mut(
             &mut state.external_regions[id.0 as usize].state,
             &region.projections,
@@ -3069,6 +3269,7 @@ fn is_interior_mutable_region(
                 .expect("validated local region names a current-function local")
                 .ty
         }
+        ValidationRegionRoot::Persistent(_) => return false,
         ValidationRegionRoot::External(id) => state.external_regions[id.0 as usize].ty,
     };
     is_interior_mutable_from_root(types, root_ty, &region.projections)

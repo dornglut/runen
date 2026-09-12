@@ -50,6 +50,7 @@ fn execute_integer_lt(scalar: ScalarType, left: Value, right: Value) -> Executio
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -156,6 +157,7 @@ fn integer_lt_constant_constant_execution_uses_explicit_operand_type() {
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -262,6 +264,7 @@ fn execute_branching_integer_lt(left: i8, right: i8) -> ExecutionReport {
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -328,6 +331,7 @@ fn integer_lt_raw_move_ub_produces_no_ordering_write() {
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })

@@ -50,6 +50,7 @@ fn execute_integer_eq(scalar: ScalarType, left: Value, right: Value) -> Executio
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -150,6 +151,7 @@ fn integer_eq_constant_constant_execution_uses_explicit_operand_type() {
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -256,6 +258,7 @@ fn execute_branching_integer_eq(left: i8, right: i8) -> ExecutionReport {
         },
     };
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })

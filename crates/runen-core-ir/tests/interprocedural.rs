@@ -64,6 +64,7 @@ fn validates_no_result_call_and_parameter_is_live_on_entry() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -120,6 +121,7 @@ fn result_call_initializes_destination_on_normal_successor() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -161,6 +163,7 @@ fn call_arguments_reject_exact_arity_and_type_mismatches() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -211,6 +214,7 @@ fn call_arguments_reject_exact_arity_and_type_mismatches() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -266,6 +270,7 @@ fn call_arguments_apply_move_effects_left_to_right() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -322,6 +327,7 @@ fn call_arguments_apply_copy_then_move_effects_left_to_right() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -370,6 +376,7 @@ fn result_destination_must_be_vacant() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -424,6 +431,7 @@ fn result_destination_vacancy_is_checked_before_argument_moves() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -479,6 +487,7 @@ fn cyclic_result_call_reuses_destination_after_prior_lifetime_ends() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -537,6 +546,7 @@ fn result_destination_requires_init_like_exclusive_authority() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -567,6 +577,7 @@ fn raw_pointer_containing_signatures_are_rejected() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -595,6 +606,7 @@ fn raw_pointer_containing_results_are_rejected() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -653,6 +665,7 @@ fn direct_and_mutual_recursive_call_graphs_are_valid() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![left, right],
     })
@@ -674,6 +687,7 @@ fn result_return_requires_an_owned_value() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -699,6 +713,7 @@ fn no_result_return_rejects_an_owned_value() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -721,6 +736,7 @@ fn parameter_local_designations_are_unique() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -759,6 +775,7 @@ fn body_points_include_function_identity() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![first, second],
     })
@@ -825,6 +842,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         ),
     };
     validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![valid],
     })
@@ -844,6 +862,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![invalid_target],
     })
@@ -867,6 +886,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![non_bool],
     })
@@ -887,6 +907,7 @@ fn branch_validates_targets_and_bool_valued_operand_shape() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![bad_access],
     })
@@ -934,6 +955,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![copy_bool],
     })
@@ -953,6 +975,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![move_non_bool],
     })
@@ -973,6 +996,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![copy_noncopy],
     })
@@ -1011,6 +1035,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![raw_bool],
     })
@@ -1030,6 +1055,7 @@ fn branch_move_copy_and_raw_move_use_existing_operand_contracts() {
         ),
     };
     let error = validate_program(Program {
+        persistent: vec![],
         types: types.clone(),
         functions: vec![raw_i64],
     })
@@ -1069,6 +1095,7 @@ fn branch_move_effect_is_propagated_to_both_validation_edges() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -1122,6 +1149,7 @@ fn constant_branches_validate_both_cfg_edges_without_value_pruning() {
         };
 
         let error = validate_program(Program {
+            persistent: vec![],
             types,
             functions: vec![function],
         })
@@ -1168,6 +1196,7 @@ fn branch_join_keeps_distinct_partial_initialization_states() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -1221,6 +1250,7 @@ fn branch_join_keeps_distinct_active_loan_states() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -1319,6 +1349,7 @@ fn branch_join_keeps_raw_pointer_targets_and_no_continuation_is_path_local() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -1381,6 +1412,7 @@ fn branch_condition_ub_creates_no_successor_work_item() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -1408,6 +1440,7 @@ fn disconnected_invalid_branch_is_still_statically_rejected() {
     };
 
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -1439,6 +1472,7 @@ fn branch_and_goto_cycles_deduplicate_complete_validation_states() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
