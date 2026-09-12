@@ -33,6 +33,7 @@ struct Lowerer<'a> {
     types: TypeMap,
     specializations: Vec<SpecializationKey>,
     functions: BTreeMap<SpecializationKey, core::FunctionId>,
+    closure_functions: BTreeMap<hir::ClosureId, core::FunctionId>,
 }
 
 impl<'a> Lowerer<'a> {
@@ -40,16 +41,35 @@ impl<'a> Lowerer<'a> {
         validate_function_declarations(compilation)?;
         let types = TypeMap::new(compilation)?;
         let (specializations, functions) = discover_specializations(compilation)?;
+        let mut closure_functions = BTreeMap::new();
+        for (index, closure) in compilation.closures.iter().enumerate() {
+            let function_index = specializations
+                .len()
+                .checked_add(index)
+                .ok_or(LoweringError::RepresentationLimit("Core function identity"))?;
+            let id = core::FunctionId(index_u32(function_index, "Core function identity")?);
+            if closure_functions.insert(closure.id, id).is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "duplicate HIR closure identity",
+                ));
+            }
+        }
         Ok(Self {
             compilation,
             types,
             specializations,
             functions,
+            closure_functions,
         })
     }
 
     fn lower(self) -> Result<core::ValidatedProgram, LoweringError> {
-        let mut functions = Vec::with_capacity(self.specializations.len());
+        let capacity = self
+            .specializations
+            .len()
+            .checked_add(self.compilation.closures.len())
+            .ok_or(LoweringError::RepresentationLimit("Core function identity"))?;
+        let mut functions = Vec::with_capacity(capacity);
         for specialization in &self.specializations {
             let function = find_function(self.compilation, specialization.function)?;
             functions.push(
@@ -57,8 +77,27 @@ impl<'a> Lowerer<'a> {
                     self.compilation,
                     &self.types,
                     &self.functions,
+                    &self.closure_functions,
                     function,
                     specialization,
+                )?
+                .lower()?,
+            );
+        }
+        for (closure_index, closure) in self.compilation.closures.iter().enumerate() {
+            let specialization = SpecializationKey {
+                function: closure.function,
+                type_arguments: Vec::new(),
+            };
+            functions.push(
+                FunctionLowerer::new_closure(
+                    self.compilation,
+                    &self.types,
+                    &self.functions,
+                    &self.closure_functions,
+                    closure,
+                    closure_index,
+                    &specialization,
                 )?
                 .lower()?,
             );
@@ -207,6 +246,21 @@ fn discover_specializations(
                 ));
             }
             specializations.push(specialization);
+        }
+    }
+
+    for closure in &compilation.closures {
+        let current = SpecializationKey {
+            function: closure.function,
+            type_arguments: Vec::new(),
+        };
+        validate_specialization_key(compilation, &current)?;
+        let mut discovered = Vec::new();
+        collect_body_specializations(compilation, &current, &closure.body, &mut discovered)?;
+        for target in discovered {
+            if seen.insert(target.clone()) {
+                specializations.push(target);
+            }
         }
     }
 
@@ -370,7 +424,8 @@ fn collect_statement_specializations(
                 collect_value_specializations(compilation, current, condition, specializations)?;
                 collect_block_specializations(compilation, current, body, specializations)?;
             }
-            hir::Statement::Fault { .. }
+            hir::Statement::Closure { .. }
+            | hir::Statement::Fault { .. }
             | hir::Statement::Break { .. }
             | hir::Statement::Continue { .. } => {}
         }
@@ -475,6 +530,7 @@ impl TypeMap {
             .and_then(|count| count.checked_add(reference_types.len()))
             .and_then(|count| count.checked_add(raw_pointer_types.len()))
             .and_then(|count| count.checked_add(function_types.len()))
+            .and_then(|count| count.checked_add(compilation.closures.len()))
             .ok_or(LoweringError::RepresentationLimit("Core type identity"))?;
         if index_u32(maximum_types - 1, "Core type identity").is_err() {
             return Err(LoweringError::RepresentationLimit("Core type identity"));
@@ -502,6 +558,9 @@ impl TypeMap {
         let mut visiting_function_types = BTreeSet::new();
         for id in function_types {
             map.lower_function_type(compilation, id, &mut visiting_function_types)?;
+        }
+        for (index, closure) in compilation.closures.iter().enumerate() {
+            map.lower_closure_type(compilation, closure, index)?;
         }
         Ok(map)
     }
@@ -552,6 +611,11 @@ impl TypeMap {
                 hir::Type::Function(_) => {
                     return Err(LoweringError::InvalidHirInvariant(
                         "HIR record field contains a function-value type",
+                    ));
+                }
+                hir::Type::Closure(_) => {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "HIR record field contains an opaque closure type",
                     ));
                 }
             };
@@ -681,6 +745,51 @@ impl TypeMap {
         Ok(mapped)
     }
 
+    fn lower_closure_type(
+        &mut self,
+        _compilation: &hir::TypedCompilation,
+        closure: &hir::Closure,
+        closure_index: usize,
+    ) -> Result<core::TypeId, LoweringError> {
+        let ty = hir::Type::Closure(closure.id);
+        if self.mapped.contains_key(&ty) {
+            return Err(LoweringError::InvalidHirInvariant(
+                "duplicate HIR closure type mapping",
+            ));
+        }
+        let mut fields = Vec::with_capacity(closure.captures.len());
+        for (index, capture) in closure.captures.iter().enumerate() {
+            let field_ty = match capture.ty {
+                hir::Type::Closure(earlier) => self
+                    .mapped
+                    .get(&hir::Type::Closure(earlier))
+                    .copied()
+                    .ok_or(LoweringError::InvalidHirInvariant(
+                        "closure environment dependency is not earlier in declaration order",
+                    ))?,
+                hir::Type::Parameter(_)
+                | hir::Type::SafeReference { .. }
+                | hir::Type::RawPointer(_) => {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "closure environment contains an inadmissible source type",
+                    ));
+                }
+                concrete => self.get(concrete)?,
+            };
+            fields.push(core::Field::new(format!("$capture{index}"), field_ty));
+        }
+        let mapped = self.types.push(core::TypeDef::structure(
+            format!("$closure-env-{closure_index}"),
+            fields,
+        ));
+        if self.mapped.insert(ty, mapped).is_some() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "duplicate HIR closure type mapping",
+            ));
+        }
+        Ok(mapped)
+    }
+
     fn lower_function_type_component(
         &mut self,
         compilation: &hir::TypedCompilation,
@@ -694,6 +803,9 @@ impl TypeMap {
             )),
             hir::Type::RawPointer(_) => Err(LoweringError::InvalidHirInvariant(
                 "HIR function type contains a raw-pointer component",
+            )),
+            hir::Type::Closure(_) => Err(LoweringError::InvalidHirInvariant(
+                "HIR function type contains an opaque closure component",
             )),
             concrete => self.get(concrete),
         }
@@ -946,6 +1058,22 @@ fn collect_used_function_types(
         }
         collect_statement_function_types(&function.body.statements, &mut function_types);
     }
+    for closure in &compilation.closures {
+        for parameter in &closure.parameters {
+            if let hir::Type::Function(id) = parameter.ty {
+                function_types.insert(id);
+            }
+        }
+        if let Some(hir::Type::Function(id)) = closure.result {
+            function_types.insert(id);
+        }
+        for capture in &closure.captures {
+            if let hir::Type::Function(id) = capture.ty {
+                function_types.insert(id);
+            }
+        }
+        collect_statement_function_types(&closure.body.statements, &mut function_types);
+    }
 
     let mut pending = function_types.iter().copied().collect::<Vec<_>>();
     let mut cursor = 0;
@@ -1002,6 +1130,7 @@ fn collect_statement_function_types(
                 collect_statement_function_types(&body.statements, function_types);
             }
             hir::Statement::RecordDestructure { .. }
+            | hir::Statement::Closure { .. }
             | hir::Statement::Assignment { .. }
             | hir::Statement::ReferenceAssign { .. }
             | hir::Statement::RawAssign { .. }
@@ -1053,6 +1182,25 @@ fn collect_used_safe_reference_types(
         }
         collect_statement_safe_reference_types(&function.body.statements, &mut references);
     }
+    for closure in &compilation.closures {
+        for parameter in &closure.parameters {
+            if let hir::Type::SafeReference {
+                referent,
+                permission,
+            } = parameter.ty
+            {
+                references.insert((referent, permission));
+            }
+        }
+        if let Some(hir::Type::SafeReference {
+            referent,
+            permission,
+        }) = closure.result
+        {
+            references.insert((referent, permission));
+        }
+        collect_statement_safe_reference_types(&closure.body.statements, &mut references);
+    }
     references
 }
 
@@ -1098,6 +1246,7 @@ fn collect_statement_safe_reference_types(
                 collect_statement_safe_reference_types(&body.statements, references);
             }
             hir::Statement::RecordDestructure { .. }
+            | hir::Statement::Closure { .. }
             | hir::Statement::Assignment { .. }
             | hir::Statement::ReferenceAssign { .. }
             | hir::Statement::RawAssign { .. }
@@ -1115,6 +1264,9 @@ fn collect_used_raw_pointer_types(
     let mut pointees = BTreeSet::new();
     for function in &compilation.functions {
         collect_statement_raw_pointer_types(&function.body.statements, &mut pointees);
+    }
+    for closure in &compilation.closures {
+        collect_statement_raw_pointer_types(&closure.body.statements, &mut pointees);
     }
     pointees
 }
@@ -1157,6 +1309,7 @@ fn collect_statement_raw_pointer_types(
                 collect_statement_raw_pointer_types(&body.statements, pointees);
             }
             hir::Statement::RecordDestructure { .. }
+            | hir::Statement::Closure { .. }
             | hir::Statement::Assignment { .. }
             | hir::Statement::ReferenceAssign { .. }
             | hir::Statement::RawAssign { .. }
@@ -1201,7 +1354,12 @@ struct FunctionLowerer<'a> {
     compilation: &'a hir::TypedCompilation,
     types: FunctionTypeMap<'a>,
     functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
-    function: &'a hir::Function,
+    closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
+    name: String,
+    result: Option<hir::Type>,
+    safe_reference_result_contract: hir::SafeReferenceResultContract,
+    body: hir::Body,
+    entry_capture_initializers: Vec<(hir::BindingId, core::LocalId, usize)>,
     locals: Vec<core::LocalDecl>,
     bindings: BTreeMap<hir::BindingId, core::LocalId>,
     parameter_locals: Vec<core::LocalId>,
@@ -1216,6 +1374,7 @@ impl<'a> FunctionLowerer<'a> {
         compilation: &'a hir::TypedCompilation,
         types: &'a TypeMap,
         functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
+        closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
         function: &'a hir::Function,
         specialization: &'a SpecializationKey,
     ) -> Result<Self, LoweringError> {
@@ -1250,7 +1409,12 @@ impl<'a> FunctionLowerer<'a> {
                 specialization,
             },
             functions,
-            function,
+            closure_functions,
+            name: function.name.clone(),
+            result: function.result,
+            safe_reference_result_contract: function.safe_reference_result_contract,
+            body: function.body.clone(),
+            entry_capture_initializers: Vec::new(),
             locals: Vec::new(),
             bindings: BTreeMap::new(),
             parameter_locals: Vec::new(),
@@ -1275,6 +1439,79 @@ impl<'a> FunctionLowerer<'a> {
         Ok(lowerer)
     }
 
+    fn new_closure(
+        compilation: &'a hir::TypedCompilation,
+        types: &'a TypeMap,
+        functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
+        closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
+        closure: &'a hir::Closure,
+        closure_index: usize,
+        specialization: &'a SpecializationKey,
+    ) -> Result<Self, LoweringError> {
+        validate_specialization_key(compilation, specialization)?;
+        if specialization.function != closure.function || !specialization.type_arguments.is_empty()
+        {
+            return Err(LoweringError::InvalidHirInvariant(
+                "closure wrapper specialization does not match its declaring function",
+            ));
+        }
+        let mut lowerer = Self {
+            compilation,
+            types: FunctionTypeMap {
+                base: types,
+                specialization,
+            },
+            functions,
+            closure_functions,
+            name: format!("$closure-wrapper-{closure_index}"),
+            result: closure.result,
+            safe_reference_result_contract: closure.safe_reference_result_contract,
+            body: closure.body.clone(),
+            entry_capture_initializers: Vec::new(),
+            locals: Vec::new(),
+            bindings: BTreeMap::new(),
+            parameter_locals: Vec::new(),
+            blocks: vec![BlockDraft::default()],
+            current: 0,
+            next_temp: 0,
+            loops: Vec::new(),
+        };
+
+        for parameter in &closure.parameters {
+            let local = lowerer.push_source_local(parameter.name.clone(), parameter.ty, false)?;
+            if lowerer.bindings.insert(parameter.binding, local).is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "duplicate closure parameter binding identity",
+                ));
+            }
+            lowerer.parameter_locals.push(local);
+        }
+
+        let environment_ty = lowerer.types.get(hir::Type::Closure(closure.id))?;
+        let environment = lowerer.next_local_id()?;
+        lowerer.locals.push(core::LocalDecl::new(
+            format!("$closure-env-{closure_index}"),
+            environment_ty,
+            false,
+        ));
+        lowerer.parameter_locals.push(environment);
+
+        for (field, capture) in closure.captures.iter().enumerate() {
+            let local = lowerer.push_source_local(capture.name.clone(), capture.ty, false)?;
+            if lowerer.bindings.insert(capture.binding, local).is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "duplicate closure capture binding identity",
+                ));
+            }
+            lowerer
+                .entry_capture_initializers
+                .push((capture.binding, environment, field));
+        }
+
+        lowerer.register_source_locals(&closure.body.statements)?;
+        Ok(lowerer)
+    }
+
     fn register_source_locals(
         &mut self,
         statements: &[hir::Statement],
@@ -1296,6 +1533,20 @@ impl<'a> FunctionLowerer<'a> {
                     if self.bindings.insert(*binding, local).is_some() {
                         return Err(LoweringError::InvalidHirInvariant(
                             "duplicate HIR binding identity",
+                        ));
+                    }
+                }
+                hir::Statement::Closure {
+                    binding,
+                    name,
+                    closure,
+                    ..
+                } => {
+                    let local =
+                        self.push_source_local(name.clone(), hir::Type::Closure(*closure), false)?;
+                    if self.bindings.insert(*binding, local).is_some() {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "duplicate HIR closure binding identity",
                         ));
                     }
                 }
@@ -1357,7 +1608,19 @@ impl<'a> FunctionLowerer<'a> {
     }
 
     fn lower(mut self) -> Result<core::Function, LoweringError> {
-        let body = self.function.body.clone();
+        for (binding, environment, field) in self.entry_capture_initializers.clone() {
+            let destination = self.binding(binding)?;
+            self.push_statement(core::Statement::Init {
+                dst: core::Place::local(destination),
+                src: core::Operand::Move(
+                    core::Place::local(environment)
+                        .field(index_u32(field, "closure environment field")?)
+                        .into(),
+                ),
+            });
+        }
+
+        let body = self.body.clone();
         let sequence_normal = self.lower_statements(&body.statements)?;
         Self::validate_sequence_completion(
             sequence_normal,
@@ -1365,7 +1628,7 @@ impl<'a> FunctionLowerer<'a> {
             body.has_normal_continuation,
         )?;
 
-        if self.function.result.is_some() && body.has_normal_continuation {
+        if self.result.is_some() && body.has_normal_continuation {
             return Err(LoweringError::InvalidHirInvariant(
                 "result-bearing HIR body has normal continuation",
             ));
@@ -1383,11 +1646,7 @@ impl<'a> FunctionLowerer<'a> {
             ));
         }
 
-        let result = self
-            .function
-            .result
-            .map(|ty| self.types.get(ty))
-            .transpose()?;
+        let result = self.result.map(|ty| self.types.get(ty)).transpose()?;
 
         let blocks = self
             .blocks
@@ -1400,7 +1659,7 @@ impl<'a> FunctionLowerer<'a> {
             })
             .collect::<Result<Vec<_>, LoweringError>>()?;
 
-        let safe_reference_result_contract = match self.function.safe_reference_result_contract {
+        let safe_reference_result_contract = match self.safe_reference_result_contract {
             hir::SafeReferenceResultContract::None => core::SafeReferenceResultContract::None,
             hir::SafeReferenceResultContract::SharedIdentity { origin } => {
                 core::SafeReferenceResultContract::SharedIdentity { origin }
@@ -1411,7 +1670,7 @@ impl<'a> FunctionLowerer<'a> {
         };
 
         Ok(core::Function {
-            name: self.function.name.clone(),
+            name: self.name,
             parameters: self.parameter_locals,
             result,
             safe_reference_result_contract,
@@ -1445,6 +1704,35 @@ impl<'a> FunctionLowerer<'a> {
                         dst: core::Place::local(destination),
                         src: core::Operand::Move(core::Place::local(value).into()),
                     });
+                }
+                hir::Statement::Closure {
+                    binding, closure, ..
+                } => {
+                    let destination = self.binding(*binding)?;
+                    let closure_site = self.compilation.closure(*closure);
+                    if self.local_type(destination)?
+                        != self.types.get(hir::Type::Closure(*closure))?
+                    {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "closure binding local type does not match its environment type",
+                        ));
+                    }
+                    for (field, capture) in closure_site.captures.iter().enumerate() {
+                        let source = self.binding(capture.outer_binding)?;
+                        let operand = match capture.ownership {
+                            hir::OwnedUse::Duplicate => {
+                                core::Operand::Copy(core::Place::local(source).into())
+                            }
+                            hir::OwnedUse::Consume => {
+                                core::Operand::Move(core::Place::local(source).into())
+                            }
+                        };
+                        self.push_statement(core::Statement::Init {
+                            dst: core::Place::local(destination)
+                                .field(index_u32(field, "closure environment field")?),
+                            src: operand,
+                        });
+                    }
                 }
                 hir::Statement::RecordDestructure {
                     record,
@@ -1565,6 +1853,7 @@ impl<'a> FunctionLowerer<'a> {
             }),
             hir::Statement::While { .. }
             | hir::Statement::Local { .. }
+            | hir::Statement::Closure { .. }
             | hir::Statement::RecordDestructure { .. }
             | hir::Statement::Assignment { .. }
             | hir::Statement::ReferenceAssign { .. }
@@ -3327,6 +3616,11 @@ impl<'a> FunctionLowerer<'a> {
                             "reference-dereference HIR value has a function-value result type",
                         ));
                     }
+                    hir::Type::Closure(_) => {
+                        return Err(LoweringError::InvalidHirInvariant(
+                            "reference-dereference HIR value has an opaque closure result type",
+                        ));
+                    }
                 };
 
                 let source = self.binding(*reference)?;
@@ -3846,6 +4140,48 @@ impl<'a> FunctionLowerer<'a> {
                 self.terminate_current(core::Terminator::IndirectCall {
                     callable,
                     callee: core::Operand::Move(core::Place::local(held_callee).into()),
+                    arguments,
+                    destination: result.map(core::Place::local),
+                    target: continuation,
+                })?;
+                self.current = continuation.0 as usize;
+                Ok(result)
+            }
+            hir::CallTarget::Closure { binding, closure } => {
+                let source = self.binding(*binding)?;
+                let environment_ty = self.types.get(hir::Type::Closure(*closure))?;
+                if self.local_type(source)? != environment_ty {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "closure HIR call binding type does not match its environment type",
+                    ));
+                }
+                let held_environment = self.push_core_temporary(environment_ty)?;
+                let snapshot = if self
+                    .compilation
+                    .type_is_duplicable(hir::Type::Closure(*closure))
+                {
+                    core::Operand::Copy(core::Place::local(source).into())
+                } else {
+                    core::Operand::Move(core::Place::local(source).into())
+                };
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(held_environment),
+                    src: snapshot,
+                });
+
+                let mut arguments = self.lower_arguments(arguments)?;
+                arguments.push(core::Operand::Move(
+                    core::Place::local(held_environment).into(),
+                ));
+                let result = result.map(|ty| self.push_temporary(ty)).transpose()?;
+                let target_function = self.closure_functions.get(closure).copied().ok_or(
+                    LoweringError::InvalidHirInvariant(
+                        "HIR closure site is absent from wrapper function map",
+                    ),
+                )?;
+                let continuation = self.new_block()?;
+                self.terminate_current(core::Terminator::Call {
+                    function: target_function,
                     arguments,
                     destination: result.map(core::Place::local),
                     target: continuation,

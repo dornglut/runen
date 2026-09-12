@@ -659,17 +659,114 @@ impl Parser<'_> {
 
     fn parse_let_statement(&mut self) {
         debug_assert!(self.at(SyntaxKind::KwLet));
+        let closure = self.peek_nontrivia(1) == Some(SyntaxKind::Ident)
+            && self.peek_nontrivia(2) == Some(SyntaxKind::Eq)
+            && self.peek_nontrivia(3) == Some(SyntaxKind::KwFn)
+            && self.peek_nontrivia(4) == Some(SyntaxKind::LBracket);
         let unqualified_pattern = self.peek_nontrivia(1) == Some(SyntaxKind::Ident)
             && self.peek_nontrivia(2) == Some(SyntaxKind::LBrace);
         let qualified_pattern = self.peek_nontrivia(1) == Some(SyntaxKind::Ident)
             && self.peek_nontrivia(2) == Some(SyntaxKind::ColonColon)
             && self.peek_nontrivia(3) == Some(SyntaxKind::Ident)
             && self.peek_nontrivia(4) == Some(SyntaxKind::LBrace);
-        if unqualified_pattern || qualified_pattern {
+        if closure {
+            self.parse_closure_declaration();
+        } else if unqualified_pattern || qualified_pattern {
             self.parse_record_destructuring_declaration();
         } else {
             self.parse_local_declaration();
         }
+    }
+
+    fn parse_closure_declaration(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::ClosureDeclaration.into());
+        self.expect(SyntaxKind::KwLet, ExpectedSyntax::Item);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.expect(SyntaxKind::Eq, ExpectedSyntax::Equals);
+        self.parse_closure_initializer();
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_closure_initializer(&mut self) {
+        self.builder
+            .start_node(SyntaxKind::ClosureInitializer.into());
+        self.expect(SyntaxKind::KwFn, ExpectedSyntax::Item);
+        self.parse_closure_captures();
+        self.parse_parameter_list();
+        if self.at(SyntaxKind::Arrow) {
+            self.builder.start_node(SyntaxKind::ResultClause.into());
+            self.bump();
+            self.parse_type();
+            self.builder.finish_node();
+        }
+        self.parse_body();
+        self.builder.finish_node();
+    }
+
+    fn parse_closure_captures(&mut self) {
+        self.builder.start_node(SyntaxKind::ClosureCaptures.into());
+        if !self.expect(SyntaxKind::LBracket, ExpectedSyntax::Item) {
+            self.builder.finish_node();
+            return;
+        }
+        self.bump_trivia();
+        if self.at(SyntaxKind::RBracket) {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+            self.bump();
+            self.builder.finish_node();
+            return;
+        }
+
+        let mut missing_close = false;
+        while !self.at(SyntaxKind::RBracket) && self.current().is_some() {
+            if self.at(SyntaxKind::LParen)
+                || self.at(SyntaxKind::Semicolon)
+                || self.at(SyntaxKind::RBrace)
+                || self.at_any(TOP_LEVEL_STARTERS)
+            {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightBracket));
+                missing_close = true;
+                break;
+            }
+            if self.at(SyntaxKind::Ident) {
+                self.bump();
+                if self.eat(SyntaxKind::Comma) {
+                    self.bump_trivia();
+                    continue;
+                }
+                if !self.at(SyntaxKind::RBracket) {
+                    self.error_here(SyntaxErrorKind::Expected(
+                        ExpectedSyntax::CommaOrRightBracket,
+                    ));
+                    self.recover_until(&[
+                        SyntaxKind::Comma,
+                        SyntaxKind::RBracket,
+                        SyntaxKind::LParen,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::RBrace,
+                    ]);
+                    self.eat(SyntaxKind::Comma);
+                }
+            } else {
+                self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Identifier));
+                self.recover_until(&[
+                    SyntaxKind::Ident,
+                    SyntaxKind::Comma,
+                    SyntaxKind::RBracket,
+                    SyntaxKind::LParen,
+                    SyntaxKind::Semicolon,
+                    SyntaxKind::RBrace,
+                ]);
+                self.eat(SyntaxKind::Comma);
+            }
+            self.bump_trivia();
+        }
+        if !missing_close {
+            self.expect(SyntaxKind::RBracket, ExpectedSyntax::RightBracket);
+        }
+        self.builder.finish_node();
     }
 
     fn parse_local_declaration(&mut self) {

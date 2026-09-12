@@ -8,15 +8,16 @@ use runen_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, identifier_key};
 
 use crate::{
     Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
-    BooleanEqualityRelation, CallTarget, CleanupPath, Diagnostic, DiagnosticKind, Duplicability,
-    Field, FieldReceiverTransientCleanup, FieldValueReceiver, Function, FunctionId, FunctionType,
-    FunctionTypeId, IntrinsicType, LiteralValue, MarkerImplementation, MarkerImplementationTarget,
-    MarkerTrait, MarkerTraitId, Module, ModuleId, NumericContract, OwnedUse, Parameter,
-    RawPointerPointee, Record, RecordFieldValue, RecordId, RecordPatternBinding,
-    RecordPatternScrutinee, RecordPatternTest, RecordPatternTestKind,
-    RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent, Return,
-    SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type, TypeParameter,
-    TypeParameterId, TypedCompilation, Value, ValueKind, type_is_duplicable_in_records,
+    BooleanEqualityRelation, CallTarget, CleanupPath, Closure, ClosureCapture, ClosureId,
+    Diagnostic, DiagnosticKind, Duplicability, Field, FieldReceiverTransientCleanup,
+    FieldValueReceiver, Function, FunctionId, FunctionType, FunctionTypeId, IntrinsicType,
+    LiteralValue, MarkerImplementation, MarkerImplementationTarget, MarkerTrait, MarkerTraitId,
+    Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee, Record,
+    RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTest,
+    RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
+    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type,
+    TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
+    type_is_duplicable_in_records,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -113,6 +114,8 @@ struct StructuralOwnershipState {
 enum BindingSource {
     Parameter,
     Local,
+    Closure,
+    Capture,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -545,13 +548,20 @@ struct BodyResolutionContext<'a> {
     records: &'a [Record],
     headers: &'a [FunctionHeader],
     function_types: &'a RefCell<Vec<FunctionType>>,
+    closures: &'a RefCell<Vec<Closure>>,
     marker_implementations: &'a MarkerImplementationRelation,
     safe_reference_result_origin_authority: Option<ReferenceAuthorityId>,
+    closure_body: bool,
 }
 
 impl BodyResolutionContext<'_> {
     fn type_is_duplicable(&self, ty: Type) -> bool {
-        type_is_duplicable_in_records(ty, self.records)
+        match ty {
+            Type::Closure(closure) => {
+                self.closures.borrow()[closure.0].duplicability == Duplicability::Duplicable
+            }
+            concrete => type_is_duplicable_in_records(concrete, self.records),
+        }
     }
 }
 
@@ -603,6 +613,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
 
     let constants = resolve_constants(&constant_syntax, &mut diagnostics);
     let function_types = RefCell::new(Vec::new());
+    let closures = RefCell::new(Vec::new());
     let records = resolve_records(&record_syntax, &modules, &imports, &mut diagnostics);
     let marker_implementations = resolve_marker_implementations(
         &marker_implementation_syntax,
@@ -653,6 +664,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             &records,
             &headers,
             &function_types,
+            &closures,
             &marker_implementation_relation,
             &mut next_binding,
             &mut diagnostics,
@@ -689,6 +701,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         records,
         functions,
         function_types: function_types.into_inner(),
+        closures: closures.into_inner(),
         marker_traits,
         marker_implementations,
     })
@@ -1659,6 +1672,7 @@ fn exported_type_exposes_private_record(
         }
         Type::Intrinsic(_)
         | Type::Parameter(_)
+        | Type::Closure(_)
         | Type::SafeReference {
             referent: ReferenceReferent::Intrinsic(_),
             ..
@@ -1677,7 +1691,7 @@ fn type_contains_reference_or_pointer_inner(
     visiting: &mut BTreeSet<RecordId>,
 ) -> bool {
     match ty {
-        Type::Intrinsic(_) | Type::Parameter(_) | Type::Function(_) => false,
+        Type::Intrinsic(_) | Type::Parameter(_) | Type::Function(_) | Type::Closure(_) => false,
         Type::Record(record) => {
             if !visiting.insert(record) {
                 return false;
@@ -1798,7 +1812,8 @@ fn raw_pointer_pointee_type_is_valid(ty: Type, records: &[Record]) -> bool {
         Type::Parameter(_)
         | Type::SafeReference { .. }
         | Type::RawPointer(_)
-        | Type::Function(_) => false,
+        | Type::Function(_)
+        | Type::Closure(_) => false,
     }
 }
 
@@ -1971,7 +1986,8 @@ fn resolve_type(
             Type::Parameter(_)
             | Type::SafeReference { .. }
             | Type::RawPointer(_)
-            | Type::Function(_) => {
+            | Type::Function(_)
+            | Type::Closure(_) => {
                 unreachable!(
                     "source reference type syntax is non-recursive and abstract referents reject before wrapping"
                 )
@@ -1988,7 +2004,8 @@ fn resolve_type(
             Type::Parameter(_)
             | Type::SafeReference { .. }
             | Type::RawPointer(_)
-            | Type::Function(_) => {
+            | Type::Function(_)
+            | Type::Closure(_) => {
                 unreachable!(
                     "source raw-pointer type syntax is non-recursive and abstract pointees reject before wrapping"
                 )
@@ -2328,7 +2345,10 @@ fn record_duplicability_is_valid(
     let duplicable = records[id.0].fields.iter().all(|field| match field.ty {
         Type::Intrinsic(_) => true,
         Type::Record(target) => record_duplicability_is_valid(target, records, resolved),
-        Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_) => false,
+        Type::Parameter(_)
+        | Type::SafeReference { .. }
+        | Type::RawPointer(_)
+        | Type::Closure(_) => false,
         Type::Function(_) => true,
     });
     resolved[id.0] = Some(duplicable);
@@ -2347,6 +2367,7 @@ fn validate_body(
     records: &[Record],
     headers: &[FunctionHeader],
     function_types: &RefCell<Vec<FunctionType>>,
+    closures: &RefCell<Vec<Closure>>,
     marker_implementations: &MarkerImplementationRelation,
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
@@ -2403,16 +2424,36 @@ fn validate_body(
         records,
         headers,
         function_types,
+        closures,
         marker_implementations,
         safe_reference_result_origin_authority,
+        closure_body: false,
     };
+    validate_body_sequence(
+        header,
+        &header.body,
+        &context,
+        state,
+        next_binding,
+        diagnostics,
+    )
+}
+
+fn validate_body_sequence(
+    header: &FunctionHeader,
+    body_node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    mut state: SemanticState,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Body {
     let mut control = ControlValidationContext::default();
     let value_context = ValueValidationContext::default();
     let mut statements = Vec::new();
     let mut terminal_return = None;
     let mut has_normal_continuation = true;
 
-    for node in header.body.children() {
+    for node in body_node.children() {
         if !has_normal_continuation {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::UnreachableStatement,
@@ -2425,7 +2466,7 @@ fn validate_body(
             terminal_return = Some(validate_terminal_return(
                 header,
                 &node,
-                &context,
+                context,
                 &value_context,
                 &mut state,
                 diagnostics,
@@ -2437,7 +2478,7 @@ fn validate_body(
         if let Some(statement) = validate_body_statement(
             header,
             &node,
-            &context,
+            context,
             &value_context,
             &mut state,
             &mut control,
@@ -2483,6 +2524,9 @@ fn validate_body_statement(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<Statement> {
     match node.kind() {
+        SyntaxKind::ClosureDeclaration => {
+            validate_closure_declaration(header, node, context, state, next_binding, diagnostics)
+        }
         SyntaxKind::LocalDeclaration => validate_local(
             header,
             node,
@@ -2604,6 +2648,7 @@ fn statement_has_normal_continuation(statement: &Statement) -> bool {
         }),
         Statement::While { .. }
         | Statement::Local { .. }
+        | Statement::Closure { .. }
         | Statement::RecordDestructure { .. }
         | Statement::Assignment { .. }
         | Statement::ReferenceAssign { .. }
@@ -2694,7 +2739,7 @@ fn validate_block_with_direct_bindings(
 
         if let Some(statement) = statement {
             match &statement {
-                Statement::Local { binding, .. } => {
+                Statement::Local { binding, .. } | Statement::Closure { binding, .. } => {
                     control
                         .scopes
                         .last_mut()
@@ -3195,6 +3240,446 @@ fn append_remaining_ownership_frontier(
             }
         }
     }
+}
+
+fn resolve_closure_interface(
+    header: &FunctionHeader,
+    initializer: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<(
+    Vec<Parameter>,
+    Option<Type>,
+    SafeReferenceResultContract,
+    SyntaxNode,
+)> {
+    let type_context = FullTypeResolutionContext {
+        names: TypeNameResolutionContext {
+            module: header.module,
+            unit: header.unit,
+            modules: context.modules,
+            imports: context.imports,
+            type_parameters: &[],
+        },
+        records: context.records,
+        function_types: context.function_types,
+    };
+
+    let parameter_list = direct_child(initializer, SyntaxKind::ParameterList);
+    let mut parameter_names = BTreeSet::new();
+    let mut parameters = Vec::new();
+    for parameter_node in parameter_list
+        .children()
+        .filter(|node| node.kind() == SyntaxKind::Parameter)
+    {
+        let name_token = direct_token(&parameter_node, SyntaxKind::Ident);
+        let name = key(&name_token);
+        let parameter_location = location(header.unit, &parameter_node);
+        if !parameter_names.insert(name.clone()) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicateParameter,
+                location: parameter_location,
+            });
+            continue;
+        }
+        let type_node = direct_child(&parameter_node, SyntaxKind::TypeRef);
+        let Some(ty) = resolve_full_type(&type_node, &type_context, false, diagnostics) else {
+            continue;
+        };
+        if matches!(ty, Type::RawPointer(_)) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::RawPointerParameter,
+                location: location(header.unit, &type_node),
+            });
+            continue;
+        }
+        if !validate_safe_reference_referent(
+            ty,
+            context.records,
+            location(header.unit, &type_node),
+            diagnostics,
+        ) {
+            continue;
+        }
+        let binding = BindingId(*next_binding);
+        *next_binding += 1;
+        parameters.push(Parameter {
+            binding,
+            name,
+            ty,
+            location: parameter_location,
+        });
+    }
+
+    let mut safe_reference_result_contract = SafeReferenceResultContract::None;
+    let result = initializer
+        .children()
+        .find(|node| node.kind() == SyntaxKind::ResultClause)
+        .and_then(|result_clause| {
+            let type_node = direct_child(&result_clause, SyntaxKind::TypeRef);
+            let ty = resolve_full_type(&type_node, &type_context, false, diagnostics)?;
+            if matches!(ty, Type::RawPointer(_)) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::RawPointerResult,
+                    location: location(header.unit, &type_node),
+                });
+                return None;
+            }
+            if matches!(
+                ty,
+                Type::SafeReference {
+                    permission: ReferencePermission::ExclusiveReplace,
+                    ..
+                }
+            ) {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ReplacementReferenceResult,
+                    location: location(header.unit, &type_node),
+                });
+                return None;
+            }
+            if !validate_safe_reference_referent(
+                ty,
+                context.records,
+                location(header.unit, &type_node),
+                diagnostics,
+            ) {
+                return None;
+            }
+            let parameter_types = parameters
+                .iter()
+                .map(|parameter| parameter.ty)
+                .collect::<Vec<_>>();
+            if let Some(contract) = derive_safe_reference_result_contract(
+                &parameter_types,
+                Some(ty),
+                location(header.unit, &type_node),
+                diagnostics,
+            ) {
+                safe_reference_result_contract = contract;
+            }
+            Some(ty)
+        });
+
+    let body = direct_child(initializer, SyntaxKind::Body);
+    Some((parameters, result, safe_reference_result_contract, body))
+}
+
+#[derive(Debug, Clone)]
+struct PendingClosureCapture {
+    name: String,
+    outer_binding: BindingId,
+    capture_binding: BindingId,
+    ty: Type,
+    ownership: OwnedUse,
+    location: SourceLocation,
+}
+
+fn validate_closure_declaration(
+    header: &FunctionHeader,
+    node: &SyntaxNode,
+    context: &BodyResolutionContext<'_>,
+    state: &mut SemanticState,
+    next_binding: &mut usize,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Statement> {
+    let declaration_location = location(header.unit, node);
+    if !header.type_parameters.is_empty() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ClosureInGenericFunction,
+            location: declaration_location,
+        });
+        return None;
+    }
+    if context.closure_body {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::NestedClosureDeclaration,
+            location: declaration_location,
+        });
+        return None;
+    }
+
+    let name_token = direct_token(node, SyntaxKind::Ident);
+    let name = key(&name_token);
+    if state.bindings.contains_key(&name) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::LocalShadowing,
+            location: SourceLocation {
+                unit: header.unit,
+                range: name_token.text_range(),
+            },
+        });
+        return None;
+    }
+
+    let initializer = direct_child(node, SyntaxKind::ClosureInitializer);
+    let diagnostics_before_interface = diagnostics.len();
+    let (parameters, result, safe_reference_result_contract, body_node) =
+        resolve_closure_interface(header, &initializer, context, next_binding, diagnostics)?;
+    if diagnostics.len() != diagnostics_before_interface {
+        return None;
+    }
+
+    let parameter_names = parameters
+        .iter()
+        .map(|parameter| parameter.name.as_str())
+        .collect::<BTreeSet<_>>();
+    let captures_node = direct_child(&initializer, SyntaxKind::ClosureCaptures);
+    let capture_tokens = captures_node
+        .children_with_tokens()
+        .filter_map(|element| element.into_token())
+        .filter(|token| token.kind() == SyntaxKind::Ident)
+        .collect::<Vec<_>>();
+    debug_assert!(!capture_tokens.is_empty());
+
+    let mut selected = BTreeSet::new();
+    let mut captures = Vec::with_capacity(capture_tokens.len());
+    let diagnostics_before_captures = diagnostics.len();
+    for token in capture_tokens {
+        let capture_name = key(&token);
+        let capture_location = SourceLocation {
+            unit: header.unit,
+            range: token.text_range(),
+        };
+        if parameter_names.contains(capture_name.as_str()) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ClosureCaptureParameterConflict,
+                location: capture_location,
+            });
+            continue;
+        }
+        let Some(binding) = state.bindings.get(&capture_name).cloned() else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidClosureCapture,
+                location: capture_location,
+            });
+            continue;
+        };
+        if !selected.insert(binding.id) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::DuplicateClosureCapture,
+                location: capture_location,
+            });
+            continue;
+        }
+        if !matches!(
+            binding.source,
+            BindingSource::Parameter | BindingSource::Local | BindingSource::Closure
+        ) || matches!(
+            binding.ty,
+            Type::Parameter(_) | Type::SafeReference { .. } | Type::RawPointer(_)
+        ) {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::InvalidClosureCapture,
+                location: capture_location,
+            });
+            continue;
+        }
+        if binding.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnavailableBinding,
+                location: capture_location,
+            });
+            continue;
+        }
+        let ownership = if context.type_is_duplicable(binding.ty) {
+            OwnedUse::Duplicate
+        } else {
+            OwnedUse::Consume
+        };
+        let target = ReferenceTarget::local_root(binding.id);
+        let compatible = match ownership {
+            OwnedUse::Duplicate => state.target_satisfies_shared_requirement(&target),
+            OwnedUse::Consume => state.target_satisfies_exclusive_requirement(&target),
+        };
+        if !compatible {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ReferencePermissionUnavailable,
+                location: capture_location,
+            });
+            continue;
+        }
+        let capture_binding = BindingId(*next_binding);
+        *next_binding += 1;
+        captures.push(PendingClosureCapture {
+            name: capture_name,
+            outer_binding: binding.id,
+            capture_binding,
+            ty: binding.ty,
+            ownership,
+            location: capture_location,
+        });
+    }
+    if diagnostics.len() != diagnostics_before_captures {
+        return None;
+    }
+
+    let duplicability = if captures
+        .iter()
+        .all(|capture| context.type_is_duplicable(capture.ty))
+    {
+        Duplicability::Duplicable
+    } else {
+        Duplicability::NonDuplicable
+    };
+
+    let mut closure_state = SemanticState::default();
+    for (slot, parameter) in parameters.iter().enumerate() {
+        let reference_authority = match parameter.ty {
+            Type::SafeReference { permission, .. } => {
+                if permission == ReferencePermission::ExclusiveReplace {
+                    closure_state
+                        .external_referents
+                        .insert(slot, StructuralOwnershipState::default());
+                }
+                Some(closure_state.create_reference_authority(
+                    ReferenceTarget::external_root(slot),
+                    permission,
+                    None,
+                ))
+            }
+            _ => None,
+        };
+        closure_state.bindings.insert(
+            parameter.name.clone(),
+            BindingState {
+                id: parameter.binding,
+                ty: parameter.ty,
+                mutability: AssignmentMutability::Immutable,
+                source: BindingSource::Parameter,
+                ownership: StructuralOwnershipState::default(),
+                reference_authority,
+                pointer_origin: None,
+                raw_pointer_target_domain: None,
+            },
+        );
+    }
+    for capture in &captures {
+        let previous = closure_state.bindings.insert(
+            capture.name.clone(),
+            BindingState {
+                id: capture.capture_binding,
+                ty: capture.ty,
+                mutability: AssignmentMutability::Immutable,
+                source: BindingSource::Capture,
+                ownership: StructuralOwnershipState::default(),
+                reference_authority: None,
+                pointer_origin: None,
+                raw_pointer_target_domain: None,
+            },
+        );
+        debug_assert!(previous.is_none());
+    }
+
+    let safe_reference_result_origin_authority = match safe_reference_result_contract {
+        SafeReferenceResultContract::None => None,
+        SafeReferenceResultContract::SharedIdentity { origin }
+        | SafeReferenceResultContract::SharedDirectChild { origin } => Some(
+            closure_state
+                .bindings
+                .values()
+                .find(|binding| binding.id == parameters[origin].binding)
+                .and_then(|binding| binding.reference_authority)
+                .expect("closure result origin parameter has activation authority"),
+        ),
+    };
+    let closure_context = BodyResolutionContext {
+        modules: context.modules,
+        imports: context.imports,
+        constants: context.constants,
+        records: context.records,
+        headers: context.headers,
+        function_types: context.function_types,
+        closures: context.closures,
+        marker_implementations: context.marker_implementations,
+        safe_reference_result_origin_authority,
+        closure_body: true,
+    };
+    let closure_header = FunctionHeader {
+        id: header.id,
+        module: header.module,
+        unit: header.unit,
+        name: name.clone(),
+        accessibility: Accessibility::ModulePrivate,
+        type_parameters: Vec::new(),
+        parameters: parameters.clone(),
+        result,
+        safe_reference_result_contract,
+        function_type: None,
+        body: body_node.clone(),
+        location: declaration_location,
+    };
+    let diagnostics_before_body = diagnostics.len();
+    let body = validate_body_sequence(
+        &closure_header,
+        &body_node,
+        &closure_context,
+        closure_state,
+        next_binding,
+        diagnostics,
+    );
+    if diagnostics.len() != diagnostics_before_body {
+        return None;
+    }
+
+    let closure = ClosureId(context.closures.borrow().len());
+    context.closures.borrow_mut().push(Closure {
+        id: closure,
+        function: header.id,
+        module: header.module,
+        unit: header.unit,
+        parameters,
+        result,
+        safe_reference_result_contract,
+        captures: captures
+            .iter()
+            .map(|capture| ClosureCapture {
+                name: capture.name.clone(),
+                binding: capture.capture_binding,
+                outer_binding: capture.outer_binding,
+                ty: capture.ty,
+                ownership: capture.ownership,
+                location: capture.location,
+            })
+            .collect(),
+        duplicability,
+        body,
+        location: declaration_location,
+    });
+
+    let mut candidate = state.clone();
+    for capture in &captures {
+        if capture.ownership == OwnedUse::Consume {
+            binding_state_by_id_mut(&mut candidate.bindings, capture.outer_binding)
+                .expect("prevalidated closure capture remains active")
+                .ownership
+                .consume_path(&[]);
+        }
+    }
+    let binding = BindingId(*next_binding);
+    *next_binding += 1;
+    candidate.bindings.insert(
+        name.clone(),
+        BindingState {
+            id: binding,
+            ty: Type::Closure(closure),
+            mutability: AssignmentMutability::Immutable,
+            source: BindingSource::Closure,
+            ownership: StructuralOwnershipState::default(),
+            reference_authority: None,
+            pointer_origin: None,
+            raw_pointer_target_domain: None,
+        },
+    );
+    *state = candidate;
+
+    Some(Statement::Closure {
+        binding,
+        name,
+        closure,
+        location: declaration_location,
+    })
 }
 
 fn validate_local(
@@ -5931,7 +6416,8 @@ fn validate_value_inner(
                             Type::Parameter(_)
                             | Type::SafeReference { .. }
                             | Type::RawPointer(_)
-                            | Type::Function(_) => {
+                            | Type::Function(_)
+                            | Type::Closure(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidSafeReferenceReferent {
                                         referent: selected_ty,
@@ -5989,7 +6475,8 @@ fn validate_value_inner(
                             Type::Parameter(_)
                             | Type::SafeReference { .. }
                             | Type::RawPointer(_)
-                            | Type::Function(_) => {
+                            | Type::Function(_)
+                            | Type::Closure(_) => {
                                 diagnostics.push(Diagnostic {
                                     kind: DiagnosticKind::InvalidRawPointerPointee {
                                         pointee: binding.ty,
@@ -6581,7 +7068,8 @@ fn validate_reference_root(
         Type::Parameter(_)
         | Type::SafeReference { .. }
         | Type::RawPointer(_)
-        | Type::Function(_) => {
+        | Type::Function(_)
+        | Type::Closure(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSafeReferenceReferent {
                     referent: selected_ty,
@@ -6738,7 +7226,8 @@ fn validate_reference_reborrow(
         Type::Parameter(_)
         | Type::SafeReference { .. }
         | Type::RawPointer(_)
-        | Type::Function(_) => {
+        | Type::Function(_)
+        | Type::Closure(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidSafeReferenceReferent {
                     referent: selected_ty,
@@ -6927,7 +7416,8 @@ fn validate_raw_address(
         Type::Parameter(_)
         | Type::SafeReference { .. }
         | Type::RawPointer(_)
-        | Type::Function(_) => {
+        | Type::Function(_)
+        | Type::Closure(_) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidRawPointerPointee {
                     pointee: binding.ty,
@@ -8242,6 +8732,10 @@ enum ResolvedCallTarget {
         binding: BindingId,
         function_type: FunctionTypeId,
     },
+    Closure {
+        binding: BindingId,
+        closure: ClosureId,
+    },
 }
 
 fn resolve_call_target(
@@ -8286,6 +8780,12 @@ fn resolve_call_target(
                 binding: binding.id,
                 function_type,
             }),
+            Type::Closure(closure) if binding.source == BindingSource::Closure => {
+                Some(ResolvedCallTarget::Closure {
+                    binding: binding.id,
+                    closure,
+                })
+            }
             _ => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedFunction,
@@ -8432,7 +8932,9 @@ fn type_argument_satisfies_marker_requirement(
                     candidate.id == parameter && candidate.requirements.contains(&required)
                 })
         }
-        Type::SafeReference { .. } | Type::RawPointer(_) | Type::Function(_) => false,
+        Type::SafeReference { .. } | Type::RawPointer(_) | Type::Function(_) | Type::Closure(_) => {
+            false
+        }
     }
 }
 
@@ -8479,8 +8981,29 @@ fn resolve_call_application(
         });
     }
 
+    if let ResolvedCallTarget::Closure { binding, closure } = resolved_target {
+        if let Some(list) = type_argument_list {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnexpectedGenericTypeArguments,
+                location: location(header.unit, &list),
+            });
+            return None;
+        }
+        let closure_site = context.closures.borrow()[closure.0].clone();
+        return Some(ResolvedCallApplication {
+            target: CallTarget::Closure { binding, closure },
+            parameter_types: closure_site
+                .parameters
+                .iter()
+                .map(|parameter| parameter.ty)
+                .collect(),
+            result: closure_site.result,
+            safe_reference_result_contract: closure_site.safe_reference_result_contract,
+        });
+    }
+
     let ResolvedCallTarget::Direct(function) = resolved_target else {
-        unreachable!("indirect target returned above")
+        unreachable!("non-direct target returned above")
     };
     let target = &context.headers[function.0];
     let type_arguments = match (target.type_parameters.is_empty(), type_argument_list) {
@@ -8632,6 +9155,33 @@ fn validate_call_inner(
             location: location(header.unit, node),
         });
         return None;
+    }
+
+    if let CallTarget::Closure { binding, closure } = &application.target {
+        let binding_state = binding_state_by_id(&state.bindings, *binding)
+            .expect("classified closure target remains an active binding");
+        if binding_state.ty != Type::Closure(*closure)
+            || binding_state.source != BindingSource::Closure
+        {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedFunction,
+                location: location(header.unit, node),
+            });
+            return None;
+        }
+        if binding_state.ownership.path_availability(&[]) != PathAvailability::FullyAvailable {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnavailableBinding,
+                location: location(header.unit, node),
+            });
+            return None;
+        }
+        if !context.type_is_duplicable(binding_state.ty) {
+            binding_state_by_id_mut(&mut state.bindings, *binding)
+                .expect("classified closure target remains active")
+                .ownership
+                .consume_path(&[]);
+        }
     }
 
     let mut arguments = Vec::with_capacity(argument_nodes.len());

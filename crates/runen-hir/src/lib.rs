@@ -79,6 +79,10 @@ pub struct FunctionId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FunctionTypeId(pub(crate) usize);
 
+/// Opaque per-compilation source closure-site/type identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ClosureId(pub(crate) usize);
+
 /// Opaque per-compilation nominal marker-trait handle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarkerTraitId(pub(crate) usize);
@@ -205,6 +209,8 @@ pub enum Type {
     RawPointer(RawPointerPointee),
     /// Canonical structural captureless function-value type.
     Function(FunctionTypeId),
+    /// Fresh opaque source closure type identified by its declaration site.
+    Closure(ClosureId),
 }
 
 /// One retained ordered generic function type-parameter declaration.
@@ -341,7 +347,7 @@ pub struct Record {
 pub(crate) fn type_is_duplicable_in_records(ty: Type, records: &[Record]) -> bool {
     match ty {
         Type::Intrinsic(_) | Type::RawPointer(_) | Type::Function(_) => true,
-        Type::Parameter(_) => false,
+        Type::Parameter(_) | Type::Closure(_) => false,
         Type::SafeReference {
             permission: ReferencePermission::Shared,
             ..
@@ -485,6 +491,10 @@ pub enum CallTarget {
         binding: BindingId,
         function_type: FunctionTypeId,
     },
+    Closure {
+        binding: BindingId,
+        closure: ClosureId,
+    },
 }
 
 /// Resolved producer for one typed HIR value.
@@ -606,6 +616,33 @@ pub enum ValueKind {
     },
 }
 
+/// One retained ordered capture for an accepted source closure site.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClosureCapture {
+    pub name: String,
+    pub binding: BindingId,
+    pub outer_binding: BindingId,
+    pub ty: Type,
+    pub ownership: OwnedUse,
+    pub location: SourceLocation,
+}
+
+/// One accepted source closure declaration site and its validated activation body.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Closure {
+    pub id: ClosureId,
+    pub function: FunctionId,
+    pub module: ModuleId,
+    pub unit: usize,
+    pub parameters: Vec<Parameter>,
+    pub result: Option<Type>,
+    pub safe_reference_result_contract: SafeReferenceResultContract,
+    pub captures: Vec<ClosureCapture>,
+    pub duplicability: Duplicability,
+    pub body: Body,
+    pub location: SourceLocation,
+}
+
 /// One source-selected remaining-ownership cleanup path for a binding.
 ///
 /// `fields` contains resolved declaration-field indices. An empty field path
@@ -636,6 +673,12 @@ pub enum Statement {
         ty: Type,
         mutability: AssignmentMutability,
         initializer: Value,
+        location: SourceLocation,
+    },
+    Closure {
+        binding: BindingId,
+        name: String,
+        closure: ClosureId,
         location: SourceLocation,
     },
     RecordDestructure {
@@ -748,6 +791,7 @@ pub struct TypedCompilation {
     pub records: Vec<Record>,
     pub functions: Vec<Function>,
     pub function_types: Vec<FunctionType>,
+    pub closures: Vec<Closure>,
     pub marker_traits: Vec<MarkerTrait>,
     pub marker_implementations: Vec<MarkerImplementation>,
 }
@@ -769,6 +813,11 @@ impl TypedCompilation {
     }
 
     #[must_use]
+    pub fn closure(&self, id: ClosureId) -> &Closure {
+        &self.closures[id.0]
+    }
+
+    #[must_use]
     pub fn marker_trait(&self, id: MarkerTraitId) -> &MarkerTrait {
         &self.marker_traits[id.0]
     }
@@ -777,7 +826,12 @@ impl TypedCompilation {
     /// Abstract generic parameters deliberately have no positive duplicability evidence.
     #[must_use]
     pub fn type_is_duplicable(&self, ty: Type) -> bool {
-        type_is_duplicable_in_records(ty, &self.records)
+        match ty {
+            Type::Closure(closure) => {
+                self.closure(closure).duplicability == Duplicability::Duplicable
+            }
+            concrete => type_is_duplicable_in_records(concrete, &self.records),
+        }
     }
 }
 
@@ -851,6 +905,11 @@ pub enum DiagnosticKind {
     ImmutableAssignmentTarget,
     ExpectedFunction,
     GenericFunctionValue,
+    ClosureInGenericFunction,
+    NestedClosureDeclaration,
+    DuplicateClosureCapture,
+    InvalidClosureCapture,
+    ClosureCaptureParameterConflict,
     ArgumentCount {
         expected: usize,
         found: usize,
