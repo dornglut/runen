@@ -4,6 +4,7 @@
 - [Execution-persistent storage](persistent-storage.md)
 - [Control flow](control-flow.md)
 - [Functions and calls](functions.md)
+- [External callable imports](external-calls.md)
 - [Callable values and indirect calls](callable-values.md)
 - [Borrowing](borrowing.md)
 - [References](references.md)
