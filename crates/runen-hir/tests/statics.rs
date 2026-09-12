@@ -273,10 +273,7 @@ fn generic_and_closure_bodies_resolve_statics_without_capture_identity() {
         ValueKind::StaticRead(_)
     ));
 
-    let errors = build(
-        "static VALUE: I64 = 9; \
-         fn bad(dummy: I64) { let c = fn[VALUE]() { let copy: I64 = dummy; }; }",
-    )
-    .expect_err("module statics are not closure capture targets");
+    let errors = build("static VALUE: I64 = 9; fn bad() { let c = fn[VALUE]() {}; }")
+        .expect_err("module statics are not closure capture targets");
     assert!(has_kind(&errors, DiagnosticKind::InvalidClosureCapture));
 }
