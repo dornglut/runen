@@ -1,0 +1,94 @@
+name: Temporary #698 exact-head audit
+
+on:
+  push:
+    branches:
+      - tmp-698-exact-head-audit
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Audit exact published candidate
+        shell: bash
+        env:
+          BASE: 42a55ae6d9737c5240cdd530712bc964f8b4ec62
+          CANDIDATE: 98d9b502a6a0840fd2ac2acb22f9fbd01a092c71
+          TREE: 7d04972859b2dadb4a053fbd6d140080bf490308
+        run: |
+          set -euo pipefail
+          git checkout --detach "$CANDIDATE"
+
+          test "$(git show -s --format=%P HEAD)" = "$BASE"
+          test "$(git show -s --format=%T HEAD)" = "$TREE"
+          test "$(git rev-list --count "$BASE..$CANDIDATE")" = 1
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$BASE"
+          git diff --check "$BASE..$CANDIDATE"
+
+          printf '%s\n' \
+            spec/language/core/README.md \
+            spec/language/core/faults.md \
+            spec/language/core/functions.md \
+            spec/language/core/persistent-storage.md \
+            spec/language/core/references.md \
+            spec/language/source/README.md \
+            spec/language/source/closures.md \
+            spec/language/source/concrete-syntax.md \
+            spec/language/source/constants.md \
+            spec/language/source/function-execution.md \
+            spec/language/source/literals.md \
+            spec/language/source/local-bindings.md \
+            spec/language/source/names-modules.md \
+            spec/language/source/references.md \
+            spec/language/source/statics.md \
+            | sort > /tmp/expected-files
+          git diff --name-only "$BASE..$CANDIDATE" | sort > /tmp/actual-files
+          diff -u /tmp/expected-files /tmp/actual-files
+
+          # Removed/stale source syntax categories must not survive.
+          ! grep -Fq 'ConstReference' spec/language/source/concrete-syntax.md
+          ! grep -Fq 'only the constant relation can succeed' spec/language/source/concrete-syntax.md
+          ! grep -Fq 'For the module-constant branch' spec/language/source/concrete-syntax.md
+          ! grep -Fq 'A resolved constant reference supplies `Exact(T)`' spec/language/source/concrete-syntax.md
+          ! grep -Fq 'A module constant selected only after local lookup fails' spec/language/source/concrete-syntax.md
+          ! grep -Fq 'A same-module constant reached after local lookup fails is a wrong category' spec/language/source/concrete-syntax.md
+
+          # Positive source integration invariants.
+          grep -Fq 'ModuleScalarReference' spec/language/source/concrete-syntax.md
+          grep -Fq 'StaticDeclaration' spec/language/source/concrete-syntax.md
+          grep -Fq 'QualifiedStaticReferenceRootTarget' spec/language/source/concrete-syntax.md
+          grep -Fq 'module-static branch' spec/language/source/concrete-syntax.md
+          grep -Fq 'static scalar read supplies `Exact(T)`' spec/language/source/concrete-syntax.md
+          grep -Fq 'StaticRootOrigin(staticBinding)' spec/language/source/references.md
+          grep -Fq 'A fresh static-root authority is not `ParameterOrigin`' spec/language/source/references.md
+          grep -Fq 'source-valid immutable static scalar read from `statics.md`' spec/language/source/function-execution.md
+          grep -Fq 'constants.md` owns constant value production, `statics.md` owns immutable static scalar-read production' spec/language/source/local-bindings.md
+          grep -Fq 'module statics are not such bindings and occupy no closure environment slot' spec/language/source/statics.md
+
+          # Positive Core integration and terminal non-dangling invariants.
+          grep -Fq 'exactly two root-storage categories' spec/language/core/references.md
+          grep -Fq 'Execution-persistent Shared root' spec/language/core/references.md
+          grep -Fq 'preserved contract-bearing Shared-reference result whose target lies in any such persistent instance makes Core language validation fail' spec/language/core/functions.md
+          grep -Fq 'This includes any carrier preserved in the outermost activation' spec/language/core/persistent-storage.md
+          grep -Fq 'persistent terminal cleanup' spec/language/core/faults.md
+
+          # No implementation or roadmap files are in the candidate surface.
+          ! git diff --name-only "$BASE..$CANDIDATE" | grep -Ev '^spec/language/'
+
+      - name: Canonical repository validation
+        shell: bash
+        env:
+          CANDIDATE: 98d9b502a6a0840fd2ac2acb22f9fbd01a092c71
+        run: |
+          set -euo pipefail
+          git checkout --detach "$CANDIDATE"
+          rustup toolchain install stable --profile minimal
+          cargo +stable validate
+          test "$(git rev-parse HEAD)" = "$CANDIDATE"
