@@ -22,7 +22,7 @@ jobs:
           BASE: 42a55ae6d9737c5240cdd530712bc964f8b4ec62
           OLD: 7a96415c8c9d54f351aded1a7dc4c342764fe47d
           TRANSFORM_BLOB: e7cd60ccd25d6005cb57dec36a10b95631075481
-          FIXUP_BLOB: 6e7a97e5c07a65dc6d09ff57779447c9b8c36621
+          FIXUP_BLOB: 9251b08133d1c3521bf4e880dc6a10893d64ec6d
         run: |
           set -euo pipefail
           test "$(git hash-object .github/tmp-698-final-syntax-consistency.py)" = "$TRANSFORM_BLOB"
