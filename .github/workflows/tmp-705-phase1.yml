@@ -1,0 +1,47 @@
+name: Temporary P0-D #705 phase-1 compiler gate
+
+on:
+  push:
+    branches:
+      - p0d-705-external-callable-impl
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tmp-705-phase1
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out staging head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Prove accepted base
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse origin/main)" = "8e7e0d36bf8e3c000295bd1d607297f024dfdbe4"
+          test "$(git rev-parse 8e7e0d36bf8e3c000295bd1d607297f024dfdbe4^{tree})" = "0f637c32df99d3f6644f9cc2c2f33c6c6d5a9244"
+      - name: Install maintained Rust toolchain
+        shell: bash
+        run: rustup toolchain install stable --profile minimal
+      - name: Apply phase-1 implementation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python .github/tmp-705-phase1.py
+          cargo +stable fmt --all
+          git diff --check
+      - name: Test syntax external declarations
+        shell: bash
+        run: cargo +stable test -p runen-syntax --test external_callables
+      - name: Test Core external-call substrate
+        shell: bash
+        run: cargo +stable test -p runen-core-ir --test external_callables
+      - name: Compile workspace to expose migration/exhaustiveness obligations
+        shell: bash
+        run: cargo +stable check --workspace --all-targets
