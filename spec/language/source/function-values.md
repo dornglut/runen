@@ -2,7 +2,7 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source-language relation for first-class captureless function-value types, function values carrying source function-entity identity, function-value formation from existing non-generic function entities, function-value duplicability and ordinary transport, the bounded indirect-call target branch through active bindings of exact function-value type, and source-to-Core refinement of function-value types, values, and indirect calls.
+This document owns the represented source-language relation for first-class captureless function-value types, function values carrying source function-entity identity, function-value formation from existing eligible non-generic Runen-body function entities, function-value duplicability and ordinary transport, the bounded indirect-call target branch through active bindings of exact function-value type, and source-to-Core refinement of function-value types, values, and indirect calls.
 
 It consumes source function-entity identity, callable-signature structure, concrete parameter/result admission, bounded safe-reference result-contract derivation, and exported callable-interface accessibility from [Source callables](callables.md); represented source value-type integration and equality from [Source type foundation](types.md); same-module and qualified declaration lookup from [Source names and modules](names-modules.md); function-local/closure-body lookup, binding identity, ordinary binding use, local lifecycle, and assignment from [Source function-local bindings](local-bindings.md); dynamic call validation/execution, source-function activation creation, argument/result transfer, recursion, divergence, cleanup, and defined-fault propagation from [Source function execution](function-execution.md); safe-reference call-entry, result provenance, and bounded result-contract consequences from [Source safe references](references.md); generic type-parameter/application boundaries from [Source generics](generics.md); bounded dedicated closure bindings/capture bindings and closure-call delegation from [Source closures and explicit by-value capture](closures.md); and represented function-type/value/call spelling from [Source concrete syntax](concrete-syntax.md). It does not redefine those owners.
 
@@ -87,13 +87,14 @@ Function-value types remain outside the generic type-argument domain owned by `g
 
 ## Source function values
 
-A represented **source function value** contains exactly one source function-entity identity established by `callables.md`.
+A represented **source function value** contains exactly one eligible Runen-body source function-entity identity established by `callables.md`. Declaration-only external function entities from `external-callables.md` are not function-value payloads in this revision.
 
 A function value is valid at one exact source function-value type only when:
 
 1. the target source function entity exists in the program/module graph under the applicable lookup relation;
-2. the target source function is non-generic, meaning its callable signature has no generic type-parameter slots; and
-3. the target function's exact parameter types, result structure, and bounded safe-reference result contract produce a function-value type equal to the required function-value type.
+2. the target source function has a represented Runen body under `function-execution.md` and is not an external callable declaration;
+3. the target source function is non-generic, meaning its callable signature has no generic type-parameter slots; and
+4. the target function's exact parameter types, result structure, and bounded safe-reference result contract produce a function-value type equal to the required function-value type.
 
 Distinct function entities remain distinct function values even when both satisfy the same function-value type.
 
@@ -131,7 +132,7 @@ For one bare `UserIdentifier` in an ordinary value position with required functi
 1. perform active local binding lookup in the current body root/scope tree;
 2. if an active binding resolves the key, that selection is final and the occurrence is ordinary binding use rather than function-value formation;
 3. only when no active binding resolves the key, perform same-module declaration lookup under `names-modules.md` using the current body's source-module context;
-4. the selected module binding MUST denote one non-generic source function entity; and
+4. the selected module binding MUST denote one eligible non-generic Runen-body source function entity and MUST NOT denote an external callable declaration; and
 5. that function entity's exact callable structure MUST produce source function-value type equal to `F`.
 
 If same-module lookup instead selects a constant, nominal record, marker trait, generic function, or another wrong category, the occurrence is source-invalid for function-value formation and lookup MUST NOT search another declaration or imported module merely because `F` requires a function value.
@@ -144,7 +145,7 @@ In a closure body, uncaptured creator bindings are absent from the fresh closure
 
 For one represented `QualifiedModuleMember` in an ordinary value position with required function-value type `F`, use the existing source-unit module-alias and qualified exported-member lookup from `names-modules.md`. A closure body retains its declaration-site source unit under `closures.md`, so this same rule applies there without a new alias relation.
 
-The selected exported target binding MUST denote one non-generic source function entity whose exact callable structure produces function-value type equal to `F`.
+The selected exported target binding MUST denote one eligible non-generic Runen-body source function entity, not an external callable declaration, whose exact callable structure produces source function-value type equal to `F`.
 
 An unresolved alias/member, inaccessible target, selected constant/record/trait, selected generic function, or exact function-value type mismatch is source-invalid. Qualified lookup does not fall back to a local binding, same-module declaration, another import, or another category.
 
@@ -267,7 +268,7 @@ A bounded source indirect call refines to one Core `IndirectCall` with:
 
 The resulting Core indirect call MUST preserve the source order required by `function-execution.md`: destination/result admission before callee/argument state effects where applicable, callee value evaluation before ordinary arguments, ordinary arguments left-to-right, final safe-reference call-entry checks after argument effects, and target selection before common source-function activation execution.
 
-Existing source direct calls continue to refine to Core direct calls and need not be re-expressed through function values. Bounded closure calls refine separately under `closures.md` and do not pass through this function-value relation.
+Existing Runen-body source direct calls continue to refine to Core direct calls and need not be re-expressed through function values. Direct calls selected to external callable declarations refine separately through `external-callables.md` and `core/external-calls.md`; they never pass through a function value. Bounded closure calls refine separately under `closures.md` and do not pass through this function-value relation.
 
 The refinement creates no code-address observation, pointer conversion, ABI/calling convention, stable callable layout, symbol/linker identity, FFI compatibility, dynamic-library handle, vtable/table representation, or serialization format.
 

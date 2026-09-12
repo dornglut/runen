@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the currently represented Core semantics for finite function programs, function identity, the canonical callable-interface relation, owned-value parameter slots, direct-call target selection, common function-call destination/argument/activation semantics after a callable interface is established, result transfer, recursion, divergence, and defined-fault propagation through calls.
 
-It consumes local storage, initialization state, owned move/copy, destruction domains, and function-termination cleanup from [Core value and storage semantics](value-storage.md); execution-persistent declaration/instance identity and terminal persistent cleanup from [Core execution-persistent storage](persistent-storage.md); access authority and explicit-loan termination from [Core borrowing](borrowing.md); safe-reference values, reference-backed authority, carrier lifecycle, and reference access from [Core references](references.md); raw-pointer value and provenance semantics from [Core pointers and provenance](pointers.md); and defined-fault classification from [Core faults](faults.md). First-class callable scalar types/values, static function-value formation, indirect-call callee evaluation, and dynamic target selection are owned by [Core callable values and indirect calls](callable-values.md); after an indirect target is selected, that owner reuses the common call relations defined here rather than redefining them.
+It consumes local storage, initialization state, owned move/copy, destruction domains, and function-termination cleanup from [Core value and storage semantics](value-storage.md); execution-persistent declaration/instance identity and terminal persistent cleanup from [Core execution-persistent storage](persistent-storage.md); access authority and explicit-loan termination from [Core borrowing](borrowing.md); safe-reference values, reference-backed authority, carrier lifecycle, and reference access from [Core references](references.md); raw-pointer value and provenance semantics from [Core pointers and provenance](pointers.md); and defined-fault classification from [Core faults](faults.md). First-class callable scalar types/values, static function-value formation, indirect-call callee evaluation, and dynamic target selection are owned by [Core callable values and indirect calls](callable-values.md); after an indirect target is selected, that owner reuses the common call relations defined here rather than redefining them. Declaration-only external callable identities, provider admission, and external-call execution are owned by [Core external callable imports](external-calls.md), which reuses only the canonical callable-interface structure plus the result-destination and ordered-argument call-site prefix explicitly identified below and does not create a Core function activation.
 
 This relation is independent of source syntax, source name resolution, ABI, calling convention, physical stack layout, backend realization, or a particular compiler representation.
 
@@ -13,8 +13,9 @@ This relation is independent of source syntax, source name resolution, ABI, call
 A represented Core program contains:
 
 - one finite Core type-identity domain;
-- one finite sequence of represented Core function entities; and
-- one finite sequence of execution-persistent storage declarations owned by `persistent-storage.md`.
+- one finite sequence of represented Core function entities;
+- one finite sequence of execution-persistent storage declarations owned by `persistent-storage.md`; and
+- one finite sequence of declaration-only external callable requirements owned by `external-calls.md`.
 
 Each represented function entity has one identity within that program. Function identity is semantic within the represented Core program but does not require a stable numeric encoding, serialized identifier, symbol name, physical address, or source declaration identity.
 
@@ -28,9 +29,9 @@ A canonical Core **callable interface** consists of exactly:
 
 For a represented function entity, the callable-interface parameter `TypeId` sequence is derived in parameter-slot order from the designated parameter locals defined below. The function's result specification and safe-reference result contract complete the derived interface. The semantic interface therefore contains no second independent function-parameter type source.
 
-The program-wide type domain is shared by every function body, callable interface, and persistent-storage declaration in that program. A type identity used by two different functions or by a function and persistent declaration therefore denotes the same represented Core type.
+The program-wide type domain is shared by every function body, callable interface, persistent-storage declaration, and external callable declaration in that program. A type identity used by two different functions or by a function and persistent declaration therefore denotes the same represented Core type.
 
-`callable-values.md` may attach this same canonical interface relation to callable scalar types. It does not create a second signature/interface validity relation.
+`callable-values.md` may attach this same canonical interface relation to callable scalar types, and `external-calls.md` may attach it to declaration-only external callable requirements subject to that owner's stricter scalar-only domain. Neither creates a second signature/interface validity relation.
 
 This revision defines no overload set, closure, method receiver, variadic parameter list, default argument, generic callable, effect signature, ABI signature, or linkage identity. Callable scalar types, function values, and indirect target selection are separately owned by `callable-values.md`.
 
@@ -204,6 +205,10 @@ The target function MUST exist in the same represented Core program. Its derived
 Call-graph cycles are valid. Direct recursion and mutual recursion therefore remain valid represented Core programs. A recursive execution may diverge.
 
 An indirect call does not use this static target-selection form. Its exact static callable type, callee operand, and dynamic target-selection prelude are defined by `callable-values.md`; after that prelude selects one target function, the common relations below apply.
+
+### Reusable call-site prefix
+
+`external-calls.md` consumes the result-destination admission and ordinary ordered-argument production relations in the next sections for its exact scalar-only external interface. That reuse ends before function activation creation, parameter-local transfer, safe-reference activation-origin establishment, callee-body execution, or function cleanup. Those remain ordinary Core function semantics under this document.
 
 ## Result destination admission
 

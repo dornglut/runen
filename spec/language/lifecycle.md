@@ -36,7 +36,7 @@ Language validation determines whether a program satisfies the rules of the clai
 
 Admission checks hard environment requirements such as execution features, authority, memory capabilities, ABI requirements, realtime guarantees, or other profile-defined facilities.
 
-A hard requirement MUST either be admitted or rejected. It MUST NOT silently degrade into an optimization preference.
+A hard requirement MUST either be admitted or rejected. It MUST NOT silently degrade into an optimization preference. A declaration-only external callable requirement under [Core external callable imports](core/external-calls.md) is one such hard requirement: environment admission must supply exactly one matching provider contract for every declared external requirement before realization/execution may proceed.
 
 ## Realization
 

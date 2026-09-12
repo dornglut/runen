@@ -11,6 +11,7 @@
 - [Immutable execution statics](statics.md)
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
+- [External callable imports](external-callables.md)
 - [Function values and indirect calls](function-values.md)
 - [Closures and explicit by-value capture](closures.md)
 - [Generics](generics.md)

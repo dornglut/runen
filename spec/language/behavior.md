@@ -22,4 +22,4 @@ Recoverable domain or application failure represented as an ordinary value remai
 
 An observation exists only when the applicable language or profile contract makes it observable. Examples include externally visible I/O, volatile or MMIO operations, state-domain commits, public logical events, network-visible actions, or explicit host/environment effects.
 
-Physical implementation state is not observable unless a normative contract explicitly exposes it.
+Physical implementation state is not observable unless a normative contract explicitly exposes it. An admitted external provider under [Core external callable imports](core/external-calls.md) may contribute only the explicit host/environment observations permitted by its provider contract; provider addresses, calling mechanisms, symbol tables, marshalling storage, and other realization state remain unobservable absent another normative contract.
