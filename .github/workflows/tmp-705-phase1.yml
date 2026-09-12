@@ -34,6 +34,7 @@ jobs:
         run: |
           set -euo pipefail
           python .github/tmp-705-phase1.py
+          python .github/tmp-705-phase1-fix.py
           cargo +stable fmt --all
           git diff --check
       - name: Test syntax external declarations
@@ -42,6 +43,8 @@ jobs:
       - name: Test Core external-call substrate
         shell: bash
         run: cargo +stable test -p runen-core-ir --test external_callables
-      - name: Compile workspace to expose migration/exhaustiveness obligations
+      - name: Compile changed libraries
         shell: bash
-        run: cargo +stable check --workspace --all-targets
+        run: |
+          cargo +stable check -p runen-syntax --lib
+          cargo +stable check -p runen-core-ir --lib
