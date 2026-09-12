@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented Core semantics for defined-fault reason identity and explicit defined-fault termination.
 
-It consumes termination loan handling from [Core borrowing](borrowing.md), termination cleanup and storage-extent ending from [Core value and storage semantics](value-storage.md), and same-fault propagation through suspended callers from [Core functions and calls](functions.md). [Core control flow](control-flow.md) consumes this document's explicit fault terminator as one represented basic-block termination category with no intra-activation successor.
+It consumes termination loan handling from [Core borrowing](borrowing.md), activation-local termination cleanup and storage-extent ending from [Core value and storage semantics](value-storage.md), execution-terminal persistent cleanup from [Core execution-persistent storage](persistent-storage.md), and same-fault propagation through suspended callers from [Core functions and calls](functions.md). [Core control flow](control-flow.md) consumes this document's explicit fault terminator as one represented basic-block termination category with no intra-activation successor.
 
 Defined faults are distinct from undefined behavior and from ordinary recoverable result values.
 
@@ -72,8 +72,10 @@ This preservation requirement is semantic fault-reason identity, not equality of
 
 When `Fault(F)` or its call propagation reaches the outermost represented Core activation with no suspended represented caller:
 
-- that activation performs its applicable defined-fault termination handling exactly once;
-- the represented Core execution terminates with defined-fault outcome `F`;
+- that activation performs its applicable defined-fault activation-local termination handling exactly once;
+- after that activation cleanup, `persistent-storage.md` performs execution-terminal persistent cleanup and ends the persistent storage extents;
+- only after persistent terminal cleanup does the represented Core execution terminate with defined-fault outcome `F`;
+- the exact fault reason `F` is unchanged by persistent cleanup;
 - no normal result value is produced; and
 - no normal continuation is selected.
 
@@ -121,7 +123,7 @@ This document introduces no implicit conversion between ordinary result values a
 
 `control-flow.md` owns basic-block execution, `Goto`, `Branch`, CFG reachability, and cyclic execution. It consumes only the fact that `Fault(F)` is one terminator with no intra-activation successor.
 
-`borrowing.md` owns termination loan handling. `value-storage.md` owns destruction domains, cleanup order, stored-value lifetimes, and storage-extent ending. `functions.md` owns caller suspension, represented-call fault propagation, and the fact that a faulting call does not follow its normal continuation or initialize its result destination. `callable-values.md` owns only the indirect-call target-selection prelude and does not define a second fault-propagation relation after activation creation.
+`borrowing.md` owns termination loan handling. `value-storage.md` owns activation-local destruction domains, cleanup order, stored-value lifetimes, and local storage-extent ending. `persistent-storage.md` owns the additional execution-terminal persistent cleanup that follows outermost activation cleanup. `functions.md` owns caller suspension, represented-call fault propagation, and the fact that a faulting call does not follow its normal continuation or initialize its result destination. `callable-values.md` owns only the indirect-call target-selection prelude and does not define a second fault-propagation relation after activation creation.
 
 This document does not redefine those relations.
 

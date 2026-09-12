@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for boolean literals, signed decimal fixed-width integer literals, and context-typed decimal binary-floating literals: their semantic values, required-type materialization, integer representability/source-validity, floating formation rounding, and literal owned-value production.
 
-It consumes the represented intrinsic source type identities and semantic value domains from [Source type foundation](types.md), including the exact `F16` / `F32` / `F64` binary-format parameters. For nonzero decimal floating materialization it consumes the semantic binary floating rounding relation from [Core floating-point semantics](../core/numerics/floating-point.md). [Source concrete syntax](concrete-syntax.md) owns the represented literal spellings, reserved-key roles, decimal token forms, and grammar. [Source constants](constants.md) consumes the exact materialized scalar values defined here as the sole initializer domain of the represented explicitly typed source constants. [Source function execution](function-execution.md) consumes the owned values produced here and owns their surrounding initialization, assignment, direct-call argument, record-construction-field, return, cleanup, and transfer execution. [Source control flow](control-flow.md) consumes literal producers admitted by its concrete `ConditionalValue` grammar and owns exact-`Bool` condition admission and conditional/loop selection. This document does not redefine those owners.
+It consumes the represented intrinsic source type identities and semantic value domains from [Source type foundation](types.md), including the exact `F16` / `F32` / `F64` binary-format parameters. For nonzero decimal floating materialization it consumes the semantic binary floating rounding relation from [Core floating-point semantics](../core/numerics/floating-point.md). [Source concrete syntax](concrete-syntax.md) owns the represented literal spellings, reserved-key roles, decimal token forms, and grammar. [Source constants](constants.md) and [Source immutable execution statics](statics.md) consume the exact materialized scalar values defined here as the sole initializer domain of their represented explicitly typed scalar declarations. [Source function execution](function-execution.md) consumes the owned values produced here and owns their surrounding initialization, assignment, direct-call argument, record-construction-field, return, cleanup, and transfer execution. [Source control flow](control-flow.md) consumes literal producers admitted by its concrete `ConditionalValue` grammar and owns exact-`Bool` condition admission and conditional/loop selection. This document does not redefine those owners.
 
 Literal semantics are independent of parser representation, typed HIR, Core MIR constant representation, host numeric parsing, physical machine integers or floating encodings, backend behavior, and target ABI.
 
@@ -168,7 +168,7 @@ This revision defines no NaN literal form. Decimal floating literal data in this
 
 The absence of NaN literal syntax does not narrow the NaN value class of `F16`, `F32`, or `F64` and does not establish a singleton, canonical, signed, payload-bearing, quiet, or signaling NaN member. Those semantic member properties remain exactly as defined or deliberately left open by the Core floating owner.
 
-The represented constant initializer relation in `constants.md` consumes only literal materialization from this document. It therefore can produce represented finite values, signed zeroes, subnormal/normal values, and infinities according to the rules above, but cannot fabricate a NaN constant under this literal-only boundary.
+The represented constant and static initializer relations in `constants.md` and `statics.md` consume only literal materialization from this document. It therefore can produce represented finite values, signed zeroes, subnormal/normal values, and infinities according to the rules above, but cannot fabricate a NaN constant under this literal-only boundary.
 
 ## Owned-value production
 
@@ -186,7 +186,7 @@ Evaluating such a literal:
 
 The produced intrinsic value is duplicable because duplicability of the represented intrinsic source types is owned by `types.md`. Literal formation does not create a separate ownership class.
 
-Transfer of the produced value into a receiving position whose concrete grammar admits that literal is owned by the applicable source owner and does not alter the literal value defined here. Represented examples include local initialization, assignment RHS, direct-call arguments, record-construction fields, return results, `ConditionalValue` positions, and the self-contained literal initializer of a source constant under `constants.md`.
+Transfer of the produced value into a receiving position whose concrete grammar admits that literal is owned by the applicable source owner and does not alter the literal value defined here. Represented examples include local initialization, assignment RHS, direct-call arguments, record-construction fields, return results, `ConditionalValue` positions, and the self-contained literal initializer of a source constant or first-slice source static under `constants.md` / `statics.md`.
 
 Concrete syntax, not this semantic owner, determines which literal family is admitted in each represented receiving grammar. In particular, a decimal floating literal is included in the concrete `ConditionalValue` grammar, but `control-flow.md` rejects it semantically because a condition must produce exact source type `Bool`.
 
@@ -218,11 +218,11 @@ This document introduces no:
 - local or global type inference;
 - numeric promotion relation;
 - literal suffix semantics;
-- constant-expression evaluation beyond the self-contained literal materialization consumed by `constants.md`;
-- static-storage declaration or runtime initialization model;
+- constant-expression evaluation beyond the self-contained literal materialization consumed by `constants.md` and `statics.md`;
+- runtime static-initialization evaluation beyond the already-materialized literal value consumed by `statics.md`;
 - general constant-expression category.
 
-The represented source constant relation is owned by `constants.md`, not inferred merely from an implementation knowing a literal at compile time. Outside that explicit relation, a literal may be compile-time-known to an implementation without acquiring constant/static source semantics.
+The represented source constant and static declaration relations are owned by `constants.md` and `statics.md`, not inferred merely from an implementation knowing a literal at compile time. Outside those explicit relations, a literal may be compile-time-known to an implementation without acquiring constant or persistent-static source semantics.
 
 ## Implementation boundary
 
