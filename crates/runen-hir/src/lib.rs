@@ -87,6 +87,22 @@ pub struct ClosureId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarkerTraitId(pub(crate) usize);
 
+/// Opaque per-compilation source static declaration identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StaticId(pub(crate) usize);
+
+/// One resolved immutable execution-static scalar declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Static {
+    pub id: StaticId,
+    pub module: ModuleId,
+    pub name: String,
+    pub accessibility: Accessibility,
+    pub ty: Type,
+    pub initializer: LiteralValue,
+    pub location: SourceLocation,
+}
+
 /// Semantic identity of one ordered generic function type-parameter slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypeParameterId {
