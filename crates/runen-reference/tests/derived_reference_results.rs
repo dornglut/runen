@@ -143,6 +143,7 @@ fn direct_child_runtime_survives_cleanup_and_releases_ancestry_after_last_descen
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, direct_child_callee(replace_i64, shared_i64)],
     })
@@ -228,6 +229,7 @@ fn direct_child_fault_runtime_initializes_no_result_destination() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, fault],
     })

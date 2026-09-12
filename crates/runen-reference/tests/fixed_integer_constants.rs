@@ -9,6 +9,7 @@ fn execute_direct_result(scalar: ScalarType, value: Value) -> runen_reference::E
     let mut types = TypeTable::new();
     let result_ty = types.push(TypeDef::scalar("result", scalar));
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -91,6 +92,7 @@ fn non_i64_values_survive_init_copy_assign_and_move() {
     let mut types = TypeTable::new();
     let u32_ty = types.push(TypeDef::scalar("u32", ScalarType::U32));
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -190,6 +192,7 @@ fn u64_max_round_trips_through_call_argument_and_result() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![caller, callee],
     })
@@ -218,6 +221,7 @@ fn mixed_fixed_width_struct_round_trips_through_storage() {
         ObservedValue::U64(u64::MAX),
     ]);
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),

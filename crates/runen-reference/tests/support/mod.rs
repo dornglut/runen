@@ -5,6 +5,7 @@ use runen_reference::{ActivationId, Machine, VerificationEvent, VerificationEven
 
 pub fn one_function_program(types: TypeTable, body: Body) -> Program {
     Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "fixture".into(),

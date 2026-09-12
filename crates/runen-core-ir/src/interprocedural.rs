@@ -2,7 +2,7 @@
 
 use crate::{
     BasicBlockId, CallableInterface, Fault, FunctionId, LoanDecl, LocalDecl, LocalId, Operand,
-    Place, SafeReferenceResultContract, Statement, TypeId, TypeTable,
+    PersistentDecl, PersistentId, Place, SafeReferenceResultContract, Statement, TypeId, TypeTable,
 };
 
 /// End of one program-level Core basic block.
@@ -113,10 +113,16 @@ impl Function {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
     pub types: TypeTable,
+    pub persistent: Vec<PersistentDecl>,
     pub functions: Vec<Function>,
 }
 
 impl Program {
+    #[must_use]
+    pub fn persistent(&self, id: PersistentId) -> Option<&PersistentDecl> {
+        self.persistent.get(id.0 as usize)
+    }
+
     #[must_use]
     pub fn function(&self, id: FunctionId) -> Option<&Function> {
         self.functions.get(id.0 as usize)

@@ -87,6 +87,22 @@ pub struct ClosureId(pub(crate) usize);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct MarkerTraitId(pub(crate) usize);
 
+/// Opaque per-compilation source static declaration identity.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct StaticId(pub(crate) usize);
+
+/// One resolved immutable execution-static scalar declaration.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Static {
+    pub id: StaticId,
+    pub module: ModuleId,
+    pub name: String,
+    pub accessibility: Accessibility,
+    pub ty: IntrinsicType,
+    pub initializer: LiteralValue,
+    pub location: SourceLocation,
+}
+
 /// Semantic identity of one ordered generic function type-parameter slot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct TypeParameterId {
@@ -501,6 +517,8 @@ pub enum CallTarget {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ValueKind {
     Literal(LiteralValue),
+    /// Non-consuming read of one immutable execution-static scalar.
+    StaticRead(StaticId),
     BooleanNot {
         operand: Box<Value>,
     },
@@ -579,6 +597,8 @@ pub enum ValueKind {
         fields: Vec<usize>,
         permission: ReferencePermission,
     },
+    /// Fresh Shared authority to one complete execution-static scalar root.
+    StaticReferenceRoot(StaticId),
     ReferenceReborrow {
         reference: BindingId,
         fields: Vec<usize>,
@@ -779,6 +799,7 @@ pub struct Function {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Module {
     pub id: ModuleId,
+    pub statics: Vec<StaticId>,
     pub records: Vec<RecordId>,
     pub functions: Vec<FunctionId>,
     pub marker_traits: Vec<MarkerTraitId>,
@@ -788,6 +809,7 @@ pub struct Module {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TypedCompilation {
     pub modules: Vec<Module>,
+    pub statics: Vec<Static>,
     pub records: Vec<Record>,
     pub functions: Vec<Function>,
     pub function_types: Vec<FunctionType>,
@@ -797,6 +819,11 @@ pub struct TypedCompilation {
 }
 
 impl TypedCompilation {
+    #[must_use]
+    pub fn static_decl(&self, id: StaticId) -> &Static {
+        &self.statics[id.0]
+    }
+
     #[must_use]
     pub fn record(&self, id: RecordId) -> &Record {
         &self.records[id.0]

@@ -36,6 +36,7 @@ fn explicit_fault_is_valid_without_return_value_in_result_function() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -66,6 +67,7 @@ fn explicit_fault_contributes_no_cfg_successor_state() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -90,6 +92,7 @@ fn explicit_fault_has_no_operand_or_target_to_validate() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })

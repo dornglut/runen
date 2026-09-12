@@ -15,8 +15,8 @@ use crate::{
     Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee, Record,
     RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTest,
     RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
-    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Type,
-    TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
+    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Static, StaticId,
+    Type, TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
     type_is_duplicable_in_records,
 };
 
@@ -29,6 +29,7 @@ enum EntityId {
     Function(FunctionId),
     MarkerTrait(MarkerTraitId),
     Constant(ConstantId),
+    Static(StaticId),
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -40,6 +41,7 @@ struct ModuleEntity {
 #[derive(Debug, Default)]
 struct ModuleBuild {
     namespace: BTreeMap<String, ModuleEntity>,
+    statics: Vec<StaticId>,
     records: Vec<RecordId>,
     functions: Vec<FunctionId>,
     marker_traits: Vec<MarkerTraitId>,
@@ -73,6 +75,17 @@ struct ConstantSyntax {
     id: ConstantId,
     unit: usize,
     node: SyntaxNode,
+}
+
+#[derive(Debug, Clone)]
+struct StaticSyntax {
+    id: StaticId,
+    module: ModuleId,
+    unit: usize,
+    name: String,
+    accessibility: Accessibility,
+    node: SyntaxNode,
+    location: SourceLocation,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -127,6 +140,7 @@ enum ReferenceTarget {
         binding: BindingId,
         fields: Vec<usize>,
     },
+    Static(StaticId),
     External {
         slot: usize,
         fields: Vec<usize>,
@@ -161,6 +175,10 @@ impl ReferenceTarget {
                     binding: *binding,
                     fields: projected,
                 }
+            }
+            Self::Static(id) => {
+                debug_assert!(relative_fields.is_empty());
+                Self::Static(*id)
             }
             Self::External { slot, fields } => {
                 let mut projected = fields.clone();
@@ -203,8 +221,13 @@ impl ReferenceTarget {
                     && (left_fields.starts_with(right_fields)
                         || right_fields.starts_with(left_fields))
             }
+            (Self::Static(left), Self::Static(right)) => left == right,
             (Self::Local { .. }, Self::External { .. })
-            | (Self::External { .. }, Self::Local { .. }) => false,
+            | (Self::External { .. }, Self::Local { .. })
+            | (Self::Local { .. }, Self::Static(_))
+            | (Self::Static(_), Self::Local { .. })
+            | (Self::External { .. }, Self::Static(_))
+            | (Self::Static(_), Self::External { .. }) => false,
         }
     }
 }
@@ -368,6 +391,7 @@ impl SemanticState {
                     state.ownership.path_availability(fields) == PathAvailability::FullyAvailable
                 })
             }
+            ReferenceTarget::Static(_) => true,
             ReferenceTarget::External { slot, fields } => {
                 self.external_referents.get(slot).is_none_or(|state| {
                     state.path_availability(fields) == PathAvailability::FullyAvailable
@@ -383,6 +407,9 @@ impl SemanticState {
                     .expect("reference target names active local binding")
                     .ownership
                     .consume_path(fields)
+            }
+            ReferenceTarget::Static(_) => {
+                unreachable!("Shared execution-static root cannot be consumed")
             }
             ReferenceTarget::External { slot, fields } => self
                 .external_referents
@@ -400,6 +427,7 @@ impl SemanticState {
                         state.ownership.nonempty_installation_is_admitted(fields)
                     })
             }
+            ReferenceTarget::Static(_) => false,
             ReferenceTarget::External { slot, fields } => {
                 fields.is_empty()
                     || self
@@ -421,6 +449,9 @@ impl SemanticState {
                 } else {
                     ownership.install_nonempty_path(fields);
                 }
+            }
+            ReferenceTarget::Static(_) => {
+                unreachable!("Shared execution-static root cannot be a replacement target")
             }
             ReferenceTarget::External { slot, fields } => {
                 let ownership = self
@@ -545,6 +576,7 @@ struct BodyResolutionContext<'a> {
     modules: &'a BTreeMap<ModuleId, ModuleBuild>,
     imports: &'a [UnitImports],
     constants: &'a [ResolvedConstant],
+    statics: &'a [Static],
     records: &'a [Record],
     headers: &'a [FunctionHeader],
     function_types: &'a RefCell<Vec<FunctionType>>,
@@ -597,6 +629,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
     let (
         mut modules,
         constant_syntax,
+        static_syntax,
         record_syntax,
         function_syntax,
         marker_traits,
@@ -612,6 +645,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
     }
 
     let constants = resolve_constants(&constant_syntax, &mut diagnostics);
+    let statics = resolve_statics(&static_syntax, &mut diagnostics);
     let function_types = RefCell::new(Vec::new());
     let closures = RefCell::new(Vec::new());
     let records = resolve_records(&record_syntax, &modules, &imports, &mut diagnostics);
@@ -643,6 +677,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         return Err(diagnostics);
     }
     let constants = constants.expect("constant resolution succeeds when diagnostics are empty");
+    let statics = statics.expect("static resolution succeeds when diagnostics are empty");
 
     validate_record_acyclicity(&records, &mut diagnostics);
     if !diagnostics.is_empty() {
@@ -661,6 +696,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
             &modules,
             &imports,
             &constants,
+            &statics,
             &records,
             &headers,
             &function_types,
@@ -690,6 +726,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
         .iter_mut()
         .map(|(id, module)| Module {
             id: *id,
+            statics: std::mem::take(&mut module.statics),
             records: std::mem::take(&mut module.records),
             functions: std::mem::take(&mut module.functions),
             marker_traits: std::mem::take(&mut module.marker_traits),
@@ -698,6 +735,7 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
 
     Ok(TypedCompilation {
         modules,
+        statics,
         records,
         functions,
         function_types: function_types.into_inner(),
@@ -733,6 +771,7 @@ fn collect_declarations(
 ) -> (
     BTreeMap<ModuleId, ModuleBuild>,
     Vec<ConstantSyntax>,
+    Vec<StaticSyntax>,
     Vec<RecordSyntax>,
     Vec<FunctionSyntax>,
     Vec<MarkerTrait>,
@@ -740,6 +779,7 @@ fn collect_declarations(
 ) {
     let mut modules = BTreeMap::<ModuleId, ModuleBuild>::new();
     let mut constants = Vec::new();
+    let mut statics = Vec::new();
     let mut records = Vec::new();
     let mut functions = Vec::new();
     let mut marker_traits = Vec::new();
@@ -784,6 +824,51 @@ fn collect_declarations(
                         id,
                         unit: unit_index,
                         node: item,
+                    });
+                }
+                SyntaxKind::StaticDeclaration => {
+                    let id = StaticId(statics.len());
+                    let mut identifiers = item
+                        .children_with_tokens()
+                        .filter_map(|element| element.into_token())
+                        .filter(|token| token.kind() == SyntaxKind::Ident);
+                    let introducer = identifiers
+                        .next()
+                        .expect("syntax-clean static declaration has contextual introducer");
+                    debug_assert_eq!(key(&introducer), "static");
+                    let name_token = identifiers
+                        .next()
+                        .expect("syntax-clean static declaration has one declaration name");
+                    debug_assert!(identifiers.next().is_none());
+                    let name = key(&name_token);
+                    let accessibility = declaration_accessibility(&item);
+                    let item_location = location(unit_index, &item);
+                    if insert_entity(
+                        &mut modules,
+                        unit.module,
+                        &name,
+                        EntityId::Static(id),
+                        accessibility,
+                    ) {
+                        modules
+                            .get_mut(&unit.module)
+                            .expect("module inserted")
+                            .statics
+                            .push(id);
+                    } else {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::DuplicateModuleBinding,
+                            location: item_location,
+                        });
+                    }
+                    statics.push(StaticSyntax {
+                        id,
+                        module: unit.module,
+                        unit: unit_index,
+                        name,
+                        accessibility,
+                        node: item,
+                        location: item_location,
                     });
                 }
                 SyntaxKind::RecordDefinition => {
@@ -924,6 +1009,7 @@ fn collect_declarations(
     (
         modules,
         constants,
+        statics,
         records,
         functions,
         marker_traits,
@@ -947,19 +1033,55 @@ fn resolve_constant(
     declaration: &ConstantSyntax,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ResolvedConstant> {
-    let type_node = direct_child(&declaration.node, SyntaxKind::TypeRef);
+    let (intrinsic, value) =
+        resolve_intrinsic_literal_declaration(declaration.unit, &declaration.node, diagnostics)?;
+    Some(ResolvedConstant {
+        ty: Type::Intrinsic(intrinsic),
+        value,
+    })
+}
+
+fn resolve_statics(
+    declarations: &[StaticSyntax],
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<Vec<Static>> {
+    let mut resolved = Vec::with_capacity(declarations.len());
+    for declaration in declarations {
+        debug_assert_eq!(declaration.id.0, resolved.len());
+        let (ty, initializer) = resolve_intrinsic_literal_declaration(
+            declaration.unit,
+            &declaration.node,
+            diagnostics,
+        )?;
+        resolved.push(Static {
+            id: declaration.id,
+            module: declaration.module,
+            name: declaration.name.clone(),
+            accessibility: declaration.accessibility,
+            ty,
+            initializer,
+            location: declaration.location,
+        });
+    }
+    Some(resolved)
+}
+
+fn resolve_intrinsic_literal_declaration(
+    unit: usize,
+    node: &SyntaxNode,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<(IntrinsicType, LiteralValue)> {
+    let type_node = direct_child(node, SyntaxKind::TypeRef);
     let type_token = type_node
         .children_with_tokens()
         .filter_map(|element| element.into_token())
         .find(|token| !token.kind().is_trivia())
-        .expect("syntax-clean constant type contains one intrinsic type token");
-    let ty = Type::Intrinsic(
-        intrinsic_type(type_token.kind())
-            .expect("syntax-clean constant type is one represented intrinsic type"),
-    );
+        .expect("syntax-clean scalar declaration type contains one intrinsic type token");
+    let intrinsic = intrinsic_type(type_token.kind())
+        .expect("syntax-clean scalar declaration type is one represented intrinsic type");
+    let ty = Type::Intrinsic(intrinsic);
 
-    let literal = declaration
-        .node
+    let literal = node
         .children()
         .find(|child| {
             matches!(
@@ -969,8 +1091,8 @@ fn resolve_constant(
                     | SyntaxKind::DecimalFloatingLiteral
             )
         })
-        .expect("syntax-clean constant declaration contains one literal initializer");
-    let literal_location = location(declaration.unit, &literal);
+        .expect("syntax-clean scalar declaration contains one literal initializer");
+    let literal_location = location(unit, &literal);
     let value = match literal.kind() {
         SyntaxKind::BooleanLiteral => {
             let found = Type::Intrinsic(IntrinsicType::Bool);
@@ -988,7 +1110,7 @@ fn resolve_constant(
                 .children_with_tokens()
                 .filter_map(|element| element.into_token())
                 .find(|token| matches!(token.kind(), SyntaxKind::KwTrue | SyntaxKind::KwFalse))
-                .expect("syntax-clean Boolean constant literal contains one Boolean token");
+                .expect("syntax-clean Boolean scalar literal contains one Boolean token");
             LiteralValue::Bool(token.kind() == SyntaxKind::KwTrue)
         }
         SyntaxKind::DecimalIntegerLiteral => {
@@ -997,10 +1119,10 @@ fn resolve_constant(
         SyntaxKind::DecimalFloatingLiteral => {
             materialize_floating_literal(&literal, ty, literal_location, diagnostics)?
         }
-        _ => unreachable!("constant initializer has one represented literal kind"),
+        _ => unreachable!("scalar initializer has one represented literal kind"),
     };
 
-    Some(ResolvedConstant { ty, value })
+    Some((intrinsic, value))
 }
 
 fn insert_entity(
@@ -1114,7 +1236,10 @@ fn resolve_marker_trait_reference(
     {
         return match resolve_qualified_entity(unit, &qualified, modules, imports, diagnostics)? {
             EntityId::MarkerTrait(id) => Some(id),
-            EntityId::Record(_) | EntityId::Function(_) | EntityId::Constant(_) => {
+            EntityId::Record(_)
+            | EntityId::Function(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedMarkerTrait,
                     location: location(unit, &qualified),
@@ -1137,7 +1262,12 @@ fn resolve_marker_trait_reference(
         .map(|entity| entity.entity)
     {
         Some(EntityId::MarkerTrait(id)) => Some(id),
-        Some(EntityId::Record(_) | EntityId::Function(_) | EntityId::Constant(_)) => {
+        Some(
+            EntityId::Record(_)
+            | EntityId::Function(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_),
+        ) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedMarkerTrait,
                 location: trait_location,
@@ -1174,7 +1304,10 @@ fn resolve_marker_implementation_target(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(MarkerImplementationTarget::Record(record)),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::InvalidMarkerImplementationTarget,
                     location: location(implementation.unit, &qualified),
@@ -1206,7 +1339,12 @@ fn resolve_marker_implementation_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(MarkerImplementationTarget::Record(record)),
-        Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
+        Some(
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_),
+        ) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::InvalidMarkerImplementationTarget,
                 location: target_location,
@@ -1909,7 +2047,10 @@ fn resolve_type(
     {
         match resolve_qualified_entity(*unit, &qualified, modules, imports, diagnostics)? {
             EntityId::Record(id) => Type::Record(id),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(*unit, &qualified),
@@ -1959,7 +2100,10 @@ fn resolve_type(
                 {
                     Some(EntityId::Record(id)) => Type::Record(id),
                     Some(
-                        EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_),
+                        EntityId::Function(_)
+                        | EntityId::MarkerTrait(_)
+                        | EntityId::Constant(_)
+                        | EntityId::Static(_),
                     ) => {
                         diagnostics.push(Diagnostic {
                             kind: DiagnosticKind::ExpectedRecordType,
@@ -2209,33 +2353,24 @@ fn resolve_qualified_entity(
     Some(target.entity)
 }
 
-fn resolve_constant_reference(
+fn resolve_module_scalar_type(
     header: &FunctionHeader,
     node: &SyntaxNode,
     context: &BodyResolutionContext<'_>,
     diagnostics: &mut Vec<Diagnostic>,
-) -> Option<ResolvedConstant> {
+) -> Option<Type> {
     debug_assert_eq!(node.kind(), SyntaxKind::IdentifierUse);
-    let id = if let Some(qualified) = node
+    let entity = if let Some(qualified) = node
         .children()
         .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
     {
-        match resolve_qualified_entity(
+        resolve_qualified_entity(
             header.unit,
             &qualified,
             context.modules,
             context.imports,
             diagnostics,
-        )? {
-            EntityId::Constant(id) => id,
-            EntityId::Record(_) | EntityId::Function(_) | EntityId::MarkerTrait(_) => {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::ExpectedValueBinding,
-                    location: location(header.unit, &qualified),
-                });
-                return None;
-            }
-        }
+        )?
     } else {
         let token = direct_token(node, SyntaxKind::Ident);
         let name = key(&token);
@@ -2243,32 +2378,33 @@ fn resolve_constant_reference(
             unit: header.unit,
             range: token.text_range(),
         };
-        match context
+        let Some(entity) = context
             .modules
             .get(&header.module)
             .and_then(|module| module.namespace.get(&name))
             .copied()
             .map(|entity| entity.entity)
-        {
-            Some(EntityId::Constant(id)) => id,
-            Some(EntityId::Record(_) | EntityId::Function(_) | EntityId::MarkerTrait(_)) => {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::ExpectedValueBinding,
-                    location: name_location,
-                });
-                return None;
-            }
-            None => {
-                diagnostics.push(Diagnostic {
-                    kind: DiagnosticKind::UnresolvedName,
-                    location: name_location,
-                });
-                return None;
-            }
-        }
+        else {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::UnresolvedName,
+                location: name_location,
+            });
+            return None;
+        };
+        entity
     };
 
-    Some(context.constants[id.0])
+    match entity {
+        EntityId::Constant(id) => Some(context.constants[id.0].ty),
+        EntityId::Static(id) => Some(Type::Intrinsic(context.statics[id.0].ty)),
+        EntityId::Record(_) | EntityId::Function(_) | EntityId::MarkerTrait(_) => {
+            diagnostics.push(Diagnostic {
+                kind: DiagnosticKind::ExpectedValueBinding,
+                location: location(header.unit, node),
+            });
+            None
+        }
+    }
 }
 
 fn validate_record_acyclicity(records: &[Record], diagnostics: &mut Vec<Diagnostic>) {
@@ -2364,6 +2500,7 @@ fn validate_body(
     modules: &BTreeMap<ModuleId, ModuleBuild>,
     imports: &[UnitImports],
     constants: &[ResolvedConstant],
+    statics: &[Static],
     records: &[Record],
     headers: &[FunctionHeader],
     function_types: &RefCell<Vec<FunctionType>>,
@@ -2421,6 +2558,7 @@ fn validate_body(
         modules,
         imports,
         constants,
+        statics,
         records,
         headers,
         function_types,
@@ -3588,6 +3726,7 @@ fn validate_closure_declaration(
         modules: context.modules,
         imports: context.imports,
         constants: context.constants,
+        statics: context.statics,
         records: context.records,
         headers: context.headers,
         function_types: context.function_types,
@@ -3912,7 +4051,10 @@ fn validate_record_pattern_node(
         };
         let record = match entity {
             EntityId::Record(record) => record,
-            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -3937,7 +4079,12 @@ fn validate_record_pattern_node(
             .map(|entity| entity.entity)
         {
             Some(EntityId::Record(record)) => record,
-            Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
+            Some(
+                EntityId::Function(_)
+                | EntityId::MarkerTrait(_)
+                | EntityId::Constant(_)
+                | EntityId::Static(_),
+            ) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -4108,7 +4255,10 @@ fn validate_refutable_record_pattern_node(
         };
         let record = match entity {
             EntityId::Record(record) => record,
-            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -4133,7 +4283,12 @@ fn validate_refutable_record_pattern_node(
             .map(|entity| entity.entity)
         {
             Some(EntityId::Record(record)) => record,
-            Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
+            Some(
+                EntityId::Function(_)
+                | EntityId::MarkerTrait(_)
+                | EntityId::Constant(_)
+                | EntityId::Static(_),
+            ) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: head_location,
@@ -6210,16 +6365,16 @@ fn validate_value_inner(
                             .children()
                             .any(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
                         {
-                            return resolve_constant_reference(header, node, context, diagnostics)
-                                .map_or(Invalid, |constant| Exact(constant.ty));
+                            return resolve_module_scalar_type(header, node, context, diagnostics)
+                                .map_or(Invalid, Exact);
                         }
 
                         let token = direct_token(node, SyntaxKind::Ident);
                         let name = key(&token);
                         match state.bindings.get(&name) {
                             Some(binding) => Exact(binding.ty),
-                            None => resolve_constant_reference(header, node, context, diagnostics)
-                                .map_or(Invalid, |constant| Exact(constant.ty)),
+                            None => resolve_module_scalar_type(header, node, context, diagnostics)
+                                .map_or(Invalid, Exact),
                         }
                     }
                     SyntaxKind::Call => {
@@ -6842,6 +6997,12 @@ fn validate_identifier_use(
                 value_location,
                 diagnostics,
             ),
+            EntityId::Static(id) => validate_static_value(
+                context.statics[id.0].clone(),
+                required,
+                value_location,
+                diagnostics,
+            ),
             EntityId::Function(function) if matches!(required, Type::Function(_)) => {
                 validate_function_value(function, required, value_location, context, diagnostics)
             }
@@ -6947,6 +7108,12 @@ fn validate_identifier_use(
             value_location,
             diagnostics,
         ),
+        Some(EntityId::Static(id)) => validate_static_value(
+            context.statics[id.0].clone(),
+            required,
+            value_location,
+            diagnostics,
+        ),
         Some(EntityId::Function(function)) if matches!(required, Type::Function(_)) => {
             validate_function_value(function, required, value_location, context, diagnostics)
         }
@@ -6987,6 +7154,30 @@ fn validate_constant_value(
     Some(ProducedValue::ordinary(Value {
         ty: constant.ty,
         kind: ValueKind::Literal(constant.value),
+        location: value_location,
+    }))
+}
+
+fn validate_static_value(
+    static_decl: Static,
+    required: Type,
+    value_location: SourceLocation,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let found = Type::Intrinsic(static_decl.ty);
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+    Some(ProducedValue::ordinary(Value {
+        ty: found,
+        kind: ValueKind::StaticRead(static_decl.id),
         location: value_location,
     }))
 }
@@ -7032,6 +7223,49 @@ fn validate_reference_root(
 ) -> Option<ProducedValue> {
     let value_location = location(header.unit, node);
     let permission = requested_reference_permission(node);
+
+    if let Some(qualified) = node
+        .children()
+        .find(|child| child.kind() == SyntaxKind::QualifiedModuleMember)
+    {
+        let entity = resolve_qualified_entity(
+            header.unit,
+            &qualified,
+            context.modules,
+            context.imports,
+            diagnostics,
+        )?;
+        return match entity {
+            EntityId::Static(id) if permission == ReferencePermission::Shared => {
+                validate_static_reference_root(
+                    id,
+                    required,
+                    value_location,
+                    context,
+                    state,
+                    diagnostics,
+                )
+            }
+            EntityId::Static(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::InvalidReplacementReferenceTarget,
+                    location: value_location,
+                });
+                None
+            }
+            EntityId::Record(_)
+            | EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedValueBinding,
+                    location: value_location,
+                });
+                None
+            }
+        };
+    }
+
     let identifiers = node
         .children_with_tokens()
         .filter_map(|element| element.into_token())
@@ -7041,20 +7275,58 @@ fn validate_reference_root(
         .split_first()
         .expect("syntax-clean reference root has one root identifier");
     let name = key(root_token);
-    let Some(binding) = state.bindings.get(&name).cloned() else {
+    let binding = if let Some(binding) = state.bindings.get(&name).cloned() {
+        binding
+    } else {
         let entity = context
             .modules
             .get(&header.module)
-            .and_then(|module| module.namespace.get(&name));
-        diagnostics.push(Diagnostic {
-            kind: if entity.is_some() {
-                DiagnosticKind::ExpectedValueBinding
-            } else {
-                DiagnosticKind::UnresolvedName
-            },
-            location: value_location,
-        });
-        return None;
+            .and_then(|module| module.namespace.get(&name))
+            .copied()
+            .map(|entity| entity.entity);
+        match entity {
+            Some(EntityId::Static(id)) if permission == ReferencePermission::Shared => {
+                if !selectors.is_empty() {
+                    let _ = resolve_field_path(
+                        header,
+                        selectors,
+                        Type::Intrinsic(context.statics[id.0].ty),
+                        context,
+                        diagnostics,
+                    );
+                    return None;
+                }
+                return validate_static_reference_root(
+                    id,
+                    required,
+                    value_location,
+                    context,
+                    state,
+                    diagnostics,
+                );
+            }
+            Some(EntityId::Static(_)) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::InvalidReplacementReferenceTarget,
+                    location: value_location,
+                });
+                return None;
+            }
+            Some(_) => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::ExpectedValueBinding,
+                    location: value_location,
+                });
+                return None;
+            }
+            None => {
+                diagnostics.push(Diagnostic {
+                    kind: DiagnosticKind::UnresolvedName,
+                    location: value_location,
+                });
+                return None;
+            }
+        }
     };
 
     let (fields, selected_ty) = if selectors.is_empty() {
@@ -7151,6 +7423,48 @@ fn validate_reference_root(
                 fields,
                 permission,
             },
+            location: value_location,
+        },
+        reference_authority: Some(authority),
+    })
+}
+
+fn validate_static_reference_root(
+    id: StaticId,
+    required: Type,
+    value_location: SourceLocation,
+    context: &BodyResolutionContext<'_>,
+    state: &mut SemanticState,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> Option<ProducedValue> {
+    let static_decl = &context.statics[id.0];
+    let found = Type::SafeReference {
+        referent: ReferenceReferent::Intrinsic(static_decl.ty),
+        permission: ReferencePermission::Shared,
+    };
+    if found != required {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::TypeMismatch {
+                expected: required,
+                found,
+            },
+            location: value_location,
+        });
+        return None;
+    }
+    let target = ReferenceTarget::Static(id);
+    if !state.target_satisfies_shared_requirement(&target) {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ReferencePermissionUnavailable,
+            location: value_location,
+        });
+        return None;
+    }
+    let authority = state.create_reference_authority(target, ReferencePermission::Shared, None);
+    Some(ProducedValue {
+        value: Value {
+            ty: found,
+            kind: ValueKind::StaticReferenceRoot(id),
             location: value_location,
         },
         reference_authority: Some(authority),
@@ -8153,7 +8467,10 @@ fn resolve_record_construction_target(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(record),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(header.unit, &qualified),
@@ -8178,7 +8495,12 @@ fn resolve_record_construction_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(record),
-        Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
+        Some(
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_),
+        ) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedRecordType,
                 location: target_location,
@@ -8757,7 +9079,10 @@ fn resolve_call_target(
             diagnostics,
         )? {
             EntityId::Function(id) => Some(ResolvedCallTarget::Direct(id)),
-            EntityId::Record(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
+            EntityId::Record(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedFunction,
                     location: location(header.unit, &qualified),
@@ -8804,7 +9129,12 @@ fn resolve_call_target(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Function(id)) => Some(ResolvedCallTarget::Direct(id)),
-        Some(EntityId::Record(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
+        Some(
+            EntityId::Record(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_),
+        ) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedFunction,
                 location: name_location,
@@ -8840,7 +9170,10 @@ fn resolve_generic_type_argument(
             diagnostics,
         )? {
             EntityId::Record(record) => Some(Type::Record(record)),
-            EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_) => {
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_) => {
                 diagnostics.push(Diagnostic {
                     kind: DiagnosticKind::ExpectedRecordType,
                     location: location(header.unit, &qualified),
@@ -8881,7 +9214,12 @@ fn resolve_generic_type_argument(
         .map(|entity| entity.entity)
     {
         Some(EntityId::Record(record)) => Some(Type::Record(record)),
-        Some(EntityId::Function(_) | EntityId::MarkerTrait(_) | EntityId::Constant(_)) => {
+        Some(
+            EntityId::Function(_)
+            | EntityId::MarkerTrait(_)
+            | EntityId::Constant(_)
+            | EntityId::Static(_),
+        ) => {
             diagnostics.push(Diagnostic {
                 kind: DiagnosticKind::ExpectedRecordType,
                 location: argument_location,

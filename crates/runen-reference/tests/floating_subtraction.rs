@@ -40,6 +40,7 @@ fn execute_float_sub_with_contract(
     let ty = types.push(TypeDef::scalar("float", scalar.clone()));
     let result = Place::local(LocalId(0));
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -235,6 +236,7 @@ fn produced_nan_is_a_runtime_operand_and_propagates_through_float_sub() {
     let nan = Place::local(LocalId(0));
     let result = Place::local(LocalId(1));
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -432,6 +434,7 @@ fn operand_effects_precede_exactly_one_distinct_float_sub_write() {
     let two = positive_normal(1_u64 << 23, 1);
     let one = positive_normal(1_u64 << 23, 0);
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),

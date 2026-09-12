@@ -38,6 +38,7 @@ fn outer_result_bearing_entry_preserves_result_across_entry_cleanup() {
     };
 
     let validated = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![entry],
     })

@@ -8,6 +8,7 @@ fn program_initializing(scalar: ScalarType, value: Value) -> Program {
     let mut types = TypeTable::new();
     let ty = types.push(TypeDef::scalar("scalar", scalar));
     Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -90,6 +91,7 @@ fn structural_constants_recursively_preserve_non_i64_integer_variants() {
         vec![Field::new("small", i8_ty), Field::new("large", u64_ty)],
     ));
     let program = Program {
+        persistent: vec![],
         types,
         functions: vec![Function {
             name: "entry".into(),

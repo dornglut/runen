@@ -1,6 +1,6 @@
 use runen_core_ir::{
-    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, NumericContract, Operand, Place,
-    PlaceAccess, Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement,
+    BasicBlockId, BorrowKind, FunctionId, LoanId, LocalId, NumericContract, Operand, PersistentId,
+    Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission, ScalarType, Statement,
     StorageInstanceId, StorageRegion, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram,
     Value,
 };
@@ -426,6 +426,13 @@ struct LocalStorage {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+struct PersistentStorage {
+    instance: StorageInstanceId,
+    ty: TypeId,
+    state: ObjectState,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
 struct ActiveLoan {
     kind: BorrowKind,
     place: Place,
@@ -462,9 +469,19 @@ struct ResolvedReferenceAccess {
     selected_ty: TypeId,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ExecutionStep {
+    Continue,
+    Terminal {
+        terminal: TerminalStatus,
+        result: Option<RuntimeValue>,
+    },
+}
+
 /// Executable abstract machine for validated interprocedural Core programs.
 pub struct Machine {
     program: ValidatedProgram,
+    persistent: Vec<PersistentStorage>,
     frames: Vec<Frame>,
     reference_authorities: Vec<Option<ActiveReferenceAuthority>>,
     next_activation: u64,
@@ -484,12 +501,34 @@ impl Machine {
             return Err(EntryError::EntryHasParameters(entry));
         }
 
+        let mut next_storage_instance = 1_u64;
+        let mut persistent = Vec::with_capacity(program.as_program().persistent.len());
+        for declaration in &program.as_program().persistent {
+            let instance = StorageInstanceId(next_storage_instance);
+            next_storage_instance = next_storage_instance
+                .checked_add(1)
+                .expect("reference storage-instance identity exhausted");
+            let mut state = ObjectState::uninitialized(&program.as_program().types, declaration.ty);
+            write_value(
+                &program.as_program().types,
+                declaration.ty,
+                &mut state,
+                RuntimeValue::from_constant(&declaration.initial),
+            );
+            persistent.push(PersistentStorage {
+                instance,
+                ty: declaration.ty,
+                state,
+            });
+        }
+
         let mut machine = Self {
             program,
+            persistent,
             frames: Vec::new(),
             reference_authorities: Vec::new(),
             next_activation: 1,
-            next_storage_instance: 1,
+            next_storage_instance,
             next_reference_authority: 0,
             verification_events: Vec::new(),
         };
@@ -498,175 +537,160 @@ impl Machine {
         Ok(machine)
     }
 
+    /// Verification-only dynamic storage identity for one execution-persistent declaration.
+    #[must_use]
+    pub fn persistent_storage_instance(&self, id: PersistentId) -> Option<StorageInstanceId> {
+        self.persistent
+            .get(id.0 as usize)
+            .map(|storage| storage.instance)
+    }
+
     /// Execute until normal return, defined fault, or detected undefined behavior.
     ///
     /// A cyclic call/control-flow graph may diverge and therefore never return.
     pub fn execute(mut self) -> Result<ExecutionReport, UndefinedBehavior> {
         loop {
-            let frame_index = self
-                .frames
-                .len()
-                .checked_sub(1)
-                .expect("machine always has an active frame while executing");
-            let function_id = self.frames[frame_index].function;
-            let current = self.frames[frame_index].current;
-            let block = self
-                .program
-                .as_program()
-                .function(function_id)
-                .expect("validated frame references a known function")
-                .body
-                .block(current)
-                .expect("validated frame reaches only known basic blocks")
-                .clone();
-
-            for statement in &block.statements {
-                if let Err(kind) = self.execute_statement(frame_index, statement) {
+            match self.step_once() {
+                Ok(ExecutionStep::Continue) => {}
+                Ok(ExecutionStep::Terminal { terminal, result }) => {
+                    return Ok(ExecutionReport {
+                        terminal,
+                        result: result.map(RuntimeValue::into_observed_value),
+                        verification_events: self.verification_events,
+                    });
+                }
+                Err(kind) => {
                     return Err(UndefinedBehavior {
                         kind,
                         verification_events: self.verification_events,
                     });
                 }
             }
+        }
+    }
 
-            match block.terminator {
-                Terminator::Goto(target) => self.frames[frame_index].current = target,
-                Terminator::Branch {
-                    condition,
-                    true_target,
-                    false_target,
-                } => {
-                    let value = match self.evaluate_operand(frame_index, &condition) {
-                        Ok(value) => value,
-                        Err(kind) => {
-                            return Err(UndefinedBehavior {
-                                kind,
-                                verification_events: self.verification_events,
-                            });
-                        }
-                    };
-                    self.frames[frame_index].current = match value {
-                        RuntimeValue::Bool(true) => true_target,
-                        RuntimeValue::Bool(false) => false_target,
-                        _ => unreachable!("validated Branch condition is Bool-valued"),
-                    };
-                }
-                Terminator::Call {
-                    function,
-                    arguments,
-                    destination,
-                    target,
-                } => {
-                    if let Err(kind) =
-                        self.start_call(frame_index, function, &arguments, destination, target)
-                    {
-                        return Err(UndefinedBehavior {
-                            kind,
-                            verification_events: self.verification_events,
-                        });
-                    }
-                }
-                Terminator::IndirectCall {
-                    callable: _,
-                    callee,
-                    arguments,
-                    destination,
-                    target,
-                } => {
-                    let function = match self.evaluate_operand(frame_index, &callee) {
-                        Ok(RuntimeValue::Function(function)) => function,
-                        Ok(_) => unreachable!(
-                            "validated indirect call callee has its exact callable type"
-                        ),
-                        Err(kind) => {
-                            return Err(UndefinedBehavior {
-                                kind,
-                                verification_events: self.verification_events,
-                            });
-                        }
-                    };
-                    if let Err(kind) =
-                        self.start_call(frame_index, function, &arguments, destination, target)
-                    {
-                        return Err(UndefinedBehavior {
-                            kind,
-                            verification_events: self.verification_events,
-                        });
-                    }
-                }
-                Terminator::Return(result) => {
-                    let result = if let Some(operand) = &result {
-                        match self.evaluate_operand(frame_index, operand) {
-                            Ok(value) => Some(value),
-                            Err(kind) => {
-                                return Err(UndefinedBehavior {
-                                    kind,
-                                    verification_events: self.verification_events,
-                                });
-                            }
-                        }
-                    } else {
-                        None
-                    };
-                    let continuation = self.frames[frame_index].return_to.clone();
-                    self.cleanup_frame(frame_index);
-                    self.frames.pop();
+    fn step_once(&mut self) -> Result<ExecutionStep, UndefinedBehaviorKind> {
+        let frame_index = self
+            .frames
+            .len()
+            .checked_sub(1)
+            .expect("machine always has an active frame while executing");
+        let function_id = self.frames[frame_index].function;
+        let current = self.frames[frame_index].current;
+        let block = self
+            .program
+            .as_program()
+            .function(function_id)
+            .expect("validated frame references a known function")
+            .body
+            .block(current)
+            .expect("validated frame reaches only known basic blocks")
+            .clone();
 
-                    if let Some(continuation) = continuation {
-                        let caller_index = self
-                            .frames
-                            .len()
-                            .checked_sub(1)
-                            .expect("callee continuation has one suspended caller");
-                        match (continuation.destination, result) {
-                            (Some(destination), Some(value)) => {
-                                let ty = self.place_type(caller_index, &destination);
-                                {
-                                    let types = &self.program.as_program().types;
-                                    let frame = &mut self.frames[caller_index];
-                                    write_value(
-                                        types,
-                                        ty,
-                                        place_state_mut(&mut frame.locals, &destination),
-                                        value,
-                                    );
-                                }
-                                self.record(
-                                    caller_index,
-                                    VerificationEventKind::Write {
-                                        place: destination,
-                                        kind: VerificationWriteKind::Init,
-                                    },
+        for statement in &block.statements {
+            self.execute_statement(frame_index, statement)?;
+        }
+
+        match block.terminator {
+            Terminator::Goto(target) => self.frames[frame_index].current = target,
+            Terminator::Branch {
+                condition,
+                true_target,
+                false_target,
+            } => {
+                let value = self.evaluate_operand(frame_index, &condition)?;
+                self.frames[frame_index].current = match value {
+                    RuntimeValue::Bool(true) => true_target,
+                    RuntimeValue::Bool(false) => false_target,
+                    _ => unreachable!("validated Branch condition is Bool-valued"),
+                };
+            }
+            Terminator::Call {
+                function,
+                arguments,
+                destination,
+                target,
+            } => {
+                self.start_call(frame_index, function, &arguments, destination, target)?;
+            }
+            Terminator::IndirectCall {
+                callable: _,
+                callee,
+                arguments,
+                destination,
+                target,
+            } => {
+                let function = match self.evaluate_operand(frame_index, &callee)? {
+                    RuntimeValue::Function(function) => function,
+                    _ => unreachable!("validated indirect call callee has its exact callable type"),
+                };
+                self.start_call(frame_index, function, &arguments, destination, target)?;
+            }
+            Terminator::Return(result) => {
+                let result = result
+                    .as_ref()
+                    .map(|operand| self.evaluate_operand(frame_index, operand))
+                    .transpose()?;
+                let continuation = self.frames[frame_index].return_to.clone();
+                self.cleanup_frame(frame_index);
+                self.frames.pop();
+
+                if let Some(continuation) = continuation {
+                    let caller_index = self
+                        .frames
+                        .len()
+                        .checked_sub(1)
+                        .expect("callee continuation has one suspended caller");
+                    match (continuation.destination, result) {
+                        (Some(destination), Some(value)) => {
+                            let ty = self.place_type(caller_index, &destination);
+                            {
+                                let types = &self.program.as_program().types;
+                                let frame = &mut self.frames[caller_index];
+                                write_value(
+                                    types,
+                                    ty,
+                                    place_state_mut(&mut frame.locals, &destination),
+                                    value,
                                 );
                             }
-                            (None, None) => {}
-                            _ => unreachable!(
-                                "validated call destination and callee result structures agree"
-                            ),
+                            self.record(
+                                caller_index,
+                                VerificationEventKind::Write {
+                                    place: destination,
+                                    kind: VerificationWriteKind::Init,
+                                },
+                            );
                         }
-                        self.frames[caller_index].current = continuation.target;
-                    } else {
-                        return Ok(ExecutionReport {
-                            terminal: TerminalStatus::Returned,
-                            result: result.map(RuntimeValue::into_observed_value),
-                            verification_events: self.verification_events,
-                        });
+                        (None, None) => {}
+                        _ => unreachable!(
+                            "validated call destination and callee result structures agree"
+                        ),
                     }
-                }
-                Terminator::Fault(fault) => {
-                    while !self.frames.is_empty() {
-                        let index = self.frames.len() - 1;
-                        self.cleanup_frame(index);
-                        self.frames.pop();
-                    }
-                    return Ok(ExecutionReport {
-                        terminal: TerminalStatus::Faulted(fault.code),
-                        result: None,
-                        verification_events: self.verification_events,
+                    self.frames[caller_index].current = continuation.target;
+                } else {
+                    self.cleanup_persistent();
+                    return Ok(ExecutionStep::Terminal {
+                        terminal: TerminalStatus::Returned,
+                        result,
                     });
                 }
             }
+            Terminator::Fault(fault) => {
+                while !self.frames.is_empty() {
+                    let index = self.frames.len() - 1;
+                    self.cleanup_frame(index);
+                    self.frames.pop();
+                }
+                self.cleanup_persistent();
+                return Ok(ExecutionStep::Terminal {
+                    terminal: TerminalStatus::Faulted(fault.code),
+                    result: None,
+                });
+            }
         }
+
+        Ok(ExecutionStep::Continue)
     }
 
     fn start_call(
@@ -1092,9 +1116,8 @@ impl Machine {
 
     fn reference_read(&self, actor_frame: usize, src: &ReferenceAccess) {
         let resolved = self.resolve_reference_access(actor_frame, src);
-        let (target_frame, target_place) = self.frame_place_for_storage_region(&resolved.target);
         assert!(
-            place_state(&self.frames[target_frame].locals, &target_place).fully_live(),
+            self.storage_region_fully_live(&resolved.target),
             "validated reference read reaches a fully-live referent"
         );
     }
@@ -1202,6 +1225,37 @@ impl Machine {
     ) -> Result<RuntimeValue, UndefinedBehaviorKind> {
         match operand {
             Operand::Constant(value) => Ok(RuntimeValue::from_constant(value)),
+            Operand::PersistentRead(persistent) => {
+                let target = self.persistent_region(*persistent);
+                debug_assert!(self.reference_authorities.iter().all(|active| {
+                    active.as_ref().is_none_or(|active| {
+                        !active.target.overlaps(&target)
+                            || active.permission.alias_kind() == BorrowKind::Shared
+                    })
+                }));
+                let index = persistent.0 as usize;
+                let ty = self.persistent[index].ty;
+                let types = &self.program.as_program().types;
+                let (persistent, authorities) = (&self.persistent, &mut self.reference_authorities);
+                Ok(clone_value(
+                    types,
+                    ty,
+                    &persistent[index].state,
+                    authorities,
+                ))
+            }
+            Operand::PersistentSharedRoot(persistent) => {
+                let target = self.persistent_region(*persistent);
+                let authority = self.allocate_reference_authority(
+                    target.clone(),
+                    ReferencePermission::Shared,
+                    None,
+                );
+                Ok(RuntimeValue::SafeReference(SafeReferenceValue {
+                    target,
+                    authority,
+                }))
+            }
             Operand::FunctionValue(function) => Ok(RuntimeValue::Function(*function)),
             Operand::Move(src) => {
                 let src = self.resolve_access(frame_index, src);
@@ -1296,16 +1350,7 @@ impl Machine {
             }
             Operand::ReferenceCopy(src) => {
                 let resolved = self.resolve_reference_access(frame_index, src);
-                let (target_frame, target_place) =
-                    self.frame_place_for_storage_region(&resolved.target);
-                let types = &self.program.as_program().types;
-                let state = place_state(&self.frames[target_frame].locals, &target_place);
-                Ok(clone_value(
-                    types,
-                    resolved.selected_ty,
-                    state,
-                    &mut self.reference_authorities,
-                ))
+                Ok(self.clone_storage_region_value(&resolved.target, resolved.selected_ty))
             }
         }
     }
@@ -1452,6 +1497,48 @@ impl Machine {
         }
     }
 
+    fn persistent_region(&self, id: PersistentId) -> StorageRegion {
+        let storage = self
+            .persistent
+            .get(id.0 as usize)
+            .expect("validated persistent operand names an execution-owned declaration");
+        StorageRegion {
+            instance: storage.instance,
+            projections: Vec::new(),
+        }
+    }
+
+    fn storage_region_fully_live(&self, region: &StorageRegion) -> bool {
+        if let Some(storage) = self
+            .persistent
+            .iter()
+            .find(|storage| storage.instance == region.instance)
+        {
+            debug_assert!(region.projections.is_empty());
+            return storage.state.fully_live();
+        }
+        let (frame, place) = self.frame_place_for_storage_region(region);
+        place_state(&self.frames[frame].locals, &place).fully_live()
+    }
+
+    fn clone_storage_region_value(&mut self, region: &StorageRegion, ty: TypeId) -> RuntimeValue {
+        if let Some(index) = self
+            .persistent
+            .iter()
+            .position(|storage| storage.instance == region.instance)
+        {
+            debug_assert!(region.projections.is_empty());
+            debug_assert_eq!(self.persistent[index].ty, ty);
+            let types = &self.program.as_program().types;
+            let (persistent, authorities) = (&self.persistent, &mut self.reference_authorities);
+            return clone_value(types, ty, &persistent[index].state, authorities);
+        }
+        let (frame, place) = self.frame_place_for_storage_region(region);
+        let types = &self.program.as_program().types;
+        let state = place_state(&self.frames[frame].locals, &place);
+        clone_value(types, ty, state, &mut self.reference_authorities)
+    }
+
     /// Resolve a safe-reference target across every currently active frame.
     fn frame_place_for_storage_region(&self, region: &StorageRegion) -> (usize, Place) {
         self.frames
@@ -1488,6 +1575,29 @@ impl Machine {
         Place {
             local: LocalId(u32::try_from(local_index).expect("local index exceeds u32::MAX")),
             projections: region.projections.clone(),
+        }
+    }
+
+    fn cleanup_persistent(&mut self) {
+        for storage in &self.persistent {
+            assert!(
+                !self.reference_authorities.iter().any(|active| active
+                    .as_ref()
+                    .is_some_and(|active| active.target.instance == storage.instance)),
+                "validated Core terminal cleanup cannot end persistent storage targeted by a surviving reference authority"
+            );
+        }
+        for storage in &mut self.persistent {
+            debug_assert!(matches!(storage.state, ObjectState::Leaf(_)));
+            match &mut storage.state {
+                ObjectState::Leaf(leaf @ LeafState::Live(_)) => *leaf = LeafState::Dead,
+                ObjectState::Leaf(LeafState::NeverInitialized | LeafState::Dead) => {
+                    unreachable!("validated persistent storage remains live until terminal cleanup")
+                }
+                ObjectState::Aggregate(_) => {
+                    unreachable!("validated persistent storage is scalar")
+                }
+            }
         }
     }
 
@@ -1907,5 +2017,57 @@ fn drop_live_values(
             }
         }
         _ => unreachable!("validated Core MIR guarantees state shape matches its type"),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use runen_core_ir::{
+        BasicBlock, Body, Function, PersistentDecl, Program, SafeReferenceResultContract,
+        ScalarType, TypeDef, TypeTable, validate_program,
+    };
+
+    #[test]
+    fn diverging_execution_prefix_retains_persistent_extent() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let function = Function {
+            name: "diverge".into(),
+            parameters: Vec::new(),
+            result: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
+            body: Body {
+                locals: Vec::new(),
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(
+                    Vec::new(),
+                    Terminator::Goto(BasicBlockId(0)),
+                )],
+            },
+        };
+        let validated = validate_program(Program {
+            types,
+            persistent: vec![PersistentDecl::new(i64_ty, Value::I64(13))],
+            functions: vec![function],
+        })
+        .expect("stable self-loop with persistent storage is valid");
+        let mut machine = Machine::new(validated, FunctionId(0)).expect("zero-parameter entry");
+        let instance = machine
+            .persistent_storage_instance(PersistentId(0))
+            .expect("persistent instance exists before execution");
+        let expected = ObjectState::Leaf(LeafState::Live(RuntimeValue::I64(13)));
+
+        for _ in 0..8 {
+            assert_eq!(machine.step_once(), Ok(ExecutionStep::Continue));
+            assert_eq!(
+                machine.persistent_storage_instance(PersistentId(0)),
+                Some(instance)
+            );
+            assert_eq!(machine.persistent[0].state, expected);
+            assert_eq!(machine.frames.len(), 1);
+            assert_eq!(machine.frames[0].current, BasicBlockId(0));
+        }
     }
 }

@@ -15,6 +15,7 @@ fn body(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Body {
 
 fn expect_function_error(types: TypeTable, function: Function, expected: MirValidationErrorKind) {
     let error = validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
@@ -93,6 +94,7 @@ fn shared_direct_child_accepts_exclusive_and_replace_origins() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![exclusive, replace],
     })
@@ -501,6 +503,7 @@ fn exclusive_replace_direct_child_allows_move_restore_before_return() {
     };
 
     validate_program(Program {
+        persistent: vec![],
         types,
         functions: vec![function],
     })
