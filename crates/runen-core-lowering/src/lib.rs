@@ -31,6 +31,7 @@ struct SpecializationKey {
 struct Lowerer<'a> {
     compilation: &'a hir::TypedCompilation,
     types: TypeMap,
+    persistent: BTreeMap<hir::StaticId, core::PersistentId>,
     specializations: Vec<SpecializationKey>,
     functions: BTreeMap<SpecializationKey, core::FunctionId>,
     closure_functions: BTreeMap<hir::ClosureId, core::FunctionId>,
@@ -40,6 +41,15 @@ impl<'a> Lowerer<'a> {
     fn new(compilation: &'a hir::TypedCompilation) -> Result<Self, LoweringError> {
         validate_function_declarations(compilation)?;
         let types = TypeMap::new(compilation)?;
+        let mut persistent = BTreeMap::new();
+        for (index, static_decl) in compilation.statics.iter().enumerate() {
+            let id = core::PersistentId(index_u32(index, "Core persistent identity")?);
+            if persistent.insert(static_decl.id, id).is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "duplicate HIR static identity",
+                ));
+            }
+        }
         let (specializations, functions) = discover_specializations(compilation)?;
         let mut closure_functions = BTreeMap::new();
         for (index, closure) in compilation.closures.iter().enumerate() {
@@ -57,6 +67,7 @@ impl<'a> Lowerer<'a> {
         Ok(Self {
             compilation,
             types,
+            persistent,
             specializations,
             functions,
             closure_functions,
@@ -70,19 +81,16 @@ impl<'a> Lowerer<'a> {
             .checked_add(self.compilation.closures.len())
             .ok_or(LoweringError::RepresentationLimit("Core function identity"))?;
         let mut functions = Vec::with_capacity(capacity);
+        let context = FunctionLoweringContext {
+            compilation: self.compilation,
+            types: &self.types,
+            persistent: &self.persistent,
+            functions: &self.functions,
+            closure_functions: &self.closure_functions,
+        };
         for specialization in &self.specializations {
             let function = find_function(self.compilation, specialization.function)?;
-            functions.push(
-                FunctionLowerer::new(
-                    self.compilation,
-                    &self.types,
-                    &self.functions,
-                    &self.closure_functions,
-                    function,
-                    specialization,
-                )?
-                .lower()?,
-            );
+            functions.push(FunctionLowerer::new(context, function, specialization)?.lower()?);
         }
         for (closure_index, closure) in self.compilation.closures.iter().enumerate() {
             let specialization = SpecializationKey {
@@ -90,21 +98,25 @@ impl<'a> Lowerer<'a> {
                 type_arguments: Vec::new(),
             };
             functions.push(
-                FunctionLowerer::new_closure(
-                    self.compilation,
-                    &self.types,
-                    &self.functions,
-                    &self.closure_functions,
-                    closure,
-                    closure_index,
-                    &specialization,
-                )?
-                .lower()?,
+                FunctionLowerer::new_closure(context, closure, closure_index, &specialization)?
+                    .lower()?,
             );
         }
 
+        let persistent = self
+            .compilation
+            .statics
+            .iter()
+            .map(|static_decl| {
+                let ty = self.types.get(hir::Type::Intrinsic(static_decl.ty))?;
+                Ok(core::PersistentDecl::new(
+                    ty,
+                    lower_literal(static_decl.initializer),
+                ))
+            })
+            .collect::<Result<Vec<_>, LoweringError>>()?;
         let program = core::Program {
-            persistent: vec![],
+            persistent,
             types: self.types.types,
             functions,
         };
@@ -503,6 +515,8 @@ fn collect_value_specializations(
             }
         }
         hir::ValueKind::Literal(_)
+        | hir::ValueKind::StaticRead(_)
+        | hir::ValueKind::StaticReferenceRoot(_)
         | hir::ValueKind::ReferenceRoot { .. }
         | hir::ValueKind::ReferenceReborrow { .. }
         | hir::ValueKind::ReferenceDereference { .. }
@@ -1351,9 +1365,19 @@ struct LoopLoweringTarget {
     continuation: core::BasicBlockId,
 }
 
+#[derive(Clone, Copy)]
+struct FunctionLoweringContext<'a> {
+    compilation: &'a hir::TypedCompilation,
+    types: &'a TypeMap,
+    persistent: &'a BTreeMap<hir::StaticId, core::PersistentId>,
+    functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
+    closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
+}
+
 struct FunctionLowerer<'a> {
     compilation: &'a hir::TypedCompilation,
     types: FunctionTypeMap<'a>,
+    persistent: &'a BTreeMap<hir::StaticId, core::PersistentId>,
     functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
     closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
     name: String,
@@ -1372,14 +1396,11 @@ struct FunctionLowerer<'a> {
 
 impl<'a> FunctionLowerer<'a> {
     fn new(
-        compilation: &'a hir::TypedCompilation,
-        types: &'a TypeMap,
-        functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
-        closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
+        context: FunctionLoweringContext<'a>,
         function: &'a hir::Function,
         specialization: &'a SpecializationKey,
     ) -> Result<Self, LoweringError> {
-        validate_specialization_key(compilation, specialization)?;
+        validate_specialization_key(context.compilation, specialization)?;
         if specialization.function != function.id {
             return Err(LoweringError::InvalidHirInvariant(
                 "Core lowering specialization does not match its HIR function",
@@ -1404,13 +1425,14 @@ impl<'a> FunctionLowerer<'a> {
         }
 
         let mut lowerer = Self {
-            compilation,
+            compilation: context.compilation,
             types: FunctionTypeMap {
-                base: types,
+                base: context.types,
                 specialization,
             },
-            functions,
-            closure_functions,
+            persistent: context.persistent,
+            functions: context.functions,
+            closure_functions: context.closure_functions,
             name: function.name.clone(),
             result: function.result,
             safe_reference_result_contract: function.safe_reference_result_contract,
@@ -1441,15 +1463,12 @@ impl<'a> FunctionLowerer<'a> {
     }
 
     fn new_closure(
-        compilation: &'a hir::TypedCompilation,
-        types: &'a TypeMap,
-        functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
-        closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
+        context: FunctionLoweringContext<'a>,
         closure: &'a hir::Closure,
         closure_index: usize,
         specialization: &'a SpecializationKey,
     ) -> Result<Self, LoweringError> {
-        validate_specialization_key(compilation, specialization)?;
+        validate_specialization_key(context.compilation, specialization)?;
         if specialization.function != closure.function || !specialization.type_arguments.is_empty()
         {
             return Err(LoweringError::InvalidHirInvariant(
@@ -1457,13 +1476,14 @@ impl<'a> FunctionLowerer<'a> {
             ));
         }
         let mut lowerer = Self {
-            compilation,
+            compilation: context.compilation,
             types: FunctionTypeMap {
-                base: types,
+                base: context.types,
                 specialization,
             },
-            functions,
-            closure_functions,
+            persistent: context.persistent,
+            functions: context.functions,
+            closure_functions: context.closure_functions,
             name: format!("$closure-wrapper-{closure_index}"),
             result: closure.result,
             safe_reference_result_contract: closure.safe_reference_result_contract,
@@ -2754,6 +2774,27 @@ impl<'a> FunctionLowerer<'a> {
                 });
                 Ok(temporary)
             }
+            hir::ValueKind::StaticRead(id) => {
+                let static_decl = self.compilation.static_decl(*id);
+                if value.ty != hir::Type::Intrinsic(static_decl.ty) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "static-read HIR value type does not match its declaration",
+                    ));
+                }
+                let persistent =
+                    self.persistent
+                        .get(id)
+                        .copied()
+                        .ok_or(LoweringError::InvalidHirInvariant(
+                            "static-read HIR identity has no Core persistent mapping",
+                        ))?;
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::PersistentRead(persistent),
+                });
+                Ok(temporary)
+            }
             hir::ValueKind::IntegerNeg { operand } => {
                 let integer_ty = value.ty;
                 let zero = match integer_ty {
@@ -3491,6 +3532,31 @@ impl<'a> FunctionLowerer<'a> {
 
                 self.current = join_target.0 as usize;
                 Ok(result)
+            }
+            hir::ValueKind::StaticReferenceRoot(id) => {
+                let static_decl = self.compilation.static_decl(*id);
+                let expected = hir::Type::SafeReference {
+                    referent: hir::ReferenceReferent::Intrinsic(static_decl.ty),
+                    permission: hir::ReferencePermission::Shared,
+                };
+                if value.ty != expected {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "static-reference-root HIR type does not match its declaration",
+                    ));
+                }
+                let persistent =
+                    self.persistent
+                        .get(id)
+                        .copied()
+                        .ok_or(LoweringError::InvalidHirInvariant(
+                            "static-reference-root HIR identity has no Core persistent mapping",
+                        ))?;
+                let temporary = self.push_temporary(value.ty)?;
+                self.push_statement(core::Statement::Init {
+                    dst: core::Place::local(temporary),
+                    src: core::Operand::PersistentSharedRoot(persistent),
+                });
+                Ok(temporary)
             }
             hir::ValueKind::ReferenceRoot {
                 target,
