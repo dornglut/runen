@@ -48,3 +48,6 @@ jobs:
         run: |
           cargo +stable check -p runen-syntax --lib
           cargo +stable check -p runen-core-ir --lib
+      - name: Enumerate workspace migration and exhaustiveness obligations
+        shell: bash
+        run: cargo +stable check --workspace --all-targets
