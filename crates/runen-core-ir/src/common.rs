@@ -8,6 +8,31 @@ pub struct TypeId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FunctionId(pub u32);
 
+/// Stable-in-one-program identity for one execution-persistent storage declaration.
+///
+/// This declaration identity is distinct from every dynamic [`StorageInstanceId`]
+/// created for represented execution.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct PersistentId(pub u32);
+
+/// One execution-persistent storage declaration in the Core program domain.
+///
+/// The first represented persistent-storage slice carries only an exact admitted
+/// scalar type and one already-materialized semantic initial value. Dynamic storage
+/// identity is created separately for each represented execution.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PersistentDecl {
+    pub ty: TypeId,
+    pub initial: Value,
+}
+
+impl PersistentDecl {
+    #[must_use]
+    pub fn new(ty: TypeId, initial: Value) -> Self {
+        Self { ty, initial }
+    }
+}
+
 /// Stable-in-one-function identifier for a local storage declaration.
 ///
 /// A `LocalId` identifies MIR syntax. It is not the dynamic identity of one
