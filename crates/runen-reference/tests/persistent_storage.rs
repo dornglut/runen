@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, Operand,
+    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
     PersistentDecl, PersistentId, Place, Program, ReferenceAccess, ReferencePermission,
-    SafeReferenceResultContract, ScalarType, Terminator, TypeDef, TypeTable, Value,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeTable, Value,
     validate_program,
 };
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
@@ -60,7 +60,7 @@ fn repeated_persistent_reads_are_non_consuming() {
         body: body(
             vec![LocalDecl::new("sum", i64_ty, false)],
             vec![BasicBlock::new(
-                vec![runen_core_ir::Statement::IntegerAdd {
+                vec![Statement::IntegerAdd {
                     dst: Place::local(LocalId(0)),
                     left: Operand::PersistentRead(PersistentId(0)),
                     right: Operand::PersistentRead(PersistentId(0)),
@@ -143,4 +143,87 @@ fn persistent_shared_root_crosses_activation_and_reads_through_reference() {
         .expect("defined cross-activation persistent reference execution");
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(ObservedValue::I64(73)));
+}
+
+#[test]
+fn normal_terminal_cleanup_drops_outer_persistent_reference_before_extent_end() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let shared_i64 = types.push(TypeDef::reference(
+        "SharedI64",
+        i64_ty,
+        ReferencePermission::Shared,
+    ));
+    let function = Function {
+        name: "main".into(),
+        parameters: Vec::new(),
+        result: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
+        body: body(
+            vec![LocalDecl::new("persistent_ref", shared_i64, false)],
+            vec![BasicBlock::new(
+                vec![Statement::Init {
+                    dst: Place::local(LocalId(0)),
+                    src: Operand::PersistentSharedRoot(PersistentId(0)),
+                }],
+                Terminator::Return(None),
+            )],
+        ),
+    };
+    let validated = validate_program(Program {
+        types,
+        persistent: vec![PersistentDecl::new(i64_ty, Value::I64(5))],
+        functions: vec![function],
+    })
+    .expect("outer persistent reference is valid until normal cleanup");
+
+    let report = Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect("outer frame cleanup must release the persistent carrier first");
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, None);
+}
+
+#[test]
+fn fault_terminal_cleanup_drops_outer_persistent_reference_before_extent_end() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let shared_i64 = types.push(TypeDef::reference(
+        "SharedI64",
+        i64_ty,
+        ReferencePermission::Shared,
+    ));
+    let function = Function {
+        name: "main".into(),
+        parameters: Vec::new(),
+        result: None,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
+        body: body(
+            vec![LocalDecl::new("persistent_ref", shared_i64, false)],
+            vec![BasicBlock::new(
+                vec![Statement::Init {
+                    dst: Place::local(LocalId(0)),
+                    src: Operand::PersistentSharedRoot(PersistentId(0)),
+                }],
+                Terminator::Fault(Fault::new("persistent-cleanup")),
+            )],
+        ),
+    };
+    let validated = validate_program(Program {
+        types,
+        persistent: vec![PersistentDecl::new(i64_ty, Value::I64(8))],
+        functions: vec![function],
+    })
+    .expect("outer persistent reference is valid until fault cleanup");
+
+    let report = Machine::new(validated, FunctionId(0))
+        .expect("zero-parameter entry")
+        .execute()
+        .expect("outer fault cleanup must release the persistent carrier first");
+    assert_eq!(
+        report.terminal,
+        TerminalStatus::Faulted("persistent-cleanup".into())
+    );
+    assert_eq!(report.result, None);
 }
