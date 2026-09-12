@@ -11,6 +11,7 @@
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
 - [Function values and indirect calls](function-values.md)
+- [Closures and explicit by-value capture](closures.md)
 - [Generics](generics.md)
 - [Marker traits](traits.md)
 - [Structural ownership](structural-ownership.md)

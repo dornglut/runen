@@ -4,11 +4,11 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source semantics for recursive named-field record patterns: the existing irrefutable record-destructuring declaration with bounded node-local rest/omission, and one bounded single-success refutable record-selection pattern with exact `Bool`/fixed-width-integer equality literal-test leaves, fixed-width-integer strict-upper-bound test leaves, and bounded same-path bind-and-test targets that combine one existing scalar test with one ordinary duplicating success binding. It owns unqualified same-module and qualified cross-module nominal pattern-head selection, recursive field/rest structure, binding-leaf and refutable-test order, scrutinee-category selection, direct binding-root ownership consequences, producer-backed pattern-scrutinee transient ownership/cleanup, and the pattern-local success/mismatch relation before control-flow arm execution.
 
-It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup and qualified cross-module lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), Boolean and decimal-integer literal materialization from [Source literal semantics](literals.md), exact Boolean and fixed-width integer equality value relations plus the fixed-width integer strict-less-than value relation from [Source operator semantics](operators.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), function-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), the canonical direct safe-authority compatibility relation from [Source safe references](references.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, record-construction completion, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration/pattern-transient completion from [Source function execution](function-execution.md). It does not redefine those owners.
+It consumes lexical identifier keys from [Source lexical foundation](lexical.md), same-module declaration lookup and qualified cross-module lookup from [Source names and modules](names-modules.md), nominal record/field identity, exact source type equality, field source types, structural field order, and owned-value duplicability from [Source type foundation](types.md), Boolean and decimal-integer literal materialization from [Source literal semantics](literals.md), exact Boolean and fixed-width integer equality value relations plus the fixed-width integer strict-less-than value relation from [Source operator semantics](operators.md), structural paths, path availability/consumption, and remaining-ownership frontiers from [Source structural ownership](structural-ownership.md), body-local binding lookup/identity/scope/shadowing/mutability from [Source function-local bindings](local-bindings.md), closure capture-binding and declaration-site module/source-unit context from [Source closures and explicit by-value capture](closures.md), the canonical direct safe-authority compatibility relation from [Source safe references](references.md), and direct record-field accessibility plus the completed field-value producer result boundary from [Source field-value access](field-access.md). It consumes represented producer evaluation, neutral `Call` completion including bounded closure calls, record-construction completion, producer-backed field-receiver completion, transient ownership termination, fault propagation, divergence, and declaration/pattern-transient completion from [Source function execution](function-execution.md). It does not redefine those owners.
 
 The represented concrete pattern, rest-marker, scrutinee, bounded bind-and-test target, and bounded `if let` spellings are owned by [Source concrete syntax](concrete-syntax.md). Success/mismatch arm execution and definite normal-successor composition are owned by [Source control flow](control-flow.md).
 
-This document does not define multi-arm `match`/`case` selection, pattern alternatives, guards, ranges, shorthand or wildcard bindings, tuple/array/enum patterns, destructuring assignment, reference/borrow binding modes, safe-reference formation/reborrow, arbitrary general expressions, a general source place/lvalue abstraction, field accessibility, nested module paths beyond the represented alias/member pair, or an implementation representation.
+This document does not define multi-arm `match`/`case` selection, pattern alternatives, guards, ranges, shorthand or wildcard bindings, tuple/array/enum patterns, destructuring assignment, reference/borrow binding modes, safe-reference formation/reborrow, closure capture or invocation, arbitrary general expressions, a general source place/lvalue abstraction, field accessibility, nested module paths beyond the represented alias/member pair, or an implementation representation.
 
 ## Represented record-destructuring declaration
 
@@ -72,19 +72,19 @@ Every represented **irrefutable record-pattern node** has:
   - one nested irrefutable record-pattern node; and
 - zero or one node-local rest marker that, when present, omits every declared field identity not selected by an explicit field in that node.
 
-A nested irrefutable record-pattern node itself introduces no binding. Binding leaves are the only pattern elements that produce function-local bindings. The rest marker introduces no binding, structural path, value, type, safe-authority access, or runtime operation.
+A nested irrefutable record-pattern node itself introduces no binding. Binding leaves are the only pattern elements that produce body-local bindings. The rest marker introduces no binding, structural path, value, type, safe-authority access, or runtime operation.
 
 The complete tree is irrefutable because every pattern node requires exact nominal type equality and no represented node performs a runtime shape test. A node without rest is exhaustive exactly as before. A node with rest statically accepts its exact nominal record while selecting only its explicit fields and omitting the remainder. Successful pattern production has no mismatch outcome.
 
-## Pattern-head selection
+## Pattern-head selection and inherited lookup context
 
 Every represented irrefutable or refutable record-pattern node head is either one unqualified `UserIdentifier` or one represented `QualifiedModuleMember` in the concrete form.
 
-An **unqualified pattern head** resolves directly through the same-module declaration namespace owned by `names-modules.md` and MUST select one nominal record declaration. A selected function or another wrong-category declaration is invalid and MUST NOT be bypassed.
+An **unqualified pattern head** resolves directly through same-module declaration lookup owned by `names-modules.md` and MUST select one nominal record declaration. The applicable source module is the current source-function module or, inside a closure body, the closure declaration site's retained source module from `closures.md`. A selected function or another wrong-category declaration is invalid and MUST NOT be bypassed.
 
-A **qualified pattern head** resolves only through the source-unit module-alias and qualified cross-module lookup relation owned by `names-modules.md`. That lookup therefore requires the selected target module binding to be exported. The resolved binding MUST denote one nominal record declaration. An unresolved alias/member, inaccessible target binding, or wrong-category exported binding is invalid and MUST NOT be bypassed merely because pattern context requires a record.
+A **qualified pattern head** resolves only through the source-unit module-alias and qualified cross-module lookup relation owned by `names-modules.md`. Inside a closure body that lookup consumes the closure declaration site's retained **source unit**, so the closure sees exactly the alias environment of its declaration site. The lookup requires the selected target module binding to be exported. The resolved binding MUST denote one nominal record declaration. An unresolved alias/member, inaccessible target binding, or wrong-category exported binding is invalid and MUST NOT be bypassed merely because pattern context requires a record.
 
-Function-local value bindings do not participate in either pattern-head lookup relation. A local binding whose key equals an unqualified record-pattern head therefore does not change which same-module record declaration that head denotes, and local bindings never participate in a syntactically qualified head.
+Body-local value bindings do not participate in either pattern-head lookup relation. An active local/capture/parameter binding whose key equals an unqualified record-pattern head therefore does not change which same-module record declaration that head denotes, and local bindings never participate in a syntactically qualified head. A body-local key equal to a module alias likewise does not affect explicit `alias::member` head lookup.
 
 Qualification is source name resolution only. After a source-valid head has selected its nominal record declaration, qualified versus unqualified spelling does not create a distinct record type, pattern category, runtime module operation, or lower execution fact.
 
@@ -98,7 +98,7 @@ For every irrefutable record-pattern node with selected nominal record `R`:
 
 1. each explicit pattern field key MUST resolve to exactly one declared field identity of `R`;
 2. no declared field identity may occur in more than one explicit field;
-3. every explicit selected field MUST satisfy the direct record-field accessibility relation owned by `field-access.md` in the containing function;
+3. every explicit selected field MUST satisfy the direct record-field accessibility relation owned by `field-access.md` in the current body's inherited source-module context;
 4. every explicit field target MUST satisfy the irrefutable target relation below;
 5. the node contains at most one rest marker; and
 6. if the node has no rest marker, every declared field identity of `R` MUST occur exactly once as an explicit field, while if the node has a rest marker, every declared field identity not explicitly selected is omitted by that marker.
@@ -117,16 +117,18 @@ Field presentation order is not field lookup priority. Nominal record declaratio
 
 Every explicitly selected pattern field, including fields selected inside nested nodes, independently consumes the direct field-accessibility relation from `field-access.md`.
 
-For a pattern operation in a function belonging to source module `C`, every resolved record-pattern node may denote a record declared in `C` or in another source module:
+For a pattern operation whose inherited source-module context is `C`, every resolved record-pattern node may denote a record declared in `C` or in another source module:
 
 - when the node's nominal record is declared in `C`, its explicitly selected fields are directly accessible through the same-module branch of `field-access.md` regardless of whether an individual field is module-private or exported;
 - when the node's nominal record is declared in another module, the record binding must already be exported through qualified head lookup and every explicitly selected field must independently have exported direct accessibility.
+
+For a closure body, `C` is the closure declaration site's source module; no source-function entity is required merely to establish accessibility.
 
 Field identity is resolved before accessibility. An explicit field key not declared by the resolved nominal record is an unknown field; a known explicitly selected field that fails the direct-accessibility relation is inaccessible. One invalidity class does not stand in for the other.
 
 A field omitted by a node-local rest marker is not explicitly opened and therefore requires no direct field-accessibility check merely to be omitted. Consequently an exported foreign record containing module-private fields may be opened by a qualified rest-bearing pattern that selects only accessible exported fields. Explicitly naming one of that foreign record's module-private fields remains invalid. Without rest, the existing exhaustive relation still makes such a foreign record impossible to open when any required field is inaccessible. An exported zero-field foreign record requires no field-access check and may be opened with a source-valid qualified empty pattern or qualified rest-only pattern.
 
-Recursive patterns may cross source-module boundaries repeatedly. A same-module outer record may contain a foreign exported record and open it with a qualified nested head. A foreign record may contain a record from the containing function's own module and open that field with the ordinary unqualified same-module head when exact nominal typing holds. A foreign record may also contain a record from a third module, which may be opened only through an applicable source-unit alias and exported qualified head. At every node, accessibility is recomputed from the actual current record's defining module and each explicitly selected field relative to the containing function module; no root-wide visibility decision is inherited by descendants. A node-local rest may omit inaccessible fields at that node without changing another node's lookup or accessibility obligations.
+Recursive patterns may cross source-module boundaries repeatedly. At every node, accessibility is recomputed from the actual current record's defining module and each explicitly selected field relative to inherited context `C`; no root-wide visibility decision is inherited by descendants. A node-local rest may omit inaccessible fields at that node without changing another node's lookup or accessibility obligations.
 
 Pattern-head qualification does not qualify field names, import fields into a module namespace, or create a second pattern-specific visibility relation.
 
@@ -139,6 +141,8 @@ The path is formed by appending each resolved explicit field identity traversed 
 In the irrefutable declaration, an explicit field target is either a binding leaf or a nested irrefutable record pattern, never both. Because no declared field may be explicitly selected twice, distinct binding-leaf paths in one valid pattern tree are pairwise structurally disjoint. Omitted fields and rest markers contribute no binding-leaf path.
 
 Nested record-pattern nodes are static pattern structure, not independently produced values. Their intermediate paths are not automatically duplicated or consumed merely because pattern traversal enters them. A rest marker likewise creates no owned-value or safe-authority access operation.
+
+Opaque closure-site types are not nominal record types and expose no source field paths. A dedicated closure binding or opaque-closure-valued capture binding therefore cannot satisfy a record pattern merely because a lower environment aggregate exists.
 
 ## Binding-leaf source order
 
@@ -171,7 +175,7 @@ Before the declaration enters its ownership-production relation, validation esta
 4. every binding leaf's complete resolved structural path and exact source type;
 5. the complete depth-first binding-leaf source order from explicit fields;
 6. pairwise uniqueness of all binding leaf lexical keys across the entire tree; and
-7. absence of an overlapping function-local shadow conflict for every binding leaf key against the pre-declaration lexical environment.
+7. absence of an overlapping body-local shadow conflict for every binding leaf key against the pre-declaration lexical environment of the current body.
 
 For a direct binding-root scrutinee, the additional availability and safe-authority compatibility prevalidation below is also completed against one shared pre-pattern state before any pattern-owned transition.
 
@@ -179,11 +183,11 @@ Omitted fields need no field-accessibility or safe-authority validation and prod
 
 For a producer-backed declaration, a structurally invalid pattern does not validate/evaluate the producer merely to discover a later pattern error. Once the pattern is valid, its top nominal record type is the exact required type supplied to producer validation before producer execution begins.
 
-A qualified record construction used as the producer-backed scrutinee is therefore accepted or rejected by the same exact nominal relation as any other producer. When the construction target and qualified top pattern head resolve to the same nominal foreign record and their independent target/field-accessibility requirements are source-valid, the construction may directly supply that pattern. The constructor remains exhaustive under its own owner even when the receiving pattern uses rest. When the nominal types differ, validation rejects before constructor initializer evaluation or ownership commitment.
+A qualified record construction used as the producer-backed scrutinee is therefore accepted or rejected by the same exact nominal relation as any other producer. When the construction target and qualified top pattern head resolve to the same nominal foreign record and their independent target/field-accessibility requirements are source-valid, the construction may directly supply that pattern. The constructor remains exhaustive under its own owner even when the receiving pattern uses rest. When nominal types differ, validation rejects before constructor initializer evaluation or ownership commitment.
 
 ## Pattern-introduced bindings
 
-Every valid explicit binding leaf introduces one ordinary function-local binding under `local-bindings.md`.
+Every valid explicit binding leaf introduces one ordinary immutable body-local binding under `local-bindings.md` in the current source-function or closure body.
 
 For a leaf with key `b`, path `p`, and type `T = type(p)`:
 
@@ -197,6 +201,8 @@ A rest marker introduces no binding and participates in no duplicate-binding or 
 
 All bindings introduced by one declaration enter scope together only after the **complete declaration** finishes successfully. None participates in lookup while the pattern structure, scrutinee, leaf ownership production, or producer-transient cleanup of that declaration is in progress.
 
+Inside a closure body, these new pattern bindings enter that closure body's fresh lexical tree and obey the ordinary no-overlap rule against active closure explicit parameters, capture bindings, and body locals. Uncaptured creator bindings are absent from that tree and therefore create no shadow conflict.
+
 Each established binding begins with complete structural ownership of its produced value under `local-bindings.md` and `structural-ownership.md`.
 
 ## Scrutinee categories and exact top type
@@ -205,13 +211,13 @@ The represented declaration has exactly two top-level scrutinee categories selec
 
 ### Direct binding-root scrutinee
 
-A direct binding-root scrutinee is exactly one bare unqualified function-body identifier under `concrete-syntax.md`.
+A direct binding-root scrutinee is exactly one bare unqualified body identifier under `concrete-syntax.md`.
 
-It resolves through the function-local value-binding precedence owned by `local-bindings.md` and MUST select one active parameter or ordinary local binding. Lookup MUST NOT bypass an active binding merely because a module declaration would be convenient.
+It resolves through the local-first value-binding precedence owned by `local-bindings.md` and MUST select one active explicit parameter, ordinary local, or closure capture binding whose exact type is the top nominal record type. Lookup MUST NOT bypass an active binding merely because a module declaration would be convenient.
 
-Only when no active parameter/local binding resolves the key does existing same-module fallback occur. A selected module declaration is then the wrong category and the declaration is source-invalid.
+A dedicated opaque closure binding or opaque-closure-valued capture binding is the wrong category/type and remains category-final. Only when no active body-local binding resolves the key does existing same-module fallback occur; a selected module declaration is then the wrong category and the declaration is source-invalid.
 
-The selected root binding's declared source type MUST equal exactly the nominal record type of the top pattern head, whether that head was resolved by same-module or qualified lookup.
+The selected root binding's exact source type MUST equal exactly the nominal record type of the top pattern head, whether that head was resolved by same-module or qualified lookup.
 
 A bare direct root is **not** ordinary whole-binding `IdentifierUse` production for this declaration. The root is not first duplicated or consumed as a complete value and no pattern scrutinee transient is created.
 
@@ -219,15 +225,15 @@ A bare direct root is **not** ordinary whole-binding `IdentifierUse` production 
 
 A producer-backed scrutinee is exactly one syntactically non-bare producer admitted by `concrete-syntax.md`:
 
-- a result-bearing source call, direct or bounded indirect;
+- a result-bearing neutral source `Call`, whether direct, bounded indirect, or bounded closure;
 - a record construction; or
 - a field-value use, using either its binding-root or bounded producer-backed receiver form.
 
 `RecordConstruction` in this list is the one existing producer category and may use either its represented unqualified same-module target or its qualified cross-module target. Pattern-head qualification and pattern rest do not create a second construction or pattern scrutinee category.
 
-The top pattern head's nominal record type is the exact required source type of the **complete scrutinee producer result**. Structural similarity to another record type is insufficient. A qualified construction of a foreign record may therefore satisfy a qualified top pattern exactly when both resolve to the same nominal record and the construction and pattern are independently source-valid.
+The top pattern head's nominal record type is the exact required source type of the **complete scrutinee producer result**. Structural similarity to another record type is insufficient. For a bounded closure call, the selected closure site's explicit callable result must therefore be exactly that nominal record type before any closure snapshot/argument effect can commit.
 
-For a producer-backed field-value scrutinee, that top required type constrains the field-value operation's final selected field result. It does not constrain the field-value operation's internal call or record-construction receiver, whose own exact receiver type remains selected and validated under `field-access.md`. A qualified construction may therefore appear inside such a field-value receiver regardless of whether the final record result consumed by the pattern is same-module or foreign, provided the final selected type exactly equals the resolved top pattern type.
+For a producer-backed field-value scrutinee, that top required type constrains the field-value operation's final selected field result. It does not constrain the field-value operation's internal call or record-construction receiver, whose own exact receiver type remains selected and validated under `field-access.md`.
 
 The producer is resolved/evaluated in the lexical environment that exists before any binding introduced by this pattern enters scope.
 
@@ -235,8 +241,8 @@ A successful complete producer yields one fully owned **pattern scrutinee transi
 
 - has no lexical key or source binding identity;
 - is not source-addressable or a safe-reference target in this slice;
-- does not participate in function-local lookup;
-- is not an ordinary local or parameter; and
+- does not participate in body-local lookup;
+- is not an ordinary local, explicit parameter, or capture binding; and
 - exists only until the consuming pattern operation completes its success cleanup or mismatch cleanup.
 
 On successful complete producer completion, the pattern transient begins as one structural owned-value root with an empty consumed-path state under `structural-ownership.md`.
@@ -275,13 +281,15 @@ For each leaf path `p` of exact type `T`:
 - if `T` is duplicable under `types.md`, its prevalidated Shared requirement permits one owned duplicate of the complete value at `p`, leaving the root structural ownership state unchanged;
 - if `T` is non-duplicable, its prevalidated Exclusive requirement permits transfer of exactly the complete owned value at `p` and the canonical successful-consumption transition from `structural-ownership.md` to the root binding.
 
+This applies equally when the admitted direct root is a nominal-record closure capture binding. Its binding immutability does not prohibit ownership consumption; it only prohibits assignment/rebinding.
+
 No ancestor of `p` is independently duplicated or consumed by this operation. Structurally disjoint paths remain governed by their own structural state.
 
 A field omitted by rest receives no pattern-owned duplicate or consume transition and no direct safe-authority access. Its ownership remains exactly whatever the direct root's pre-pattern structural state already establishes, subject only to independent selected leaf consumption on structurally related paths. Rest does not synthesize whole-root or ancestor consumption.
 
 Exhaustive no-rest patterns retain the existing consequence that separately consuming every ownership-producing leaf may leave an empty remaining root frontier without synthesizing consumption of the empty root path.
 
-A rest-only direct-root pattern has no binding leaf and performs no ownership or authority-requiring access transition. A direct-root pattern has no transient cleanup phase. Later use, assignment, and cleanup of the root binding consume its resulting structural ownership state through the existing owners.
+A rest-only direct-root pattern has no binding leaf and performs no ownership or authority-requiring access transition. A direct-root pattern has no transient cleanup phase. Later use, assignment where admitted, and cleanup of the root binding consume its resulting structural ownership state through the existing owners.
 
 ## Producer-backed transient leaf ownership
 
@@ -313,7 +321,7 @@ Therefore:
 - if all structurally owned subvalues have been transferred, the frontier is empty without synthesizing whole-root consumption; and
 - zero-field and recursively zero-leaf frontier members remain source-owned facts even when faithful lower scalar cleanup is vacuous.
 
-The pattern scrutinee transient frontier is cleaned exactly once by `function-execution.md` before the consuming pattern operation transfers control beyond that transient: before declaration bindings enter scope, before bounded-refutable success bindings enter their success block, or before bounded-refutable mismatch control begins. Rest introduces no second cleanup category, source order, or lifetime. A rest-only producer-backed irrefutable pattern therefore evaluates its accepted producer, establishes the ordinary fully owned pattern transient, produces no leaves, cleans that complete remaining transient through this existing relation, and introduces no bindings. This is a pattern-specific omission/cleanup relation, not a general arbitrary-value discard expression or statement.
+The pattern scrutinee transient frontier is cleaned exactly once by `function-execution.md` before the consuming pattern operation transfers control beyond that transient: before declaration bindings enter scope, before bounded-refutable success bindings enter their success block, or before bounded-refutable mismatch control begins. Rest introduces no second cleanup category, source order, or lifetime.
 
 A field-receiver transient internal to a producer-backed field-value scrutinee has already ended before this pattern transient exists. Pattern leaf consumption or omission therefore cannot alter, enlarge, or retroactively reselect the field-receiver cleanup frontier.
 
@@ -338,26 +346,25 @@ A non-duplicable binding leaf whose type is a zero-field or recursively zero-lea
 
 Pattern validity and ownership are never defined by lower scalar-leaf existence.
 
-## Producer fault and divergence
+## Producer fault, divergence, and static transaction boundary
 
 Pattern structure is source validation and occurs before producer execution consequences.
 
-If complete producer evaluation yields a defined fault before the pattern transient is established:
+If complete producer evaluation yields a **runtime defined fault in a source-valid program** before the pattern transient is established:
 
 - no pattern leaf production occurs;
 - no pattern-introduced binding enters scope;
 - producer-internal transient cleanup follows the producer's existing owner;
+- for a bounded closure-call producer, the source-valid pre-argument closure snapshot has already occurred and follows the runtime fault cleanup semantics from `closures.md` rather than rolling back;
 - for a producer-backed field-value scrutinee, no pattern transient exists during receiver fault propagation, and any field-receiver transient that exists after receiver success is completed entirely inside that field-value producer before a result could reach this pattern;
-- ownership/structural/reference-authority transitions already completed by producer evaluation remain effective; and
+- ownership/structural/reference-authority transitions already completed by runtime producer evaluation remain effective; and
 - the same defined fault continues under `function-execution.md`.
 
-If complete producer evaluation diverges, no pattern leaf production, pattern binding establishment, or pattern-transient cleanup occurs merely because execution remains suspended. Producer-owned transients remain governed by the producer's divergence relation. A producer-backed field-value scrutinee may diverge only while its retained receiver producer is still evaluating; after receiver success its field-selection and field-receiver cleanup tail is non-diverging under the current source model.
+If complete producer evaluation diverges, no pattern leaf production, pattern binding establishment, or pattern-transient cleanup occurs merely because execution remains suspended. Producer-owned transients, including a held closure environment where applicable, remain governed by the producer's divergence relation.
 
 Rest and omission add no producer evaluation step, fault reason, divergence point, or post-producer failure relation. After successful producer completion, explicit leaf production and remaining-frontier cleanup retain their existing finite/non-diverging classifications.
 
-A qualified construction used as the scrutinee follows its ordinary construction fault/divergence relation after complete pattern and producer source validation. Qualified versus unqualified spelling of the already resolved pattern head does not add a fault, divergence, or cleanup path.
-
-For source validation implementations, producer-backed validation must preserve this atomic source-validity boundary: failure after tentative consuming producer validation must not leave rejected-source ownership or authority state committed. A nested producer-backed field-value use independently preserves its own transaction boundary under `field-access.md`; pattern validity does not merge those transactions into one ownership domain.
+For **source-static validation**, producer-backed validation is atomic over the existing complete producer-validation state. A later pattern/outer validation failure after tentative producer validation MUST NOT leave rejected-source ownership, authority, pointer-origin, or closure-snapshot state committed. A nested bounded closure call therefore cannot leak a speculative non-duplicable closure consumption when the enclosing pattern producer is statically rejected. A nested producer-backed field-value use independently preserves its own transaction boundary under `field-access.md`; pattern validity composes with that transaction without merging their ownership domains.
 
 ## Declaration completion
 
@@ -366,7 +373,7 @@ For a valid direct-root pattern declaration:
 1. complete recursive pattern field/rest structure and binding-leaf validation;
 2. validate all explicit leaf paths and applicable Shared/Exclusive direct safe-authority requirements against one pre-pattern state;
 3. produce every binding-leaf value in depth-first explicit-field source order; and
-4. establish all new bindings together.
+4. establish all new bindings together in the current body.
 
 For a valid producer-backed pattern declaration:
 
@@ -377,13 +384,13 @@ For a valid producer-backed pattern declaration:
 5. transfer the produced record into the fully owned pattern scrutinee transient;
 6. produce every explicit binding-leaf value in depth-first source order;
 7. clean the pattern transient's canonical remaining frontier—including omitted fields—exactly once; and
-8. establish all new bindings together.
+8. establish all new bindings together in the current body.
 
 Only after the applicable sequence completes may the next body statement begin.
 
 ## Bounded single-success refutable record selection
 
-The represented refutable pattern operation is one recursive named-field record pattern consumed only by the bounded single-success selection statement from `control-flow.md` and `concrete-syntax.md`. It reuses the exact nominal head lookup, field identity/accessibility, node-local rest/omission, structural path, binding-leaf, scrutinee-category, producer transaction, and qualified-name relations above. It does not change the existing irrefutable declaration.
+The represented refutable pattern operation is one recursive named-field record pattern consumed only by the bounded single-success selection statement from `control-flow.md` and `concrete-syntax.md`. It reuses the exact nominal head lookup, field identity/accessibility, node-local rest/omission, structural path, binding-leaf, scrutinee-category, producer transaction, body-context lookup, and qualified-name relations above. It does not change the existing irrefutable declaration.
 
 A **refutable record-pattern node** has the same explicit nominal record head, explicit-field uniqueness/accessibility relation, no-rest exhaustiveness/rest-authorized omission relation, and optional final rest marker as an irrefutable record-pattern node. Its explicit field target is exactly one of:
 
@@ -399,9 +406,9 @@ A strict-upper-bound test leaf contains exactly one represented decimal integer 
 
 An equality-only or strict-upper-bound-only test target introduces no binding. A **same-path bind-and-test target** is the sole bounded exception to the otherwise separate binding/test target categories: one explicit record field occurrence contributes both one retained refutable-test fact and one retained success-binding fact for the exact same complete structural path `p`. It is not two explicit selections of the field and does not authorize another leaf to overlap `p`.
 
-Let `T = type(p)` be the exact selected field type. The composite test category and literal/bound admission are exactly the existing test relations below. The composite binding has exact declared type `T`, uses one ordinary pattern binding identity/key, is immutable, and is produced only after full match. Because every type admitted by either represented test relation is duplicable under `types.md`, the composite binding's source-selected ownership consequence is always **duplicate** in this revision. No non-duplicable bind-and-test relation is represented.
+Let `T = type(p)` be the exact selected field type. The composite test category and literal/bound admission are exactly the existing test relations below. The composite binding has exact declared type `T`, uses one ordinary pattern binding identity/key in the current body, is immutable, and is produced only after full match. Because every type admitted by either represented test relation is duplicable under `types.md`, the composite binding's source-selected ownership consequence is always **duplicate** in this revision. No non-duplicable bind-and-test relation is represented.
 
-The composite binding identifier is a binding declaration, not an `IdentifierUse` or another preexisting function-local value operand. It does not participate in lookup and is not in scope while its associated test executes. The semantic left operand of either composite test remains the selected field value at `p`, not the newly declared binding.
+The composite binding identifier is a binding declaration, not an `IdentifierUse` or another preexisting value operand. It does not participate in lookup and is not in scope while its associated test executes. The semantic left operand of either composite test remains the selected field value at `p`, not the newly declared binding.
 
 A source-valid refutable pattern MUST contain at least one **refutable-test leaf** somewhere in the complete recursive tree. An equality-only target, a strict-upper-bound-only target, or the test component of a same-path bind-and-test target each satisfies that requirement. A zero-test tree is rejected in this operation rather than becoming an always-success selector for capability already owned by irrefutable destructuring.
 
@@ -419,7 +426,7 @@ For a strict-upper-bound test leaf, including the strict-upper-bound component o
 - `literals.md` MUST successfully materialize the bound's existing decimal integer literal under exact required type `T`; and
 - every other field type, or a bound that cannot materialize under `T`, rejects the strict-upper-bound test leaf.
 
-The selected field declaration supplies the exact required type directly for either test category. This relation creates no default integer type, coercion, promotion, conversion, comparison-local operand evidence, general comparison inference, or general pattern inference. In particular, the ordinary comparison-local evidence relation from `function-execution.md` is neither invoked nor widened by a strict-upper-bound pattern test or same-path bind-and-test target. The materialized literal or bound is a static semantic constant with no ownership state and no runtime producer evaluation.
+The selected field declaration supplies the exact required type directly for either test category. This relation creates no default integer type, coercion, promotion, conversion, comparison-local operand evidence, general comparison inference, or general pattern inference. The ordinary comparison-local evidence relation from `function-execution.md` is neither invoked nor widened by a strict-upper-bound pattern test or same-path bind-and-test target. The materialized literal or bound is a static semantic constant with no ownership state and no runtime producer evaluation.
 
 **Refutable-test source order** is depth-first traversal in explicit field order, independently of binding-leaf production order: visit explicit fields in written order, contribute an equality-only or strict-upper-bound-only target immediately, contribute the one test component of a same-path bind-and-test target immediately at that same explicit field position, recursively contribute refutable tests from a nested refutable node before the next sibling, and contribute nothing for an ordinary binding target or rest marker.
 
@@ -440,9 +447,9 @@ Validation establishes at least:
 
 A static pattern, test-category, field-type, literal/bound-materialization, binding-key, or composite-association failure commits no scrutinee producer-validation state and establishes no binding. Once the tree is valid, the top nominal record type supplies the exact complete producer result type exactly as for the irrefutable producer-backed pattern relation.
 
-For a direct-root refutable selection, every ordinary explicit binding-leaf path retains the existing fully-available plus Shared/Exclusive compatibility requirement above. Every refutable-test path additionally MUST be fully available and satisfy the canonical **Shared requirement** from `references.md`, all against the same pre-selection structural/authority state. For a same-path bind-and-test target, that one fully-available plus Shared requirement for `p` discharges both the Phase-1 non-consuming test access and the later Phase-2 ordinary duplicate binding access; no additional Exclusive requirement is introduced merely because the target is composite. Nested static pattern nodes and omitted fields add no independent availability/authority requirement merely because traversal enters or omits them.
+For a direct-root refutable selection, every ordinary explicit binding-leaf path retains the existing fully-available plus Shared/Exclusive compatibility requirement above. Every refutable-test path additionally MUST be fully available and satisfy the canonical **Shared requirement** from `references.md`, all against the same pre-selection structural/authority state. For a same-path bind-and-test target, that one fully-available plus Shared requirement for `p` discharges both the Phase-1 non-consuming test access and the later Phase-2 ordinary duplicate binding access; no additional Exclusive requirement is introduced merely because the target is composite.
 
-All direct-root binding and refutable-test path preconditions are discharged before the first dynamic refutable test or binding transfer. Distinct independently originating ownership-producing/test leaves retain the existing structural-disjointness consequence of one explicit field occurrence selecting one target and nested targets remaining structurally inside their selected field. The sole authorized equal-path overlap is the one test/binding pair belonging to one same-path bind-and-test target. That pair has exact-equal path `p`; it is not an ancestor/descendant overlap, does not permit another independent leaf at `p`, and does not weaken duplicate-field rejection. No other exact, ancestor, or descendant overlap is introduced by this exception.
+All direct-root binding and refutable-test path preconditions are discharged before the first dynamic refutable test or binding transfer. Distinct independently originating ownership-producing/test leaves retain the existing structural-disjointness consequence of one explicit field occurrence selecting one target and nested targets remaining structurally inside their selected field. The sole authorized equal-path overlap is the one test/binding pair belonging to one same-path bind-and-test target. No other exact, ancestor, or descendant overlap is introduced by this exception.
 
 ### Two-phase match execution and no rollback
 
@@ -480,25 +487,29 @@ On full match, binding leaves are produced through the existing direct-root rela
 
 ### Refutable producer-backed success and mismatch
 
-A producer-backed refutable selection reuses exactly the existing producer-backed scrutinee categories and evaluates the selected complete producer exactly once. Any producer-internal field-receiver transient finishes before the resulting record enters the distinct pattern scrutinee transient, exactly as above.
+A producer-backed refutable selection reuses exactly the existing producer-backed scrutinee categories and evaluates the selected complete producer exactly once. Any producer-internal field-receiver transient finishes before the pattern transient exists.
 
-If complete producer evaluation faults or diverges before the pattern transient exists, the existing producer fault/divergence relation applies: no refutable test, binding production, selection arm, or pattern-transient cleanup begins merely because this is a refutable receiving position.
+After producer success, the complete owned record becomes one pattern scrutinee transient with an initially empty consumed-path set.
 
-After successful producer completion, the pattern transient begins fully owned. Refutable tests, including composite tests, are non-consuming duplicates from that transient.
+On mismatch during Phase 1:
 
-On mismatch, no binding transfer has occurred, so the transient still has its initial empty consumed-path set. Its remaining frontier is therefore exactly the complete root. No composite binding exists. `function-execution.md` ends that transient exactly once before mismatch control begins.
+- no binding leaf has been produced;
+- the pattern transient remains completely owned because tests are non-consuming;
+- the complete transient root is therefore its remaining ownership frontier; and
+- `function-execution.md` cleans that complete transient exactly once before mismatch control proceeds.
 
-On full match, ordinary and composite binding leaves are produced through the existing producer-transient relation. A composite binding duplicates its already tested scalar path and therefore leaves that original path owned by the transient. The final remaining frontier is selected from the post-binding consumed-path state—including the source-owned paths of duplicating composite leaves where structurally applicable—and cleaned exactly once by `function-execution.md` before success bindings enter their block.
+On full match, Phase 2 produces bindings through the existing producer-transient duplicate/consume relation. Afterward, cleanup uses the post-binding canonical remaining frontier exactly as for an irrefutable producer-backed pattern before the success bindings enter the success block.
 
-Producer effects completed before the pattern transient exists remain effective on both match outcomes. The pattern operation performs no rollback or producer re-evaluation.
+Producer fault/divergence before transient establishment uses the same relation already defined above and never fabricates a match/mismatch outcome.
 
-### Refutable binding scope and pattern-local completion
+### Pattern outcome boundary
 
-All success binding identities, including composite binding identities, are statically established during pattern validation, but none enters lexical scope during scrutinee evaluation or refutable testing. After full match, all binding-leaf values are produced, applicable producer-transient cleanup completes, and then all success bindings enter scope together for exactly the success child block owned by `control-flow.md`/`local-bindings.md`.
+The bounded refutable pattern produces exactly one of:
 
-Mismatch establishes no success binding. An explicit mismatch block is a sibling child scope and cannot resolve a success-only binding merely because its static identity was known during validation. With omitted mismatch, no synthetic binding scope exists.
+- **match**, together with the success binding set and resulting direct-root or producer-cleanup state; or
+- **mismatch**, with no success binding and the mismatch state described above.
 
-The pattern operation itself supplies only `match` versus `mismatch` plus the exact pattern-owned state described here. `control-flow.md` owns arm execution, abnormal completion, omitted mismatch fallthrough, and exact normal-successor composition. In particular, this pattern owner does not normalize a direct-root success state to equal mismatch after a non-duplicable transfer. Composite bindings themselves introduce no such divergence because they are duplicating only in this revision.
+The pattern operation itself supplies only `match` versus `mismatch` plus the exact pattern-owned state described here. `control-flow.md` owns success-block execution, abnormal completion, omitted mismatch fallthrough, and exact normal-successor composition. In particular, this pattern owner does not normalize a direct-root success state to equal mismatch after a non-duplicable transfer. Composite bindings themselves introduce no such divergence because they are duplicating only in this revision.
 
 ## HIR and lowering refinement boundary
 
@@ -508,8 +519,8 @@ At minimum retain:
 
 - the top nominal record identity;
 - direct-root versus producer-backed scrutinee category;
-- for a direct-root scrutinee, the resolved root binding identity;
-- for a producer-backed scrutinee, the validated typed complete producer, including any field-value producer's own retained receiver/path/consequence/cleanup facts through its canonical owner;
+- for a direct-root scrutinee, the resolved root binding identity, including whether it is an admitted closure capture binding only insofar as needed for correct lookup/lifecycle mapping;
+- for a producer-backed scrutinee, the validated typed complete producer, including any bounded closure call's already selected closure interface/snapshot semantics through its canonical owner and any field-value producer's own retained receiver/path/consequence/cleanup facts;
 - all explicit binding leaves in depth-first source order;
 - each binding leaf's complete resolved structural field path from the top root;
 - each new binding identity/key/exact type;
@@ -520,7 +531,7 @@ For direct-root patterns, source validation MUST discharge each leaf's applicabl
 
 The concrete rest marker and the set of omitted field identities need not survive in typed HIR after complete source validation. Their semantic consequences are already discharged into the accepted explicit leaf set, direct-root ownership result, and producer cleanup frontier. Retaining the marker or omitted identities for diagnostics/tooling does not create a lower semantic requirement.
 
-Pattern-head qualification is discharged by source validation. Nested pattern heads are static validation structure; after every nested exact nominal type relation is proven, their resolved identities are already represented by the retained top record identity, full leaf paths, and retained leaf types. A faithful HIR therefore need not retain qualified versus unqualified head spelling or an additional nested-head identity solely for this feature.
+Pattern-head qualification and closure declaration-site module/source-unit inheritance are discharged by source validation. Nested pattern heads are static validation structure; after every nested exact nominal type relation is proven, their resolved identities are already represented by the retained top record identity, full leaf paths, and retained leaf types. A faithful HIR therefore need not retain qualified versus unqualified head spelling or an additional nested-head identity solely for this feature.
 
 Compiler temporary identity is not source-semantic pattern identity. If the retained producer is a record construction, its own source validator may discard whether its target spelling was qualified after retaining the resolved nominal record identity and initializer facts; pattern HIR requires no duplicate qualification fact.
 
@@ -534,22 +545,22 @@ For bounded refutable selection, typed HIR additionally MUST retain every refuta
 
 A faithful bounded-refutable lowering performs all retained refutable tests before emitting any retained binding-leaf `Copy`/`Move`. Fixed-width integer equality tests refine through an applicable projected/direct scalar `Copy`, exactly one accepted typed Core `IntegerEq`, and existing Bool `Branch`/`Goto` control flow. Boolean equality tests may refine through the existing Bool equality/branch relation without a new predicate operation. A strict-upper-bound test refines through the applicable projected/direct scalar operand, exactly one accepted typed Core `IntegerLt` of the retained exact integer type with the field value as left operand and the retained bound as right operand, followed by existing Bool `Branch`/`Goto` control flow. After all tests succeed, a composite success binding refines through the same projected/direct scalar `Copy` used by any ordinary duplicable binding leaf. Producer mismatch cleanup uses the complete transient frontier; producer success cleanup uses the retained post-binding frontier. No Core `Match`, switch, range primitive, generic predicate, pattern-test operation, `IntegerNe`, Boolean-complement synthesis, compare-and-branch fusion requirement, rollback operation, runtime discriminant object, runtime helper, host comparison, or source state lattice is required.
 
-Lowering MUST NOT reconstruct pattern-head lookup/accessibility, whether a source node used rest, omitted field identities, no-rest exhaustiveness, binding-leaf order, refutable-test order/kind/type/value, same-path composite association, source duplicability, path availability, consumed paths, direct safe-authority compatibility, field-receiver frontier membership, pattern-transient remaining-frontier membership, or match/mismatch cleanup selection from Core liveness/copyability/alias state. Zero-leaf source cleanup may refine to no Core `Drop` where the lower destruction domain is empty.
+Lowering MUST NOT reconstruct pattern-head lookup/accessibility, whether a source node used rest, omitted field identities, no-rest exhaustiveness, binding-leaf order, refutable-test order/kind/type/value, same-path composite association, source duplicability, path availability, consumed paths, direct safe-authority compatibility, field-receiver frontier membership, pattern-transient remaining-frontier membership, closure-call target classification, or match/mismatch cleanup selection from Core liveness/copyability/alias state. Zero-leaf source cleanup may refine to no Core `Drop` where the lower destruction domain is empty.
 
 ## Future compatibility boundary
 
 The explicit field-target form permits later pattern categories to extend the right side of a field entry without changing the accepted ordinary binding-leaf, bounded same-path bind-and-test, or nested-record spellings. The bounded rest marker occupies only the node-level omission role defined here and does not become a field target.
 
-This revision does not define shorthand field binding, `_` wildcard/ignore bindings, tuple/array/enum patterns, top-level scalar patterns, floating literal tests, alternatives, guards, multi-arm `match`/`case`, reference/borrow binding modes, mutable pattern bindings, destructuring assignment, arbitrary pattern scrutinees, general expressions/grouping, qualified binding leaves, qualified field names, nested module paths beyond the represented alias/member pair, pattern-specific visibility modifiers, ranges, lower-bound tests, `<=`/`>`/`>=` pattern relations, multiple tests on one field, non-duplicable same-path bind-and-test, nested-record-node alias/binding, constructor spread/update, or general spread syntax.
+This revision does not define shorthand field binding, `_` wildcard/ignore bindings, tuple/array/enum patterns, top-level scalar patterns, floating literal tests, alternatives, guards, multi-arm `match`/`case`, reference/borrow binding modes, mutable pattern bindings, destructuring assignment, arbitrary pattern scrutinees, general expressions/grouping, qualified binding leaves, qualified field names, nested module paths beyond the represented alias/member pair, pattern-specific visibility modifiers, ranges, lower-bound tests, `<=`/`>`/`>=` pattern relations, multiple tests on one field, non-duplicable same-path bind-and-test, nested-record-node alias/binding, constructor spread/update, closure-pattern matching, or general spread syntax.
 
 Later pattern features must extend rather than reinterpret the direct-root and producer-backed recursive semantics accepted here. A future variant/range/multi-arm pattern feature must preserve the exact nominal and qualified-lookup semantics of represented record heads and the accepted no-rollback ownership boundary rather than silently replacing them with structural/runtime member lookup or maybe-owned state. A future wildcard or spread feature must not reinterpret this node-local rest marker as a produced value or binding. A future richer bind-and-test feature must preserve the bounded composite's explicit same-target association rather than treating arbitrary overlapping retained leaves as valid.
 
 ## Source/Core separation
 
-Pattern ownership is source semantics over nominal record/field identities, structural paths, source type duplicability, binding identity, independent binding/refutable-test source orders, node-local omission, direct safe-authority compatibility, equality/strict-upper-bound test relations, source-authorized same-path composite association, match/mismatch state, and pattern-transient ownership.
+Pattern ownership is source semantics over nominal record/field identities, structural paths, source type duplicability, body-local binding identity, independent binding/refutable-test source orders, node-local omission, direct safe-authority compatibility, equality/strict-upper-bound test relations, source-authorized same-path composite association, match/mismatch state, and pattern-transient ownership.
 
 A field-receiver transient used internally by a producer-backed field-value scrutinee is owned by the field-value operation, not by pattern semantics. Only the completed selected record result crosses into the pattern ownership relation.
 
-Core projections, path liveness, scalar copyability, lower alias state, destruction domains, compiler local numbering, physical offsets, backend storage, construction-target qualification, pattern-head qualification, and the erased concrete rest marker are not source pattern authority.
+Core projections, path liveness, scalar copyability, lower alias state, destruction domains, compiler local numbering, generated closure-environment fields, physical offsets, backend storage, construction-target qualification, pattern-head qualification, and the erased concrete rest marker are not source pattern authority.
 
 A faithful implementation may map retained resolved paths to lower projections only after source validation has selected every source-semantic fact above.

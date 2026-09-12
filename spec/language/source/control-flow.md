@@ -2,11 +2,11 @@
 
 Status: **provisional normative; incomplete**
 
-This document owns the represented source semantics for statement-level conditional, bounded single-success refutable record selection, and bounded-loop control flow: condition/pattern-outcome admission and selection, validation of represented outcomes, explicit child lexical-scope composition, omitted false/mismatch behavior, local normal-continuation composition, bounded-`while` backedge admission, bounded unlabeled `break`/`continue` target and target-state admission, definite structural ownership for binding roots and replacement-capable external referent roots, exact raw-pointer-origin provenance at represented normal successors, and the source-to-Core control-flow refinement boundary.
+This document owns the represented source semantics for statement-level conditional, bounded single-success refutable record selection, and bounded-loop control flow: condition/pattern-outcome admission and selection, validation of represented outcomes, explicit child lexical-scope composition, omitted false/mismatch behavior, local normal-continuation composition, bounded-`while` backedge admission, bounded unlabeled `break`/`continue` target and target-state admission, definite structural ownership for active binding roots and replacement-capable external referent roots in the current activation, exact raw-pointer-origin provenance at represented normal successors, and the source-to-Core control-flow refinement boundary.
 
-It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); producer-backed field-value result typing and validation from [Source field-value access](field-access.md); bounded refutable record-pattern validation, refutable-test matching, success/mismatch pattern-owned state, success-binding establishment, and producer-pattern-transient cleanup selection from [Source patterns](patterns.md); owned-value producers, producer evaluation, lexical-block execution, local normal-continuation presence, return execution, explicit-fault execution, loop-transfer cleanup, lexical cleanup, defined-fault propagation, bounded-loop body execution sequencing, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, assignment mutability, binding structural lifecycle, and raw-pointer local integration from [Source function-local bindings](local-bindings.md); structural ownership state from [Source structural ownership](structural-ownership.md); replacement-capable external referent structural roots plus sequential safe-reference authority/carrier state from [Source safe references](references.md); exact raw-pointer origin provenance and lexical target validity from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md); and vacant non-replacing initialization/result-destination admission from [Core value and storage semantics](../core/value-storage.md) and [Core functions](../core/functions.md). Concrete `if`/`else`/bounded `if let`/`while`/`break`/`continue` spelling and the represented `ConditionalValue` grammar are owned by [Source concrete syntax](concrete-syntax.md).
+It consumes represented source type identity and the intrinsic `Bool` type from [Source type foundation](types.md); producer-backed field-value result typing and validation from [Source field-value access](field-access.md); bounded refutable record-pattern validation, refutable-test matching, success/mismatch pattern-owned state, success-binding establishment, and producer-pattern-transient cleanup selection from [Source patterns](patterns.md); owned-value producers, producer evaluation, lexical-block execution, local normal-continuation presence, return execution, explicit-fault execution, loop-transfer cleanup, lexical cleanup, defined-fault propagation, bounded-loop body execution sequencing, and divergence from [Source function execution](function-execution.md); binding identity, lexical scope, lookup, assignment mutability, binding structural lifecycle, and raw-pointer local integration from [Source function-local bindings](local-bindings.md); closure activation/root-scope boundaries, dedicated closure/capture binding state, declaration-time latency, and bounded closure-call producer behavior from [Source closures and explicit by-value capture](closures.md); structural ownership state from [Source structural ownership](structural-ownership.md); replacement-capable external referent structural roots plus sequential safe-reference authority/carrier state from [Source safe references](references.md); exact raw-pointer origin provenance and lexical target validity from [Source raw pointers and unsafe admission](raw-pointers-unsafe.md); represented Core Bool branching and CFG path-state validity from [Core control flow](../core/control-flow.md); and vacant non-replacing initialization/result-destination admission from [Core value and storage semantics](../core/value-storage.md) and [Core functions](../core/functions.md). Concrete `if`/`else`/bounded `if let`/`while`/`break`/`continue` spelling and the represented `ConditionalValue` grammar are owned by [Source concrete syntax](concrete-syntax.md).
 
-This document does not redefine owned-value producer semantics, pattern structure/refutable-test semantics/pattern-owned transfers, field-receiver semantics, return execution, explicit-fault execution, structural path/state mathematics, safe-reference authority/carrier/reborrow/lifetime semantics, raw-pointer origin production/transport/unsafe semantics, binding scope/mutability rules, lexical cleanup order, fault cleanup, loop-transfer cleanup ordering, Core path state, Core value/storage semantics, or concrete grammar.
+This document does not redefine owned-value producer semantics, closure capture/invocation/activation semantics, pattern structure/refutable-test semantics/pattern-owned transfers, field-receiver semantics, return execution, explicit-fault execution, structural path/state mathematics, safe-reference authority/carrier/reborrow/lifetime semantics, raw-pointer origin production/transport/unsafe semantics, binding scope/mutability rules, lexical cleanup order, fault cleanup, loop-transfer cleanup ordering, Core path state, Core value/storage semantics, or concrete grammar.
 
 ## Represented conditional statement
 
@@ -34,21 +34,27 @@ Concrete syntax deliberately excludes standalone safe-reference formation/reborr
 
 An admitted producer-backed `FieldValueUse` condition MUST have final selected field type exactly `Bool` under `field-access.md`. That requirement applies to the complete field-value result; the internal result-bearing call or record-construction receiver retains its independently selected exact receiver type.
 
+A neutral `Call` condition uses the existing call target/interface classification before effects. A bounded closure call is therefore admitted as a condition exactly when the selected dedicated closure site's explicit callable interface has result type exactly `Bool`; a closure call with another result type or no result is rejected by this same exact-`Bool` requirement. This adds no separate closure-condition category and no additional producer family.
+
 A syntactically represented conditional value whose resolved/produced type is not exactly `Bool` is source-invalid.
 
 The same exact admission relation is consumed by both represented `IfStatement` and `WhileStatement`. `while` does not add a second condition grammar or type rule.
 
 ## Definite enclosing source state
 
-For control-flow purposes, one **definite enclosing source state** contains these independently owned components:
+For control-flow purposes, one **definite enclosing source state** contains these independently owned components for the **current activation**:
 
-1. every active enclosing parameter/local binding identity with its declared source type, assignment-mutability classification, and exact structural ownership consumed-path set;
-2. every active replacement-capable parameter external referent structural root from `references.md`, with its exact structural ownership consumed-path set; and
-3. for every active raw-pointer local, its exact `PointerOrigin(binding)` provenance from `raw-pointers-unsafe.md`.
+1. every active binding identity in the current body's lexical tree with its exact source type, assignment-mutability classification, and exact structural ownership consumed-path set, including source-function/closure explicit parameters, ordinary/pattern bindings, dedicated closure bindings, and closure capture bindings when those categories are present;
+2. every active replacement-capable explicit-parameter external referent structural root from `references.md`, with its exact structural ownership consumed-path set; and
+3. for every active raw-pointer ordinary local, its exact `PointerOrigin(binding)` provenance from `raw-pointers-unsafe.md`.
 
-Safe-reference authority parent/child/carrier state is validated sequentially by `references.md` and remains subject to lexical cleanup. Bounded Shared direct-child call results remain ordinary sequential authority/carrier state under that owner, including carrierless-parent ancestry while returned descendants remain active. This state is **not** converted into a generic branch-state lattice, authority-graph union, join, or fixed point by this document. The represented exclusions on reference fields, mutable/rebindable reference locals, and replacement-capable results, together with lexical carrier cleanup and the exact bounded result relation from `references.md`, require no additional control-flow authority-state dimension.
+A source-function activation and a closure activation each instantiate this relation over their own active bindings and root lexical tree. This document does not introduce a third generalized activation object. Creator bindings absent from a closure body's fresh lexical root are not members of the closure activation's definite state merely because the closure was declared inside that source function.
 
-Every structural-state equality below applies independently to all continuing structural owned-value roots: ordinary binding roots and replacement-capable external referent roots. Raw-pointer provenance equality remains a separate exact requirement.
+Safe-reference authority parent/child/carrier state is validated sequentially by `references.md` and remains subject to lexical cleanup. Bounded Shared direct-child call results remain ordinary sequential authority/carrier state under that owner, including carrierless-parent ancestry while returned descendants remain active. This state is **not** converted into a generic branch-state lattice, authority-graph union, join, or fixed point by this document. The represented exclusions on reference fields, mutable/rebindable reference locals, reference capture, and replacement-capable results, together with lexical carrier cleanup and the exact bounded result relation from `references.md`, require no additional control-flow authority-state dimension.
+
+Every structural-state equality below applies independently to all continuing structural owned-value roots in the current activation: active binding roots and replacement-capable external referent roots. Raw-pointer provenance equality remains a separate exact requirement.
+
+A dedicated closure binding whose opaque root is consumed on only one of two normally continuing outcomes therefore fails the same exact-state equality as any other unequal continuing root. No closure-specific maybe-owned state, implicit duplicate, or branch repair is introduced. A duplicable closure use leaves the applicable structural state unchanged.
 
 ## Condition validation state
 
@@ -56,13 +62,13 @@ Source validation of one represented conditional begins in the definite enclosin
 
 Validate the condition through its existing producer owner with exact required source type `Bool`.
 
-A producer-backed `FieldValueUse` condition consumes the field-value owner's existing validation transaction with exact required final type `Bool`; this conditional relation adds no separate receiver-validation or ownership-commit rule.
+A producer-backed `FieldValueUse` condition consumes the field-value owner's existing validation transaction with exact required final type `Bool`; this conditional relation adds no separate receiver-validation or ownership-commit rule. A bounded closure-call condition likewise consumes the complete source-call validation transaction from `function-execution.md`/`closures.md`; a statically rejected condition therefore cannot leak a speculative non-duplicable closure snapshot or argument effect.
 
-During source validation, apply each semantic ownership, reference-authority, external-referent, or raw-pointer consequence selected by that condition producer exactly once before conditional outcome state splitting.
+During source validation of a valid condition, apply each semantic ownership, reference-authority, external-referent, raw-pointer, and closure-snapshot consequence selected by that condition producer exactly once before conditional outcome state splitting.
 
 The resulting definite enclosing state is the **post-condition state**. The explicit then arm and, when present, the explicit else arm are each source-validated from semantically identical copies of that same post-condition state. When else is omitted, the false normal outcome is the unchanged post-condition state as defined below.
 
-The successful condition result is one owned Bool transient held by the conditional operation for branch selection. That transient is not a function-local binding, external referent root, or member of the post-condition state. Any source-state consequences that condition production applied to pre-existing roots, reference authority, or raw-pointer provenance are already reflected in the post-condition state.
+The successful condition result is one owned Bool transient held by the conditional operation for branch selection. That transient is not a body-local binding, external referent root, or member of the post-condition state. Any source-state consequences that condition production applied to pre-existing roots, reference authority, raw-pointer provenance, or a dedicated closure binding are already reflected in the post-condition state.
 
 For a producer-backed field-value condition, its producer-specific receiver transient lifecycle has already completed under `function-execution.md` before the successful Bool result is transferred into this distinct condition transient.
 
@@ -86,7 +92,7 @@ This revision therefore does not require source constant propagation, constant f
 When execution reaches one represented conditional statement:
 
 1. evaluate the condition producer exactly once under its existing source execution semantics with required type `Bool`;
-2. preserve every ownership, safe-reference, external-referent, raw-pointer, transient, fault, and divergence consequence of that producer evaluation;
+2. preserve every ownership, safe-reference, external-referent, raw-pointer, closure-snapshot, transient, fault, and divergence consequence of that producer evaluation;
 3. on successful production, hold exactly one owned Bool condition transient;
 4. consume that transient for conditional selection;
 5. when its Bool value is `true`, execute only the then arm;
@@ -95,7 +101,7 @@ When execution reaches one represented conditional statement:
 
 A producer-backed field-value condition reaches step 3 only after its complete producer-specific field-receiver lifecycle has finished under `function-execution.md`; this conditional relation does not define a second receiver lifecycle.
 
-Conditional selection itself performs no additional binding read, move, duplicate, assignment, reference formation/reborrow, referent replacement, pointer retargeting, structural consumption, cleanup, call, fault selection, return, loop transfer, or hidden source state transition beyond ending ownership of the successful Bool condition transient used for selection.
+Conditional selection itself performs no additional binding read, move, duplicate, assignment, reference formation/reborrow, referent replacement, pointer retargeting, closure snapshot, structural consumption, cleanup, call, fault selection, return, loop transfer, or hidden source state transition beyond ending ownership of the successful Bool condition transient used for selection.
 
 The represented condition is therefore evaluated once even though source validation considers both outcomes.
 
@@ -106,7 +112,9 @@ If condition evaluation yields one defined fault `F` before successful Bool prod
 - no explicit conditional arm begins;
 - no conditional normal successor is selected;
 - ownership and other source-state transitions already completed during condition evaluation remain effective; and
-- the active activation follows the existing producer/receiving cleanup and defined-fault propagation relations from `function-execution.md` with the same fault `F`.
+- the current activation follows the existing producer/receiving cleanup and defined-fault propagation relations from `function-execution.md`/`closures.md` with the same fault `F`.
+
+For a source-valid bounded closure-call condition, a runtime argument fault after the closure snapshot therefore retains the actual snapshot consequence as owned by `closures.md`; this is distinct from static rejection rollback.
 
 The conditional statement does not add a second fault cleanup boundary.
 
@@ -118,15 +126,15 @@ If condition evaluation diverges before successful Bool production:
 
 - no explicit conditional arm begins;
 - no conditional normal successor is selected; and
-- no lexical-scope, activation, conditional, external-referent restoration, or loop-transfer cleanup occurs merely because execution remains suspended.
+- no lexical-scope, activation, conditional, external-referent restoration, closure-environment cleanup, or loop-transfer cleanup occurs merely because execution remains suspended.
 
-Producer-owned transients and completed ownership/source-state transitions persist exactly as required by their existing owners.
+Producer-owned transients and completed ownership/source-state transitions persist exactly as required by their existing owners. A held closure environment from a diverging bounded closure-call condition remains owned by that suspended call operation.
 
 Divergence is likewise a dynamic execution possibility and does not create a static no-local-normal outcome for an otherwise normally continuable represented construct.
 
 ## Explicit arm lexical scopes
 
-Every explicit conditional arm is exactly one represented nested block and therefore exactly one child lexical scope under `local-bindings.md` and `function-execution.md`.
+Every explicit conditional arm is exactly one represented nested block and therefore exactly one child lexical scope under `local-bindings.md` and `function-execution.md` within the **current activation**.
 
 An explicit then arm and explicit else arm are sibling lexical scopes of the same enclosing scope.
 
@@ -135,9 +143,11 @@ Consequently:
 - bindings introduced in one arm do not enter the other arm;
 - bindings introduced in one arm do not survive the normal end of that arm;
 - sibling arms MAY independently introduce the same lexical identifier key because their scopes do not overlap;
-- neither arm may introduce a key that illegally shadows an active enclosing function-local binding;
-- ordinary locals, safe-reference locals/reborrows, record-pattern bindings, nested blocks, assignments, reference replacement, raw-pointer operations inside applicable unsafe blocks, calls, explicit fault statements, represented bounded `while`, source-valid bounded `break;`/`continue;`, and the arm's optional terminal return retain their existing semantics; and
+- neither arm may introduce a key that illegally shadows an active enclosing binding in the current body's lexical tree;
+- ordinary locals, safe-reference locals/reborrows, record-pattern bindings, dedicated closure declarations where independently admitted by `closures.md`, nested blocks, assignments, reference replacement, raw-pointer operations inside applicable unsafe blocks, calls, explicit fault statements, represented bounded `while`, source-valid bounded `break;`/`continue;`, and the arm's optional terminal return retain their existing semantics; and
 - nested represented conditionals may occur because `IfStatement` is itself a represented body statement inside an arm block.
+
+A closure body may contain these ordinary child scopes, but a `ClosureDeclaration` in that closure body remains source-invalid under `closures.md`; grammar reuse does not create nested closures.
 
 This document does not create an abstract source-visible branch-scope identity beyond the ordinary child lexical scopes already owned by `local-bindings.md`.
 
@@ -147,12 +157,12 @@ When an explicit arm has a local normal continuation and the selected execution 
 
 1. finish its contained body-statement sequence under `function-execution.md`;
 2. normally exit that child lexical scope;
-3. clean bindings declared directly in that arm using the existing lexical-scope cleanup relation, including ending any safe-reference carriers stored there; and
+3. clean bindings declared directly in that arm using the existing lexical-scope cleanup relation, including ending any safe-reference carriers stored there and any dedicated closure values declared there; and
 4. only after that cleanup does the arm produce its **normal enclosing outcome** for conditional-successor purposes.
 
-Arm-local bindings have ended before normal-successor comparison and therefore are not members of the enclosing binding environment compared when two normal outcomes meet. External referent roots established by incoming replacement-capable parameters are activation-level state and remain continuing roots unless the activation terminates.
+Arm-local bindings have ended before normal-successor comparison and therefore are not members of the enclosing binding environment compared when two normal outcomes meet. External referent roots established by incoming replacement-capable explicit parameters are activation-level state and remain continuing roots unless the current activation terminates.
 
-Normal cleanup of one arm does not itself clean, reset, restore, or retarget enclosing roots merely to make their states match another arm.
+Normal cleanup of one arm does not itself clean, reset, restore, retarget, or duplicate enclosing roots merely to make their states match another arm.
 
 ## Explicit arm return and explicit fault
 
@@ -161,21 +171,25 @@ When source validation determines that an explicit arm has no local normal conti
 At runtime, when the selected arm reaches a represented return:
 
 - the return performs the replacement-capable normal-completion restoration check owned by `references.md`/`function-execution.md` after result effects and before activation cleanup;
-- a source-valid return then terminates the current source function activation under `function-execution.md`;
+- a source-valid return then terminates the **current activation**: a source-function activation under `function-execution.md` or a closure activation under `closures.md`;
 - the arm does not first perform independent normal child-scope cleanup;
-- every then-active lexical scope participates exactly once in return-induced activation cleanup; and
+- every then-active lexical scope in that activation participates exactly once in return-induced activation cleanup; and
 - no conditional normal join or normal successor is taken on that execution.
 
-A returning path may consume a complete root or an arbitrary source-valid structural subvalue of an enclosing binding and may change an external referent during return-value production. It need not equal a normal sibling outcome, but every incoming replacement-capable external referent must satisfy the separately required fully-available normal-return postcondition before cleanup.
+A closure-body return never terminates the creator source-function activation; it returns from the closure activation only.
+
+A returning path may consume a complete root or an arbitrary source-valid structural subvalue of an enclosing binding in the current activation and may change an external referent during return-value production. It need not equal a normal sibling outcome, but every incoming replacement-capable external referent must satisfy the separately required fully-available normal-return postcondition before cleanup.
 
 At runtime, when the selected arm reaches represented `fault;`:
 
 - the statement selects the distinguished source defined-fault reason `ExplicitFault` under `function-execution.md`;
 - the arm does not first perform independent normal child-scope cleanup;
-- every then-active lexical scope participates exactly once in the existing activation fault cleanup;
+- every then-active lexical scope in the current activation participates exactly once in the existing activation fault cleanup;
 - completed ownership/provenance/reference transitions before the statement remain effective;
 - no replacement-capable external-referent restoration is synthesized for the fault; and
 - no conditional normal join or normal successor is taken on that execution.
+
+A closure-body explicit fault faults the closure activation and then propagates through the calling relation; it does not directly fault the creator merely because the closure was declared there.
 
 A path that explicitly faults may therefore reach the fault statement with enclosing binding/external-referent roots in any source-valid then-current structural state and with any source-valid raw-pointer origins. That state does not have to equal a normal sibling outcome because the explicitly faulting path contributes no normal successor state.
 
@@ -183,9 +197,11 @@ These rules do not introduce path-dependent ownership/origin at a normal success
 
 ## Explicit arm loop transfer
 
-A source-valid `break;` or `continue;` reached inside an explicit conditional arm likewise gives that execution no **local** normal arm outcome, but it does not terminate the function activation merely for that reason.
+A source-valid `break;` or `continue;` reached inside an explicit conditional arm likewise gives that execution no **local** normal arm outcome, but it does not terminate the current activation merely for that reason.
 
-The transfer statement independently selects the nearest enclosing represented `while` and MUST satisfy the applicable exact target-state rule below, including every continuing binding root, replacement-capable external referent root, and raw-pointer origin, before the containing conditional can be source-valid. Its exited-scope cleanup is owned by `function-execution.md` and includes the active arm scope plus every intervening active child scope through the target loop body scope.
+The transfer statement independently selects the nearest enclosing represented `while` in the **current activation's lexical-scope tree** and MUST satisfy the applicable exact target-state rule below, including every continuing binding root, replacement-capable external referent root, and raw-pointer origin, before the containing conditional can be source-valid. Its exited-scope cleanup is owned by `function-execution.md` and includes the active arm scope plus every intervening active child scope through the target loop body scope.
+
+A loop in the creator source-function body is not an enclosing loop for code executing in a closure activation. The closure call/root boundary is not traversable by `break;` or `continue;`.
 
 The transfer path contributes no normal enclosing state to the conditional's ordinary local successor composition. Consequently:
 
@@ -200,11 +216,11 @@ The conditional does not merge break and continue destinations, create an abrupt
 
 If execution of an accepted producer or other operation inside the selected arm yields a defined fault before the represented successful statement structure reaches its local normal continuation or loop transfer, that concrete execution produces no normal enclosing outcome.
 
-The active child scope participates exactly once in the existing activation fault cleanup from `function-execution.md`. It does not first perform independent normal arm cleanup and then fault cleanup. No replacement-capable external-referent restoration is synthesized on that fault path.
+The active child scope participates exactly once in the existing current-activation fault cleanup from `function-execution.md`/`closures.md`. It does not first perform independent normal arm cleanup and then fault cleanup. No replacement-capable external-referent restoration is synthesized on that fault path.
 
 Such a producer-originating fault possibility does **not** by itself remove the arm's static local normal continuation. Static completion follows the represented statement/control structure under `function-execution.md`; a producer that may fault dynamically still contributes its ordinary successful continuation when one is represented.
 
-If execution inside the selected arm diverges, that concrete execution produces no runtime normal outcome and performs no normal arm, successor, loop-transfer cleanup, or external-referent restoration merely because execution remains suspended.
+If execution inside the selected arm diverges, that concrete execution produces no runtime normal outcome and performs no normal arm, successor, loop-transfer cleanup, closure-activation cleanup, or external-referent restoration merely because execution remains suspended.
 
 Divergence likewise does not alter static local normal-continuation presence under this revision. The represented explicit `fault;`, `break;`, and `continue;` statements are different: successful execution of each has no local fallthrough by definition.
 
@@ -228,17 +244,17 @@ An explicit `else {}` is an actual child lexical scope, even though its empty bo
 
 Let `E` be the post-condition definite enclosing source state.
 
-Its binding component contains exactly the active parameter/local binding identities that remain in the enclosing lexical environment after successful condition production. Condition evaluation cannot introduce one new function-local binding because represented conditional values are owned-value producers rather than declarations.
+Its binding component contains exactly the active binding identities that remain in the current activation's enclosing lexical environment after successful condition production. This includes continuing dedicated closure/capture binding roots when those categories are active. Condition evaluation cannot introduce one new body binding merely by producing a value; a closure declaration is a distinct statement rather than a `ConditionalValue` producer.
 
-Its external-referent component contains exactly the replacement-capable parameter structural roots established for the current activation by `references.md`; ordinary child scopes do not create or remove those roots.
+Its external-referent component contains exactly the replacement-capable explicit-parameter structural roots established for the current activation by `references.md`; ordinary child scopes do not create or remove those roots.
 
-For each binding root and external referent root, `E` retains exact structural ownership state. For every binding of exact type `RawPtr(T)`, `E` additionally retains the exact pointer-origin provenance established by `raw-pointers-unsafe.md`.
+For each binding root and external referent root, `E` retains exact structural ownership state. For every ordinary local binding of exact type `RawPtr(T)`, `E` additionally retains the exact pointer-origin provenance established by `raw-pointers-unsafe.md`.
 
 Each explicit arm is source-validated from its own copy of `E`. An omitted else uses unchanged `E` as its normal false outcome.
 
 After normal completion and local cleanup of an explicit arm that has a local normal continuation, its normal outcome contains only enclosing binding identities belonging to `E`, the same external referent roots, and applicable raw origins. An arm with no local normal continuation contributes no enclosing state for normal-successor composition; its return, explicit fault, or loop transfer follows its own target relation.
 
-Binding identity, declared type, assignment-mutability classification, and external referent root identity/type are unchanged by conditional branching itself. Where two normal outcomes meet, the conditional compares each continuing structural root's ownership state and every continuing raw-pointer binding's exact pointer-origin provenance.
+Binding identity, source type, assignment-mutability classification, and external referent root identity/type are unchanged by conditional branching itself. Where two normal outcomes meet, the conditional compares each continuing structural root's ownership state and every continuing raw-pointer local's exact pointer-origin provenance.
 
 ## Conditional local normal-continuation composition
 
@@ -249,11 +265,11 @@ After both represented outcomes have been source-validated, compose only their *
 - **zero normal outcomes:** the conditional has no local normal continuation and no normal join; and
 - **omitted else:** the false outcome is always normal, so a conditional without explicit else always has at least one normal outcome.
 
-This is only composition of the local-fallthrough relation from `function-execution.md`. It introduces no source state set, completion lattice, maybe-owned state, maybe-origin state, authority-graph join, implicit cleanup/restore edge, or runtime completion tag.
+This is only composition of the local-fallthrough relation from `function-execution.md`. It introduces no source state set, completion lattice, maybe-owned state, maybe-origin state, authority-graph join, closure-state join, implicit cleanup/restore edge, or runtime completion tag.
 
 A sole normal outcome is not a union, intersection, widening, or normalization of branch states. It is exactly the enclosing state produced by that one normally completing outcome after ordinary arm-local cleanup.
 
-A zero-local-normal conditional does not by itself imply function-activation termination. It may be activation-terminating when all paths return/fault, or it may occur inside a represented loop where all paths perform source-valid loop transfers. The enclosing control owner determines those destinations.
+A zero-local-normal conditional does not by itself imply activation termination. It may be activation-terminating when all paths return/fault, or it may occur inside a represented loop where all paths perform source-valid loop transfers. The enclosing control owner determines those destinations.
 
 ## Exact structural-ownership state equality for two normal outcomes
 
@@ -261,20 +277,22 @@ For one represented continuing structural root, two normal outcomes have equal s
 
 When **two** normal outcomes meet, a represented conditional has a valid normal successor only when every continuing binding root and every replacement-capable external referent root in `E` has equal structural ownership state on those two outcomes.
 
+This includes the complete opaque root of a continuing dedicated closure binding and the exact concrete/opaque root of any continuing closure capture binding in the current closure activation. No closure environment field decomposition is introduced at this join boundary.
+
 When all continuing structural states are equal:
 
 - each common state is the one definite structural ownership state of that root at the normal continuation; and
-- subsequent source validation proceeds through the existing single-state binding/external-referent relations in `local-bindings.md`, `references.md`, and `structural-ownership.md`.
+- subsequent source validation proceeds through the existing single-state binding/external-referent relations in `local-bindings.md`, `references.md`, `closures.md`, and `structural-ownership.md`.
 
 When two normal outcomes exist and any continuing structural root has unequal normal outcome states, the conditional statement is source-invalid at its normal join boundary. No normal post-conditional ownership state is established.
 
-The equality requirement is semantic equality of source structural state. It is not equality of runtime values, record values, Core local/external-referent state, parser nodes, HIR data structures, compiler hashes, or physical storage.
+The equality requirement is semantic equality of source structural state. It is not equality of runtime values, record values, closure environments, Core local/external-referent state, parser nodes, HIR data structures, compiler hashes, or physical storage.
 
 No equality comparison is performed between a normal outcome and an outcome that has no local normal continuation. A return, explicit fault, or loop transfer instead obeys its independently established destination/cleanup/restoration relation.
 
 ## Exact raw-pointer-origin equality for two normal outcomes
 
-For one enclosing binding of exact type `RawPtr(T)`, two normal outcomes have equal pointer-origin state exactly when the stored raw-pointer value on each outcome carries `PointerOrigin(x)` for the same source binding identity `x` under `raw-pointers-unsafe.md`.
+For one enclosing ordinary local binding of exact type `RawPtr(T)`, two normal outcomes have equal pointer-origin state exactly when the stored raw-pointer value on each outcome carries `PointerOrigin(x)` for the same source binding identity `x` under `raw-pointers-unsafe.md`.
 
 When **two** normal outcomes meet, a represented conditional has a valid normal successor only when every raw-pointer binding identity in `E` has equal pointer origin on those outcomes in addition to satisfying every structural ownership equality.
 When the origins are equal, that exact origin is the one definite pointer-origin provenance at the normal continuation. When any continuing raw-pointer binding has different origins, the conditional is source-invalid at its normal join boundary even if both pointer values have the same raw-pointer type and both target bindings would individually satisfy lexical target validity.
@@ -291,7 +309,7 @@ The exact-state rules for two normal outcomes have these required consequences.
 
 If both normal outcomes consume the complete root of the same continuing structural root and do not replace/restore it, both consumed-path sets contain the complete root path and that root may join as unavailable.
 
-If two normal outcomes exist and one consumes the complete root while the other leaves it fully available, the states differ and the conditional is source-invalid. This applies equally to a local binding root and a replacement-capable external referent root.
+If two normal outcomes exist and one consumes the complete root while the other leaves it fully available, the states differ and the conditional is source-invalid. This applies equally to an ordinary/capture/dedicated-closure binding root and a replacement-capable external referent root.
 
 A no-local-normal outcome is not compared against a normal sibling. Return/fault cleanup or a source-valid loop-transfer target relation consumes that path's actual then-current state as applicable; a normal return additionally obeys the replacement-capable external-referent restoration law.
 
@@ -301,7 +319,7 @@ If both normal outcomes consume exactly the same represented nested structural p
 
 If two normal outcomes leave different consumed sibling or nested paths, the states differ and the conditional is source-invalid.
 
-No structural similarity, equal remaining-frontier shape, or equal number of consumed paths substitutes for exact consumed-path-set equality.
+No structural similarity, equal remaining-frontier shape, equal closure-capture shape, or equal number of consumed paths substitutes for exact consumed-path-set equality.
 
 A no-local-normal outcome may independently reach its return/fault/loop-transfer destination after different valid structural operations; the applicable destination relation handles that path rather than normalizing it toward a normal sibling.
 
@@ -309,13 +327,13 @@ A no-local-normal outcome may independently reach its return/fault/loop-transfer
 
 A represented non-consuming duplicate use leaves the consumed-path set unchanged under `structural-ownership.md` and therefore does not by itself prevent an equal-state join when two normal outcomes meet.
 
-Duplicating a Shared reference or raw-pointer value likewise preserves its exact authority/origin identity under its owner. A replacement-capable reference value is non-duplicable.
+Duplicating a Shared reference, raw-pointer value, function value, or source-duplicable closure value likewise preserves the applicable source state under its owner. A replacement-capable reference value and a closure with any non-duplicable capture are non-duplicable.
 
 ### Assignment and replacement
 
-Whole-binding assignment retains its existing source-first replacement semantics. Safe-reference complete-referent replacement retains the separate source-first semantics from `references.md`.
+Whole-binding assignment retains its existing source-first replacement semantics. Safe-reference complete-referent replacement retains the separate source-first semantics from `references.md`. Dedicated closure bindings and closure capture bindings are immutable and have no ordinary assignment restoration path in this slice.
 
-A successful whole-binding assignment may begin from a fully available, partially available, or unavailable binding state and ends by establishing fresh complete structural ownership for the replacement value. A successful `*r = Value` may likewise restore the selected replacement-capable external referent or local-root structural domain to complete ownership when its post-RHS reference-authority requirement succeeds.
+A successful whole-binding assignment may begin from a fully available, partially available, or unavailable mutable ordinary-local state and ends by establishing fresh complete structural ownership for the replacement value. A successful `*r = Value` may likewise restore the selected replacement-capable external referent or local-root structural domain to complete ownership when its post-RHS reference-authority requirement succeeds.
 
 Consequently, two normal arms with different earlier ownership histories may still produce equal normal structural states when explicit accepted replacement operations re-establish the same complete-state classification before normal arm completion. The conditional inserts no implicit repair.
 
@@ -329,13 +347,15 @@ Two normal outcomes may produce different runtime values in the same mutable enc
 
 For a raw-pointer binding they may likewise produce different implementation-level pointer encodings only when the source-defined pointer origin remains the same; source pointer equality/representation is not defined. Different source pointer origins do not join.
 
+A continuing source-duplicable dedicated closure binding may hold semantically different captured values on two dynamic outcomes only when such difference arises from existing source execution of the same binding value; this control-flow relation still compares ownership state rather than runtime value identity. The first closure slice provides no assignment to replace the dedicated closure binding.
+
 Structural ownership/provenance definiteness is not runtime value equality, constant propagation, or SSA value merging.
 
 ### Omitted else
 
 With no explicit else arm, the false normal outcome is the unchanged post-condition state.
 
-When the then arm also completes normally, its normal enclosing structural ownership state MUST equal that unchanged post-condition state for every continuing binding/external-referent root, and every enclosing raw-pointer binding's origin MUST equal its unchanged post-condition origin. Therefore a normally completing then arm may not leave one continuing root consumed/partially consumed or one raw-pointer local retargeted unless accepted operations inside the then arm explicitly restore the applicable post-condition state before normal completion.
+When the then arm also completes normally, its normal enclosing structural ownership state MUST equal that unchanged post-condition state for every continuing binding/external-referent root, and every enclosing raw-pointer binding's origin MUST equal its unchanged post-condition origin. Therefore a normally completing then arm may not leave one continuing root—including a non-duplicable dedicated closure root—consumed/partially consumed or one raw-pointer local retargeted unless accepted operations inside the then arm explicitly restore the applicable post-condition state before normal completion. Dedicated closure bindings are immutable, so this slice has no ordinary restoration for their consumption.
 
 When the then arm has no local normal continuation, the omitted-else false outcome is the sole normal successor and no structural/origin equality is required against that then arm. The then path independently obeys return, fault, or loop-transfer validity as applicable.
 
@@ -343,13 +363,13 @@ When the then arm has no local normal continuation, the omitted-else false outco
 
 Zero-field and recursively zero-leaf source values participate in consumed-path-state equality exactly like other structural owned values when two normal outcomes meet.
 
-Their source ownership state MUST NOT be inferred from whether a Core representation has a scalar destruction leaf or emits a physical destruction operation.
+Their source ownership state MUST NOT be inferred from whether a Core representation has a scalar destruction leaf or emits a physical destruction operation. The same applies when such a value is contained in a closure environment.
 
 ## Post-successor source operations
 
 After a conditional with one valid normal successor, every represented continuing binding root and replacement-capable external referent root has exactly one committed structural ownership state: either the equal state of two normal outcomes or the exact state of the sole normal outcome. Every continuing raw-pointer binding likewise has exactly one committed pointer origin by the same two-outcome/sole-outcome rule.
 
-Subsequent whole-binding use, field-value use, record-pattern use, assignment, safe-reference operation, raw-pointer operation, nested conditional, bounded `while`, lexical cleanup, return cleanup, loop transfer, or fault cleanup consumes those ordinary definite states through their existing source owners.
+Subsequent whole-binding use, field-value use, record-pattern use, closure capture/invocation, assignment, safe-reference operation, raw-pointer operation, nested conditional, bounded `while`, lexical cleanup, return cleanup, loop transfer, or fault cleanup consumes those ordinary definite states through their existing source owners.
 
 No post-successor operation performs a second conditional-state analysis merely because a value was previously used inside a represented conditional.
 
@@ -364,20 +384,21 @@ When two normal outcomes meet, this conditional relation does not derive a commo
 - meet, join, widening, or another lattice operation;
 - automatically consuming still-owned values on one branch edge;
 - automatically restoring a replacement-capable external referent on one branch edge;
+- automatically duplicating or reconstructing a consumed closure value on one branch edge;
 - automatically retargeting a raw-pointer local on one branch edge;
 - inventing a maybe-owned or maybe-origin state;
 - joining safe-reference authority graphs; or
-- consulting lower Core liveness, external-referent state, reference-authority state, or pointer-target metadata.
+- consulting lower Core liveness, generated closure-environment shape, external-referent state, reference-authority state, or pointer-target metadata.
 
-In particular, source-invalid unequal two-normal-outcome states are not made valid by silently cleaning additional owned subvalues, restoring a referent, ending/reconstructing reference authority, or retargeting a raw pointer on an outcome that retained a different state.
+In particular, source-invalid unequal two-normal-outcome states are not made valid by silently cleaning additional owned subvalues, restoring a referent, ending/reconstructing reference authority, reconstructing a closure value, or retargeting a raw pointer on an outcome that retained a different state.
 
 When exactly one normal outcome exists, using that outcome directly is not normalization and performs no branch-edge cleanup/restore/retargeting.
 
-This avoids introducing path-specific source destruction, restoration, authority, or pointer-retarget timing as an implicit consequence of merely reaching a branch successor.
+This avoids introducing path-specific source destruction, restoration, authority, closure reconstruction, or pointer-retarget timing as an implicit consequence of merely reaching a branch successor.
 
 ## No conditional ownership, provenance, authority, or completion flags
 
-This revision introduces no source drop flag, runtime moved-state flag, hidden path tag, conditional cleanup bit, runtime pointer-origin tag, runtime reference-authority tag, runtime completion tag, or source-visible ownership/provenance/authority test.
+This revision introduces no source drop flag, runtime moved-state flag, hidden path tag, conditional cleanup bit, runtime pointer-origin tag, runtime reference-authority tag, runtime closure-availability tag, runtime completion tag, or source-visible ownership/provenance/authority test.
 
 Every continuing structural root that reaches a represented normal continuation has one definite structural ownership state fixed statically by the rules above, and every raw-pointer binding has one exact pointer origin. Loop-transfer destinations likewise require one exact statically established target state rather than a runtime ownership/provenance classification.
 
@@ -398,7 +419,7 @@ The concrete bounded `if let` form is owned by `concrete-syntax.md`. The stateme
 
 Source validation first completes the entire refutable pattern relation from `patterns.md`, including applicable literal/bound materialization, binding/refutable-test path selection/order, direct-root availability/authority prevalidation, and success-binding identities. A static pattern error rejects the statement before any producer-backed scrutinee validation/evaluation can commit source producer state.
 
-For a producer-backed scrutinee, validate its complete existing producer transaction with the top nominal record type as exact required type. On successful producer validation, let `E` be the definite enclosing source state after committing the producer's ordinary ownership/reference/external-referent/raw-pointer consequences; the pattern transient itself is not an enclosing state root. For a direct binding-root scrutinee, let `E` be the unchanged definite enclosing state immediately before dynamic pattern testing.
+For a producer-backed scrutinee, validate its complete existing producer transaction with the top nominal record type as exact required type. On successful producer validation, let `E` be the definite enclosing source state after committing the producer's ordinary ownership/reference/external-referent/raw-pointer/closure-snapshot consequences; the pattern transient itself is not an enclosing state root. For a direct binding-root scrutinee, let `E` be the unchanged definite enclosing state immediately before dynamic pattern testing.
 
 The two pattern outcomes are then established entirely by `patterns.md`:
 
@@ -409,17 +430,17 @@ Both represented pattern outcomes MUST be considered for source validity. Source
 
 ### Refutable-selection arm scopes and runtime selection
 
-The explicit success and mismatch blocks are ordinary sibling child lexical scopes under `local-bindings.md` and `function-execution.md`.
+The explicit success and mismatch blocks are ordinary sibling child lexical scopes under `local-bindings.md` and `function-execution.md` in the current activation.
 
 Success bindings established by `patterns.md` enter scope together only for the success child block. They are not visible in the mismatch block, do not exist on mismatch, and end under ordinary child-scope cleanup before a normal success-arm outcome is compared with another normal outcome. The mismatch arm may independently declare the same lexical key when ordinary sibling-scope/shadowing rules permit it.
 
 After successful scrutinee acquisition, refutable tests execute exactly once in retained refutable-test order. The first unsuccessful test selects only the mismatch outcome; all tests succeeding selects only the success outcome. No binding transfer occurs before full match. Refutable testing adds no new fault/divergence possibility after the complete scrutinee exists.
 
-When the scrutinee producer faults or diverges before successful complete scrutinee acquisition, no refutable-test result selects an arm. Existing producer fault/divergence and cleanup relations remain controlling, and no pattern-transient cleanup is performed merely because execution is suspended before that transient exists.
+When the scrutinee producer faults or diverges before successful complete scrutinee acquisition, no refutable-test result selects an arm. Existing producer fault/divergence and cleanup relations remain controlling, including closure-call held-environment behavior where applicable, and no pattern-transient cleanup is performed merely because execution is suspended before that transient exists.
 
 ### Refutable-selection normal and abnormal outcomes
 
-A normally completing explicit success or mismatch arm follows the same ordinary child-scope completion/cleanup relation defined for conditional arms above. Return, explicit fault, producer-originating fault/divergence, and bounded loop transfers likewise retain the same activation/target/cleanup semantics; a no-local-normal arm contributes no ordinary local normal outcome.
+A normally completing explicit success or mismatch arm follows the same ordinary child-scope completion/cleanup relation defined for conditional arms above. Return, explicit fault, producer-originating fault/divergence, and bounded loop transfers likewise retain the same current-activation/target/cleanup semantics; a no-local-normal arm contributes no ordinary local normal outcome.
 
 When no explicit mismatch block is present, mismatch selects one **omitted-mismatch normal outcome**. It executes no body statement, introduces no lexical binding or synthetic scope, performs no additional cleanup/restoration after pattern-owned mismatch cleanup has completed, and carries exactly the mismatch enclosing state supplied by `patterns.md`. The omitted-mismatch outcome always contributes one local normal outcome.
 
@@ -435,7 +456,7 @@ Consequently, if a direct-root success consumes a non-duplicable binding-leaf pa
 
 Producer-backed pattern-transient state is never a normal-successor state dimension: that transient has ended exactly once on both success and mismatch before the corresponding explicit arm or omitted mismatch begins. Producer effects on enclosing roots/provenance remain in `E` on both outcomes unless later arm operations validly change them.
 
-This relation introduces no maybe-owned state, pattern-outcome state union, rollback, implicit branch-edge cleanup, automatic restoration, hidden non-duplicable clone, runtime moved-state flag, generic discriminant, or authority-graph join.
+This relation introduces no maybe-owned state, pattern-outcome state union, rollback, implicit branch-edge cleanup, automatic restoration, hidden non-duplicable clone, runtime moved-state flag, generic discriminant, closure-state tag, or authority-graph join.
 
 ## Constant conditions
 
@@ -463,59 +484,67 @@ One represented source `while` statement consists of exactly one represented `Co
 
 The `while` is statement-only. It produces no source value, introduces no Unit/Void value, and is not an owned-value producer. It has no represented `else`, label, result value, iteration binding, pattern condition, iterator protocol, or unconditional-loop form. Its body may contain the bounded unlabeled `break;` and `continue;` statements defined below.
 
-The condition consumes the exact same admission/type/producer relation defined above: its result type MUST be exactly intrinsic `Bool`, standalone record construction and direct safe-reference/raw-pointer value forms remain excluded by grammar, and all existing producer validation and transactional ownership/reference/provenance rules apply unchanged.
+The condition consumes the exact same admission/type/producer relation defined above: its result type MUST be exactly intrinsic `Bool`, standalone record construction and direct safe-reference/raw-pointer value forms remain excluded by grammar, and all existing producer validation and transactional ownership/reference/provenance/closure-snapshot rules apply unchanged.
 
 ## While validation environments H and C
 
-Let `H` be the complete definite enclosing source state immediately before validation of the loop condition. It includes every active enclosing binding root, every replacement-capable external referent root, and every raw-pointer origin as defined above.
+Let `H` be the complete definite enclosing source state of the **current activation** immediately before validation of the loop condition. It includes every active enclosing binding root, every replacement-capable external referent root, and every raw-pointer origin as defined above. Dedicated closure and closure capture binding roots therefore participate when a represented `while` occurs in an activation where those bindings are active.
 
-Validate the loop condition through its existing producer owner from a copy of `H`, requiring exact intrinsic `Bool`. A failed condition validation makes the `while` source-invalid and commits no speculative condition ownership/reference/provenance change to the surrounding environment.
+Validate the loop condition through its existing producer owner from a copy of `H`, requiring exact intrinsic `Bool`. A failed condition validation makes the `while` source-invalid and commits no speculative condition ownership/reference/provenance/closure-snapshot change to the surrounding environment.
 
 On successful condition validation, apply the condition producer's selected source-state consequences exactly once to that validation copy. Call the resulting definite enclosing state `C`.
 
-`C` is the state after one successful condition production and before runtime Bool selection. The successful Bool condition transient is not a function-local binding or external referent root and is not part of `C`.
+`C` is the state after one successful condition production and before runtime Bool selection. The successful Bool condition transient is not a body-local binding or external referent root and is not part of `C`.
 
 The represented false outcome is always one static normal outcome carrying exactly `C`. It introduces no body scope, performs no body cleanup or referent restoration, and establishes the loop's definite post-loop state when source validation succeeds.
 
 The represented true outcome validates the explicit body from a semantically identical copy of `C` as one ordinary child lexical block under `local-bindings.md` and `function-execution.md`.
 
-Condition evaluation introduces no new function-local binding or replacement-capable external referent identity. Consequently every continuing root in `H` remains represented in `C` and remains present after ordinary normal completion/cleanup of the body or after an admitted loop transfer. Body-local bindings end before ordinary backedge comparison or as part of transfer cleanup and are not target-state dimensions.
+Condition evaluation introduces no new body-local binding or replacement-capable external referent identity. Consequently every continuing root in `H` remains represented in `C` and remains present after ordinary normal completion/cleanup of the body or after an admitted loop transfer. Body-local bindings end before ordinary backedge comparison or as part of transfer cleanup and are not target-state dimensions.
+
+A closure declaration inside a source-function loop body may establish a dedicated closure binding whose scope is contained by that body. Such a body-local closure binding ends before the outer backedge comparison and is therefore not an `H` dimension. A dedicated closure binding that was already active before loop condition validation is an `H` dimension and must satisfy the exact-state rules below. Closure declarations inside a closure body remain invalid under `closures.md`.
 
 ## While normal-backedge admission
 
 If the body has a local normal continuation, the `while` admits that normal outcome as a backedge **only** when every continuing binding root and replacement-capable external referent root from `H` has exactly the same structural ownership state after ordinary body-scope normal cleanup as it had in `H`, and every enclosing raw-pointer binding has exactly the same pointer origin as it had in `H`.
 
-For structural ownership, equality is exactly equality of the prefix-free consumed-path set under `structural-ownership.md`. For raw-pointer origin, equality is exactly the `PointerOrigin(x)` identity relation from `raw-pointers-unsafe.md`. Binding/root identities, declared source types, and assignment-mutability classifications remain the same enclosing facts and are not reconstructed or merged.
+For structural ownership, equality is exactly equality of the prefix-free consumed-path set under `structural-ownership.md`. For raw-pointer origin, equality is exactly the `PointerOrigin(x)` identity relation from `raw-pointers-unsafe.md`. Binding/root identities, source types, and assignment-mutability classifications remain the same enclosing facts and are not reconstructed or merged.
 
 The comparison is deliberately against `H`, not `C`. The condition will execute again after a normal backedge; therefore the body must explicitly restore whatever enclosing structural ownership/external-referent/raw-pointer state the next condition evaluation requires to begin from the same accepted loop-head state. A condition may itself transform `H` to a different `C` each iteration through its existing producer consequences.
 
 If any continuing root's normal post-body structural ownership state or any raw-pointer origin differs from its applicable state in `H`, the `while` is source-invalid with no admitted ordinary backedge and no committed post-loop state.
 
+In particular, a non-duplicable continuing dedicated closure binding that is consumed by a closure invocation or later closure capture on an ordinary backedge path cannot equal a fully available `H` state unless an independently represented restoration exists. Dedicated closure bindings are immutable in this slice, so no ordinary assignment repair exists. A source-duplicable closure invocation leaves the stored closure root available and therefore does not by itself violate the backedge state.
+
 This is exact source-state equality, not equality of runtime values. A mutable enclosing ordinary binding or replacement-capable referent may therefore contain a different runtime value after explicit replacement while still satisfying the backedge when its structural ownership state equals `H`. A mutable raw-pointer local may be temporarily retargeted inside the body but must have its exact `H` origin restored before a normal backedge.
 
-A successful represented whole-binding assignment or safe-reference complete-referent replacement may explicitly restore complete ownership before the backedge when otherwise source-valid. Raw-pointer assignment may restore a required pointer origin. The loop adds no special restoration operation. An immutable ordinary binding receives no implicit restoration and cannot be assigned merely to satisfy the loop invariant.
+A successful represented whole-binding assignment or safe-reference complete-referent replacement may explicitly restore complete ownership before the backedge when otherwise source-valid. Raw-pointer assignment may restore a required pointer origin. The loop adds no special restoration operation. An immutable binding, including a dedicated closure or capture binding, receives no implicit restoration and cannot be assigned merely to satisfy the loop invariant.
 
 A body-local binding never participates in this equality because ordinary normal body-scope cleanup ends it before comparison. Re-entering the same static body on a later dynamic iteration does not create a new source binding identity; it creates a new dynamic value owned by that same static binding identity while the child scope is active. The lexical pointer-target-validity rule from `raw-pointers-unsafe.md` prevents a longer-lived enclosing raw-pointer local from retaining an origin naming such a shorter-lived body-local instance.
 
 ## Nearest enclosing loop target
 
-Every source-valid `break;` or `continue;` is lexically contained in at least one represented `while` body.
+Every source-valid `break;` or `continue;` is lexically contained in at least one represented `while` body **within the current activation's lexical-scope tree**.
 
-The target is exactly the nearest enclosing represented `while` whose body lexical scope contains the transfer point. Ordinary nested blocks, unsafe blocks, conditional arm scopes, and bounded refutable-selection arm scopes do not become transfer targets. While execution is inside a nested represented loop, that inner loop is the target of an unlabeled transfer from its body and shadows any outer loop for this purpose.
+The target is exactly the nearest enclosing represented `while` whose body lexical scope contains the transfer point in that same tree. Ordinary nested blocks, unsafe blocks, conditional arm scopes, and bounded refutable-selection arm scopes do not become transfer targets. While execution is inside a nested represented loop, that inner loop is the target of an unlabeled transfer from its body and shadows any outer loop in the same activation for this purpose.
 
-Target selection is a static source lexical/control fact. It is independent of parser node identity, HIR/Core block numbering, dynamic iteration count, runtime stack layout, or physical branch structure.
+A closure activation starts a fresh root lexical-scope tree under `closures.md`. A loop enclosing the closure declaration or call in the creator activation is not an enclosing loop for code executing in the closure body. `break;` or `continue;` cannot cross a closure root/call boundary.
 
-An occurrence with no enclosing represented `while` is source-invalid. This revision defines no label namespace, labeled transfer, dynamic target selection, or transfer to a non-nearest enclosing loop.
+Target selection is a static source lexical/control fact. It is independent of parser node identity, HIR/Core block numbering, dynamic iteration count, runtime stack layout, closure declaration nesting in source text, or physical branch structure.
+
+An occurrence with no enclosing represented `while` in the current activation is source-invalid. This revision defines no label namespace, labeled transfer, dynamic target selection, cross-activation transfer, or transfer to a non-nearest enclosing loop.
 
 ## Loop-transfer exited scopes and cleanup boundary
 
-For one admitted transfer to target loop `L`, the exited lexical scopes are every then-active source lexical scope from the scope containing the transfer point outward through and including `L`'s body lexical scope, stopping before the lexical scope containing the `while` statement itself.
+For one admitted transfer to target loop `L`, the exited lexical scopes are every then-active source lexical scope in the **current activation** from the scope containing the transfer point outward through and including `L`'s body lexical scope, stopping before the lexical scope containing the `while` statement itself.
 
 Thus a transfer directly in the loop body exits exactly that body scope; a transfer in nested blocks, unsafe blocks, a conditional arm, or a bounded refutable-selection arm exits those active descendant scopes innermost-first and then the target body scope; and an inner-loop transfer does not exit the outer loop body.
 
-`function-execution.md` owns the actual cleanup ordering and remaining-frontier cleanup of those exited scopes, including safe-reference carriers stored in exited locals. The transfer-state comparisons below concern only the continuing roots/origins represented by the selected loop's `H`/`C`; body/descendant locals are not target-state dimensions and receive no separate normalization rule.
+A closure root is an activation boundary rather than an exited scope on a loop transfer. Since a transfer cannot target a creator loop, loop-transfer cleanup never traverses from a closure activation into creator scopes.
 
-Transfer cleanup MUST NOT consume, reset, restore, retarget, or otherwise change an enclosing `H`/`C` root or raw-pointer origin merely to force target-state equality. Any required restoration must have been established by an ordinary accepted source operation before the transfer.
+`function-execution.md` owns the actual cleanup ordering and remaining-frontier cleanup of those exited scopes, including safe-reference carriers and dedicated closure values stored in exited locals. The transfer-state comparisons below concern only the continuing roots/origins represented by the selected loop's `H`/`C`; body/descendant locals are not target-state dimensions and receive no separate normalization rule.
+
+Transfer cleanup MUST NOT consume, reset, restore, duplicate, reconstruct, retarget, or otherwise change an enclosing `H`/`C` root or raw-pointer origin merely to force target-state equality. Any required restoration must have been established by an ordinary accepted source operation before the transfer.
 
 ## Continue admission
 
@@ -523,9 +552,9 @@ For nearest target loop `L`, let `H_L` be that loop's already-defined loop-head 
 
 After the source-valid operations preceding the transfer, and independently of cleanup of body/descendant locals, `continue;` is admitted only when every continuing binding root and replacement-capable external referent root belonging to `H_L` has exactly the same structural ownership state as in `H_L` and every raw-pointer binding belonging to `H_L` has exactly the same pointer origin as in `H_L`.
 
-The equality relations are exactly the same prefix-free consumed-path-state and exact pointer-origin equalities used for an ordinary normal backedge. Binding/root identity, declared type, and assignment-mutability classification remain the same enclosing facts.
+The equality relations are exactly the same prefix-free consumed-path-state and exact pointer-origin equalities used for an ordinary normal backedge. Binding/root identity, source type, and assignment-mutability classification remain the same enclosing facts.
 
-If any enclosing structural state or raw-pointer origin differs, the `continue;` is source-invalid. The language does not repair the state through implicit cleanup, replacement, retargeting, reset, union, intersection, widening, authority-graph manipulation, or a runtime ownership/provenance flag.
+If any enclosing structural state or raw-pointer origin differs—including a continuing dedicated closure root consumed since `H_L`—the `continue;` is source-invalid. The language does not repair the state through implicit cleanup, replacement, closure reconstruction, retargeting, reset, union, intersection, widening, authority-graph manipulation, or a runtime ownership/provenance flag.
 
 A mutable enclosing ordinary binding or replacement-capable referent may contain a different runtime value while satisfying the target relation because target equality is structural ownership equality, not runtime value equality. A mutable raw-pointer local may likewise be retargeted temporarily only when its exact required origin is restored before the transfer. Explicit accepted replacement/assignment may restore required state; there is no implicit restoration.
 
@@ -535,9 +564,9 @@ For nearest target loop `L`, let `C_L` be that loop's already-defined successful
 
 After the source-valid operations preceding the transfer, and independently of cleanup of body/descendant locals, `break;` is admitted only when every continuing binding root and replacement-capable external referent root belonging to `C_L` has exactly the same structural ownership state as in `C_L` and every raw-pointer binding belonging to `C_L` has exactly the same pointer origin as in `C_L`.
 
-If any enclosing structural state or raw-pointer origin differs, the `break;` is source-invalid. No implicit edge cleanup/reset/restore/retargeting/normalization is performed to force equality.
+If any enclosing structural state or raw-pointer origin differs—including a continuing dedicated closure/capture root state—the `break;` is source-invalid. No implicit edge cleanup/reset/restore/closure reconstruction/retargeting/normalization is performed to force equality.
 
-The target is deliberately `C_L`, not `H_L`. The existing `while` relation already establishes `C_L` as the one definite post-loop source state after the loop's normal false exit. Requiring every explicit break path to establish exactly that same state preserves one definite post-loop state without adding a join, union, intersection, maybe-owned/origin state, authority graph merge, or runtime flag.
+The target is deliberately `C_L`, not `H_L`. The existing `while` relation already establishes `C_L` as the one definite post-loop source state after the loop's normal false exit. Requiring every explicit break path to establish exactly that same state preserves one definite post-loop state without adding a join, union, intersection, maybe-owned/origin state, authority graph merge, closure state merge, or runtime flag.
 
 Runtime values in mutable bindings/referents need not equal values from a condition-false execution when the required source state equals `C_L`. `break;` does not synthesize or claim that the condition evaluated false.
 
@@ -546,15 +575,15 @@ Runtime values in mutable bindings/referents need not equal values from a condit
 On successful dynamic execution of an admitted `continue;`:
 
 1. perform the exited-scope cleanup owned by `function-execution.md` exactly once;
-2. transfer to the selected loop's condition point; and
+2. transfer to the selected loop's condition point in the same activation; and
 3. let the ordinary `while` relation perform the next condition evaluation exactly once.
 
-`continue;` itself does not evaluate the condition, produce/consume a Bool, restore a referent, or create a source-visible iteration identity.
+`continue;` itself does not evaluate the condition, produce/consume a Bool, restore a referent, reconstruct a closure, or create a source-visible iteration identity.
 
 On successful dynamic execution of an admitted `break;`:
 
 1. perform the exited-scope cleanup owned by `function-execution.md` exactly once; and
-2. transfer directly to the selected loop's existing post-loop continuation with source state `C_L`.
+2. transfer directly to the selected loop's existing post-loop continuation in the same activation with source state `C_L`.
 
 `break;` does not re-evaluate the condition and does not synthesize a false condition result. Its execution may therefore have different effects from a later condition-false exit even though both reach the same definite structural ownership/pointer-origin state.
 
@@ -564,7 +593,7 @@ Both statements have no local fallthrough in their immediate source sequence. Th
 
 If the represented body has no local normal continuation under `function-execution.md`, it contributes no ordinary normal backedge state and requires no body-wide equality comparison against `H`.
 
-Return and explicit-fault termination use the actual then-current body/enclosing state through their existing activation cleanup relations. A normal return still requires every incoming replacement-capable external referent fully available before activation cleanup. Fault has no such restoration obligation. An admitted `break;` or `continue;` path instead must already have satisfied its own exact `C` or `H` target-state relation and performs transfer cleanup rather than ordinary body normal cleanup.
+Return and explicit-fault termination use the actual then-current body/enclosing state through their existing current-activation cleanup relations. A normal return still requires every incoming replacement-capable external referent fully available before activation cleanup. Fault has no such restoration obligation. An admitted `break;` or `continue;` path instead must already have satisfied its own exact `C` or `H` target-state relation and performs transfer cleanup rather than ordinary body normal cleanup.
 
 A producer-originating defined fault or divergence inside an otherwise locally normally continuable body remains a dynamic possibility and does not remove that body's represented local normal continuation. The ordinary backedge equality requirement still applies to the successful normal body path.
 
@@ -585,23 +614,23 @@ No source constant propagation, symbolic execution, unreachable-loop-exit weaken
 For a source-valid represented `while`, runtime execution follows `function-execution.md` and the condition producer's existing owner:
 
 1. evaluate the condition from the current loop-head dynamic state;
-2. preserve every ownership/reference/provenance transition, transient consequence, defined-fault possibility, and divergence consequence of that evaluation;
+2. preserve every ownership/reference/provenance/closure-snapshot transition, transient consequence, defined-fault possibility, and divergence consequence of that evaluation;
 3. on successful Bool production, consume the condition transient for selection;
 4. if false, take the post-loop normal continuation without activating the body scope;
 5. if true, activate and execute the ordinary child body block;
 6. if the body completes normally, perform its ordinary normal child-scope cleanup and then repeat from condition evaluation;
 7. if the body executes an admitted `continue;`, perform its transfer cleanup and repeat from condition evaluation without a second normal body cleanup;
 8. if the body executes an admitted `break;`, perform its transfer cleanup and continue after the selected loop without re-evaluating the condition or performing normal body cleanup;
-9. if the body returns or explicitly faults, follow the existing activation termination relation without a separate normal body cleanup/backedge; and
-10. if condition/body execution faults through another accepted producer or diverges, preserve the existing fault/divergence semantics without inventing a normal backedge, referent restoration, or exit.
+9. if the body returns or explicitly faults, follow the existing current-activation termination relation without a separate normal body cleanup/backedge; and
+10. if condition/body execution faults through another accepted producer or diverges, preserve the existing fault/divergence semantics without inventing a normal backedge, referent restoration, closure reconstruction, or exit.
 
-Each successful normal or continue backedge therefore reaches one fresh condition evaluation. A direct-call condition performs a fresh dynamic call on each such visit to the condition point; no loop-invariant hoisting or memoization authority is implied.
+Each successful normal or continue backedge therefore reaches one fresh condition evaluation. A direct, bounded-indirect, or bounded-closure call condition performs a fresh dynamic call on each such visit to the condition point; no loop-invariant hoisting or memoization authority is implied.
 
 ## While post-loop state
 
 For every source-valid represented `while`, the definite normal post-loop state is exactly `C`, the state after successful condition validation and before false selection.
 
-The backedge-restored `H` state is **not** the post-loop state. A condition producer's ownership/reference/provenance effects remain effective on the false execution that exits the loop.
+The backedge-restored `H` state is **not** the post-loop state. A condition producer's ownership/reference/provenance/closure-snapshot effects remain effective on the false execution that exits the loop.
 
 An admitted explicit `break;` also reaches the post-loop continuation only after proving exact structural ownership and raw-pointer-origin equality with `C`. The break path need not have executed a false condition and may carry different runtime values/effects while preserving that source state.
 
@@ -611,11 +640,11 @@ This distinction is required for condition producers that consume or otherwise t
 
 ## No loop state lattice or fixed point
 
-The bounded `while` and loop-transfer relations require no source ownership/origin state set, may-be-owned/origin state, join/meet, widening, fixed-point iteration, generic source CFG, SSA construction, runtime moved/drop/origin/iteration/completion flag, implicit backedge/transfer cleanup/restoration/retargeting of enclosing values, authority-graph fixed point, or hidden lifetime generation.
+The bounded `while` and loop-transfer relations require no source ownership/origin/closure state set, may-be-owned/origin state, join/meet, widening, fixed-point iteration, generic source CFG, SSA construction, runtime moved/drop/origin/iteration/completion flag, implicit backedge/transfer cleanup/restoration/reconstruction/retargeting of enclosing values, authority-graph fixed point, or hidden lifetime generation.
 
 Validation checks one exact condition transition `H -> C`, one body validation from `C`, one exact source-state equality proof from each ordinary normal cleaned-body outcome back to `H`, and one exact `H`/`C` proof at each represented continue/break transfer respectively. Repeated runtime execution is justified by those invariants; source validation does not enumerate iterations.
 
-Safe-reference parent/child authority is still validated sequentially under `references.md`; no control-flow authority graph is merged. Lower Core CFG path states, reference authority, external-referent state, and pointer-target metadata remain proving/implementation facts and do not become source loop ownership/origin authority.
+Safe-reference parent/child authority is still validated sequentially under `references.md`; no control-flow authority graph is merged. Lower Core CFG path states, generated closure-environment liveness, reference authority, external-referent state, and pointer-target metadata remain proving/implementation facts and do not become source loop ownership/origin authority.
 
 ## Nested conditional/while composition
 
@@ -623,19 +652,21 @@ A represented `IfStatement`, bounded refutable-selection statement, or `WhileSta
 
 An inner conditional or bounded refutable selection first establishes its definite local normal successor when one exists; that binding/external-referent/raw-origin state becomes the ordinary state for later statements in the containing loop body before the outer backedge comparison. A no-local-normal inner selection may instead consist of source-valid return/fault/loop-transfer paths and admits no later sibling in that immediate sequence.
 
-An inner bounded `while` exposes its definite `C` post-loop state to the containing sequence whether it reaches that state through its false condition or an admitted inner break. An inner continue never reaches the outer body continuation; it returns only to the inner condition point. Neither inner transfer targets the outer loop while the inner loop remains the nearest enclosing represented loop.
+An inner bounded `while` exposes its definite `C` post-loop state to the containing sequence whether it reaches that state through its false condition or an admitted inner break. An inner continue never reaches the outer body continuation; it returns only to the inner condition point. Neither inner transfer targets the outer loop while the inner loop remains the nearest enclosing represented loop in the same activation.
 
 After an inner loop completes to its definite `C`, later outer-body operations may independently establish the outer `H` or `C` state required by a subsequent outer continue/break.
 
-These compositions require no general source CFG, completion lattice, ownership/origin state-set merge, authority graph merge, or pointer-target lattice beyond the exact relations already defined here.
+A closure call encountered inside these constructs executes a distinct closure activation. Conditionals/loops inside that closure compose only within the closure activation's fresh root; they do not become lexically nested control-flow targets in the creator activation. Conversely, creator loops are not targets of closure-body transfer statements.
+
+These compositions require no general source CFG, completion lattice, ownership/origin state-set merge, authority graph merge, closure-state merge, or pointer-target lattice beyond the exact relations already defined here.
 
 ## Result-bearing and normal-completion boundary
 
-The represented control-flow statements consume the result-bearing and replacement-capable normal-completion requirements from `function-execution.md` and `references.md`.
+The represented control-flow statements consume the result-bearing and replacement-capable normal-completion requirements from `function-execution.md`, `references.md`, and `closures.md` for the **current activation**.
 
-A conditional or bounded refutable-selection statement whose two explicit arms both terminate the current function activation by represented return and/or explicit fault has no local normal successor and may therefore discharge the remaining result-path obligation without a redundant root terminal return after it. Every normal return must independently satisfy the replacement-capable external-referent restoration law; explicit fault has no such obligation.
+A conditional or bounded refutable-selection statement whose two explicit arms both terminate the current activation by represented return and/or explicit fault has no local normal successor and may therefore discharge the remaining result-path obligation without a redundant root terminal return after it. Every normal return must independently satisfy the replacement-capable external-referent restoration law; explicit fault has no such obligation. In a closure body, these paths terminate the closure activation, not the creator source-function activation.
 
-A conditional/refutable selection with no local normal continuation because its paths instead perform loop transfers does **not** by itself terminate the function activation and does not independently discharge a result or restoration obligation. Such transfers are source-valid only inside an enclosing represented loop, which consumes their destinations; that `while` still has its represented false normal outcome.
+A conditional/refutable selection with no local normal continuation because its paths instead perform loop transfers does **not** by itself terminate the current activation and does not independently discharge a result or restoration obligation. Such transfers are source-valid only inside an enclosing represented loop in the same activation, which consumes their destinations; that `while` still has its represented false normal outcome.
 
 If exactly one conditional/refutable-selection arm has a local normal continuation, that sole continuation remains subject to the ordinary result-bearing and eventual normal-completion requirements.
 
@@ -649,7 +680,7 @@ A faithful source-to-Core lowering MAY refine one source-valid represented condi
 
 After source validation has fixed the condition type, each arm's local normal-continuation presence, any required two-normal-outcome source structural ownership/external-referent/raw-pointer-origin equality, sequential safe-reference authority validity, and any nested loop-transfer target/cleanup facts, a lowering may:
 
-1. lower the existing condition producer exactly once under that producer's accepted lowering relation;
+1. lower the existing condition producer exactly once under that producer's accepted lowering relation, including the existing generated-wrapper refinement when the condition is a bounded closure call;
 2. materialize its Bool result in a compiler-owned Core temporary when useful;
 3. consume that temporary once as the Core `Branch` condition operand;
 4. lower the then arm to one or more Core blocks;
@@ -660,23 +691,23 @@ After source validation has fixed the condition type, each arm's local normal-co
 9. when exactly one normal outcome exists, continue subsequent source lowering from that sole normal path, with or without a dedicated lower join block; and
 10. when zero local normal outcomes exist, emit no lower normal join merely to create an unreachable local continuation.
 
-The exact shape or number of Core blocks is not source-observable. A loop transfer's selected Core block is a lower refinement of its source lexical target, not source-semantic block identity.
+The exact shape or number of Core blocks is not source-observable. A loop transfer's selected Core block is a lower refinement of its source lexical target in the same activation, not source-semantic block identity.
 
-A compiler temporary used for condition selection is not a source binding. Producer-internal temporaries remain governed by their producer's accepted lowering relation.
+A compiler temporary used for condition selection is not a source binding. Producer-internal temporaries, including held/generated closure environment temporaries, remain governed by their producer's accepted lowering relation.
 
-Source external-referent structural equality, safe-reference authority validity, and raw-pointer origin equality are validation/refinement facts. A lowerer MUST retain enough information to refine accepted reference and pointer operations, but the conditional join does not require a new Core source-state merge operation, authority graph join, runtime origin object, or physical pointer equality check.
+Source external-referent structural equality, safe-reference authority validity, closure root ownership state, and raw-pointer origin equality are validation/refinement facts. A lowerer MUST retain enough information to refine accepted operations, but the conditional join does not require a new Core source-state merge operation, authority graph join, closure-state object, runtime origin object, or physical pointer equality check.
 
-A result-producing return whose producer is a direct call may first create the existing call continuation block and then terminate that continuation with Core `Return`; this does not create a second source continuation.
+A result-producing return whose producer is a direct, bounded-indirect, or bounded-closure call may first create the existing applicable call continuation block and then terminate that continuation with Core `Return`; this does not create a second source continuation.
 
 The stable abstract Core defined-fault reason used for source `ExplicitFault` is selected by `function-execution.md` through the accepted [Core defined faults](../core/faults.md) relation. This conditional owner neither chooses an implementation string/code nor defines a second fault-lowering rule.
 
 ## Bounded refutable-selection source/Core refinement
 
-A faithful lowering MAY refine one source-valid bounded refutable-selection statement using only already accepted source-selected pattern facts plus Core scalar `Copy`/`IntegerEq`/`IntegerLt`, Bool `Branch`, `Goto`, projected `Move`/`Copy`/`Drop`, direct-call continuations, and existing return/fault/loop-transfer refinements.
+A faithful lowering MAY refine one source-valid bounded refutable-selection statement using only already accepted source-selected pattern facts plus Core scalar `Copy`/`IntegerEq`/`IntegerLt`, Bool `Branch`, `Goto`, projected `Move`/`Copy`/`Drop`, existing call continuations/generated closure-wrapper refinement, and existing return/fault/loop-transfer refinements.
 
 After source validation has retained the exact scrutinee category/producer, refutable tests and their kind/path/type/literal-or-bound value facts, binding leaves and duplicate/consume consequences, mismatch/success transient-cleanup facts, arm-local completion/cleanup, any required two-normal-outcome exact source-state equality, and nested transfer targets, a lowering may:
 
-1. lower/evaluate the retained producer-backed scrutinee exactly once when applicable, completing any producer-internal field-receiver lifecycle before the pattern transient exists;
+1. lower/evaluate the retained producer-backed scrutinee exactly once when applicable, completing any producer-internal field-receiver/closure-call lifecycle before the pattern transient exists;
 2. lower refutable tests strictly in retained test order and branch the first unsuccessful result to the mismatch path without lowering later tests or any binding-leaf transfer on that runtime path;
 3. refine a fixed-width integer equality test through an applicable projected/direct scalar `Copy`, exactly one retained typed `IntegerEq`, and Bool `Branch`; refine a Boolean equality test through accepted Bool equality/branch behavior without a new Core predicate operation; refine a strict-upper-bound test through an applicable projected/direct scalar `Copy`, exactly one retained typed `IntegerLt` with the selected field value as left operand and retained bound as right operand, and Bool `Branch`;
 4. after all tests succeed, lower every retained success binding-leaf duplicate/transfer in binding order, then emit the retained producer-backed success frontier cleanup if applicable, and only then enter/lower the success arm with its success bindings live;
@@ -684,13 +715,13 @@ After source validation has retained the exact scrutinee category/producer, refu
 6. refine normal arm cleanup, Return/Fault, and retained break/continue cleanup/targets exactly as for other represented child blocks;
 7. when two local-normal outcomes exist, transfer both to one lower normal continuation only after source exact-state validity has already been established; when one exists, continue only from that path; when zero exist, create no synthetic normal continuation.
 
-The exact Core block count/shape is not source-observable. A lowerer MAY orient a Bool branch according to a retained Boolean equality literal value; it MUST NOT reverse strict-upper-bound operands, synthesize an ordering complement, or re-run source pattern lookup, literal/bound typing, path availability, authority compatibility, or state-join selection.
+The exact Core block count/shape is not source-observable. A lowerer MAY orient a Bool branch according to a retained Boolean equality literal value; it MUST NOT reverse strict-upper-bound operands, synthesize an ordering complement, or re-run source pattern lookup, literal/bound typing, path availability, authority compatibility, closure target classification, or state-join selection.
 
-This refinement requires no Core `Match`, switch, range primitive, generic predicate/comparison, pattern-test opcode, `IntegerNe`, Boolean-complement synthesis, compare-and-branch fusion requirement, rollback primitive, runtime moved-state/discriminant object, runtime helper, host comparison, or source/Core ownership-state merge operation.
+This refinement requires no Core `Match`, switch, range primitive, generic predicate/comparison, pattern-test opcode, `IntegerNe`, Boolean-complement synthesis, compare-and-branch fusion requirement, rollback primitive, runtime moved-state/discriminant/closure-state object, runtime helper, host comparison, or source/Core ownership-state merge operation.
 
 ## Bounded-while source/Core refinement
 
-A faithful lowering MAY refine one source-valid represented bounded `while` using only the already accepted Core CFG, value, call, safe-reference, pointer, and vacant initialization semantics.
+A faithful lowering MAY refine one source-valid represented bounded `while` using only the already accepted Core CFG, value, call, safe-reference, pointer, closure-conversion, and vacant initialization semantics.
 
 After source validation has fixed exact Bool condition typing, retained condition/body HIR, body local normal-continuation presence/cleanup, any required H-state ordinary backedge structural/external-referent/raw-origin equality, sequential safe-reference authority validity, and all retained loop-transfer target/cleanup facts, a lowering may:
 
@@ -704,13 +735,13 @@ After source validation has fixed exact Bool condition typing, retained conditio
 8. preserve existing `Return`/`Fault`/other terminating lower paths without synthetic normal backedges; and
 9. continue lowering following source only from the post-loop block.
 
-A direct-call condition may create its existing call continuation block before the Core `Branch`; the call's result destination and condition temporary remain compiler-owned storage. The loop relation requires no second call or branch operation.
+A direct/bounded-indirect/bounded-closure call condition may create its existing applicable call continuation/generated wrapper sequence before the Core `Branch`; the call's result destination and condition temporary remain compiler-owned storage. The loop relation requires no second call or branch operation.
 
-The accepted Core vacant non-replacing `Init` relation and result-bearing direct-call destination relation permit one fixed compiler/source local that is Dead or otherwise wholly vacant on a later cycle to begin a new stored-value lifetime without changing its dynamic storage-instance identity. Lowering may therefore reuse statically allocated body locals and condition/result temporaries across normal or continue cycle visits when Core validation proves the required vacancy/authority. This is a lower proving fact, not source assignment mutability, source ownership/reference restoration, or source pointer-origin inference.
+The accepted Core vacant non-replacing `Init` relation and result-bearing call destination relation permit one fixed compiler/source local that is Dead or otherwise wholly vacant on a later cycle to begin a new stored-value lifetime without changing its dynamic storage-instance identity. Lowering may therefore reuse statically allocated body locals, generated closure temporaries, and condition/result temporaries across normal or continue cycle visits when Core validation proves the required vacancy/authority. This is a lower proving fact, not source assignment mutability, source ownership/reference restoration, closure restoration, or source pointer-origin inference.
 
-No new Core operation, Core state lattice, source/Core loop flag, runtime moved/origin/authority flag, dynamic slot identity, or hidden lifetime-generation mechanism is required. Existing Core `Goto` is sufficient for both loop transfers after source cleanup/target validity has been retained. Existing Core safe-reference and raw-pointer values preserve their already defined authority/target/provenance through accepted operations; source exact-state validity is established before lowering.
+No new Core operation, Core state lattice, source/Core loop flag, runtime moved/origin/authority/closure flag, dynamic slot identity, or hidden lifetime-generation mechanism is required. Existing Core `Goto` is sufficient for both loop transfers after source cleanup/target validity has been retained. Existing Core safe-reference and raw-pointer values preserve their already defined authority/target/provenance through accepted operations; source exact-state validity is established before lowering.
 
-The exact Core block identities/count remain implementation facts. The semantic requirements are the predecessor-before-header edge, per-visit condition execution, correct Branch targets, ordinary normal body cleanup before ordinary backedge, transfer cleanup before transfer `Goto`, nearest-loop target preservation, exact source structural/external-referent/raw-origin target state, sequential safe-reference authority validity, absence of a synthetic ordinary backedge for no-local-normal body paths, and continuation of following source from the post-loop block.
+The exact Core block identities/count remain implementation facts. The semantic requirements are the predecessor-before-header edge, per-visit condition execution, correct Branch targets, ordinary normal body cleanup before ordinary backedge, transfer cleanup before transfer `Goto`, nearest-loop target preservation within one activation, exact source structural/external-referent/raw-origin target state, sequential safe-reference authority validity, absence of a synthetic ordinary backedge for no-local-normal body paths, and continuation of following source from the post-loop block.
 
 ## Lower path states do not define source control flow
 
@@ -718,36 +749,39 @@ Core CFG validation may preserve multiple distinct implementation states at a lo
 
 For a conditional or bounded refutable selection, a source local declared only in one child arm scope may be represented by one Core local that is Dead after that arm's normal cleanup but Never-initialized on an execution that never entered that arm. Those distinct lower states remain valid implementation facts under Core control flow.
 
-For a bounded `while`, one static body local or compiler temporary may be Never-initialized before the first body/condition visit and Dead on a later cycle after its prior value was moved/dropped/cleaned. Accepted Core vacant initialization admits the later new lifetime when the selected destination is wholly vacant; source validity still comes only from the source loop and transfer relations above.
+For a bounded `while`, one static body local, generated closure-support local, or compiler temporary may be Never-initialized before the first body/condition visit and Dead on a later cycle after its prior value was moved/dropped/cleaned. Accepted Core vacant initialization admits the later new lifetime when the selected destination is wholly vacant; source validity still comes only from the source loop and transfer relations above.
 
-These lower differences do not make ended body/arm locals visible after their source scopes and do not create path-dependent source ownership, safe-reference authority, external-referent state, or pointer-origin provenance for continuing source state.
+These lower differences do not make ended body/arm locals visible after their source scopes and do not create path-dependent source ownership, closure availability, safe-reference authority, external-referent state, or pointer-origin provenance for continuing source state.
 
 Lowering MUST NOT:
 
 - use Core path-state union/intersection to reconstruct source structural ownership of binding or external-referent roots;
+- use generated closure-environment field liveness to reconstruct source closure availability or capture-field paths;
 - use Core reference-authority/path state to reconstruct or merge source safe-reference authority graphs;
 - use Core raw-pointer target/provenance metadata to reconstruct or merge source pointer origins;
 - accept an unequal two-normal-outcome conditional/refutable-selection join merely because every lower continuation operation happens to validate under multiple Core states;
 - accept a conditional/refutable selection whose raw-pointer origins differ merely because lower pointer values share a Core type or implementation representation;
 - accept a bounded-`while` ordinary/continue backedge whose source continuing structural/raw-origin state differs from `H` merely because Core cyclic path states validate;
 - accept a break whose source continuing structural/raw-origin state differs from `C` merely because its lower `Goto` validates;
-- redirect a source loop transfer to a non-nearest loop based on lower block convenience;
+- redirect a source loop transfer to a loop in another activation or to a non-nearest loop based on lower block convenience;
 - invent a source local normal successor from lower reachability after source validation determined none;
-- infer source normal/transfer cleanup or external-referent restoration from lower scalar liveness; or
+- infer source normal/transfer cleanup, closure reconstruction, or external-referent restoration from lower scalar liveness; or
 - turn Core worklist behavior into source semantic authority.
 
-Source local normal-continuation presence, conditional/refutable-selection join validity, bounded-loop ordinary/explicit transfer validity, transfer target selection, and definite source successor structural/external-referent/raw-origin states are established before lowering by this document, `patterns.md`, `function-execution.md`, `references.md`, `local-bindings.md`, `structural-ownership.md`, and `raw-pointers-unsafe.md`.
+Source local normal-continuation presence, conditional/refutable-selection join validity, bounded-loop ordinary/explicit transfer validity, transfer target selection, and definite source successor structural/external-referent/raw-origin states are established before lowering by this document, `patterns.md`, `closures.md`, `function-execution.md`, `references.md`, `local-bindings.md`, `structural-ownership.md`, and `raw-pointers-unsafe.md`.
 
 ## Determinism
 
-For one fixed source-valid represented program and one fixed activation state, Boolean conditional, bounded refutable-selection, bounded-`while`, and bounded loop-transfer target selection are deterministic.
+For one fixed source-valid represented program and one fixed current activation state, Boolean conditional, bounded refutable-selection, bounded-`while`, and bounded loop-transfer target selection are deterministic.
 
-A Boolean condition producer has its existing deterministic or otherwise accepted source behavior. Once it yields one of the two semantic Bool values, exactly one runtime conditional outcome is selected. A bounded refutable selection evaluates its complete scrutinee once and its retained refutable tests in fixed order; the first unsuccessful test selects mismatch, while all successful tests select success. A selected child arm or `while` body may normal-complete, return, explicitly fault, execute the uniquely selected nearest-loop break/continue transfer, yield another defined fault, or diverge according to its existing owners. A false `while` condition selects only the post-loop continuation; a normal true body or continue returns only to the selected loop's next condition evaluation; break reaches only the selected loop's post-loop continuation.
+A Boolean condition producer has its existing deterministic or otherwise accepted source behavior. Once it yields one of the two semantic Bool values, exactly one runtime conditional outcome is selected. A bounded refutable selection evaluates its complete scrutinee once and its retained refutable tests in fixed order; the first unsuccessful test selects mismatch, while all successful tests select success. A selected child arm or `while` body may normal-complete, return, explicitly fault, execute the uniquely selected nearest-loop break/continue transfer within the current activation, yield another defined fault, or diverge according to its existing owners. A false `while` condition selects only the post-loop continuation; a normal true body or continue returns only to the selected loop's next condition evaluation; break reaches only the selected loop's post-loop continuation.
 
-Validation of both represented Boolean-conditional outcomes, both bounded refutable-selection outcomes, the represented `while` false/body relations, every exact external-referent structural equality, every exact pointer-origin equality, every sequential safe-reference authority requirement, and every explicit transfer target-state relation is a static validity obligation, not runtime nondeterminism.
+Validation of both represented Boolean-conditional outcomes, both bounded refutable-selection outcomes, the represented `while` false/body relations, every exact external-referent structural equality, every exact pointer-origin equality, every sequential safe-reference authority requirement, every continuing closure/capture-root ownership state, and every explicit transfer target-state relation is a static validity obligation, not runtime nondeterminism.
+
+Closure-body control flow is validated against the closure activation's fresh lexical/root state. Merely validating a closure body at its declaration site does not execute, merge, or otherwise contribute its control-flow outcomes to creator source-function control flow; those outcomes are latent until a bounded closure invocation creates the closure activation.
 
 ## Further boundaries
 
-This revision does not define general expressions, grouping expressions, comparisons beyond the already accepted relations consumed by pattern tests, logical operators, arithmetic operators, truthiness, coercions, standalone record-construction Boolean conditions, direct safe-reference/raw-pointer Boolean condition forms, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, loop values, multi-arm `match`/`case`, pattern alternatives/guards/ranges, variants/enums/tagged-union selection, fault payloads, panic/throw syntax, catch/recovery, labels or a label namespace, labeled transfer, break/continue values, transfer to a non-nearest loop, source state/completion lattices, pointer-origin sets/unions, generic safe-authority graph joins, general loop fixed-point inference, path-dependent ownership/origin after a two-normal-outcome join or bounded-while target, automatic join/backedge/transfer normalization, drop flags, custom destructors, must-consume policy, additional reference/borrow forms beyond `references.md`, raw-pointer operation semantics, named/non-lexical lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
+This revision does not define general expressions, grouping expressions, comparisons beyond the already accepted relations consumed by pattern tests, logical operators, arithmetic operators, truthiness, coercions, standalone record-construction Boolean conditions, direct safe-reference/raw-pointer Boolean condition forms, conditional values/expressions, direct `else if`, unrestricted nonterminal-within-block return or arbitrary unreachable tails, additional loop forms (`loop`, `for`, do/while), loop `else`, loop values, multi-arm `match`/`case`, pattern alternatives/guards/ranges, variants/enums/tagged-union selection, fault payloads, panic/throw syntax, catch/recovery, labels or a label namespace, labeled transfer, break/continue values, cross-activation loop transfer, transfer to a non-nearest loop, source state/completion lattices, pointer-origin sets/unions, generic safe-authority graph joins, closure-state joins, general loop fixed-point inference, path-dependent ownership/origin after a two-normal-outcome join or bounded-while target, automatic join/backedge/transfer normalization, drop flags, custom destructors, must-consume policy, additional reference/borrow forms beyond `references.md`, raw-pointer operation semantics, named/non-lexical lifetime inference, optimizer transformations, ABI/linkage, backend branches, Exec, Model, or stable serialized HIR/Core control-flow identity.
 
 Those concerns require their own accepted owners or later extensions and MUST NOT be inferred from the represented Boolean conditional, bounded single-success refutable record selection, bounded-`while`, or bounded unlabeled loop-transfer relations here.

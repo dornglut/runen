@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented source constant declaration, constant-value, constant-use, and constant-to-Core refinement relations. It consumes lexical identifier keys from [Source lexical foundation](lexical.md), module binding identity/accessibility and lookup from [Source names and modules](names-modules.md), intrinsic source type identity and duplicability from [Source type foundation](types.md), and exact scalar literal materialization from [Source literal semantics](literals.md). It does not redefine those owners.
 
-Concrete spelling is owned by [Source concrete syntax](concrete-syntax.md). Function-local lookup precedence is owned by [Source function-local bindings](local-bindings.md). Evaluation/producer sequencing is owned by [Source function execution](function-execution.md).
+Concrete spelling is owned by [Source concrete syntax](concrete-syntax.md). Local-first lookup precedence in source-function and closure bodies is owned by [Source function-local bindings](local-bindings.md). Closure bodies retain declaration-site source module/source-unit context under [Source closures and explicit by-value capture](closures.md). Evaluation/producer sequencing is owned by [Source function execution](function-execution.md).
 
 ## Constant declarations
 
@@ -53,6 +53,8 @@ The following are not represented constant types under this revision:
 - nominal record types;
 - safe-reference types;
 - raw-pointer types;
+- captureless function-value types;
+- opaque closure-site types;
 - abstract generic type-parameter expressions; and
 - any other future source type category.
 
@@ -70,14 +72,15 @@ The declaration's exact type is the literal's exact required source type. Initia
 
 A literal that cannot materialize under the exact declared type makes the constant declaration source-invalid and establishes no constant value.
 
-Successful materialization establishes the declaration's exact compile-time semantic scalar value. It performs no runtime initialization, creates no function activation or transient source storage, and has no initialization side effect.
+Successful materialization establishes the declaration's exact compile-time semantic scalar value. It performs no runtime initialization, creates no function/closure activation or transient source storage, and has no initialization side effect.
 
 This initializer relation introduces no:
 
 - operator evaluation;
 - constant reference;
 - record construction;
-- direct or indirect call;
+- direct, bounded-indirect, or bounded-closure call;
+- closure capture/formation;
 - safe-reference or raw-pointer formation;
 - defined-fault or divergence-producing computation;
 - general constant-expression category; or
@@ -93,20 +96,24 @@ Existing source module-import cycles remain governed by `names-modules.md`. A fu
 
 ## Unqualified constant use
 
-In a bare unqualified value position within a function body, function-local lookup retains the precedence owned by `local-bindings.md`.
+In a bare unqualified value position within a represented **source-function body or closure body**, local-first lookup retains the precedence owned by `local-bindings.md` for that body's own lexical tree.
 
-1. If an active parameter/local binding resolves the lexical identifier key, that selection is final and ordinary local-binding semantics apply.
-2. Only when no active parameter/local binding resolves the key does same-module lookup under `names-modules.md` apply.
+1. If an active binding in the current body resolves the lexical identifier key, that selection is final and the consuming operation applies the selected binding/category semantics.
+2. Only when no active binding in the current body resolves the key does same-module lookup under `names-modules.md` apply, using that body's source-module context.
 3. If same-module lookup selects a constant binding, the constant-value production relation below applies.
 4. If same-module lookup selects another category, the consuming value context rejects it; lookup does not continue by desired category.
 
-A constant is not a function-local binding and acquires no local binding identity, assignment mutability, structural availability, lexical storage extent, or cleanup state merely because it is used in a function body.
+For a closure body, the same-module context is the closure declaration site's source module retained by `closures.md`. Creator source-function bindings that were **not explicitly captured** are absent from the fresh closure-body local domain. Consequently an uncaptured creator local with the same key does not suppress same-module constant fallback inside the closure body. Explicit capture bindings, closure explicit parameters, and active closure-body locals remain category-final and do suppress fallback exactly as ordinary local-first lookup requires.
+
+A constant is not a body-local binding and acquires no local binding identity, assignment mutability, structural availability, lexical storage extent, closure capture slot, or cleanup state merely because it is used in a source-function or closure body.
 
 ## Qualified constant use
 
 A qualified constant use consumes the existing two-part module-qualified lookup relation from `names-modules.md`.
 
-The first key selects a source-unit module alias. The second key must select an exported constant binding in that target module. Function-local value bindings do not participate in this explicitly qualified lookup.
+The first key selects a source-unit module alias. The second key must select an exported constant binding in that target module. Body-local value bindings do not participate in this explicitly qualified lookup.
+
+A closure body uses the **declaration-site source unit** retained by `closures.md`, so it sees exactly that source unit's module-alias environment. A same-spelled closure/body-local key does not affect explicit `alias::member` lookup.
 
 Qualification creates no nested path, arbitrary member access, method/associated-item lookup, indirect call, or runtime module value.
 
@@ -117,25 +124,27 @@ A successful constant use produces exactly one owned source scalar value:
 - its source type is exactly the constant declaration's intrinsic source type; and
 - its semantic value is exactly the declaration's fully materialized constant value.
 
-Constant use is effect-free, non-faulting, and non-diverging. It does not consume, move, mutate, initialize, or otherwise change the constant declaration. It creates no source-visible storage instance, address, alias, lifetime, or shared storage relation between uses.
+Constant use is effect-free, non-faulting, and non-diverging. It does not consume, move, mutate, initialize, or otherwise change the constant declaration. It creates no source-visible storage instance, address, alias, lifetime, closure capture, or shared storage relation between uses.
 
 A represented constant may therefore be used repeatedly. Repeated use is not modeled as copying from hidden runtime storage. Each source use directly produces one owned value equal to the declaration's semantic constant value.
 
 Because every admitted constant type is duplicable, this repeated-production relation does not grant a new duplicability capability to any type.
 
-A resolved constant use supplies one exact static result source type to receiving/operation-selection relations that consume exact producer result facts. `function-execution.md` owns the integration of this producer with ordinary source evaluation and receiving contexts.
+A resolved constant use supplies one exact static result source type to receiving/operation-selection relations that consume exact producer result facts. `function-execution.md` owns integration of this producer with ordinary source evaluation and receiving contexts in either activation kind.
 
 This document does not make a named constant interchangeable with a pattern literal, range bound, type-level value, enum discriminant, array size, or another future constant-consuming syntax. Those consumers require their own accepted relations.
 
-## Generic and trait boundary
+## Generic and closure boundary
 
 A represented constant declaration is not generic and has no type, value, const, lifetime, pack, effect, or other generic parameter.
 
-A constant use inside a generic function body remains one ordinary concrete module-value producer. Its exact intrinsic type and semantic value are independent of the generic function's type-parameter substitution.
+A constant use inside a generic source-function body remains one ordinary concrete module-value producer. Its exact intrinsic type and semantic value are independent of the generic function's type-parameter substitution.
 
-The generic type-parameter lookup domain remains type-position-only and does not shadow constant lookup in value positions. Function-local value bindings retain their existing local-first precedence.
+A constant use inside a closure body likewise remains one ordinary module-value producer resolved from the retained declaration-site module/source-unit context. Constants are not captured into closure environments; direct module lookup remains available when local-first lookup does not select a body binding.
 
-This relation introduces no const/value generic parameter, type-level constant, specialization-key dimension, associated constant, marker requirement, trait capability, or runtime witness.
+The generic type-parameter lookup domain remains type-position-only and does not shadow constant lookup in value positions. Body-local value bindings retain their existing local-first precedence.
+
+This relation introduces no const/value generic parameter, type-level constant, closure capture of module constants, specialization-key dimension, associated constant, marker requirement, trait capability, or runtime witness.
 
 ## Core refinement
 
@@ -146,11 +155,11 @@ Every admitted source constant value maps to an existing representation-neutral 
 - `Bool` and fixed-width integer values map to their exact corresponding Core scalar values; and
 - represented `F16`, `F32`, and `F64` literal values map to the existing representation-neutral Core binary-floating values produced by accepted decimal-literal materialization, including represented signed zero, subnormal, normal, and infinity values.
 
-The represented initializer domain cannot produce a NaN member, safe-reference value, raw-pointer value, or another value absent from the current Core constant-value relation.
+The represented initializer domain cannot produce a NaN member, safe-reference value, raw-pointer value, function value, closure value, or another value absent from the current Core constant-value relation.
 
 A source constant use may therefore refine directly to the corresponding existing Core constant operand/value at its consuming Core operation after source validation. The constant declaration itself need not become a Core program entity.
 
-Source module identity, constant binding identity, name, accessibility, source location, and declaration presentation order erase after source resolution once a use retains the exact typed semantic value required for lowering.
+Source module identity, constant binding identity, name, accessibility, source location, declaration presentation order, and closure declaration-site context erase after source resolution once a use retains the exact typed semantic value required for lowering.
 
 This refinement does not prescribe textual substitution, constant folding, compiler storage, object-file representation, or another realization strategy. It establishes only that the represented source semantics require no runtime global storage, initializer function, load, symbol, reference, pointer, ABI, or linkage object.
 
@@ -164,6 +173,7 @@ A represented constant declaration has no:
 - source addressability;
 - safe-reference root-target status;
 - raw-pointer target/provenance status;
+- closure capture/environment identity;
 - assignment or replacement mutability;
 - runtime initialization phase or ordering;
 - program-start or program-end lifecycle;
@@ -181,7 +191,7 @@ This revision does not define:
 - constant-expression operators;
 - constant-evaluable functions or general compile-time execution;
 - const/value/lifetime generic parameters;
-- nominal-record constants;
+- nominal-record, function-value, or closure constants;
 - safe-reference or raw-pointer constants;
 - NaN constant source fabrication;
 - pattern/range/type-level constants;
