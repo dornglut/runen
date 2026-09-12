@@ -1,0 +1,88 @@
+name: Temporary P0-D persistent substrate harness
+
+on:
+  push:
+    branches:
+      - tmp-700-source-export
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-700-persistent-substrate
+  cancel-in-progress: true
+
+jobs:
+  migrate-and-validate:
+    name: Build exact clean persistent substrate head
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CLEAN_PARENT: 07102223a886d61bf661c74bdffe4232a7964171
+      TARGET_BRANCH: tmp-700-source-export
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Check out temporary harness head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: tmp-700-source-export
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Install maintained Rust toolchains
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy
+          rustup toolchain install 1.93.0 --profile minimal --component rustfmt,clippy
+
+      - name: Apply bounded persistent-substrate migration
+        run: |
+          set -euo pipefail
+          python3 .github/tmp-700-migrate.py
+          cargo +stable fmt --all
+          git diff --check
+
+      - name: Materialize clean implementation commit
+        id: clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "Aschenrot"
+          git config user.email "128308156+aschenrot@users.noreply.github.com"
+          git rm .github/tmp-700-migrate.py .github/workflows/tmp-700-harness.yml
+          git add -A
+          git diff --cached --check
+          tree="$(git write-tree)"
+          clean_commit="$(printf '%s\n' 'feat(core-ir): implement execution-persistent scalar storage' | git commit-tree "${tree}" -p "${CLEAN_PARENT}")"
+          echo "clean_commit=${clean_commit}" >> "${GITHUB_OUTPUT}"
+          git checkout --detach "${clean_commit}"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+          test "$(git rev-parse HEAD^)" = "${CLEAN_PARENT}"
+          echo "Clean implementation commit: ${clean_commit}"
+          echo "Clean implementation tree: $(git rev-parse HEAD^{tree})"
+
+      - name: Run focused persistent Core conformance
+        run: |
+          set -euo pipefail
+          cargo +stable test -p runen-core-ir --test persistent_storage --locked
+
+      - name: Run focused persistent reference conformance
+        run: |
+          set -euo pipefail
+          cargo +stable test -p runen-reference --test persistent_storage --locked
+
+      - name: Run canonical repository validation
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ steps.clean.outputs.clean_commit }}"
+          cargo +stable validate
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Publish exact validated clean head
+        shell: bash
+        run: |
+          set -euo pipefail
+          clean_commit="${{ steps.clean.outputs.clean_commit }}"
+          test "$(git rev-parse HEAD)" = "${clean_commit}"
+          git push origin "+${clean_commit}:refs/heads/${TARGET_BRANCH}"
+          echo "Published validated clean head ${clean_commit}"
