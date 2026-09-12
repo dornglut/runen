@@ -3,18 +3,19 @@ from pathlib import Path
 p = Path('/tmp/runen-698-final-syntax-consistency.py')
 text = p.read_text()
 
-old_case = 'a qualified bare module member does not become a field receiver'
-new_case = 'A qualified bare module member does not become a field receiver'
-count_case = text.count(old_case)
-if count_case != 2:
-    raise SystemExit(f'expected exactly two transform casing occurrences, found {count_case}')
-text = text.replace(old_case, new_case)
+fixes = [
+    ('a qualified bare module member does not become a field receiver',
+     'A qualified bare module member does not become a field receiver', 2),
+    ('neither wrapper, a constant reference',
+     'either wrapper, a constant reference', 2),
+    ('named constants are likewise not admitted as pattern test leaves or bounds merely because their values are scalar.',
+     'Named constants are likewise not admitted as pattern test leaves or bounds merely because their values are scalar.', 1),
+]
 
-old_wrapper = 'neither wrapper, a constant reference'
-new_wrapper = 'either wrapper, a constant reference'
-count_wrapper = text.count(old_wrapper)
-if count_wrapper != 2:
-    raise SystemExit(f'expected exactly two transform wrapper occurrences, found {count_wrapper}')
-text = text.replace(old_wrapper, new_wrapper)
+for old, new, expected in fixes:
+    count = text.count(old)
+    if count != expected:
+        raise SystemExit(f'expected exactly {expected} transform occurrence(s), found {count}: {old!r}')
+    text = text.replace(old, new)
 
 p.write_text(text)
