@@ -155,6 +155,9 @@ pub enum SyntaxKind {
     TraitReference,
     TraitRequirementClause,
     ConstDeclaration,
+    ClosureDeclaration,
+    ClosureInitializer,
+    ClosureCaptures,
 }
 
 impl SyntaxKind {
@@ -328,6 +331,9 @@ impl Language for RunenLanguage {
             130 => SyntaxKind::TraitReference,
             131 => SyntaxKind::TraitRequirementClause,
             132 => SyntaxKind::ConstDeclaration,
+            133 => SyntaxKind::ClosureDeclaration,
+            134 => SyntaxKind::ClosureInitializer,
+            135 => SyntaxKind::ClosureCaptures,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }
