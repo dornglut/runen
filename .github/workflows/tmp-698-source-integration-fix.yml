@@ -1,0 +1,116 @@
+name: Temporary #698 source integration fix
+
+on:
+  push:
+    branches:
+      - tmp-698-source-integration-fix
+
+permissions:
+  contents: write
+
+jobs:
+  validate-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 0
+
+      - name: Reconstruct corrected candidate
+        shell: bash
+        env:
+          BASE: 42a55ae6d9737c5240cdd530712bc964f8b4ec62
+          OLD: fa755798ffa932f64339c87de94c859129a875b2
+          TRANSFORM_BLOB: 9b07713b653aabcc7fd3fcf02de0d7e5563489e2
+        run: |
+          set -euo pipefail
+          test "$(git hash-object .github/tmp-698-source-integration-fix.py)" = "$TRANSFORM_BLOB"
+          cp .github/tmp-698-source-integration-fix.py /tmp/runen-698-source-integration-fix.py
+          git checkout --detach "$OLD"
+          python3 /tmp/runen-698-source-integration-fix.py
+          git diff --check
+
+          printf '%s\n' \
+            spec/language/source/references.md \
+            spec/language/source/concrete-syntax.md \
+            spec/language/source/local-bindings.md \
+            spec/language/source/function-execution.md \
+            | sort > /tmp/expected-correction-files
+          git diff --name-only | sort > /tmp/actual-correction-files
+          diff -u /tmp/expected-correction-files /tmp/actual-correction-files
+
+          printf '%s\n' \
+            spec/language/core/README.md \
+            spec/language/core/faults.md \
+            spec/language/core/functions.md \
+            spec/language/core/persistent-storage.md \
+            spec/language/core/references.md \
+            spec/language/source/README.md \
+            spec/language/source/closures.md \
+            spec/language/source/concrete-syntax.md \
+            spec/language/source/constants.md \
+            spec/language/source/function-execution.md \
+            spec/language/source/literals.md \
+            spec/language/source/local-bindings.md \
+            spec/language/source/names-modules.md \
+            spec/language/source/references.md \
+            spec/language/source/statics.md \
+            | sort > /tmp/expected-total-files
+          git diff --name-only "$BASE" | sort > /tmp/actual-total-files
+          diff -u /tmp/expected-total-files /tmp/actual-total-files
+
+          ! grep -Fq 'const/static storage' spec/language/source/references.md
+          grep -Fq 'constant declaration, or static declaration' spec/language/source/concrete-syntax.md
+          grep -Fq '| ModuleScalarReference' spec/language/source/concrete-syntax.md
+          ! grep -Fq '| IdentifierUse' <(sed -n '/^ValueAtom /,/^ModuleScalarReference/p' spec/language/source/concrete-syntax.md)
+          grep -Fq 'same-module lookup may instead select one source static' spec/language/source/local-bindings.md
+          grep -Fq 'qualified constant/static/function-value candidates' spec/language/source/local-bindings.md
+          grep -Fq 'static storage semantics beyond `statics.md`' spec/language/source/local-bindings.md
+          grep -Fq '`statics.md` owns immutable execution-static declaration/storage/read/Shared-root semantics' spec/language/source/function-execution.md
+          grep -Fq 'immutable static scalar reads have none under `statics.md`' spec/language/source/function-execution.md
+          grep -Fq 'persistent scalar-read relation in Core `persistent-storage.md`' spec/language/source/function-execution.md
+          grep -Fq 'preserved contract-bearing Shared-reference result whose target lies in any such persistent instance makes Core language validation fail' spec/language/core/functions.md
+          grep -Fq 'This includes any carrier preserved in the outermost activation' spec/language/core/persistent-storage.md
+
+          git add -- \
+            spec/language/source/references.md \
+            spec/language/source/concrete-syntax.md \
+            spec/language/source/local-bindings.md \
+            spec/language/source/function-execution.md
+          tree="$(git write-tree)"
+          echo "$tree" > /tmp/candidate-tree
+          echo "candidate tree: $tree"
+
+      - name: Canonical repository validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install stable --profile minimal
+          cargo +stable validate
+          git diff --exit-code
+          test "$(git write-tree)" = "$(cat /tmp/candidate-tree)"
+
+      - name: Publish corrected atomic candidate
+        shell: bash
+        env:
+          BASE: 42a55ae6d9737c5240cdd530712bc964f8b4ec62
+          OLD: fa755798ffa932f64339c87de94c859129a875b2
+          FEATURE_REF: refs/heads/p0d-698-immutable-shared-static-spec
+        run: |
+          set -euo pipefail
+          tree="$(git write-tree)"
+          test "$tree" = "$(cat /tmp/candidate-tree)"
+          remote_main="$(git ls-remote origin refs/heads/main | cut -f1)"
+          test "$remote_main" = "$BASE"
+          remote_feature="$(git ls-remote origin "$FEATURE_REF" | cut -f1)"
+          test "$remote_feature" = "$OLD"
+          export GIT_AUTHOR_NAME='Aschenrot'
+          export GIT_AUTHOR_EMAIL='128308156+aschenrot@users.noreply.github.com'
+          export GIT_COMMITTER_NAME='Aschenrot'
+          export GIT_COMMITTER_EMAIL='128308156+aschenrot@users.noreply.github.com'
+          candidate="$(printf '%s\n' 'P0-D: specify immutable Shared-addressable execution-static scalars' | git commit-tree "$tree" -p "$BASE")"
+          test "$(git show -s --format=%P "$candidate")" = "$BASE"
+          test "$(git show -s --format=%T "$candidate")" = "$tree"
+          git push --force-with-lease="$FEATURE_REF:$OLD" origin "$candidate:$FEATURE_REF"
+          echo "validated candidate: $candidate"
+          echo "validated tree: $tree"
