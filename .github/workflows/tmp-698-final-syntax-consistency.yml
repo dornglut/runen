@@ -22,10 +22,14 @@ jobs:
           BASE: 42a55ae6d9737c5240cdd530712bc964f8b4ec62
           OLD: 7a96415c8c9d54f351aded1a7dc4c342764fe47d
           TRANSFORM_BLOB: e7cd60ccd25d6005cb57dec36a10b95631075481
+          FIXUP_BLOB: d336c84ade3ed554ced3b828e1a7ff586dfbf0e7
         run: |
           set -euo pipefail
           test "$(git hash-object .github/tmp-698-final-syntax-consistency.py)" = "$TRANSFORM_BLOB"
+          test "$(git hash-object .github/tmp-698-final-syntax-fixup.py)" = "$FIXUP_BLOB"
           cp .github/tmp-698-final-syntax-consistency.py /tmp/runen-698-final-syntax-consistency.py
+          cp .github/tmp-698-final-syntax-fixup.py /tmp/runen-698-final-syntax-fixup.py
+          python3 /tmp/runen-698-final-syntax-fixup.py
           git checkout --detach "$OLD"
           python3 /tmp/runen-698-final-syntax-consistency.py
           git diff --check
