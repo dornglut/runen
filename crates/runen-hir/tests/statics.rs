@@ -66,6 +66,27 @@ fn statics_retain_exact_scalar_declaration_identity_and_reads() {
 }
 
 #[test]
+fn same_valued_statics_keep_distinct_source_identities() {
+    let hir = build(
+        "static LEFT: I64 = 7; static RIGHT: I64 = 7; \
+         fn left() -> I64 { return LEFT; } \
+         fn right() -> I64 { return RIGHT; }",
+    )
+    .expect("same-valued statics remain distinct declarations");
+    assert_eq!(hir.statics.len(), 2);
+    assert_ne!(hir.statics[0].id, hir.statics[1].id);
+    assert_eq!(hir.statics[0].initializer, hir.statics[1].initializer);
+    assert_eq!(
+        returned_value(&hir, "left").kind,
+        ValueKind::StaticRead(hir.statics[0].id)
+    );
+    assert_eq!(
+        returned_value(&hir, "right").kind,
+        ValueKind::StaticRead(hir.statics[1].id)
+    );
+}
+
+#[test]
 fn static_reads_are_non_consuming_and_anchor_existing_comparison_selection() {
     let hir = build(
         "static LIMIT: I64 = 7; fn ok() -> Bool { let first: I64 = LIMIT; let second: I64 = LIMIT; return LIMIT == 7; }",
@@ -115,6 +136,30 @@ fn qualified_exported_static_bypasses_local_lookup_and_private_static_is_inacces
 }
 
 #[test]
+fn qualified_shared_static_roots_enforce_export_and_keep_static_identity() {
+    let hir = build_qualified(
+        "export static ANSWER: I64 = 42;",
+        "import dep; fn f() -> I64 { let root: &I64 = &dep::ANSWER; return *root; }",
+    )
+    .expect("qualified exported static is a valid Shared root");
+    let f = function(&hir, "f");
+    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+        panic!("first statement must bind the qualified static root");
+    };
+    assert_eq!(
+        initializer.kind,
+        ValueKind::StaticReferenceRoot(hir.statics[0].id)
+    );
+
+    let errors = build_qualified(
+        "static PRIVATE: I64 = 1;",
+        "import dep; fn f() { let root: &I64 = &dep::PRIVATE; }",
+    )
+    .expect_err("qualified private static cannot be a Shared root");
+    assert!(has_kind(&errors, DiagnosticKind::InaccessibleBinding));
+}
+
+#[test]
 fn statics_share_the_module_namespace_and_wrong_categories_remain_final() {
     for source in [
         "static duplicate: I64 = 1; static duplicate: I64 = 2; fn f() {}",
@@ -137,17 +182,26 @@ fn statics_share_the_module_namespace_and_wrong_categories_remain_final() {
 
 #[test]
 fn only_complete_shared_static_roots_are_semantically_admitted() {
-    let hir =
-        build("static VALUE: I64 = 7; fn read() -> I64 { let root: &I64 = &VALUE; return *root; }")
-            .expect("complete Shared static root is valid");
+    let hir = build(
+        "static VALUE: I64 = 7; \
+         fn read() -> I64 { \
+             let left: &I64 = &VALUE; \
+             let right: &I64 = &VALUE; \
+             return *right; \
+         }",
+    )
+    .expect("multiple complete Shared static roots are valid");
     let read = function(&hir, "read");
-    let Statement::Local { initializer, .. } = &read.body.statements[0] else {
-        panic!("first statement must bind the static root");
-    };
-    assert!(matches!(
-        initializer.kind,
-        ValueKind::StaticReferenceRoot(_)
-    ));
+    assert_eq!(read.body.statements.len(), 2);
+    for statement in &read.body.statements {
+        let Statement::Local { initializer, .. } = statement else {
+            panic!("static roots must be retained as local initializers");
+        };
+        assert!(matches!(
+            initializer.kind,
+            ValueKind::StaticReferenceRoot(_)
+        ));
+    }
 
     let replacement = build("static VALUE: I64 = 7; fn bad() { let root: &mut I64 = &mut VALUE; }")
         .expect_err("static replacement roots are excluded");
@@ -218,4 +272,11 @@ fn generic_and_closure_bodies_resolve_statics_without_capture_identity() {
             .kind,
         ValueKind::StaticRead(_)
     ));
+
+    let errors = build(
+        "static VALUE: I64 = 9; \
+         fn bad(dummy: I64) { let c = fn[VALUE]() { let copy: I64 = dummy; }; }",
+    )
+    .expect_err("module statics are not closure capture targets");
+    assert!(has_kind(&errors, DiagnosticKind::InvalidClosureCapture));
 }
