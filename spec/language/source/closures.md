@@ -81,7 +81,7 @@ A capture occurrence MUST resolve to one active outer binding established before
 - a pattern-introduced local binding where its existing local-binding relation makes it an active whole-value binding; or
 - an earlier dedicated closure binding declared in that same ordinary source-function body.
 
-A capture occurrence does not select a closure-activation capture binding because closure declarations are not admitted inside closure bodies in this slice. It also does not select a module constant, source function entity, record/type declaration, marker trait, import alias, generic type parameter, field path, safe-reference target, raw-pointer target, arbitrary producer, dereference result, or other non-binding value. Module constants and source functions may still be resolved directly from the closure body through their ordinary module relations where applicable; they do not require capture storage.
+A capture occurrence does not select a closure-activation capture binding because closure declarations are not admitted inside closure bodies in this slice. It also does not select a module constant, source static, source function entity, record/type declaration, marker trait, import alias, generic type parameter, field path, safe-reference target, raw-pointer target, arbitrary producer, dereference result, or other non-binding value. Module constants, source statics, and source functions may still be resolved directly from the closure body through their ordinary declaration-site module/source-unit relations where applicable; they do not require capture storage. A static therefore never occupies a closure environment slot.
 
 If two capture occurrences resolve to the same outer binding identity, the closure declaration is invalid. Capture uniqueness is by selected binding identity rather than by implementation collection order.
 
@@ -357,6 +357,10 @@ It is not admitted as:
 Consequently a closure value cannot be passed as an ordinary source-call argument, returned to a caller, stored in a record, published from a module, or otherwise transported into a wider source extent under this first slice. Capture by a later lexical closure declared in the same ordinary source-function body is the only closure-to-closure value transport specifically added here.
 
 This source restriction is not evidence that lower reference-free environment aggregates cannot cross a Core parameter/result boundary. Future first-class or escaping closure work must define an explicit source type/adaptation/opaque-transport relation rather than silently widening `fn(...)` or inferred-local semantics.
+
+## Module static boundary
+
+A source static from `statics.md` is a module entity, not an active outer value binding, and therefore is never an explicit closure capture target. The closure body's retained declaration-site source module/source-unit context permits ordinary static reads and Shared static-root formation directly inside the closure body without an environment slot. This adds no captured storage, creator activation dependency, or hidden closure parameter.
 
 ## Source-to-Core refinement
 
