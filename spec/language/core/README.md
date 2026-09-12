@@ -1,6 +1,7 @@
 # Core Semantics
 
 - [Value and storage](value-storage.md)
+- [Execution-persistent storage](persistent-storage.md)
 - [Control flow](control-flow.md)
 - [Functions and calls](functions.md)
 - [Callable values and indirect calls](callable-values.md)

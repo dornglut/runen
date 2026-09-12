@@ -8,6 +8,7 @@
 - [Raw pointers and unsafe admission](raw-pointers-unsafe.md)
 - [Literal semantics](literals.md)
 - [Constants](constants.md)
+- [Immutable execution statics](statics.md)
 - [Operator semantics](operators.md)
 - [Callable signatures](callables.md)
 - [Function values and indirect calls](function-values.md)
