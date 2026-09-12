@@ -22,7 +22,7 @@ Distinct constant declarations are distinct module bindings even when their decl
 
 Constant declaration identity is name-resolution identity only. It is not runtime value identity, storage identity, address identity, linkage identity, ABI identity, reflection identity, or Core global identity.
 
-Constant bindings occupy the ordinary module declaration namespace from `names-modules.md`. A constant therefore participates in the same duplicate-key prohibition as represented record, function, and marker-trait declarations. This document introduces no separate module value namespace or overload set.
+Constant bindings occupy the ordinary module declaration namespace from `names-modules.md`. A constant therefore participates in the same duplicate-key prohibition as every represented module declaration category, including records, functions, marker traits, and source statics from `statics.md`. This document introduces no separate module value namespace or overload set.
 
 ## Accessibility and lookup
 
@@ -92,7 +92,7 @@ A represented constant initializer is self-contained and cannot name another dec
 
 Constant declarations remain ordinary order-independent module declarations. Reordering source units or textual module declarations does not change constant binding identity, lookup, type, or value.
 
-Existing source module-import cycles remain governed by `names-modules.md`. A future constant-expression or static-initialization owner may introduce an independently justified dependency/cycle relation without changing the constant declaration/value relation defined here.
+Existing source module-import cycles remain governed by `names-modules.md`. A future constant-expression or runtime-static-initialization extension may introduce an independently justified dependency/cycle relation without changing the constant declaration/value relation defined here. The accepted literal-initialized static baseline in `statics.md` itself adds no initializer dependency edge.
 
 ## Unqualified constant use
 
@@ -180,13 +180,13 @@ A represented constant declaration has no:
 - cleanup/destructor ordering; or
 - physical address, layout, ABI, FFI, or linkage guarantee.
 
-Persistent source storage, if later accepted, requires its own canonical semantics for storage identity, initialization, access, reference/raw-pointer origins, lifecycle, and applicable physical guarantees. Nothing in this document predefines that relation.
+The accepted bounded persistent source-storage relation is owned separately by `statics.md` and Core `persistent-storage.md`. It establishes immutable per-execution scalar storage and Shared addressability without changing the storage-free meaning of a constant. Broader runtime initialization, mutation, raw-pointer access, or physical guarantees remain outside both first slices.
 
 ## Deliberate boundaries
 
 This revision does not define:
 
-- source static storage;
+- static semantics beyond the bounded immutable execution-static relation owned by `statics.md`;
 - constant references in constant initializers;
 - constant-expression operators;
 - constant-evaluable functions or general compile-time execution;
