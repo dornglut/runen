@@ -106,7 +106,7 @@ fn filter_preserves_distinct_matching_record_classes_and_exact_multiplicity() {
 
     let result = filter_field_equivalent(&input, key(1), &Value::i32(7)).unwrap();
     assert_eq!(result.class_count(), 2);
-    assert_eq!(result.total_multiplicity(), 3);
+    assert_eq!(result.total_multiplicity().unwrap(), 3);
     assert_eq!(result.multiplicity_of(&matching_true), 2);
     assert_eq!(result.multiplicity_of(&matching_false), 1);
     assert_eq!(result.multiplicity_of(&rejected), 0);
@@ -174,7 +174,7 @@ fn filter_uses_exact_optional_absence_and_present_equivalence() {
     let present_target = Value::present(LogicalType::I32, Value::i32(7)).unwrap();
     let present_result = filter_field_equivalent(&input, key(1), &present_target).unwrap();
     assert_eq!(present_result.class_count(), 2);
-    assert_eq!(present_result.total_multiplicity(), 2);
+    assert_eq!(present_result.total_multiplicity().unwrap(), 2);
     assert_eq!(present_result.multiplicity_of(&present_seven_a), 1);
     assert_eq!(present_result.multiplicity_of(&present_seven_b), 1);
     assert_eq!(present_result.multiplicity_of(&present_eight), 0);
@@ -238,7 +238,7 @@ fn filter_reuses_nan_equivalence_and_signed_zero_distinction() {
     let nan_target = Value::float(FloatValue::nan(FloatFormat::F64, NaNRealizationId::new(99)));
     let nan_result = filter_field_equivalent(&input, key(1), &nan_target).unwrap();
     assert_eq!(nan_result.class_count(), 2);
-    assert_eq!(nan_result.total_multiplicity(), 2);
+    assert_eq!(nan_result.total_multiplicity().unwrap(), 2);
     assert_eq!(nan_result.multiplicity_of(&nan_a), 1);
     assert_eq!(nan_result.multiplicity_of(&nan_b), 1);
 
@@ -298,7 +298,7 @@ fn filter_reuses_recursive_nested_bag_equivalence() {
 
     let result = filter_field_equivalent(&input, key(1), &target).unwrap();
     assert_eq!(result.class_count(), 2);
-    assert_eq!(result.total_multiplicity(), 2);
+    assert_eq!(result.total_multiplicity().unwrap(), 2);
     assert_eq!(result.multiplicity_of(&left), 1);
     assert_eq!(result.multiplicity_of(&right), 1);
     assert_eq!(result.multiplicity_of(&other), 0);
