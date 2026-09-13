@@ -30,13 +30,9 @@ fn two_distinct_admitted_domains_construct_domain_keyed_context() {
     )
     .unwrap();
 
-    let context = TwoDomainObservationSet::new(
-        &left,
-        shared_observation,
-        &right,
-        shared_observation,
-    )
-    .unwrap();
+    let context =
+        TwoDomainObservationSet::new(&left, shared_observation, &right, shared_observation)
+            .unwrap();
 
     assert_eq!(context.observation_id(left_id), Some(shared_observation));
     assert_eq!(context.observation_id(right_id), Some(shared_observation));
@@ -85,18 +81,11 @@ fn absent_member_observation_cannot_construct_context() {
     let right_id = StateDomainId::new(31);
     let admitted = ObservationId::new(3);
     let missing = ObservationId::new(300);
-    let left = ObservedBagDomain::new(
-        left_id,
-        LogicalType::Bool,
-        [(admitted, bool_bag([true]))],
-    )
-    .unwrap();
-    let right = ObservedBagDomain::new(
-        right_id,
-        LogicalType::Bool,
-        [(admitted, bool_bag([false]))],
-    )
-    .unwrap();
+    let left =
+        ObservedBagDomain::new(left_id, LogicalType::Bool, [(admitted, bool_bag([true]))]).unwrap();
+    let right =
+        ObservedBagDomain::new(right_id, LogicalType::Bool, [(admitted, bool_bag([false]))])
+            .unwrap();
 
     let left_error = TwoDomainObservationSet::new(&left, missing, &right, admitted)
         .err()
@@ -139,8 +128,7 @@ fn equivalent_roots_do_not_collapse_distinct_domain_associations() {
     )
     .unwrap();
 
-    let context =
-        TwoDomainObservationSet::new(&left, observation, &right, observation).unwrap();
+    let context = TwoDomainObservationSet::new(&left, observation, &right, observation).unwrap();
 
     assert_ne!(left_id, right_id);
     assert_eq!(context.observation_id(left_id), Some(observation));
@@ -175,10 +163,8 @@ fn constructor_order_does_not_change_domain_to_observation_or_root_meaning() {
     let reverse =
         TwoDomainObservationSet::new(&right, right_observation, &left, left_observation).unwrap();
 
-    for (domain_id, observation_id) in [
-        (left_id, left_observation),
-        (right_id, right_observation),
-    ] {
+    for (domain_id, observation_id) in [(left_id, left_observation), (right_id, right_observation)]
+    {
         assert_eq!(forward.observation_id(domain_id), Some(observation_id));
         assert_eq!(reverse.observation_id(domain_id), Some(observation_id));
         assert!(bags_equivalent(
