@@ -53,7 +53,7 @@ The input and output are Bags and therefore have no semantic iteration order. Fi
 
 After a well-formed input and admitted field-key subset are established, the represented projection is pure, non-faulting, non-diverging, and deterministic. It consumes no state domain, `ObservationSet`, clock, external observation, stable entity identity, physical storage/index, or incremental-maintenance behavior.
 
-This revision defines only field restriction over `Bag<R>`. It does not define projection that creates, renames, derives, computes, or collides fields; projection over non-record values; Relation or Sequence projection; a general `select`/`derive` expression relation; or source spelling for projection.
+The represented projection relation above defines only field restriction over `Bag<R>`. It does not define projection that creates, renames, derives, computes, or collides fields; projection over non-record values; Relation or Sequence projection; a general `select`/`derive` expression relation; or source spelling for projection.
 
 ## Bounded record-field equivalence filtering
 
@@ -94,7 +94,7 @@ The field key `k` keeps exactly its existing logical field-key identity from `R`
 
 After a well-formed input and admitted `R`, `k`, `T`, and `v` are established, the represented filter is pure, non-faulting, non-diverging, and deterministic. It consumes no state domain, `ObservationSet`, clock, external observation, stable entity identity, physical storage/index, or incremental-maintenance behavior.
 
-This revision defines only field-equivalence filtering over `Bag<R>`. It does not define Boolean-field truth filtering, truthiness, generic predicate or callback values, scalar ordering/comparator predicates, general `where` expressions, Relation or Sequence filtering, joins, grouping, aggregation, ordering, or source spelling for filtering.
+The represented filter relation above defines only field-equivalence filtering over `Bag<R>`. It does not define Boolean-field truth filtering, truthiness, generic predicate or callback values, scalar ordering/comparator predicates, general `where` expressions, Relation or Sequence filtering, join semantics, grouping, aggregation, ordering, or source spelling for filtering.
 
 ## Bounded disjoint-record field-equivalence join
 
@@ -144,7 +144,7 @@ Every field key in `R ⊎ S` keeps exactly its existing logical field-key identi
 
 After well-formed inputs and admitted `R`, `S`, `kL`, `kR`, and `T` are established, the represented join is pure, non-faulting, non-diverging, and deterministic. It consumes no state domain, `ObservationSet`, clock, external observation, stable entity identity, physical storage/index, or incremental-maintenance behavior.
 
-This revision defines only an inner field-equivalence join over two `Bag` inputs with disjoint record schemas. It does not define overlapping-schema collision or qualification rules; natural, cross, outer, semi, anti, temporal, stateful, or other join families; generic join predicates/expressions; field creation or rename; scalar ordering/comparator predicates; grouping or aggregation; Relation or Sequence joins; or source spelling for joins.
+The represented join relation above defines only an inner field-equivalence join over two `Bag` inputs with disjoint record schemas. It does not define overlapping-schema collision or qualification rules; natural, cross, outer, semi, anti, temporal, stateful, or other join families; generic join predicates/expressions; field creation or rename; scalar ordering/comparator predicates; grouping or aggregation; Relation or Sequence joins; or source spelling for joins.
 
 ## Bag distinct
 
