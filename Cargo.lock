@@ -105,6 +105,9 @@ dependencies = [
 [[package]]
 name = "runen-numeric-oracle"
 version = "0.0.0"
+dependencies = [
+ "runen-exec-oracle",
+]
 
 [[package]]
 name = "runen-reference"

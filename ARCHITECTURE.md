@@ -50,6 +50,14 @@ The package is currently dependency-free and independent of both `runen-core-ir`
 
 Future cross-stratum verification may compose independent proving packages only when accepted semantic evidence requires that dependency; package co-location does not itself justify coupling them.
 
+### `crates/runen-numeric-oracle`
+
+Owns executable verification-only conformance relations for the currently represented numeric subset, including binary floating rounding, scalar numeric conversions, same-format unordered floating sums, and bounded tree-rounded sum-candidate evidence.
+
+It is not Runen source syntax, compiler numeric IR, a production numeric runtime, a backend model, or a normative semantic owner. Its bounded integer carriers, exponents, formats, and exact accumulators are verification representation only and do not define Runen implementation limits or physical reduction state.
+
+The package has no production dependency on another Runen package. Accepted cross-stratum verification may add test-only proving dependencies when a normative composition requires evidence. The represented unordered-floating-sum evidence consumes `runen-exec-oracle` only in tests to validate the exact semantic contribution occurrences supplied to numeric evaluation; this does not make Exec identities part of numeric values, make the numeric oracle an Exec implementation, or authorize production coupling between the packages.
+
 ### `crates/runen-model-oracle`
 
 Owns executable verification-only conformance relations for the currently represented Model logical-data, value-equivalence, finite-collection, bounded query, bounded single-domain observed Bag-root, bounded singleton/two-domain observation-context, bounded result-target observation, and bounded exact source-result correspondence subsets.
@@ -91,10 +99,10 @@ runen-syntax
                         ▼
                 runen-reference
 
-runen-exec-oracle
+runen-exec-oracle ──[test-only P0-F evidence]──▶ runen-numeric-oracle
 runen-model-oracle
 
 repository tooling is orthogonal
 ```
 
-`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` remains a consumer only of validated Core programs. `runen-exec-oracle` and `runen-model-oracle` remain independent verification-only packages outside the source/HIR and Core/reference/lowering chains and independent of each other until accepted cross-stratum evidence requires composition.
+`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` remains a consumer only of validated Core programs. `runen-exec-oracle`, `runen-numeric-oracle`, and `runen-model-oracle` remain verification-only packages outside the source/HIR and Core/reference/lowering chains. The numeric oracle's accepted test-only consumption of Exec reduction evidence composes independently owned proving relations without creating a production dependency or merging their semantic ownership; other proving-package composition still requires an accepted semantic or assurance consumer.
