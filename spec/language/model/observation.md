@@ -40,6 +40,30 @@ The observed root keeps the data semantics of its exact logical type. In particu
 
 The profile above is single-domain only. It supplies the per-domain observation object required by later composition, but it does not define the membership structure, compatibility, admission, consistency, or synchronization rules for composing observations from multiple state domains into an `ObservationSet`.
 
+## First represented singleton `ObservationSet`
+
+For one pair `(D, o)` admitted under the single-domain profile above, define the bounded singleton observation context:
+
+```text
+singleton_observation_set(D, o)
+```
+
+This singleton is a valid `ObservationSet` containing exactly the one admitted domain-scoped observation association `(D, o)`. It is immutable for its evaluation or reaction wave.
+
+The singleton is an **evaluation-context construct**, not a represented Model logical value from [Model logical data](data.md). The word `Set` in `ObservationSet` does not give this context Model `Relation`, `Bag`, or `Sequence` semantics, Model value equivalence, query-data membership, source syntax, row/entity identity, serialization identity, or another logical-data operation.
+
+For any already-represented pure Model query relation whose input is the observed logical root of `D`, evaluation relative to `singleton_observation_set(D, o)` uses exactly `observed_value(D, o)` as that root input. Replacing the singleton notation by its underlying admitted `(D, o)` relation therefore does not change the query's logical meaning or operation-specific result relation.
+
+The singleton retains the exact observation identity it identifies. Two distinct observation identities of the same domain do not collapse into one singleton context merely because their observed logical roots are Model-equivalent. This rule distinguishes the underlying admitted observations; it does not define general `ObservationSet` equality, hashing, ordering, or a Model value-equivalence relation for observation contexts.
+
+Because the represented singleton contains exactly one domain/observation association, it has no cross-domain compatibility question. This does **not** imply that this singleton can be combined with any other observation, and it supplies no admission, consistency, synchronization, or snapshot guarantee for a future multi-domain context.
+
+Singleton construction does not identify `o` with a state revision, revision position, timestamp, frame, transaction, causal frontier, freshness or progress token, ECS change cursor, physical snapshot, storage object, or another realization identity. It also defines no runtime acquisition, retention, reacquisition, unavailable-observation failure, durability, replication, enumeration order, serialization, or physical realization contract.
+
+This first singleton form deliberately does not define the general membership structure of `ObservationSet`. In particular, this revision does not decide whether a future general form is a finite map, relation, sequence, bag, opaque context, or another structure; does not define duplicate-domain behavior; and does not forbid a future separately accepted temporal or history consumer from requiring multiple observations associated with one state domain.
+
+The singleton form is sufficient to serve as one source `ObservationSet` wherever another Model contract already refers to the corresponding admitted source observation context. Defining that source context does not by itself define freshness/staleness policy, a materialized or maintained target, propagation progress, reconciliation, or target visibility.
+
 `observe` requests logical observation semantics; it does not mandate one incremental realization.
 
 The compatibility and admission rules for composing observations from multiple state domains are not defined by this revision.
