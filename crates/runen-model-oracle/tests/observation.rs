@@ -169,20 +169,15 @@ fn same_observation_across_realizations_is_compared_by_model_equivalence() {
     )
     .unwrap();
 
-    let first_realization = ObservedBagDomain::new(
-        domain_id,
-        LogicalType::F32,
-        [(observation, first_root)],
-    )
-    .unwrap();
-    let second_realization = ObservedBagDomain::new(
-        domain_id,
-        LogicalType::F32,
-        [(observation, second_root)],
-    )
-    .unwrap();
+    let first_realization =
+        ObservedBagDomain::new(domain_id, LogicalType::F32, [(observation, first_root)]).unwrap();
+    let second_realization =
+        ObservedBagDomain::new(domain_id, LogicalType::F32, [(observation, second_root)]).unwrap();
 
-    assert_eq!(first_realization.domain_id(), second_realization.domain_id());
+    assert_eq!(
+        first_realization.domain_id(),
+        second_realization.domain_id()
+    );
     assert!(bags_equivalent(
         first_realization.observed_bag(observation).unwrap(),
         second_realization.observed_bag(observation).unwrap()
