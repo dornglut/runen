@@ -36,10 +36,8 @@ fn join_rejects_invalid_input_schemas_and_fields() {
 
     let overlapping_left_type = RecordType::new([(key(1), LogicalType::I32)]).unwrap();
     let overlapping_right_type = RecordType::new([(key(1), LogicalType::I32)]).unwrap();
-    let overlapping_left =
-        BagValue::new(LogicalType::Record(overlapping_left_type), []).unwrap();
-    let overlapping_right =
-        BagValue::new(LogicalType::Record(overlapping_right_type), []).unwrap();
+    let overlapping_left = BagValue::new(LogicalType::Record(overlapping_left_type), []).unwrap();
+    let overlapping_right = BagValue::new(LogicalType::Record(overlapping_right_type), []).unwrap();
     assert_eq!(
         join_fields_equivalent(&overlapping_left, key(1), &overlapping_right, key(1))
             .err()
@@ -96,11 +94,7 @@ fn join_empty_and_no_match_preserve_exact_disjoint_union_type() {
         &right_type,
         vec![(key(3), Value::i32(7)), (key(4), Value::u8(1))],
     );
-    let right = BagValue::new(
-        LogicalType::Record(right_type.clone()),
-        [right_record.clone()],
-    )
-    .unwrap();
+    let right = BagValue::new(LogicalType::Record(right_type.clone()), [right_record]).unwrap();
     let empty_left_result = join_fields_equivalent(&empty_left, key(1), &right, key(3)).unwrap();
     assert_eq!(empty_left_result.element_type(), &output_type);
     assert!(empty_left_result.is_empty());
@@ -274,11 +268,7 @@ fn join_uses_exact_optional_absence_and_present_equivalence() {
         ],
     );
 
-    let left = BagValue::new(
-        LogicalType::Record(left_type),
-        [left_absent, left_present],
-    )
-    .unwrap();
+    let left = BagValue::new(LogicalType::Record(left_type), [left_absent, left_present]).unwrap();
     let right = BagValue::new(
         LogicalType::Record(right_type),
         [right_present, right_absent],
@@ -465,8 +455,7 @@ fn join_reuses_nan_equivalence_and_signed_zero_distinction() {
 #[test]
 fn join_reuses_recursive_nested_bag_equivalence() {
     let nested = LogicalType::bag(LogicalType::I32);
-    let left_type =
-        RecordType::new([(key(1), nested.clone()), (key(2), LogicalType::U8)]).unwrap();
+    let left_type = RecordType::new([(key(1), nested.clone()), (key(2), LogicalType::U8)]).unwrap();
     let right_type = RecordType::new([(key(3), nested), (key(4), LogicalType::U8)]).unwrap();
 
     let left_nested = BagValue::new(
@@ -479,8 +468,7 @@ fn join_reuses_recursive_nested_bag_equivalence() {
         [Value::i32(2), Value::i32(1), Value::i32(1)],
     )
     .unwrap();
-    let right_other =
-        BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(2)]).unwrap();
+    let right_other = BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(2)]).unwrap();
 
     let left_record = record(
         &left_type,
@@ -535,21 +523,14 @@ fn join_is_independent_of_record_and_occurrence_construction_order() {
         [left_first.clone(), left_second.clone()],
     )
     .unwrap();
-    let left_b = BagValue::new(
-        LogicalType::Record(left_type),
-        [left_second, left_first],
-    )
-    .unwrap();
+    let left_b = BagValue::new(LogicalType::Record(left_type), [left_second, left_first]).unwrap();
     let right_a = BagValue::new(
         LogicalType::Record(right_type.clone()),
         [right_first.clone(), right_second.clone()],
     )
     .unwrap();
-    let right_b = BagValue::new(
-        LogicalType::Record(right_type),
-        [right_second, right_first],
-    )
-    .unwrap();
+    let right_b =
+        BagValue::new(LogicalType::Record(right_type), [right_second, right_first]).unwrap();
 
     let result_a = join_fields_equivalent(&left_a, key(1), &right_a, key(3)).unwrap();
     let result_b = join_fields_equivalent(&left_b, key(1), &right_b, key(3)).unwrap();
