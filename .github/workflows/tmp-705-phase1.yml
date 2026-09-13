@@ -39,6 +39,7 @@ jobs:
           python .github/tmp-705-phase3.py
           python .github/tmp-705-phase4.py
           python .github/tmp-705-phase4-fix.py
+          python .github/tmp-705-phase5.py
           cargo +stable fmt --all
           git diff --check
       - name: Test syntax external declarations
@@ -50,6 +51,9 @@ jobs:
       - name: Test Core external-call substrate
         shell: bash
         run: cargo +stable test -p runen-core-ir --test external_callables
+      - name: Test Core lowering external functions
+        shell: bash
+        run: cargo +stable test -p runen-core-lowering --test external_callables
       - name: Test reference provider admission and execution
         shell: bash
         run: cargo +stable test -p runen-reference --test external_callables
@@ -59,7 +63,8 @@ jobs:
           cargo +stable check -p runen-syntax --lib
           cargo +stable check -p runen-hir --lib
           cargo +stable check -p runen-core-ir --lib
+          cargo +stable check -p runen-core-lowering --lib
           cargo +stable check -p runen-reference --lib
-      - name: Enumerate lowering and workspace obligations
+      - name: Enumerate remaining workspace obligations
         shell: bash
         run: cargo +stable check --workspace --all-targets
