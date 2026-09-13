@@ -1,4 +1,4 @@
-name: Temporary P0-D #705 workspace diagnostics
+name: Temporary P0-D #705 canonical staging gate
 
 on:
   push:
@@ -6,14 +6,14 @@ on:
       - p0d-705-external-callable-impl
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: tmp-705-staged
   cancel-in-progress: false
 
 jobs:
-  diagnose:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Check out staging head
@@ -55,6 +55,7 @@ jobs:
           python .github/tmp-705-phase12-diagnose.py
           python .github/tmp-705-phase13.py
           python .github/tmp-705-phase14.py
+          python .github/tmp-705-phase15.py
           cargo +stable fmt --all
           git diff --check
       - name: Focused external-callable conformance
@@ -66,23 +67,9 @@ jobs:
           cargo +stable test -p runen-core-ir --test external_callables
           cargo +stable test -p runen-core-lowering --test external_callables
           cargo +stable test -p runen-reference --test external_callables
-      - name: Capture workspace compiler diagnostics
+      - name: Compile entire workspace
         shell: bash
-        run: |
-          set +e
-          cargo +stable check --workspace --all-targets --keep-going > .github/tmp-705-workspace-errors.txt 2>&1
-          status=$?
-          echo "cargo_status=$status" >> .github/tmp-705-workspace-errors.txt
-          exit 0
-      - name: Publish temporary diagnostic report
+        run: cargo +stable check --workspace --all-targets
+      - name: Run canonical validation
         shell: bash
-        run: |
-          set -euo pipefail
-          if git diff --quiet -- .github/tmp-705-workspace-errors.txt; then
-            exit 0
-          fi
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add .github/tmp-705-workspace-errors.txt
-          git commit -m "chore: refresh #705 workspace diagnostics [skip ci]"
-          git push origin HEAD:p0d-705-external-callable-impl
+        run: cargo +stable validate
