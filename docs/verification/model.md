@@ -7,7 +7,7 @@ Status: **non-normative assurance guidance**
 The canonical normative owners are:
 
 - `spec/language/model/data.md` for represented logical types, explicit absence, structural records, finite Relation/Bag/Sequence values, and Model value equivalence;
-- `spec/language/model/queries.md` for the accepted bounded record-field projection, bounded record-field equivalence filter, and `distinct : Bag<T> -> Relation<T>` evaluator relations.
+- `spec/language/model/queries.md` for the accepted bounded record-field projection, bounded record-field equivalence filter, bounded disjoint-record field-equivalence join, and `distinct : Bag<T> -> Relation<T>` evaluator relations.
 
 ## Verification representation
 
@@ -25,6 +25,8 @@ The projection API accepts a Rust slice of verification-only `FieldKey` values s
 
 The bounded field-equivalence filter uses one verification-only `FieldKey` and one exact typed `Value` as carriers for its accepted predicate inputs. It compares the selected entry in each private record equivalence-class key with the constant value's private equivalence key and copies matching record classes with their unchanged multiplicities. It does not reconstruct or select a representative record, expose private tree order, or use host equality in place of Model equivalence.
 
+The bounded disjoint-record field-equivalence join uses two verification-only `FieldKey` values as carriers for the accepted join fields. After validating disjoint record schemas and exact selected-field type equality, it compares the selected entries of private left/right record equivalence-class keys directly and merges complete matching key maps. Matching multiplicities are multiplied and accumulated with checked `u64` arithmetic only because the oracle fixture carrier is finite-width; `MultiplicityOverflow` is verification machinery and is not a normative Model query fault or semantic bound.
+
 ## Executable evidence
 
 The current oracle exercises exactly the accepted represented subset:
@@ -38,9 +40,10 @@ The current oracle exercises exactly the accepted represented subset:
 - recursive equivalence through optional, record, and collection nesting;
 - `distinct : Bag<T> -> Relation<T>` as direct equivalence-class support mapping;
 - bounded `project_fields<K> : Bag<R> -> Bag<R|K>` record-field restriction, including exact retained field identities/types, representative-free class projection, and occurrence-preserving multiplicity aggregation when projected classes merge;
-- bounded `filter_field_equivalent<k, v> : Bag<R> -> Bag<R>` record-field equivalence filtering, including exact field/value type admission, representative-free matching, exact retained multiplicity, tagged optional absence/presence, same-type NaN matching, signed-zero distinction, and recursive nested-value equivalence.
+- bounded `filter_field_equivalent<k, v> : Bag<R> -> Bag<R>` record-field equivalence filtering, including exact field/value type admission, representative-free matching, exact retained multiplicity, tagged optional absence/presence, same-type NaN matching, signed-zero distinction, and recursive nested-value equivalence;
+- bounded `join_fields_equivalent<kL, kR> : Bag<R> × Bag<S> -> Bag<R ⊎ S>` disjoint-record field-equivalence joining, including exact schema/key/type admission, representative-free matching and merge, pair/output distinction, multiplicity products, tagged optional behavior, same-type NaN matching, signed-zero distinction, and recursive nested-value equivalence.
 
-Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. Projection tests additionally vary retained-key candidate order and record-field construction order. Bounded filter tests vary record-field construction and Bag occurrence order and exercise exact typed rejection, multiplicity, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
+Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. Projection tests additionally vary retained-key candidate order and record-field construction order. Bounded filter tests vary record-field construction and Bag occurrence order and exercise exact typed rejection, multiplicity, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. Bounded join tests vary record-field construction and Bag occurrence order and exercise schema/type rejection, empty/no-match cases, one-to-many and many-to-one matching, multiplicity products, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
 
 ## Deliberate boundaries
 
@@ -48,7 +51,7 @@ This executable evidence does not define or implement:
 
 - source Model syntax or source-to-Model lowering;
 - compiler Model IR, generic query ASTs, planners, indexes, storage layouts, or runtime/database architecture;
-- general projection expressions or field creation/rename/derivation, general filtering beyond the accepted bounded field-equivalence relation, joins, grouping, aggregation, ordering, or static query type/cardinality inference beyond the accepted bounded record-field projection, bounded field-equivalence filter, and `distinct` relations;
+- general projection expressions or field creation/rename/derivation, general filtering beyond the accepted bounded field-equivalence relation, general joins beyond the accepted bounded disjoint-record field-equivalence relation, grouping, aggregation, ordering, or static query type/cardinality inference beyond the accepted bounded record-field projection, bounded field-equivalence filter, bounded disjoint-record field-equivalence join, and `distinct` relations;
 - state-domain execution, revision/visibility behavior, `ObservationSet` admission or multi-domain compatibility;
 - stable entity/row key semantics;
 - materialization, freshness, incremental maintenance, differential update algorithms, or replication;
