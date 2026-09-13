@@ -146,6 +146,58 @@ After well-formed inputs and admitted `R`, `S`, `kL`, `kR`, and `T` are establis
 
 The represented join relation above defines only an inner field-equivalence join over two `Bag` inputs with disjoint record schemas. It does not define overlapping-schema collision or qualification rules; natural, cross, outer, semi, anti, temporal, stateful, or other join families; generic join predicates/expressions; field creation or rename; scalar ordering/comparator predicates; grouping or aggregation; Relation or Sequence joins; or source spelling for joins.
 
+## Bounded record-field partition grouping
+
+Let `R` be one represented closed structural record type from `data.md`, and let `K` be one finite subset of the logical field keys of `R` admitted by the bounded projection relation above.
+
+For two Model-equivalence classes of `R` values, define the bounded grouping-key relation by:
+
+```text
+[r1] ~K [r2]  iff  r1|K is Model-equivalent to r2|K
+```
+
+where `r|K : R|K` is the accepted record-field restriction. This notation relates input record equivalence classes; it does not select record representatives or define source grouping syntax.
+
+The relation `~K` is itself an equivalence relation. Projection is well-defined on each input `R` equivalence class, and Model value equivalence on `R|K` is reflexive, symmetric, and transitive. Applying those three properties to the projected class therefore gives reflexivity, symmetry, and transitivity of `~K` without introducing a grouping-specific equality relation.
+
+For an input `B : Bag<R>`, each `~K` equivalence block that contains at least one `R` class of positive multiplicity in `B` determines one group value `G : Bag<R>`. That group contains exactly the input record equivalence classes in the block that occur in `B`, and each such class has exactly the same multiplicity in `G` that it has in `B`.
+
+The represented bounded record-field partition grouping has exactly this semantic type:
+
+```text
+group_by_fields<K> : Bag<R> -> Relation<Bag<R>>
+```
+
+The result contains exactly one member for every non-empty group induced by `~K` on the support of the input Bag. `Bag<R>` is already a represented Model logical type and `Relation<Bag<R>>` is therefore an existing collection construction; this relation creates no new record type, field key, source name, group identifier, or other logical identity.
+
+This notation identifies the semantic partition relation only. It does not define source `group by` syntax, generic grouping-key expressions or callbacks, aggregate functions or aggregate output, a query expression AST, compiler IR, an implementation API, a planner/hash/index strategy, or a physical grouping representation.
+
+The partition is well-defined without representative selection. Equivalent `R` values restrict to equivalent `R|K` values, so membership in one `~K` block depends only on the input record equivalence class. Because `~K` is an equivalence relation, every positive-multiplicity input class belongs to exactly one block. The output groups therefore have pairwise-disjoint input-class support, and the union of their supports is exactly the support of `B`.
+
+Grouping preserves occurrence multiplicity inside the partition. If one input record class has multiplicity `m` in `B`, its unique output group has multiplicity exactly `m` for that class. No input occurrence is duplicated, dropped, normalized, split across groups, or merged with a distinct input record class merely because the classes have equivalent grouping keys.
+
+Each non-empty partition block contributes exactly one member of the outer Relation. Distinct blocks cannot become one Relation member through Bag equivalence: two distinct blocks have disjoint non-empty input-class supports, while Model equivalence of two `Bag<R>` values requires every `R` equivalence class to have the same multiplicity in both bags. The outer Relation therefore represents the set of groups without adding a group-occurrence multiplicity dimension.
+
+Consequences follow from the accepted projection, record, Bag, Relation, Optional, floating, and recursive Model value-equivalence semantics:
+
+- the empty input Bag yields the empty `Relation<Bag<R>>`; grouping does not manufacture an empty group;
+- when `K` is empty, every `R` value restricts to the unique empty record value, so every non-empty input Bag yields exactly one group Model-equivalent to the complete input Bag; the empty input still yields no group;
+- when `K` is the complete field-key set of `R`, two input classes are related by `~K` exactly when they are the same `R` Model-equivalence class, so every distinct input class forms one group Bag preserving that class's full input multiplicity;
+- when retained grouping-key fields have `Optional<U>` type, their `Absent` and `Present` values follow the accepted tagged Model equivalence exactly; there is no SQL `NULL`, unknown grouping result, truthiness, implicit coalescing, or absent propagation;
+- same-type NaN values in retained floating key fields belong to one grouping-key equivalence class under accepted Model equivalence;
+- `+0` and `-0` in retained floating key fields remain distinct grouping-key equivalence classes because they are not Model-equivalent;
+- represented records, optionals, Relations, Bags, and Sequences retained inside grouping-key fields follow their existing recursive Model value-equivalence rules without a grouping-specific comparison relation.
+
+The grouping key remains recoverable without selecting a representative input record. For every output group `G`, `project_fields<K>(G)` contains exactly one `R|K` Model-equivalence class, possibly with multiplicity greater than one, because every member of `G` lies in the same `~K` block. Therefore `distinct(project_fields<K>(G))` is the singleton `Relation<R|K>` containing exactly that group's projected key equivalence class.
+
+The input Bag, output Relation, and every group Bag expose no semantic iteration order. Field declaration, construction, enumeration, storage, hash, index, worker, scheduler, partition-discovery, or presentation order cannot affect block membership, group values, or the outer Relation.
+
+Grouping by ordinary projected logical values does not establish a persistent entity, row, group, or reconciliation identity. The retained field keys remain schema components under `data.md`; neither `K` nor its projected values become stable entity keys merely because they determine this partition.
+
+After a well-formed input and admitted `R` and `K` are established, the represented grouping relation is pure, non-faulting, non-diverging, and deterministic. It consumes no state domain, `ObservationSet`, clock, external observation, stable identity, physical storage/index, freshness, or incremental-maintenance behavior.
+
+The represented grouping relation above defines only the non-empty partition of `Bag<R>` induced by equivalence of an existing bounded field restriction. It does not define aggregate functions or aggregate result values; `count`, sum, minimum/maximum, average, reductions, or aggregate absence rules; record-shaped group/aggregate output; fresh or derived field keys; generic grouping-key expressions; source grouping syntax; ordering/comparator semantics; stable group/entity identity; Relation or Sequence grouping; state-backed grouping; or planner/storage/incremental behavior.
+
 ## Bag distinct
 
 For every represented Model logical type `T`, the first `distinct` relation has exactly this type:
@@ -181,9 +233,9 @@ This first slice admits only `Bag<T>` input. `distinct` over Relation or Sequenc
 
 The accepted base query operations are represented illustratively by `from`, `where`, `select`, `derive`, `join`, `group`, `aggregate`, `distinct`, and `order` or `order by`.
 
-The existence of those operation names does not supply semantics that their canonical owners have not yet defined. In particular, Model value equivalence is not by itself a query predicate language, grouping rule, aggregate equality rule, or ordering relation. The bounded field-equivalence filter and bounded disjoint-record field-equivalence join above are explicit operation-specific consumers of that equivalence relation and do not broaden it beyond those contracts.
+The existence of those operation names does not supply semantics that their canonical owners have not yet defined. In particular, Model value equivalence is not by itself a query predicate language, aggregate equality rule, or ordering relation. The bounded field-equivalence filter, bounded disjoint-record field-equivalence join, and bounded record-field partition grouping above are explicit operation-specific consumers of that equivalence relation and do not broaden it beyond those contracts.
 
-The exact evaluator relations represented by this revision are the bounded Bag record-field projection, the bounded Bag record-field equivalence filter, the bounded disjoint-record Bag field-equivalence join, and the bounded Bag `distinct` relation. They do not define general `select`/`derive`, general predicate/filter expressions, general joins, grouping, aggregation, or ordering semantics.
+The exact evaluator relations represented by this revision are the bounded Bag record-field projection, the bounded Bag record-field equivalence filter, the bounded disjoint-record Bag field-equivalence join, the bounded Bag record-field partition grouping, and the bounded Bag `distinct` relation. They do not define general `select`/`derive`, general predicate/filter expressions, general joins, general grouping expressions or aggregate production, aggregation, or ordering semantics.
 
 ## Ordering
 
@@ -197,4 +249,4 @@ A physical realization MUST NOT manufacture an implicit semantic tie-breaker fro
 
 This revision does not define the ordering relation for logical scalar/record values, absence ordering, comparator semantics, or exact `order by` typing/execution.
 
-The exact grouping, aggregation, general query typing, general query-schema propagation beyond the represented bounded projection and disjoint-record join, general predicate absence behavior beyond the represented field-equivalence filter and join, general filtering execution, general join execution beyond the represented bounded disjoint-record relation, general projection expressions, and static cardinality rules are not defined by this revision.
+The exact aggregation relations, general query typing, general query-schema propagation beyond the represented bounded projection and disjoint-record join, general predicate absence behavior beyond the represented field-equivalence filter and join, general filtering execution, general join execution beyond the represented bounded disjoint-record relation, general grouping execution beyond the represented bounded record-field partition, general projection expressions, and static cardinality rules are not defined by this revision.
