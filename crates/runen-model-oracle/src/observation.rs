@@ -1,12 +1,14 @@
 use std::collections::BTreeMap;
 
-use crate::{BagValue, LogicalType};
+use crate::data::{BagValue, LogicalType};
 
 /// Verification-only state-domain identity token.
 ///
 /// The numeric carrier exists only to distinguish finite conformance fixtures.
 /// It is not a Model value, revision, clock, source identity, ECS identity,
-/// storage identity, or observation order.
+/// storage identity, or observation order. The oracle provides no process-global
+/// domain registry; reusing a token across independently constructed fixtures is
+/// only a test claim about abstract identity, not an implementation service.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct StateDomainId(u32);
 
