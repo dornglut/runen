@@ -18,12 +18,26 @@ replace_exact(
     '''    Program {\n        persistent: vec![],\n        external_callables: vec![],\n        types,\n        functions: vec![Function {\n''',
 )
 
+# The issue explicitly authorizes mechanical empty external-declaration fixture migration.
+for path, expected in [
+    ('crates/runen-core-ir/tests/interprocedural.rs', 34),
+    ('crates/runen-reference/tests/floating_multiplication.rs', 3),
+    ('crates/runen-reference/tests/integer_multiplication.rs', 1),
+    ('crates/runen-reference/tests/floating_constants.rs', 5),
+]:
+    p = Path(path)
+    text = p.read_text()
+    count = text.count('Program {')
+    if count != expected:
+        raise SystemExit(f'{path}: expected {expected} Program fixtures, found {count}')
+    p.write_text(text.replace('Program {', 'Program {\n        external_callables: vec![],', expected))
+
 
 def migrate_read_only_hir_test(path: str) -> None:
     p = Path(path)
     text = p.read_text()
 
-    # Calls through the common test helper need wrapping before the simple identifier cases.
+    # Calls through the common test helper need wrapping before simple aliases.
     text, call_body_count = re.subn(
         r'function\(([^)\n]+)\)\s*\.body\b',
         r'runen_body(function(\1))',
@@ -36,13 +50,14 @@ def migrate_read_only_hir_test(path: str) -> None:
     )
 
     # Direct local aliases in these compiler-named HIR inspection tests are Function references.
+    # Whitespace is admitted because rustfmt commonly places `.body` on the next line.
     text, body_count = re.subn(
-        r'\b([A-Za-z_][A-Za-z0-9_]*)\.body\b',
+        r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\.body\b',
         r'runen_body(\1)',
         text,
     )
     text, parameter_count = re.subn(
-        r'\b([A-Za-z_][A-Za-z0-9_]*)\.parameters\b',
+        r'\b([A-Za-z_][A-Za-z0-9_]*)\s*\.parameters\b',
         r'runen_parameters(\1)',
         text,
     )
@@ -63,9 +78,9 @@ def migrate_read_only_hir_test(path: str) -> None:
         raise SystemExit(f'{path}: test insertion anchor missing')
     text = text.replace(anchor, helpers + anchor, 1)
 
-    # This batch is intentionally exhaustive for direct legacy Function fields in each named file.
-    legacy_body = re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\.body\b', text)
-    legacy_parameters = re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\.parameters\b', text)
+    # Exhaust the simple/direct legacy spellings in each explicitly selected inspection file.
+    legacy_body = re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\s*\.body\b', text)
+    legacy_parameters = re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\s*\.parameters\b', text)
     if legacy_body or legacy_parameters:
         raise SystemExit(
             f'{path}: legacy direct Function fields remain: body={legacy_body} parameters={legacy_parameters}'
@@ -81,7 +96,14 @@ for path in [
     'crates/runen-hir/tests/record_destructuring.rs',
     'crates/runen-hir/tests/integer_or.rs',
     'crates/runen-hir/tests/operators.rs',
+    'crates/runen-hir/tests/grouping.rs',
+    'crates/runen-hir/tests/module_order.rs',
+    'crates/runen-hir/tests/record_destructuring_zero_field.rs',
+    'crates/runen-hir/tests/record_duplicability.rs',
+    'crates/runen-hir/tests/exclusive_references.rs',
+    'crates/runen-hir/tests/function_value_edges.rs',
+    'crates/runen-hir/tests/generics.rs',
 ]:
     migrate_read_only_hir_test(path)
 
-print('staged compiler-proven #705 read-only HIR integration batch 10')
+print('staged compiler-proven #705 fixture and read-only HIR integration batch 10')
