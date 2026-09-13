@@ -52,7 +52,7 @@ Future cross-stratum verification may compose independent proving packages only 
 
 ### `crates/runen-model-oracle`
 
-Owns executable verification-only conformance relations for the currently represented Model logical-data, value-equivalence, finite-collection, bounded query, bounded single-domain observed Bag-root/singleton-observation-context, bounded result-target observation, and bounded exact source-result correspondence subsets.
+Owns executable verification-only conformance relations for the currently represented Model logical-data, value-equivalence, finite-collection, bounded query, bounded single-domain observed Bag-root, bounded singleton/two-domain observation-context, bounded result-target observation, and bounded exact source-result correspondence subsets.
 
 It is not Runen source syntax, compiler Model IR, a planner, a storage engine, a runtime or database system, an incremental engine, and it owns no normative language semantics. Its abstract field, NaN-witness, state-domain, source-observation, result-target, and target-observation tokens plus deterministic internal ordering exist only to make accepted Model contracts executable without exposing storage order, observation order, revision/freshness/progress order, or representative selection as Model semantics. The correspondence witness is test-only and introduces no generic query/computation descriptor or stored provenance object.
 
