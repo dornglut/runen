@@ -1,0 +1,51 @@
+# Model Verification Contract
+
+Status: **non-normative assurance guidance**
+
+`crates/runen-model-oracle` is executable verification evidence for the currently accepted Runen Model subset. It does not define Model semantics and is not source syntax, compiler Model IR, a planner, a storage engine, a runtime/database system, or an incremental-maintenance engine.
+
+The canonical normative owners are:
+
+- `spec/language/model/data.md` for represented logical types, explicit absence, structural records, finite Relation/Bag/Sequence values, and Model value equivalence;
+- `spec/language/model/queries.md` for the accepted bounded `distinct : Bag<T> -> Relation<T>` evaluator relation.
+
+## Verification representation
+
+The oracle uses finite verification fixtures only.
+
+- `FieldKey` is an abstract logical schema-identity token for tests. Its numeric carrier and the private deterministic map ordering used internally are not Model field order, source spelling, stable entity identity, serialization, or storage order.
+- `NaNRealizationId` distinguishes test witnesses for the NaN-member variation permitted by accepted Core numeric semantics. Model equivalence erases that witness within one exact floating logical type; it does not make the witness a Model-visible NaN identity.
+- floating finite values are represented semantically by sign, integer significand, and semantic exponent under the accepted `F16`, `F32`, and `F64` format parameters. Host `f32`/`f64` equality, NaN payloads, and physical bit layout are not semantic oracles.
+- Relation and Bag fixtures store private Model-equivalence-class keys. Their deterministic `BTreeSet`/`BTreeMap` order is implementation machinery and is not exposed as semantic iteration order or representative selection.
+- Sequence fixtures retain semantic positional order through bounded verification-only position access. The Rust `usize` carrier is not source indexing syntax or a language indexing-base rule.
+
+Public validated constructors reject values whose recursive logical shape does not match the declared Model type. The fixture error type is verification machinery, not a compiler diagnostic contract.
+
+## Executable evidence
+
+The current oracle exercises exactly the accepted represented subset:
+
+- structural logical type equality for intrinsic scalars, `Optional`, closed records, Relation, Bag, and Sequence;
+- typed `Absent`/`Present` construction;
+- closed structural record value validation;
+- exact scalar fixture domains, including semantic finite floating members, signed zero, signed infinity, and NaN witnesses;
+- canonical typed Model value equivalence, including same-type NaN collapse and distinct `+0`/`-0` members;
+- finite Relation membership, Bag multiplicity, and Sequence positional behavior;
+- recursive equivalence through optional, record, and collection nesting;
+- `distinct : Bag<T> -> Relation<T>` as direct equivalence-class support mapping.
+
+Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
+
+## Deliberate boundaries
+
+This executable evidence does not define or implement:
+
+- source Model syntax or source-to-Model lowering;
+- compiler Model IR, generic query ASTs, planners, indexes, storage layouts, or runtime/database architecture;
+- projection, filtering, joins, grouping, aggregation, ordering, or static query type/cardinality inference beyond the already accepted bounded `distinct` relation;
+- state-domain execution, revision/visibility behavior, `ObservationSet` admission or multi-domain compatibility;
+- stable entity/row key semantics;
+- materialization, freshness, incremental maintenance, differential update algorithms, or replication;
+- cross-stratum Model/Core or Model/Exec execution.
+
+Future executable coverage must follow accepted normative semantics and repository architecture; implementation structure is not authority to select the next Model operation.
