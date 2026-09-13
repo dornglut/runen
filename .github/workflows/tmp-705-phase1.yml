@@ -51,6 +51,7 @@ jobs:
           python .github/tmp-705-phase8.py
           python .github/tmp-705-phase9.py
           python .github/tmp-705-phase10.py
+          python .github/tmp-705-phase11.py
           cargo +stable fmt --all
           git diff --check
       - name: Test syntax external declarations
@@ -78,4 +79,4 @@ jobs:
           cargo +stable check -p runen-reference --lib
       - name: Enumerate remaining workspace obligations
         shell: bash
-        run: cargo +stable check --workspace --all-targets
+        run: cargo +stable check --workspace --all-targets --keep-going
