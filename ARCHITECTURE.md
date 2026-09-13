@@ -56,7 +56,7 @@ Owns executable verification-only conformance relations for the currently repres
 
 It is not Runen source syntax, compiler Model IR, a planner, a storage engine, a runtime or database system, an incremental engine, and it owns no normative language semantics. Its abstract field and NaN witness tokens plus deterministic internal ordering exist only to make accepted Model contracts executable without exposing storage order or representative selection as Model semantics.
 
-The package is initially dependency-free and independent of the source/HIR, Core/reference, and Exec package chains. Future cross-stratum or differential verification may compose independent proving packages only when an accepted semantic or assurance consumer requires that dependency; package convenience is not sufficient authority for coupling them.
+The package has no dependency on another Runen package and remains independent of the source/HIR, Core/reference, and Exec package chains. Future cross-stratum or differential verification may compose independent proving packages only when an accepted semantic or assurance consumer requires that dependency; package convenience is not sufficient authority for coupling them.
 
 ### `crates/runen-reference`
 
