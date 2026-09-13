@@ -9,6 +9,7 @@
 mod data;
 mod observation;
 mod query;
+mod result_target;
 
 pub use data::{
     BagValue, FieldKey, FixtureError, FloatFormat, FloatValue, LogicalType, NaNRealizationId,
@@ -21,4 +22,7 @@ pub use observation::{
 pub use query::{
     bag_cardinality, distinct, filter_field_equivalent, group_by_fields, join_fields_equivalent,
     project_fields,
+};
+pub use result_target::{
+    ObservedResultTarget, ResultObservationFixtureError, ResultTargetId, TargetObservationId,
 };
