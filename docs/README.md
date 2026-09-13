@@ -6,5 +6,6 @@
 - [A0 verification contract](verification/a0.md)
 - [Exec verification contract](verification/exec.md)
 - [Exec task verification contract](verification/exec-tasks.md)
+- [Model verification contract](verification/model.md)
 - [Design decision records](decisions/README.md)
 - [Research basis](research/basis.md)

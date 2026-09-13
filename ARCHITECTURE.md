@@ -50,6 +50,14 @@ The package is currently dependency-free and independent of both `runen-core-ir`
 
 Future cross-stratum verification may compose independent proving packages only when accepted semantic evidence requires that dependency; package co-location does not itself justify coupling them.
 
+### `crates/runen-model-oracle`
+
+Owns executable verification-only conformance relations for the currently represented Model logical-data, value-equivalence, finite-collection, and bounded query subset.
+
+It is not Runen source syntax, compiler Model IR, a planner, a storage engine, a runtime or database system, an incremental engine, and it owns no normative language semantics. Its abstract field and NaN witness tokens plus deterministic internal ordering exist only to make accepted Model contracts executable without exposing storage order or representative selection as Model semantics.
+
+The package is initially dependency-free and independent of the source/HIR, Core/reference, and Exec package chains. Future cross-stratum or differential verification may compose independent proving packages only when an accepted semantic or assurance consumer requires that dependency; package convenience is not sufficient authority for coupling them.
+
 ### `crates/runen-reference`
 
 Owns the single executable reference semantics for validated Core programs represented by `runen-core-ir`, including dynamic function activations for the currently represented direct-call relation. Invalid Core programs are rejected before this boundary; the package does not maintain an alternate Core semantic data model or validator.
@@ -84,8 +92,9 @@ runen-syntax
                 runen-reference
 
 runen-exec-oracle
+runen-model-oracle
 
 repository tooling is orthogonal
 ```
 
-`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` remains a consumer only of validated Core programs, and `runen-exec-oracle` remains independent of the source/HIR and Core/reference/lowering chains.
+`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` remains a consumer only of validated Core programs. `runen-exec-oracle` and `runen-model-oracle` remain independent verification-only packages outside the source/HIR and Core/reference/lowering chains and independent of each other until accepted cross-stratum evidence requires composition.
