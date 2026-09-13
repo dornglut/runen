@@ -841,12 +841,12 @@ pub(crate) fn join_record_fields_equivalent(
             let contribution = left_multiplicity
                 .checked_mul(*right_multiplicity)
                 .ok_or(FixtureError::MultiplicityOverflow)?;
-            let count = output_classes
-                .entry(EquivalenceKey::Record(merged_fields))
-                .or_insert(0_u64);
-            *count = count
-                .checked_add(contribution)
-                .ok_or(FixtureError::MultiplicityOverflow)?;
+            if output_classes
+                .insert(EquivalenceKey::Record(merged_fields), contribution)
+                .is_some()
+            {
+                unreachable!("disjoint complete record schemas make join class pairs injective");
+            }
         }
     }
 
