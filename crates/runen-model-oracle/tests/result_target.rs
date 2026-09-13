@@ -161,18 +161,12 @@ fn target_observation_token_is_scoped_by_target_fixture() {
 fn same_target_observation_across_realizations_uses_model_equivalence() {
     let target_id = ResultTargetId::new(70);
     let observation = TargetObservationId::new(9);
-    let first = ObservedResultTarget::new(
-        target_id,
-        LogicalType::F32,
-        [(observation, f32_nan(11))],
-    )
-    .unwrap();
-    let second = ObservedResultTarget::new(
-        target_id,
-        LogicalType::F32,
-        [(observation, f32_nan(12))],
-    )
-    .unwrap();
+    let first =
+        ObservedResultTarget::new(target_id, LogicalType::F32, [(observation, f32_nan(11))])
+            .unwrap();
+    let second =
+        ObservedResultTarget::new(target_id, LogicalType::F32, [(observation, f32_nan(12))])
+            .unwrap();
 
     assert_eq!(first.target_id(), second.target_id());
     assert!(model_equivalent(
@@ -259,10 +253,7 @@ fn target_observation_construction_order_is_not_semantic_order() {
     let forward = ObservedResultTarget::new(
         ResultTargetId::new(100),
         LogicalType::U32,
-        [
-            (first, first_value.clone()),
-            (second, second_value.clone()),
-        ],
+        [(first, first_value.clone()), (second, second_value.clone())],
     )
     .unwrap();
     let reverse = ObservedResultTarget::new(
