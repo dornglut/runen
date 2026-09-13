@@ -51,6 +51,57 @@ fn record_values_reject_missing_extra_and_wrong_type_fields() {
 }
 
 #[test]
+fn record_value_equivalence_ignores_field_construction_order() {
+    let record_type =
+        RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
+    let left = Value::record(
+        record_type.clone(),
+        [(key(1), Value::i32(9)), (key(2), Value::bool(true))],
+    )
+    .unwrap();
+    let right = Value::record(
+        record_type,
+        [(key(2), Value::bool(true)), (key(1), Value::i32(9))],
+    )
+    .unwrap();
+
+    assert!(model_equivalent(&left, &right));
+}
+
+#[test]
+fn empty_structural_values_are_valid() {
+    let empty_record_type =
+        RecordType::new(std::iter::empty::<(FieldKey, LogicalType)>()).unwrap();
+    let empty_record = Value::record(
+        empty_record_type.clone(),
+        std::iter::empty::<(FieldKey, Value)>(),
+    )
+    .unwrap();
+    let second_empty_record = Value::record(
+        empty_record_type,
+        std::iter::empty::<(FieldKey, Value)>(),
+    )
+    .unwrap();
+    assert!(model_equivalent(&empty_record, &second_empty_record));
+
+    assert!(
+        RelationValue::new(LogicalType::I32, std::iter::empty::<Value>())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        BagValue::new(LogicalType::I32, std::iter::empty::<Value>())
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        SequenceValue::new(LogicalType::I32, std::iter::empty::<Value>())
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[test]
 fn typed_absence_and_nested_optional_tags_remain_distinct() {
     let absent_i32 = Value::absent(LogicalType::I32);
     let absent_bool = Value::absent(LogicalType::Bool);
@@ -208,13 +259,16 @@ fn relation_and_bag_are_equivalence_class_values_not_insertion_order() {
 }
 
 #[test]
-fn sequence_preserves_semantic_positions_and_order() {
+fn sequence_preserves_equivalent_occurrences_and_semantic_order() {
+    let duplicate = SequenceValue::new(LogicalType::I32, [Value::i32(1), Value::i32(1)]).unwrap();
+    assert_eq!(duplicate.len(), 2);
+    assert!(model_equivalent(duplicate.at(0).unwrap(), duplicate.at(1).unwrap()));
+
     let first = Value::i32(1);
     let second = Value::i32(2);
     let forward = SequenceValue::new(LogicalType::I32, [first.clone(), second.clone()]).unwrap();
     let reverse = SequenceValue::new(LogicalType::I32, [second, first]).unwrap();
 
-    assert_eq!(forward.len(), 2);
     assert!(model_equivalent(forward.at(0).unwrap(), &Value::i32(1)));
     assert!(!model_equivalent(
         &Value::sequence(forward),
