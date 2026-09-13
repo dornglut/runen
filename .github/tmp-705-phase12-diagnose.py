@@ -14,8 +14,8 @@ def replace_exact(path: str, old: str, new: str, count: int = 1) -> None:
 # Compiler-named Core test support has no external requirements.
 replace_exact(
     'crates/runen-core-ir/tests/support/mod.rs',
-    '''    Program {\n        types,\n        persistent: Vec::new(),\n        functions,\n    }\n''',
-    '''    Program {\n        types,\n        persistent: Vec::new(),\n        external_callables: Vec::new(),\n        functions,\n    }\n''',
+    '''    Program {\n        persistent: vec![],\n        types,\n        functions: vec![Function {\n''',
+    '''    Program {\n        persistent: vec![],\n        external_callables: vec![],\n        types,\n        functions: vec![Function {\n''',
 )
 
 
