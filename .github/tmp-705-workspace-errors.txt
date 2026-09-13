@@ -1,10 +1,10 @@
     Checking tinyvec_macros v0.1.1
-    Checking countme v3.0.1
+    Checking rustc-hash v1.1.0
     Checking text-size v1.1.1
     Checking memoffset v0.9.1
     Checking tinyvec v1.12.0
-    Checking rustc-hash v1.1.0
     Checking hashbrown v0.14.5
+    Checking countme v3.0.1
     Checking unicode-ident v1.0.24
     Checking runen-core-ir v0.0.0 (/home/runner/work/runen/runen/crates/runen-core-ir)
     Checking runen-numeric-oracle v0.0.0 (/home/runner/work/runen/runen/crates/runen-numeric-oracle)
@@ -13,654 +13,168 @@
     Checking rowan v0.17.0
     Checking runen-reference v0.0.0 (/home/runner/work/runen/runen/crates/runen-reference)
     Checking runen-syntax v0.0.0 (/home/runner/work/runen/runen/crates/runen-syntax)
+warning: unused variable: `i64_ty`
+  --> crates/runen-core-ir/tests/external_callables.rs:72:9
+   |
+72 |     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+   |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_i64_ty`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
     Checking runen-hir v0.0.0 (/home/runner/work/runen/runen/crates/runen-hir)
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/references.rs:70:38
-   |
-70 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/derived_reference_results.rs:17:34
-   |
-17 |     let error = validate_program(Program {
-   |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/references.rs:149:38
-    |
-149 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/references.rs:229:38
-    |
-229 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/derived_reference_results.rs:96:22
-   |
-96 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/references.rs:317:38
-    |
-317 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/references.rs:385:38
-    |
-385 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/references.rs:450:38
-    |
-450 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/references.rs:520:38
-    |
-520 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/references.rs:588:38
-    |
-588 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_results.rs:505:22
-    |
-505 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_lifecycle_edges.rs:127:38
-    |
-127 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-For more information about this error, try `rustc --explain E0063`.
-error: could not compile `runen-reference` (test "callable_lifecycle_edges") due to 1 previous error
-warning: build failed, waiting for other jobs to finish...
-error: could not compile `runen-core-ir` (test "derived_reference_results") due to 3 previous errors
-error: could not compile `runen-reference` (test "references") due to 8 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/integer_subtraction.rs:50:38
-   |
-50 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "integer_subtraction") due to 1 previous error
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/reference_calls.rs:85:38
-   |
-85 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:176:38
-    |
-176 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:285:38
-    |
-285 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:415:38
-    |
-415 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:491:38
-    |
-491 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:580:38
-    |
-580 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:669:38
-    |
-669 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:788:38
-    |
-788 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:904:38
-    |
-904 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/reference_calls.rs:983:38
-    |
-983 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "reference_calls") due to 10 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/persistent_storage.rs:32:38
-   |
-32 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/persistent_storage.rs:72:38
-   |
-72 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/integer_xor.rs:50:38
-   |
-50 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/persistent_storage.rs:134:38
-    |
-134 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/persistent_storage.rs:173:38
-    |
-173 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/persistent_storage.rs:213:38
-    |
-213 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "persistent_storage") due to 5 previous errors
-error: could not compile `runen-reference` (test "integer_xor") due to 1 previous error
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/fixed_integer_constants.rs:11:19
-   |
-11 |     let program = Program {
-   |                   ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/fixed_integer_constants.rs:94:19
-   |
-94 |     let program = Program {
-   |                   ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/fixed_integer_constants.rs:194:38
-    |
-194 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/fixed_integer_constants.rs:223:19
-    |
-223 |     let program = Program {
-    |                   ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "fixed_integer_constants") due to 4 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/faults.rs:31:38
-   |
-31 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/faults.rs:85:38
-   |
-85 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/faults.rs:126:38
-    |
-126 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/floating_subtraction.rs:42:19
-   |
-42 |     let program = Program {
-   |                   ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "faults") due to 3 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/floating_subtraction.rs:238:19
-    |
-238 |     let program = Program {
-    |                   ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/floating_subtraction.rs:436:19
-    |
-436 |     let program = Program {
-    |                   ^^^^^^^ missing `external_callables`
-
+warning: `runen-core-ir` (test "external_callables") generated 1 warning (run `cargo fix --test "external_callables" -p runen-core-ir` to apply 1 suggestion)
     Checking runen-core-lowering v0.0.0 (/home/runner/work/runen/runen/crates/runen-core-lowering)
-error: could not compile `runen-reference` (test "floating_subtraction") due to 3 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/interprocedural.rs:91:38
-   |
-91 |     let validated = validate_program(Program {
-   |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:210:38
-    |
-210 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:311:38
-    |
-311 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:379:38
-    |
-379 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:478:38
-    |
-478 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:550:38
-    |
-550 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:601:38
-    |
-601 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:653:38
-    |
-653 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/interprocedural.rs:758:38
-    |
-758 |     let validated = validate_program(Program {
-    |                                      ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "interprocedural") due to 9 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/assignment.rs:37:18
+  --> crates/runen-hir/tests/statics.rs:41:10
    |
-37 |     } = function.body.statements[0]
-   |                  ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/record_destructuring_regressions.rs:42:78
-   |
-42 |     let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[0]
-   |                                                                              ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/assignment.rs:48:19
-   |
-48 |     } = &function.body.statements[1]
-   |                   ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `BindingId` cannot be dereferenced
-  --> crates/runen-hir/tests/assignment.rs:52:16
-   |
-52 |     assert_eq!(*target, binding);
-   |                ^^^^^^^ can't be dereferenced
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/assignment.rs:79:53
-   |
-79 |     let Statement::Local { binding, .. } = function.body.statements[0] else {
-   |                                                     ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/assignment.rs:87:19
-   |
-87 |     } = &function.body.statements[1]
-   |                   ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `BindingId` cannot be dereferenced
-  --> crates/runen-hir/tests/assignment.rs:91:16
-   |
-91 |     assert_eq!(*target, binding);
-   |                ^^^^^^^ can't be dereferenced
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_destructuring_regressions.rs:120:12
-    |
-120 |     } = &f.body.statements[0]
-    |            ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_destructuring_regressions.rs:126:47
-    |
-126 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-    |                                               ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/assignment.rs:124:57
-    |
-124 |     let Statement::Assignment { value, .. } = &function.body.statements[2] else {
-    |                                                         ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/assignment.rs:132:18
-    |
-132 |         function.body.statements[3],
-    |                  ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/assignment.rs:194:39
-    |
-194 |     for statement in &scalar_function.body.statements[1..] {
-    |                                       ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/assignment.rs:213:57
-    |
-213 |     let Statement::Assignment { value, .. } = &function.body.statements[1] else {
-    |                                                         ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/assignment.rs:233:57
-    |
-233 |     let Statement::Assignment { value, .. } = &function.body.statements[1] else {
-    |                                                         ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/assignment.rs:250:14
-    |
-250 |             .body
-    |              ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/loops.rs:53:15
-   |
-53 |     assert!(f.body.has_normal_continuation);
-   |               ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/loops.rs:54:48
-   |
-54 |     let (condition, body) = while_statement(&f.body.statements[0]);
-   |                                                ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/loops.rs:128:40
-    |
-128 |     let (_, body) = while_statement(&f.body.statements[0]);
-    |                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/loops.rs:185:40
-    |
-185 |     let (_, body) = while_statement(&f.body.statements[0]);
-    |                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/loops.rs:210:40
-    |
-210 |     let (_, body) = while_statement(&f.body.statements[0]);
-    |                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/loops.rs:222:40
-    |
-222 |     let (_, body) = while_statement(&f.body.statements[0]);
-    |                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/loops.rs:245:12
-    |
-245 |     } = &f.body.statements[0]
-    |            ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/loops.rs:249:40
-    |
-249 |     let (_, body) = while_statement(&f.body.statements[1]);
-    |                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `BindingId` cannot be dereferenced
-   --> crates/runen-hir/tests/loops.rs:256:36
-    |
-256 |     assert_ne!(cleanup[0].binding, *parent);
-    |                                    ^^^^^^^ can't be dereferenced
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/loops.rs:400:46
-    |
-400 |     let (_, outer_body) = while_statement(&f.body.statements[0]);
-    |                                              ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-Some errors have detailed explanations: E0609, E0614.
-For more information about an error, try `rustc --explain E0609`.
-error: could not compile `runen-hir` (test "assignment") due to 12 previous errors
-error: could not compile `runen-hir` (test "loops") due to 10 previous errors
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/function_values.rs:45:34
-   |
-45 |     let a = function_type(use_fn.parameters[0].ty);
-   |                                  ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/function_values.rs:46:34
-   |
-46 |     let b = function_type(use_fn.parameters[1].ty);
-   |                                  ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/function_values.rs:48:39
-   |
-48 |     let nested = function_type(use_fn.parameters[2].ty);
-   |                                       ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/function_values.rs:81:16
-   |
-81 |     ] = use_fn.body.statements.as_slice()
-   |                ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/function_values.rs:96:10
-   |
-96 |         .body
+41 |         .body
    |          ^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:116:16
-    |
-116 |     ] = use_fn.body.statements.as_slice()
-    |                ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:131:10
-    |
-131 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:183:61
-    |
-183 |     let function_type = function_type(function(&hir, "use").parameters[0].ty);
-    |                                                             ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:204:34
-    |
-204 |     let a = function_type(use_fn.parameters[0].ty);
-    |                                  ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:205:34
-    |
-205 |     let b = function_type(use_fn.parameters[1].ty);
-    |                                  ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:206:34
-    |
-206 |     let c = function_type(use_fn.parameters[2].ty);
-    |                                  ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:207:41
-    |
-207 |     let identity = function_type(use_fn.parameters[3].ty);
-    |                                         ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/function_values.rs:208:38
-    |
-208 |     let child = function_type(use_fn.parameters[4].ty);
-    |                                      ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-For more information about this error, try `rustc --explain E0609`.
-error: could not compile `runen-hir` (test "function_values") due to 13 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/integer_addition.rs:70:14
+  --> crates/runen-hir/tests/closures.rs:42:16
    |
-70 |             .body
-   |              ^^^^ unknown field
+42 |     ] = use_fn.body.statements.as_slice()
+   |                ^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_addition.rs:192:10
-    |
-192 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_addition.rs:201:10
-    |
-201 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_addition.rs:226:51
-    |
-226 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&mut runen_hir::Function`
-  --> crates/runen-core-lowering/tests/integer_ordering.rs:67:39
+  --> crates/runen-hir/tests/floating_subtraction.rs:20:39
    |
-67 |         .and_then(|function| function.body.terminal_return.as_mut())
+20 |         .and_then(|function| function.body.terminal_return.as_ref())
    |                                       ^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-core-lowering` (test "integer_ordering") due to 1 previous error
+error[E0614]: type `ClosureId` cannot be dereferenced
+  --> crates/runen-hir/tests/closures.rs:46:28
+   |
+46 |     let site = hir.closure(*closure);
+   |                            ^^^^^^^^ can't be dereferenced
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/closures.rs:58:10
+   |
+58 |         .body
+   |          ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/statics.rs:96:26
+   |
+96 |     for statement in &ok.body.statements {
+   |                          ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/statics.rs:146:51
+    |
+146 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    |                                                   ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/statics.rs:195:21
+    |
+195 |     assert_eq!(read.body.statements.len(), 2);
+    |                     ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/statics.rs:196:28
+    |
+196 |     for statement in &read.body.statements {
+    |                            ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/integer_multiplication.rs:230:10
+    |
+230 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/integer_multiplication.rs:249:10
+    |
+249 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/integer_multiplication.rs:267:10
+    |
+267 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+For more information about this error, try `rustc --explain E0609`.
+Some errors have detailed explanations: E0609, E0614.
+For more information about an error, try `rustc --explain E0609`.
+error: could not compile `runen-hir` (test "statics") due to 5 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `runen-hir` (test "closures") due to 3 previous errors
+error: could not compile `runen-core-lowering` (test "integer_multiplication") due to 3 previous errors
+error: could not compile `runen-hir` (test "floating_subtraction") due to 1 previous error
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/integer_xor.rs:204:10
+    |
+204 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/integer_xor.rs:219:10
+    |
+219 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/integer_xor.rs:237:10
+    |
+237 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-core-lowering` (test "integer_xor") due to 3 previous errors
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/references.rs:889:44
+    |
+889 |         &mut consuming_shared.functions[0].body.statements[0]
+    |                                            ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/references.rs:906:51
+    |
+906 |         &mut duplicating_replacement.functions[0].body.statements[0]
+    |                                                   ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/references.rs:924:51
+    |
+924 |         &mut projected_type_mismatch.functions[0].body.statements[0]
+    |                                                   ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
 error[E0609]: no field `body` on type `runen_hir::Function`
    --> crates/runen-core-lowering/tests/integer_subtraction.rs:220:10
     |
@@ -685,7 +199,42 @@ error[E0609]: no field `body` on type `runen_hir::Function`
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
+error: could not compile `runen-core-lowering` (test "references") due to 3 previous errors
 error: could not compile `runen-core-lowering` (test "integer_subtraction") due to 3 previous errors
+error[E0609]: no field `body` on type `&mut runen_hir::Function`
+  --> crates/runen-core-lowering/tests/integer_equality.rs:57:39
+   |
+57 |         .and_then(|function| function.body.terminal_return.as_mut())
+   |                                       ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&mut runen_hir::Function`
+   --> crates/runen-core-lowering/tests/conditionals.rs:202:53
+    |
+202 |     let HirStatement::If { condition, .. } = &mut f.body.statements[0] else {
+    |                                                     ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-core-lowering` (test "integer_equality") due to 1 previous error
+error[E0609]: no field `body` on type `&mut runen_hir::Function`
+   --> crates/runen-core-lowering/tests/conditionals.rs:367:54
+    |
+367 |     let HirStatement::If { then_block, .. } = &mut f.body.statements[0] else {
+    |                                                      ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&mut runen_hir::Function`
+   --> crates/runen-core-lowering/tests/conditionals.rs:396:7
+    |
+396 |     f.body.has_normal_continuation = true;
+    |       ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-core-lowering` (test "conditionals") due to 3 previous errors
 error[E0609]: no field `body` on type `runen_hir::Function`
    --> crates/runen-core-lowering/tests/integer_negation.rs:194:10
     |
@@ -711,31 +260,45 @@ error[E0609]: no field `parameters` on type `runen_hir::Function`
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/integer_xor.rs:204:10
+   --> crates/runen-core-lowering/tests/floating_addition.rs:160:10
     |
-204 |         .body
+160 |         .body
     |          ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/integer_xor.rs:219:10
+error[E0614]: type `runen_hir::NumericContract` cannot be dereferenced
+   --> crates/runen-core-lowering/tests/floating_addition.rs:168:5
     |
-219 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/integer_xor.rs:237:10
-    |
-237 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+168 |     *contract = HirNumericContract::Reproducible;
+    |     ^^^^^^^^^ can't be dereferenced
 
 error: could not compile `runen-core-lowering` (test "integer_negation") due to 3 previous errors
-error: could not compile `runen-core-lowering` (test "integer_xor") due to 3 previous errors
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/floating_addition.rs:298:10
+    |
+298 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/floating_addition.rs:317:10
+    |
+317 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `runen_hir::Function`
+   --> crates/runen-core-lowering/tests/floating_addition.rs:335:10
+    |
+335 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-core-lowering` (test "floating_addition") due to 5 previous errors
 error[E0609]: no field `body` on type `runen_hir::Function`
    --> crates/runen-core-lowering/tests/integer_complement.rs:197:10
     |
@@ -761,179 +324,6 @@ error[E0609]: no field `parameters` on type `runen_hir::Function`
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error: could not compile `runen-core-lowering` (test "integer_complement") due to 3 previous errors
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/record_destructuring_regressions.rs:126:9
-    |
-126 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `RecordPatternScrutinee`, found `&RecordPatternScrutinee`
-    |
-help: consider removing the borrow
-    |
-126 -         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-126 +         RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-    |
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_addition.rs:229:17
-    |
-229 |     integer_add(initializer, IntrinsicType::I8);
-    |     ----------- ^^^^^^^^^^^ expected `&Value`, found `Value`
-    |     |
-    |     arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/integer_addition.rs:34:4
-    |
- 34 | fn integer_add(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-229 |     integer_add(&initializer, IntrinsicType::I8);
-    |                 +
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_addition.rs:231:50
-    |
-231 |     let Statement::Assignment { value, .. } = &f.body.statements[1] else {
-    |                                                  ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_addition.rs:234:17
-    |
-234 |     integer_add(value, IntrinsicType::I8);
-    |     ----------- ^^^^^ expected `&Value`, found `Value`
-    |     |
-    |     arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/integer_addition.rs:34:4
-    |
- 34 | fn integer_add(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-234 |     integer_add(&value, IntrinsicType::I8);
-    |                 +
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_addition.rs:236:48
-    |
-236 |     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
-    |                                                ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_addition.rs:241:51
-    |
-241 |     let Statement::Local { initializer, .. } = &f.body.statements[3] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_addition.rs:250:10
-    |
-250 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_destructuring_regressions.rs:154:38
-    |
-154 |     let Statement::Block(outer) = &f.body.statements[0] else {
-    |                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_destructuring_regressions.rs:191:10
-    |
-191 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_destructuring_regressions.rs:212:78
-    |
-212 |     let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[0]
-    |                                                                              ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-Some errors have detailed explanations: E0308, E0609.
-For more information about an error, try `rustc --explain E0308`.
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/integer_multiplication.rs:230:10
-    |
-230 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/integer_multiplication.rs:249:10
-    |
-249 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/integer_multiplication.rs:267:10
-    |
-267 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "record_destructuring_regressions") due to 7 previous errors
-error: could not compile `runen-hir` (test "integer_addition") due to 10 previous errors
-error: could not compile `runen-core-lowering` (test "integer_multiplication") due to 3 previous errors
-error[E0609]: no field `body` on type `&mut runen_hir::Function`
-   --> crates/runen-core-lowering/tests/conditionals.rs:202:53
-    |
-202 |     let HirStatement::If { condition, .. } = &mut f.body.statements[0] else {
-    |                                                     ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&mut runen_hir::Function`
-   --> crates/runen-core-lowering/tests/conditionals.rs:367:54
-    |
-367 |     let HirStatement::If { then_block, .. } = &mut f.body.statements[0] else {
-    |                                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&mut runen_hir::Function`
-   --> crates/runen-core-lowering/tests/conditionals.rs:396:7
-    |
-396 |     f.body.has_normal_continuation = true;
-    |       ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-core-lowering` (test "conditionals") due to 3 previous errors
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/floating_subtraction.rs:121:10
-    |
-121 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `runen_hir::NumericContract` cannot be dereferenced
-   --> crates/runen-core-lowering/tests/floating_subtraction.rs:129:5
-    |
-129 |     *contract = HirNumericContract::Reproducible;
-    |     ^^^^^^^^^ can't be dereferenced
-
-error: could not compile `runen-core-lowering` (test "floating_subtraction") due to 2 previous errors
 error[E0609]: no field `body` on type `&mut runen_hir::Function`
    --> crates/runen-core-lowering/tests/loops.rs:541:47
     |
@@ -974,46 +364,28 @@ error[E0609]: no field `body` on type `&mut runen_hir::Function`
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-core-lowering` (test "loops") due to 5 previous errors
 error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/floating_addition.rs:160:10
+   --> crates/runen-core-lowering/tests/floating_subtraction.rs:121:10
     |
-160 |         .body
+121 |         .body
     |          ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0614]: type `runen_hir::NumericContract` cannot be dereferenced
-   --> crates/runen-core-lowering/tests/floating_addition.rs:168:5
+   --> crates/runen-core-lowering/tests/floating_subtraction.rs:129:5
     |
-168 |     *contract = HirNumericContract::Reproducible;
+129 |     *contract = HirNumericContract::Reproducible;
     |     ^^^^^^^^^ can't be dereferenced
 
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/floating_addition.rs:298:10
-    |
-298 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+error[E0609]: no field `body` on type `&mut runen_hir::Function`
+  --> crates/runen-core-lowering/tests/integer_ordering.rs:67:39
+   |
+67 |         .and_then(|function| function.body.terminal_return.as_mut())
+   |                                       ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/floating_addition.rs:317:10
-    |
-317 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/floating_addition.rs:335:10
-    |
-335 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-core-lowering` (test "floating_addition") due to 5 previous errors
 error[E0609]: no field `body` on type `runen_hir::Function`
    --> crates/runen-core-lowering/tests/floating_multiplication.rs:121:10
     |
@@ -1028,18 +400,12 @@ error[E0614]: type `runen_hir::NumericContract` cannot be dereferenced
 129 |     *contract = HirNumericContract::Reproducible;
     |     ^^^^^^^^^ can't be dereferenced
 
-error[E0609]: no field `body` on type `&mut runen_hir::Function`
-  --> crates/runen-core-lowering/tests/integer_equality.rs:57:39
-   |
-57 |         .and_then(|function| function.body.terminal_return.as_mut())
-   |                                       ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
+error: could not compile `runen-core-lowering` (test "loops") due to 5 previous errors
+error: could not compile `runen-core-lowering` (test "floating_subtraction") due to 2 previous errors
 error: could not compile `runen-core-lowering` (test "floating_multiplication") due to 2 previous errors
-error: could not compile `runen-core-lowering` (test "integer_equality") due to 1 previous error
+error: could not compile `runen-core-lowering` (test "integer_ordering") due to 1 previous error
 error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/integer_multiplication.rs:70:14
+  --> crates/runen-hir/tests/integer_xor.rs:70:14
    |
 70 |             .body
    |              ^^^^ unknown field
@@ -1047,46 +413,54 @@ error[E0609]: no field `body` on type `&runen_hir::Function`
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:217:10
+   --> crates/runen-hir/tests/integer_xor.rs:105:74
     |
-217 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/references.rs:889:44
-    |
-889 |         &mut consuming_shared.functions[0].body.statements[0]
-    |                                            ^^^^ unknown field
+105 |         let Statement::Local { initializer, .. } = &function(&hir, name).body.statements[0] else {
+    |                                                                          ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/references.rs:906:51
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/marker_traits.rs:145:18
     |
-906 |         &mut duplicating_replacement.functions[0].body.statements[0]
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `runen_hir::Function`
-   --> crates/runen-core-lowering/tests/references.rs:924:51
-    |
-924 |         &mut projected_type_mismatch.functions[0].body.statements[0]
-    |                                                   ^^^^ unknown field
+145 |     assert_eq!(f.parameters[0].ty, Type::Parameter(f.type_parameters[0].id));
+    |                  ^^^^^^^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/floating_division.rs:20:39
-   |
-20 |         .and_then(|function| function.body.terminal_return.as_ref())
-   |                                       ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+   --> crates/runen-hir/tests/marker_traits.rs:307:10
+    |
+307 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-hir` (test "floating_division") due to 1 previous error
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/marker_traits.rs:344:22
+    |
+344 |     assert_eq!(outer.body.statements.len(), 1);
+    |                      ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/marker_traits.rs:390:10
+    |
+390 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/marker_traits.rs:431:42
+    |
+431 |     assert!(function(&hir, "use_ticket").body.terminal_return.is_some());
+    |                                          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-hir` (test "marker_traits") due to 5 previous errors
 error[E0609]: no field `body` on type `runen_hir::Function`
   --> crates/runen-hir/tests/literals.rs:29:10
    |
@@ -1095,436 +469,242 @@ error[E0609]: no field `body` on type `runen_hir::Function`
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-core-lowering` (test "references") due to 3 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:382:54
-    |
-382 |     let Statement::Local { initializer, .. } = &test.body.statements[0] else {
-    |                                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:388:53
-    |
-388 |     let Statement::Assignment { value, .. } = &test.body.statements[1] else {
-    |                                                     ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+  --> crates/runen-hir/tests/constants.rs:26:10
+   |
+26 |         .body
+   |          ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:394:54
-    |
-394 |     let Statement::Local { initializer, .. } = &test.body.statements[2] else {
-    |                                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+  --> crates/runen-hir/tests/constants.rs:56:51
+   |
+56 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+   |                                                   ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:412:54
-    |
-412 |     let Statement::Local { initializer, .. } = &test.body.statements[3] else {
-    |                                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+  --> crates/runen-hir/tests/constants.rs:62:51
+   |
+62 |     let Statement::Local { initializer, .. } = &f.body.statements[1] else {
+   |                                                   ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:425:53
-    |
-425 |     let Statement::Assignment { value, .. } = &test.body.statements[4] else {
-    |                                                     ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+  --> crates/runen-hir/tests/constants.rs:67:46
+   |
+67 |     let Statement::If { condition, .. } = &f.body.statements[2] else {
+   |                                              ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:430:54
+   --> crates/runen-hir/tests/constants.rs:157:50
     |
-430 |     let Statement::Local { initializer, .. } = &test.body.statements[5] else {
-    |                                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:447:54
-    |
-447 |     let Statement::Local { initializer, .. } = &test.body.statements[6] else {
-    |                                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:464:10
-    |
-464 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:475:39
-    |
-475 |         .and_then(|function| function.body.terminal_return.as_ref())
-    |                                       ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/literals.rs:488:39
-    |
-488 |         .and_then(|function| function.body.terminal_return.as_ref())
-    |                                       ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_multiplication.rs:225:17
-    |
-225 |     integer_mul(right, IntrinsicType::I8);
-    |     ----------- ^^^^^ expected `&Value`, found `Box<Value>`
-    |     |
-    |     arguments to this function are incorrect
-    |
-    = note: expected reference `&runen_hir::Value`
-                  found struct `Box<runen_hir::Value>`
-note: function defined here
-   --> crates/runen-hir/tests/integer_multiplication.rs:34:4
-    |
- 34 | fn integer_mul(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-225 |     integer_mul(&right, IntrinsicType::I8);
-    |                 +
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:228:10
-    |
-228 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:237:10
-    |
-237 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:246:10
-    |
-246 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:271:51
-    |
-271 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_multiplication.rs:274:17
-    |
-274 |     integer_mul(initializer, IntrinsicType::I8);
-    |     ----------- ^^^^^^^^^^^ expected `&Value`, found `Value`
-    |     |
-    |     arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/integer_multiplication.rs:34:4
-    |
- 34 | fn integer_mul(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-274 |     integer_mul(&initializer, IntrinsicType::I8);
-    |                 +
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:276:50
-    |
-276 |     let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+157 |     let Statement::Assignment { value, .. } = &f.body.statements[4] else {
     |                                                  ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_multiplication.rs:279:17
-    |
-279 |     integer_mul(value, IntrinsicType::I8);
-    |     ----------- ^^^^^ expected `&Value`, found `Value`
-    |     |
-    |     arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/integer_multiplication.rs:34:4
-    |
- 34 | fn integer_mul(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-279 |     integer_mul(&value, IntrinsicType::I8);
-    |                 +
-
+error: could not compile `runen-hir` (test "constants") due to 5 previous errors
+error: could not compile `runen-hir` (test "literals") due to 1 previous error
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:281:48
-    |
-281 |     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
-    |                                                ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:286:51
-    |
-286 |     let Statement::Local { initializer, .. } = &f.body.statements[3] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_multiplication.rs:295:10
-    |
-295 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "integer_multiplication") due to 13 previous errors
-error: could not compile `runen-hir` (test "literals") due to 11 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/refutable_record_selection.rs:74:77
+  --> crates/runen-hir/tests/faults.rs:31:16
    |
-74 |     let (scrutinee, tests, bindings, mismatch_cleanup, _, _) = selection(&f.body.statements[0]);
-   |                                                                             ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/refutable_record_selection.rs:78:47
-   |
-78 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-   |                                               ^^^^^^^^^^ unknown field
+31 |     assert!(!f.body.has_normal_continuation);
+   |                ^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:116:40
+  --> crates/runen-hir/tests/faults.rs:32:15
+   |
+32 |     assert!(f.body.terminal_return.is_none());
+   |               ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/faults.rs:33:45
+   |
+33 |     let [Statement::Fault { location }] = f.body.statements.as_slice() else {
+   |                                             ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/faults.rs:44:16
+   |
+44 |     assert!(!f.body.has_normal_continuation);
+   |                ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/faults.rs:45:15
+   |
+45 |     assert!(f.body.terminal_return.is_none());
+   |               ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/faults.rs:47:11
+   |
+47 |         f.body.statements.as_slice(),
+   |           ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/faults.rs:57:39
+   |
+57 |     let [Statement::Block(block)] = f.body.statements.as_slice() else {
+   |                                       ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/faults.rs:131:41
     |
-116 |         selection(&function(&hir, "f").body.statements[0]);
-    |                                        ^^^^ unknown field
+131 |     assert!(!function(&both_fault, "f").body.has_normal_continuation);
+    |                                         ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:146:72
+   --> crates/runen-hir/tests/faults.rs:135:36
     |
-146 |     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
-    |                                                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:171:40
-    |
-171 |         selection(&function(&hir, "f").body.statements[0]);
-    |                                        ^^^^ unknown field
+135 |     assert!(!function(&mixed, "f").body.has_normal_continuation);
+    |                                    ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:207:40
+   --> crates/runen-hir/tests/faults.rs:144:15
     |
-207 |         selection(&function(&hir, "f").body.statements[0]);
-    |                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:230:72
-    |
-230 |     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
-    |                                                                        ^^^^ unknown field
+144 |     assert!(f.body.has_normal_continuation);
+    |               ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:347:81
+   --> crates/runen-hir/tests/faults.rs:145:24
     |
-347 |     let (_, _, bindings, _, success, mismatch) = selection(&function(&hir, "f").body.statements[0]);
-    |                                                                                 ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:550:63
-    |
-550 |     let (_, _, bindings, _, success, mismatch) = selection(&f.body.statements[0]);
-    |                                                               ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:554:24
-    |
-554 |     assert!(matches!(f.body.statements[1], Statement::Local { .. }));
+145 |     assert!(matches!(f.body.statements[0], Statement::Call { .. }));
     |                        ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:635:72
+   --> crates/runen-hir/tests/faults.rs:146:24
     |
-635 |     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
-    |                                                                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/refutable_record_selection.rs:689:40
-    |
-689 |         selection(&function(&hir, "f").body.statements[0]);
-    |                                        ^^^^ unknown field
+146 |     assert!(matches!(f.body.statements[1], Statement::Local { .. }));
+    |                        ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/statics.rs:41:10
-   |
-41 |         .body
-   |          ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/statics.rs:96:26
-   |
-96 |     for statement in &ok.body.statements {
-   |                          ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/statics.rs:146:51
+error[E0308]: mismatched types
+   --> crates/runen-hir/tests/integer_xor.rs:108:41
     |
-146 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+108 |         let (left, right) = integer_xor(initializer, ty);
+    |                             ----------- ^^^^^^^^^^^ expected `&Value`, found `Value`
+    |                             |
+    |                             arguments to this function are incorrect
+    |
+note: function defined here
+   --> crates/runen-hir/tests/integer_xor.rs:34:4
+    |
+ 34 | fn integer_xor(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
+    |    ^^^^^^^^^^^ -------------
+help: consider borrowing here
+    |
+108 |         let (left, right) = integer_xor(&initializer, ty);
+    |                                         +
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/integer_xor.rs:261:51
+    |
+261 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
     |                                                   ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/statics.rs:195:21
+error[E0308]: mismatched types
+   --> crates/runen-hir/tests/integer_xor.rs:264:17
     |
-195 |     assert_eq!(read.body.statements.len(), 2);
-    |                     ^^^^ unknown field
+264 |     integer_xor(initializer, IntrinsicType::I8);
+    |     ----------- ^^^^^^^^^^^ expected `&Value`, found `Value`
+    |     |
+    |     arguments to this function are incorrect
     |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+note: function defined here
+   --> crates/runen-hir/tests/integer_xor.rs:34:4
+    |
+ 34 | fn integer_xor(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
+    |    ^^^^^^^^^^^ -------------
+help: consider borrowing here
+    |
+264 |     integer_xor(&initializer, IntrinsicType::I8);
+    |                 +
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/boolean_conjunction.rs:39:10
-   |
-39 |         .body
-   |          ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/statics.rs:196:28
+   --> crates/runen-hir/tests/integer_xor.rs:266:50
     |
-196 |     for statement in &read.body.statements {
-    |                            ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:177:10
-    |
-177 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:206:51
-    |
-206 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:215:51
-    |
-215 |     let Statement::Local { initializer, .. } = &f.body.statements[1] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:220:50
-    |
-220 |     let Statement::Assignment { value, .. } = &f.body.statements[2] else {
+266 |     let Statement::Assignment { value, .. } = &f.body.statements[1] else {
     |                                                  ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:225:48
+error[E0308]: mismatched types
+   --> crates/runen-hir/tests/integer_xor.rs:269:17
     |
-225 |     let Statement::Call { arguments, .. } = &f.body.statements[3] else {
+269 |     integer_xor(value, IntrinsicType::I8);
+    |     ----------- ^^^^^ expected `&Value`, found `Value`
+    |     |
+    |     arguments to this function are incorrect
+    |
+note: function defined here
+   --> crates/runen-hir/tests/integer_xor.rs:34:4
+    |
+ 34 | fn integer_xor(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
+    |    ^^^^^^^^^^^ -------------
+help: consider borrowing here
+    |
+269 |     integer_xor(&value, IntrinsicType::I8);
+    |                 +
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/integer_xor.rs:271:48
+    |
+271 |     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
     |                                                ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:231:46
+   --> crates/runen-hir/tests/integer_xor.rs:276:51
     |
-231 |     let Statement::If { condition, .. } = &f.body.statements[4] else {
-    |                                              ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:236:49
-    |
-236 |     let Statement::While { condition, .. } = &f.body.statements[5] else {
-    |                                                 ^^^^ unknown field
+276 |     let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    |                                                   ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:242:10
+   --> crates/runen-hir/tests/integer_xor.rs:285:10
     |
-242 |         .body
+285 |         .body
     |          ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-hir` (test "refutable_record_selection") due to 12 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/boolean_conjunction.rs:255:10
-    |
-255 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "statics") due to 5 previous errors
-error: could not compile `runen-hir` (test "boolean_conjunction") due to 10 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/floating_multiplication.rs:20:39
-   |
-20 |         .and_then(|function| function.body.terminal_return.as_ref())
-   |                                       ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
+error: could not compile `runen-hir` (test "faults") due to 12 previous errors
+Some errors have detailed explanations: E0308, E0609.
+For more information about an error, try `rustc --explain E0308`.
+error: could not compile `runen-hir` (test "integer_xor") due to 10 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
   --> crates/runen-hir/tests/integer_equality.rs:26:10
    |
@@ -1541,7 +721,6 @@ error[E0609]: no field `body` on type `&runen_hir::Function`
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-hir` (test "floating_multiplication") due to 1 previous error
 error[E0308]: mismatched types
    --> crates/runen-hir/tests/integer_equality.rs:337:28
     |
@@ -1586,68 +765,7 @@ help: consider borrowing here
 344 |         integer_comparison(&condition).1,
     |                            +
 
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/integer_ordering.rs:26:10
-   |
-26 |         .body
-   |          ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
 error: could not compile `runen-hir` (test "integer_equality") due to 5 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_ordering.rs:271:46
-    |
-271 |     let Statement::If { condition, .. } = &f.body.statements[0] else {
-    |                                              ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_ordering.rs:274:27
-    |
-274 |     assert_eq!(integer_lt(condition).0, Type::Intrinsic(IntrinsicType::I32));
-    |                ---------- ^^^^^^^^^ expected `&Value`, found `Value`
-    |                |
-    |                arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/integer_ordering.rs:33:4
-    |
- 33 | fn integer_lt(value: &Value) -> (Type, &Value, &Value) {
-    |    ^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-274 |     assert_eq!(integer_lt(&condition).0, Type::Intrinsic(IntrinsicType::I32));
-    |                           +
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_ordering.rs:275:49
-    |
-275 |     let Statement::While { condition, .. } = &f.body.statements[1] else {
-    |                                                 ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_ordering.rs:278:27
-    |
-278 |     assert_eq!(integer_lt(condition).0, Type::Intrinsic(IntrinsicType::I32));
-    |                ---------- ^^^^^^^^^ expected `&Value`, found `Value`
-    |                |
-    |                arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/integer_ordering.rs:33:4
-    |
- 33 | fn integer_lt(value: &Value) -> (Type, &Value, &Value) {
-    |    ^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-278 |     assert_eq!(integer_lt(&condition).0, Type::Intrinsic(IntrinsicType::I32));
-    |                           +
-
-error: could not compile `runen-hir` (test "integer_ordering") due to 5 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
   --> crates/runen-hir/tests/integer_negation.rs:69:14
    |
@@ -1786,119 +904,95 @@ error[E0609]: no field `body` on type `&runen_hir::Function`
 
 error: could not compile `runen-hir` (test "integer_negation") due to 13 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/constants.rs:26:10
+  --> crates/runen-hir/tests/floating_multiplication.rs:20:39
    |
-26 |         .body
+20 |         .and_then(|function| function.body.terminal_return.as_ref())
+   |                                       ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/boolean_conjunction.rs:39:10
+   |
+39 |         .body
    |          ^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/constants.rs:56:51
-   |
-56 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
-   |                                                   ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/constants.rs:62:51
-   |
-62 |     let Statement::Local { initializer, .. } = &f.body.statements[1] else {
-   |                                                   ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/constants.rs:67:46
-   |
-67 |     let Statement::If { condition, .. } = &f.body.statements[2] else {
-   |                                              ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `runen_hir::Function`
-  --> crates/runen-hir/tests/hir.rs:50:28
-   |
-50 |         first.functions[0].parameters[0].ty,
-   |                            ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `runen_hir::Function`
-  --> crates/runen-hir/tests/hir.rs:54:29
-   |
-54 |         second.functions[0].parameters[0].ty,
-   |                             ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/constants.rs:157:50
+   --> crates/runen-hir/tests/boolean_conjunction.rs:177:10
     |
-157 |     let Statement::Assignment { value, .. } = &f.body.statements[4] else {
-    |                                                  ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `runen_hir::Function`
-   --> crates/runen-hir/tests/hir.rs:118:33
-    |
-118 |     assert_eq!(hir.functions[0].parameters.len(), 2);
-    |                                 ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/hir.rs:170:48
-    |
-170 |     let Statement::Call { arguments, .. } = &f.body.statements[0] else {
-    |                                                ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `runen_hir::Function`
-   --> crates/runen-hir/tests/hir.rs:371:26
-    |
-371 |         hir.functions[0].parameters[0].ty,
-    |                          ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "constants") due to 5 previous errors
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/hir.rs:432:25
-    |
-432 |     assert_eq!(function.parameters[0].ty, Type::Record(ticket));
-    |                         ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/hir.rs:434:48
-    |
-434 |     let Statement::Local { ty, .. } = function.body.statements[0] else {
-    |                                                ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/hir.rs:469:11
-    |
-469 |     } = f.body.statements[0]
-    |           ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/hir.rs:475:10
-    |
-475 |         .body
+177 |         .body
     |          ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-hir` (test "hir") due to 9 previous errors
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:206:51
+    |
+206 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    |                                                   ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:215:51
+    |
+215 |     let Statement::Local { initializer, .. } = &f.body.statements[1] else {
+    |                                                   ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:220:50
+    |
+220 |     let Statement::Assignment { value, .. } = &f.body.statements[2] else {
+    |                                                  ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:225:48
+    |
+225 |     let Statement::Call { arguments, .. } = &f.body.statements[3] else {
+    |                                                ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:231:46
+    |
+231 |     let Statement::If { condition, .. } = &f.body.statements[4] else {
+    |                                              ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:236:49
+    |
+236 |     let Statement::While { condition, .. } = &f.body.statements[5] else {
+    |                                                 ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:242:10
+    |
+242 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/boolean_conjunction.rs:255:10
+    |
+255 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-hir` (test "floating_multiplication") due to 1 previous error
+error: could not compile `runen-hir` (test "boolean_conjunction") due to 10 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
   --> crates/runen-hir/tests/conditionals.rs:50:62
    |
@@ -1971,168 +1065,553 @@ error[E0609]: no field `body` on type `&runen_hir::Function`
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
+error: could not compile `runen-hir` (test "conditionals") due to 9 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/integer_xor.rs:70:14
+  --> crates/runen-hir/tests/refutable_record_selection.rs:74:77
    |
-70 |             .body
-   |              ^^^^ unknown field
+74 |     let (scrutinee, tests, bindings, mismatch_cleanup, _, _) = selection(&f.body.statements[0]);
+   |                                                                             ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/refutable_record_selection.rs:78:47
+   |
+78 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+   |                                               ^^^^^^^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_xor.rs:105:74
+   --> crates/runen-hir/tests/refutable_record_selection.rs:116:40
     |
-105 |         let Statement::Local { initializer, .. } = &function(&hir, name).body.statements[0] else {
-    |                                                                          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/marker_traits.rs:145:18
-    |
-145 |     assert_eq!(f.parameters[0].ty, Type::Parameter(f.type_parameters[0].id));
-    |                  ^^^^^^^^^^ unknown field
+116 |         selection(&function(&hir, "f").body.statements[0]);
+    |                                        ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-hir` (test "conditionals") due to 9 previous errors
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:146:72
+    |
+146 |     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    |                                                                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:171:40
+    |
+171 |         selection(&function(&hir, "f").body.statements[0]);
+    |                                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:207:40
+    |
+207 |         selection(&function(&hir, "f").body.statements[0]);
+    |                                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:230:72
+    |
+230 |     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    |                                                                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/integer_ordering.rs:26:10
+   |
+26 |         .body
+   |          ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:347:81
+    |
+347 |     let (_, _, bindings, _, success, mismatch) = selection(&function(&hir, "f").body.statements[0]);
+    |                                                                                 ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:550:63
+    |
+550 |     let (_, _, bindings, _, success, mismatch) = selection(&f.body.statements[0]);
+    |                                                               ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:554:24
+    |
+554 |     assert!(matches!(f.body.statements[1], Statement::Local { .. }));
+    |                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:635:72
+    |
+635 |     let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    |                                                                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/integer_ordering.rs:271:46
+    |
+271 |     let Statement::If { condition, .. } = &f.body.statements[0] else {
+    |                                              ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/refutable_record_selection.rs:689:40
+    |
+689 |         selection(&function(&hir, "f").body.statements[0]);
+    |                                        ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
 error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_xor.rs:108:41
+   --> crates/runen-hir/tests/integer_ordering.rs:274:27
     |
-108 |         let (left, right) = integer_xor(initializer, ty);
-    |                             ----------- ^^^^^^^^^^^ expected `&Value`, found `Value`
-    |                             |
-    |                             arguments to this function are incorrect
+274 |     assert_eq!(integer_lt(condition).0, Type::Intrinsic(IntrinsicType::I32));
+    |                ---------- ^^^^^^^^^ expected `&Value`, found `Value`
+    |                |
+    |                arguments to this function are incorrect
     |
 note: function defined here
-   --> crates/runen-hir/tests/integer_xor.rs:34:4
+   --> crates/runen-hir/tests/integer_ordering.rs:33:4
     |
- 34 | fn integer_xor(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
+ 33 | fn integer_lt(value: &Value) -> (Type, &Value, &Value) {
+    |    ^^^^^^^^^^ -------------
 help: consider borrowing here
     |
-108 |         let (left, right) = integer_xor(&initializer, ty);
-    |                                         +
+274 |     assert_eq!(integer_lt(&condition).0, Type::Intrinsic(IntrinsicType::I32));
+    |                           +
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/marker_traits.rs:307:10
+   --> crates/runen-hir/tests/integer_ordering.rs:275:49
     |
-307 |         .body
-    |          ^^^^ unknown field
+275 |     let Statement::While { condition, .. } = &f.body.statements[1] else {
+    |                                                 ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
+error[E0308]: mismatched types
+   --> crates/runen-hir/tests/integer_ordering.rs:278:27
+    |
+278 |     assert_eq!(integer_lt(condition).0, Type::Intrinsic(IntrinsicType::I32));
+    |                ---------- ^^^^^^^^^ expected `&Value`, found `Value`
+    |                |
+    |                arguments to this function are incorrect
+    |
+note: function defined here
+   --> crates/runen-hir/tests/integer_ordering.rs:33:4
+    |
+ 33 | fn integer_lt(value: &Value) -> (Type, &Value, &Value) {
+    |    ^^^^^^^^^^ -------------
+help: consider borrowing here
+    |
+278 |     assert_eq!(integer_lt(&condition).0, Type::Intrinsic(IntrinsicType::I32));
+    |                           +
+
+error: could not compile `runen-hir` (test "refutable_record_selection") due to 12 previous errors
+error: could not compile `runen-hir` (test "integer_ordering") due to 5 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/marker_traits.rs:344:22
-    |
-344 |     assert_eq!(outer.body.statements.len(), 1);
-    |                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+  --> crates/runen-hir/tests/floating_addition.rs:25:10
+   |
+25 |         .body
+   |          ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_xor.rs:261:51
+   --> crates/runen-hir/tests/floating_addition.rs:398:51
     |
-261 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+398 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
     |                                                   ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_xor.rs:264:17
+   --> crates/runen-hir/tests/floating_addition.rs:401:15
     |
-264 |     integer_xor(initializer, IntrinsicType::I8);
-    |     ----------- ^^^^^^^^^^^ expected `&Value`, found `Value`
+401 |     float_add(initializer, IntrinsicType::F32);
+    |     --------- ^^^^^^^^^^^ expected `&Value`, found `Value`
     |     |
     |     arguments to this function are incorrect
     |
 note: function defined here
-   --> crates/runen-hir/tests/integer_xor.rs:34:4
+   --> crates/runen-hir/tests/floating_addition.rs:48:4
     |
- 34 | fn integer_xor(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
+ 48 | fn float_add(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
+    |    ^^^^^^^^^ -------------
 help: consider borrowing here
     |
-264 |     integer_xor(&initializer, IntrinsicType::I8);
-    |                 +
+401 |     float_add(&initializer, IntrinsicType::F32);
+    |               +
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_xor.rs:266:50
+   --> crates/runen-hir/tests/floating_addition.rs:403:50
     |
-266 |     let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+403 |     let Statement::Assignment { value, .. } = &f.body.statements[1] else {
     |                                                  ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0308]: mismatched types
-   --> crates/runen-hir/tests/integer_xor.rs:269:17
+   --> crates/runen-hir/tests/floating_addition.rs:407:33
     |
-269 |     integer_xor(value, IntrinsicType::I8);
-    |     ----------- ^^^^^ expected `&Value`, found `Value`
-    |     |
-    |     arguments to this function are incorrect
+407 |         float_add_with_contract(value, IntrinsicType::F32).0,
+    |         ----------------------- ^^^^^ expected `&Value`, found `Value`
+    |         |
+    |         arguments to this function are incorrect
     |
 note: function defined here
-   --> crates/runen-hir/tests/integer_xor.rs:34:4
+   --> crates/runen-hir/tests/floating_addition.rs:32:4
     |
- 34 | fn integer_xor(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^^^ -------------
+ 32 | fn float_add_with_contract(value: &Value, ty: IntrinsicType) -> (NumericContract, &Value, &Value) {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^ -------------
 help: consider borrowing here
     |
-269 |     integer_xor(&value, IntrinsicType::I8);
-    |                 +
+407 |         float_add_with_contract(&value, IntrinsicType::F32).0,
+    |                                 +
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_xor.rs:271:48
+   --> crates/runen-hir/tests/floating_addition.rs:411:48
     |
-271 |     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+411 |     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
     |                                                ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_xor.rs:276:51
+   --> crates/runen-hir/tests/floating_addition.rs:416:51
     |
-276 |     let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+416 |     let Statement::Local { initializer, .. } = &f.body.statements[3] else {
     |                                                   ^^^^ unknown field
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/integer_xor.rs:285:10
-    |
-285 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/marker_traits.rs:390:10
-    |
-390 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/marker_traits.rs:431:42
-    |
-431 |     assert!(function(&hir, "use_ticket").body.terminal_return.is_some());
-    |                                          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "marker_traits") due to 5 previous errors
-error: could not compile `runen-hir` (test "integer_xor") due to 10 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/floating_subtraction.rs:20:39
+error[E0609]: no field `parameters` on type `runen_hir::Function`
+  --> crates/runen-hir/tests/hir.rs:50:28
    |
-20 |         .and_then(|function| function.body.terminal_return.as_ref())
-   |                                       ^^^^ unknown field
+50 |         first.functions[0].parameters[0].ty,
+   |                            ^^^^^^^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error: could not compile `runen-hir` (test "floating_subtraction") due to 1 previous error
+error[E0609]: no field `parameters` on type `runen_hir::Function`
+  --> crates/runen-hir/tests/hir.rs:54:29
+   |
+54 |         second.functions[0].parameters[0].ty,
+   |                             ^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `runen_hir::Function`
+   --> crates/runen-hir/tests/hir.rs:118:33
+    |
+118 |     assert_eq!(hir.functions[0].parameters.len(), 2);
+    |                                 ^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/hir.rs:170:48
+    |
+170 |     let Statement::Call { arguments, .. } = &f.body.statements[0] else {
+    |                                                ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-hir` (test "floating_addition") due to 7 previous errors
+error[E0609]: no field `parameters` on type `runen_hir::Function`
+   --> crates/runen-hir/tests/hir.rs:371:26
+    |
+371 |         hir.functions[0].parameters[0].ty,
+    |                          ^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/hir.rs:432:25
+    |
+432 |     assert_eq!(function.parameters[0].ty, Type::Record(ticket));
+    |                         ^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/hir.rs:434:48
+    |
+434 |     let Statement::Local { ty, .. } = function.body.statements[0] else {
+    |                                                ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/hir.rs:469:11
+    |
+469 |     } = f.body.statements[0]
+    |           ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/hir.rs:475:10
+    |
+475 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/record_pattern_rest.rs:47:12
+   |
+47 |     } = &f.body.statements[0]
+   |            ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/record_pattern_rest.rs:53:47
+   |
+53 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+   |                                               ^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0308]: mismatched types
+  --> crates/runen-hir/tests/record_pattern_rest.rs:53:9
+   |
+53 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `RecordPatternScrutinee`, found `&RecordPatternScrutinee`
+   |
+help: consider removing the borrow
+   |
+53 -         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+53 +         RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+   |
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/record_pattern_rest.rs:91:19
+   |
+91 |     } = &selected.body.statements[0]
+   |                   ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/record_pattern_rest.rs:97:54
+   |
+97 |         &RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
+   |                                                      ^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0308]: mismatched types
+  --> crates/runen-hir/tests/record_pattern_rest.rs:97:9
+   |
+97 |         &RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `RecordPatternScrutinee`, found `&RecordPatternScrutinee`
+   |
+help: consider removing the borrow
+   |
+97 -         &RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
+97 +         RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
+   |
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:108:20
+    |
+108 |     } = &rest_only.body.statements[0]
+    |                    ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:114:55
+    |
+114 |         &RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
+    |                                                       ^^^^^^^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:50:12
+   |
+50 |     } = &f.body.statements[0]
+   |            ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0308]: mismatched types
+   --> crates/runen-hir/tests/record_pattern_rest.rs:114:9
+    |
+114 |         &RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `RecordPatternScrutinee`, found `&RecordPatternScrutinee`
+    |
+help: consider removing the borrow
+    |
+114 -         &RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
+114 +         RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
+    |
+
+error[E0614]: type `runen_hir::Type` cannot be dereferenced
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:54:16
+   |
+54 |     assert_eq!(*ty, scalar_ty);
+   |                ^^^ can't be dereferenced
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:118:19
+    |
+118 |         rest_only.body.statements[1],
+    |                   ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:57:61
+   |
+57 |         ValueKind::RawAddressRoot { target } if target == f.parameters[0].binding
+   |                                                             ^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:62:12
+   |
+62 |     } = &f.body.statements[1]
+   |            ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0614]: type `runen_hir::Type` cannot be dereferenced
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:66:16
+   |
+66 |     assert_eq!(*ty, scalar_ty);
+   |                ^^^ can't be dereferenced
+
+error[E0614]: type `BindingId` cannot be dereferenced
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:72:25
+   |
+72 |         } if binding == *scalar
+   |                         ^^^^^^^ can't be dereferenced
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:137:60
+    |
+137 |     let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
+    |                                                            ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:75:50
+   |
+75 |     let Statement::Assignment { value, .. } = &f.body.statements[3] else {
+   |                                                  ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `parameters` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:80:61
+   |
+80 |         ValueKind::RawAddressRoot { target } if target == f.parameters[1].binding
+   |                                                             ^^^^^^^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:83:42
+   |
+83 |     let Statement::Local { ty, .. } = &f.body.statements[4] else {
+   |                                          ^^^^ unknown field
+   |
+   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0614]: type `runen_hir::Type` cannot be dereferenced
+  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:86:16
+   |
+86 |     assert_eq!(*ty, point_ty);
+   |                ^^^ can't be dereferenced
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:163:36
+    |
+163 |     } = &function(&hir, "partial").body.statements[0]
+    |                                    ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:187:38
+    |
+187 |     } = &function(&hir, "rest_only").body.statements[0]
+    |                                      ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:212:79
+    |
+212 |     let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
+    |                                                                               ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:240:35
+    |
+240 |         &function(&hir, "direct").body.statements[0]
+    |                                   ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:250:37
+    |
+250 |     } = &function(&hir, "producer").body.statements[0]
+    |                                     ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:264:65
+    |
+264 |     let Statement::RecordDestructure { bindings, .. } = &scoped.body.statements[0] else {
+    |                                                                 ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:268:10
+    |
+268 |         .body
+    |          ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error[E0609]: no field `body` on type `&runen_hir::Function`
+   --> crates/runen-hir/tests/record_pattern_rest.rs:297:60
+    |
+297 |     let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
+    |                                                            ^^^^ unknown field
+    |
+    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
+
+error: could not compile `runen-hir` (test "hir") due to 9 previous errors
+error: could not compile `runen-hir` (test "record_pattern_rest") due to 19 previous errors
+error: could not compile `runen-hir` (test "raw_pointers_unsafe") due to 10 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
   --> crates/runen-hir/tests/blocks.rs:52:26
    |
@@ -2281,14 +1760,7 @@ error[E0609]: no field `body` on type `&runen_hir::Function`
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/floating_addition.rs:25:10
-   |
-25 |         .body
-   |          ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
+error: could not compile `runen-hir` (test "blocks") due to 19 previous errors
 error[E0609]: no field `body` on type `&runen_hir::Function`
   --> crates/runen-hir/tests/record_construction.rs:50:10
    |
@@ -2296,75 +1768,6 @@ error[E0609]: no field `body` on type `&runen_hir::Function`
    |          ^^^^ unknown field
    |
    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "blocks") due to 19 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/floating_addition.rs:398:51
-    |
-398 |     let Statement::Local { initializer, .. } = &f.body.statements[0] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/floating_addition.rs:401:15
-    |
-401 |     float_add(initializer, IntrinsicType::F32);
-    |     --------- ^^^^^^^^^^^ expected `&Value`, found `Value`
-    |     |
-    |     arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/floating_addition.rs:48:4
-    |
- 48 | fn float_add(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
-    |    ^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-401 |     float_add(&initializer, IntrinsicType::F32);
-    |               +
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/floating_addition.rs:403:50
-    |
-403 |     let Statement::Assignment { value, .. } = &f.body.statements[1] else {
-    |                                                  ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/floating_addition.rs:407:33
-    |
-407 |         float_add_with_contract(value, IntrinsicType::F32).0,
-    |         ----------------------- ^^^^^ expected `&Value`, found `Value`
-    |         |
-    |         arguments to this function are incorrect
-    |
-note: function defined here
-   --> crates/runen-hir/tests/floating_addition.rs:32:4
-    |
- 32 | fn float_add_with_contract(value: &Value, ty: IntrinsicType) -> (NumericContract, &Value, &Value) {
-    |    ^^^^^^^^^^^^^^^^^^^^^^^ -------------
-help: consider borrowing here
-    |
-407 |         float_add_with_contract(&value, IntrinsicType::F32).0,
-    |                                 +
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/floating_addition.rs:411:48
-    |
-411 |     let Statement::Call { arguments, .. } = &f.body.statements[2] else {
-    |                                                ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/floating_addition.rs:416:51
-    |
-416 |     let Statement::Local { initializer, .. } = &f.body.statements[3] else {
-    |                                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
 error[E0609]: no field `body` on type `&runen_hir::Function`
    --> crates/runen-hir/tests/record_construction.rs:467:26
@@ -2454,961 +1857,6 @@ error[E0609]: no field `body` on type `&runen_hir::Function`
     |
     = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
 
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:50:12
-   |
-50 |     } = &f.body.statements[0]
-   |            ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `runen_hir::Type` cannot be dereferenced
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:54:16
-   |
-54 |     assert_eq!(*ty, scalar_ty);
-   |                ^^^ can't be dereferenced
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:57:61
-   |
-57 |         ValueKind::RawAddressRoot { target } if target == f.parameters[0].binding
-   |                                                             ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:62:12
-   |
-62 |     } = &f.body.statements[1]
-   |            ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `runen_hir::Type` cannot be dereferenced
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:66:16
-   |
-66 |     assert_eq!(*ty, scalar_ty);
-   |                ^^^ can't be dereferenced
-
-error[E0614]: type `BindingId` cannot be dereferenced
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:72:25
-   |
-72 |         } if binding == *scalar
-   |                         ^^^^^^^ can't be dereferenced
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:75:50
-   |
-75 |     let Statement::Assignment { value, .. } = &f.body.statements[3] else {
-   |                                                  ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:80:61
-   |
-80 |         ValueKind::RawAddressRoot { target } if target == f.parameters[1].binding
-   |                                                             ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:83:42
-   |
-83 |     let Statement::Local { ty, .. } = &f.body.statements[4] else {
-   |                                          ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `runen_hir::Type` cannot be dereferenced
-  --> crates/runen-hir/tests/raw_pointers_unsafe.rs:86:16
-   |
-86 |     assert_eq!(*ty, point_ty);
-   |                ^^^ can't be dereferenced
-
-error: could not compile `runen-hir` (test "floating_addition") due to 7 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/closures.rs:42:16
-   |
-42 |     ] = use_fn.body.statements.as_slice()
-   |                ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0614]: type `ClosureId` cannot be dereferenced
-  --> crates/runen-hir/tests/closures.rs:46:28
-   |
-46 |     let site = hir.closure(*closure);
-   |                            ^^^^^^^^ can't be dereferenced
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/closures.rs:58:10
-   |
-58 |         .body
-   |          ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
 error: could not compile `runen-hir` (test "record_construction") due to 12 previous errors
-error: could not compile `runen-hir` (test "raw_pointers_unsafe") due to 10 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/faults.rs:31:16
-   |
-31 |     assert!(!f.body.has_normal_continuation);
-   |                ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/faults.rs:32:15
-   |
-32 |     assert!(f.body.terminal_return.is_none());
-   |               ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/faults.rs:33:45
-   |
-33 |     let [Statement::Fault { location }] = f.body.statements.as_slice() else {
-   |                                             ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "closures") due to 3 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/faults.rs:44:16
-   |
-44 |     assert!(!f.body.has_normal_continuation);
-   |                ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/faults.rs:45:15
-   |
-45 |     assert!(f.body.terminal_return.is_none());
-   |               ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/faults.rs:47:11
-   |
-47 |         f.body.statements.as_slice(),
-   |           ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/faults.rs:57:39
-   |
-57 |     let [Statement::Block(block)] = f.body.statements.as_slice() else {
-   |                                       ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/faults.rs:131:41
-    |
-131 |     assert!(!function(&both_fault, "f").body.has_normal_continuation);
-    |                                         ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/faults.rs:135:36
-    |
-135 |     assert!(!function(&mixed, "f").body.has_normal_continuation);
-    |                                    ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/faults.rs:144:15
-    |
-144 |     assert!(f.body.has_normal_continuation);
-    |               ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/faults.rs:145:24
-    |
-145 |     assert!(matches!(f.body.statements[0], Statement::Call { .. }));
-    |                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/faults.rs:146:24
-    |
-146 |     assert!(matches!(f.body.statements[1], Statement::Local { .. }));
-    |                        ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error: could not compile `runen-hir` (test "faults") due to 12 previous errors
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/record_pattern_rest.rs:47:12
-   |
-47 |     } = &f.body.statements[0]
-   |            ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/record_pattern_rest.rs:53:47
-   |
-53 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-   |                                               ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-  --> crates/runen-hir/tests/record_pattern_rest.rs:53:9
-   |
-53 |         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `RecordPatternScrutinee`, found `&RecordPatternScrutinee`
-   |
-help: consider removing the borrow
-   |
-53 -         &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-53 +         RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
-   |
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/record_pattern_rest.rs:91:19
-   |
-91 |     } = &selected.body.statements[0]
-   |                   ^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-  --> crates/runen-hir/tests/record_pattern_rest.rs:97:54
-   |
-97 |         &RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
-   |                                                      ^^^^^^^^^^ unknown field
-   |
-   = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-  --> crates/runen-hir/tests/record_pattern_rest.rs:97:9
-   |
-97 |         &RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `RecordPatternScrutinee`, found `&RecordPatternScrutinee`
-   |
-help: consider removing the borrow
-   |
-97 -         &RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
-97 +         RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
-   |
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:108:20
-    |
-108 |     } = &rest_only.body.statements[0]
-    |                    ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `parameters` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:114:55
-    |
-114 |         &RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
-    |                                                       ^^^^^^^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0308]: mismatched types
-   --> crates/runen-hir/tests/record_pattern_rest.rs:114:9
-    |
-114 |         &RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
-    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ expected `RecordPatternScrutinee`, found `&RecordPatternScrutinee`
-    |
-help: consider removing the borrow
-    |
-114 -         &RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
-114 +         RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
-    |
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:118:19
-    |
-118 |         rest_only.body.statements[1],
-    |                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:137:60
-    |
-137 |     let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
-    |                                                            ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:163:36
-    |
-163 |     } = &function(&hir, "partial").body.statements[0]
-    |                                    ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:187:38
-    |
-187 |     } = &function(&hir, "rest_only").body.statements[0]
-    |                                      ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:212:79
-    |
-212 |     let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
-    |                                                                               ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:240:35
-    |
-240 |         &function(&hir, "direct").body.statements[0]
-    |                                   ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:250:37
-    |
-250 |     } = &function(&hir, "producer").body.statements[0]
-    |                                     ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:264:65
-    |
-264 |     let Statement::RecordDestructure { bindings, .. } = &scoped.body.statements[0] else {
-    |                                                                 ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:268:10
-    |
-268 |         .body
-    |          ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0609]: no field `body` on type `&runen_hir::Function`
-   --> crates/runen-hir/tests/record_pattern_rest.rs:297:60
-    |
-297 |     let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
-    |                                                            ^^^^ unknown field
-    |
-    = note: available fields are: `id`, `module`, `name`, `accessibility`, `type_parameters` ... and 4 others
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/callable_values.rs:84:26
-   |
-84 |     let report = execute(Program {
-   |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_values.rs:167:26
-    |
-167 |     let report = execute(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_values.rs:197:26
-    |
-197 |     let report = execute(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_values.rs:259:26
-    |
-259 |     let report = execute(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_values.rs:312:26
-    |
-312 |     let report = execute(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-hir` (test "record_pattern_rest") due to 19 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_values.rs:404:26
-    |
-404 |     let report = execute(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_values.rs:527:26
-    |
-527 |     let report = execute(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "callable_values") due to 7 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-reference/tests/callable_storage.rs:87:26
-   |
-87 |     let report = execute(Program {
-   |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-reference/tests/callable_storage.rs:142:26
-    |
-142 |     let report = execute(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-reference` (test "callable_storage") due to 2 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/fixed_integer_constants.rs:10:5
-   |
-10 |     Program {
-   |     ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/fixed_integer_constants.rs:93:19
-   |
-93 |     let program = Program {
-   |                   ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-core-ir` (test "fixed_integer_constants") due to 2 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/floating_constants.rs:10:5
-   |
-10 |     Program {
-   |     ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/floating_constants.rs:212:19
-    |
-212 |     let program = Program {
-    |                   ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-core-ir` (test "floating_constants") due to 2 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/faults.rs:38:22
-   |
-38 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/faults.rs:69:22
-   |
-69 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/faults.rs:94:22
-   |
-94 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-core-ir` (test "faults") due to 3 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/references.rs:80:26
-   |
-80 |         validate_program(Program {
-   |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:104:22
-    |
-104 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:238:34
-    |
-238 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:273:34
-    |
-273 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:313:34
-    |
-313 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/callable_values.rs:52:22
-   |
-52 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/callable_values.rs:65:34
-   |
-65 |     let error = validate_program(Program {
-   |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:370:34
-    |
-370 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/callable_values.rs:88:34
-   |
-88 |     let error = validate_program(Program {
-   |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:419:34
-    |
-419 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:475:34
-    |
-475 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:130:22
-    |
-130 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:527:34
-    |
-527 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:167:34
-    |
-167 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:556:34
-    |
-556 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:586:34
-    |
-586 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:198:34
-    |
-198 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:629:22
-    |
-629 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:223:34
-    |
-223 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:675:22
-    |
-675 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:701:34
-    |
-701 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:258:34
-    |
-258 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:756:34
-    |
-756 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:316:22
-    |
-316 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:790:34
-    |
-790 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:862:22
-    |
-862 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:361:34
-    |
-361 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:916:34
-    |
-916 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-warning: unused variable: `i64_ty`
-  --> crates/runen-core-ir/tests/external_callables.rs:72:9
-   |
-72 |     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
-   |         ^^^^^^ help: if this is intentional, prefix it with an underscore: `_i64_ty`
-   |
-   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/references.rs:963:34
-    |
-963 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:407:34
-    |
-407 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-    --> crates/runen-core-ir/tests/references.rs:1007:22
-     |
-1007 |     validate_program(Program {
-     |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_values.rs:445:22
-    |
-445 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-    --> crates/runen-core-ir/tests/references.rs:1074:22
-     |
-1074 |     validate_program(Program {
-     |                      ^^^^^^^ missing `external_callables`
-
-warning: `runen-core-ir` (test "external_callables") generated 1 warning (run `cargo fix --test "external_callables" -p runen-core-ir` to apply 1 suggestion)
-error: could not compile `runen-core-ir` (test "callable_values") due to 12 previous errors
-error: could not compile `runen-core-ir` (test "references") due to 21 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:122:34
-    |
-122 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:193:34
-    |
-193 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:274:22
-    |
-274 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:361:22
-    |
-361 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:417:22
-    |
-417 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:460:34
-    |
-460 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:516:22
-    |
-516 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:581:22
-    |
-581 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/derived_reference_callers.rs:635:22
-    |
-635 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-core-ir` (test "derived_reference_callers") due to 9 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/reference_calls.rs:85:22
-   |
-85 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:171:22
-    |
-171 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:201:26
-    |
-201 |         validate_program(Program {
-    |                          ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/persistent_storage.rs:63:22
-   |
-63 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/persistent_storage.rs:75:34
-   |
-75 |     let error = validate_program(Program {
-   |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/persistent_storage.rs:92:34
-   |
-92 |     let error = validate_program(Program {
-   |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:245:30
-    |
-245 |             validate_program(Program {
-    |                              ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/persistent_storage.rs:111:34
-    |
-111 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/persistent_storage.rs:167:22
-    |
-167 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:300:34
-    |
-300 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/persistent_storage.rs:197:34
-    |
-197 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:377:34
-    |
-377 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/persistent_storage.rs:234:34
-    |
-234 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/persistent_storage.rs:263:34
-    |
-263 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/persistent_storage.rs:279:22
-    |
-279 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:462:34
-    |
-462 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:503:34
-    |
-503 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:530:22
-    |
-530 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:630:22
-    |
-630 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-core-ir` (test "persistent_storage") due to 9 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:751:22
-    |
-751 |     validate_program(Program {
-    |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/reference_calls.rs:760:34
-    |
-760 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-    --> crates/runen-core-ir/tests/reference_calls.rs:1003:22
-     |
-1003 |     validate_program(Program {
-     |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-    --> crates/runen-core-ir/tests/reference_calls.rs:1089:22
-     |
-1089 |     validate_program(Program {
-     |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-    --> crates/runen-core-ir/tests/reference_calls.rs:1192:22
-     |
-1192 |     validate_program(Program {
-     |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-    --> crates/runen-core-ir/tests/reference_calls.rs:1438:34
-     |
-1438 |     let error = validate_program(Program {
-     |                                  ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-core-ir` (test "reference_calls") due to 16 previous errors
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/callable_conformance_edges.rs:72:22
-   |
-72 |     validate_program(Program {
-   |                      ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-  --> crates/runen-core-ir/tests/callable_conformance_edges.rs:92:34
-   |
-92 |     let error = validate_program(Program {
-   |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:113:34
-    |
-113 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:134:34
-    |
-134 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:160:34
-    |
-160 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:186:34
-    |
-186 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:220:34
-    |
-220 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:255:34
-    |
-255 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:287:34
-    |
-287 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:323:34
-    |
-323 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:367:34
-    |
-367 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:445:34
-    |
-445 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error[E0063]: missing field `external_callables` in initializer of `runen_core_ir::Program`
-   --> crates/runen-core-ir/tests/callable_conformance_edges.rs:484:34
-    |
-484 |     let error = validate_program(Program {
-    |                                  ^^^^^^^ missing `external_callables`
-
-error: could not compile `runen-core-ir` (test "callable_conformance_edges") due to 13 previous errors
     Checking xtask v0.0.0 (/home/runner/work/runen/runen/tools/xtask)
 cargo_status=101
