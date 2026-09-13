@@ -49,11 +49,7 @@ fn grouping_handles_empty_empty_key_and_complete_key_cases() {
         &record_type,
         vec![(key(1), Value::i32(8)), (key(2), Value::bool(false))],
     );
-    let input = BagValue::new(
-        element_type.clone(),
-        [a.clone(), b.clone(), a.clone()],
-    )
-    .unwrap();
+    let input = BagValue::new(element_type.clone(), [a.clone(), b.clone(), a.clone()]).unwrap();
 
     let empty_key_result = group_by_fields(&input, &[]).unwrap();
     assert_eq!(empty_key_result.class_count(), 1);
@@ -92,11 +88,8 @@ fn grouping_partitions_by_projected_key_preserves_multiplicity_and_recovers_key(
     .unwrap();
 
     let result = group_by_fields(&input, &[key(1)]).unwrap();
-    let group_seven = BagValue::new(
-        element_type.clone(),
-        [a.clone(), a.clone(), b.clone()],
-    )
-    .unwrap();
+    let group_seven =
+        BagValue::new(element_type.clone(), [a.clone(), a.clone(), b.clone()]).unwrap();
     let group_eight = BagValue::new(element_type, [c.clone()]).unwrap();
 
     assert_eq!(result.class_count(), 2);
@@ -122,8 +115,7 @@ fn grouping_partitions_by_projected_key_preserves_multiplicity_and_recovers_key(
 #[test]
 fn grouping_uses_exact_optional_tag_and_recursive_present_equivalence() {
     let optional_i32 = LogicalType::optional(LogicalType::I32);
-    let record_type =
-        RecordType::new([(key(1), optional_i32), (key(2), LogicalType::U8)]).unwrap();
+    let record_type = RecordType::new([(key(1), optional_i32), (key(2), LogicalType::U8)]).unwrap();
     let element_type = LogicalType::Record(record_type.clone());
 
     let absent_one = record(
@@ -185,11 +177,8 @@ fn grouping_uses_exact_optional_tag_and_recursive_present_equivalence() {
     let result = group_by_fields(&input, &[key(1)]).unwrap();
 
     let absent_group = BagValue::new(element_type.clone(), [absent_one, absent_two]).unwrap();
-    let seven_group = BagValue::new(
-        element_type.clone(),
-        [present_seven_one, present_seven_two],
-    )
-    .unwrap();
+    let seven_group =
+        BagValue::new(element_type.clone(), [present_seven_one, present_seven_two]).unwrap();
     let eight_group = BagValue::new(element_type, [present_eight]).unwrap();
 
     assert_eq!(result.class_count(), 3);
@@ -247,7 +236,12 @@ fn grouping_reuses_nan_equivalence_and_signed_zero_distinction() {
 
     let input = BagValue::new(
         element_type.clone(),
-        [nan_one.clone(), plus.clone(), nan_two.clone(), minus.clone()],
+        [
+            nan_one.clone(),
+            plus.clone(),
+            nan_two.clone(),
+            minus.clone(),
+        ],
     )
     .unwrap();
     let result = group_by_fields(&input, &[key(1)]).unwrap();
@@ -278,8 +272,7 @@ fn grouping_reuses_recursive_nested_bag_equivalence() {
         [Value::i32(2), Value::i32(1), Value::i32(1)],
     )
     .unwrap();
-    let nested_other =
-        BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(2)]).unwrap();
+    let nested_other = BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(2)]).unwrap();
 
     let a = record(
         &record_type,
@@ -291,17 +284,10 @@ fn grouping_reuses_recursive_nested_bag_equivalence() {
     );
     let other = record(
         &record_type,
-        vec![
-            (key(1), Value::bag(nested_other)),
-            (key(2), Value::u8(3)),
-        ],
+        vec![(key(1), Value::bag(nested_other)), (key(2), Value::u8(3))],
     );
 
-    let input = BagValue::new(
-        element_type.clone(),
-        [a.clone(), other.clone(), b.clone()],
-    )
-    .unwrap();
+    let input = BagValue::new(element_type.clone(), [a.clone(), other.clone(), b.clone()]).unwrap();
     let result = group_by_fields(&input, &[key(1)]).unwrap();
     let equivalent_group = BagValue::new(element_type.clone(), [a, b]).unwrap();
     let other_group = BagValue::new(element_type, [other]).unwrap();
