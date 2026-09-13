@@ -18,16 +18,10 @@ fn cardinality_is_a_distinct_exact_model_scalar() {
 
 #[test]
 fn cardinality_composes_through_existing_structural_equivalence() {
-    let present_left = Value::present(
-        LogicalType::Cardinality,
-        Value::cardinality_from_u128(17),
-    )
-    .unwrap();
-    let present_right = Value::present(
-        LogicalType::Cardinality,
-        Value::cardinality_from_u128(17),
-    )
-    .unwrap();
+    let present_left =
+        Value::present(LogicalType::Cardinality, Value::cardinality_from_u128(17)).unwrap();
+    let present_right =
+        Value::present(LogicalType::Cardinality, Value::cardinality_from_u128(17)).unwrap();
     assert!(model_equivalent(&present_left, &present_right));
 
     let relation_left = RelationValue::new(
@@ -57,10 +51,7 @@ fn bag_cardinality_counts_exact_occurrences() {
     let empty = BagValue::new(LogicalType::Bool, std::iter::empty::<Value>()).unwrap();
     let zero = bag_cardinality(&empty);
     assert_eq!(zero.logical_type(), &LogicalType::Cardinality);
-    assert!(model_equivalent(
-        &zero,
-        &Value::cardinality_from_u128(0)
-    ));
+    assert!(model_equivalent(&zero, &Value::cardinality_from_u128(0)));
 
     let input = BagValue::new(
         LogicalType::Bool,
@@ -77,7 +68,11 @@ fn bag_cardinality_counts_exact_occurrences() {
 fn explicit_multiplicity_fixtures_validate_and_merge_classes() {
     let merged = BagValue::from_multiplicities(
         LogicalType::Bool,
-        [(Value::bool(true), 2), (Value::bool(true), 3), (Value::bool(false), 4)],
+        [
+            (Value::bool(true), 2),
+            (Value::bool(true), 3),
+            (Value::bool(false), 4),
+        ],
     )
     .unwrap();
     assert_eq!(merged.class_count(), 2);
@@ -135,10 +130,7 @@ fn bag_cardinality_exceeds_u64_without_semantic_overflow() {
     let reverse_cardinality = bag_cardinality(&reverse);
     assert!(model_equivalent(&forward_cardinality, &expected));
     assert!(model_equivalent(&reverse_cardinality, &expected));
-    assert!(model_equivalent(
-        &forward_cardinality,
-        &reverse_cardinality
-    ));
+    assert!(model_equivalent(&forward_cardinality, &reverse_cardinality));
 
     assert_eq!(
         forward.total_multiplicity(),
