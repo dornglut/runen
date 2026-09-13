@@ -5,5 +5,11 @@ edition.workspace = true
 license.workspace = true
 publish = false
 
+[dependencies]
+num-bigint = "=0.5.1"
+
+[dev-dependencies]
+runen-exec-oracle = { path = "../runen-exec-oracle" }
+
 [lints]
 workspace = true
