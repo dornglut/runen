@@ -21,6 +21,20 @@ The represented Model logical types are the least finite structural type express
 
 No represented Model logical type in this revision is a safe reference, raw pointer, callable or closure value, Exec resource, state-domain handle, storage handle, target-sized integer, string, byte sequence, character, enum, variant, graph, field, or other opaque/resource-bearing category. Those require separately accepted owners and consumers.
 
+## Logical type equality
+
+Represented Model logical type equality is exact and structural over the type algebra above:
+
+- two intrinsic logical scalar types are equal exactly when they are the same intrinsic identity;
+- `Optional<A>` and `Optional<B>` are equal exactly when `A` and `B` are equal;
+- two logical record types are equal exactly when they have the same field-key set and each shared key maps to equal logical types;
+- `Relation<A>` and `Relation<B>` are equal exactly when `A` and `B` are equal;
+- `Bag<A>` and `Bag<B>` are equal exactly when `A` and `B` are equal;
+- `Sequence<A>` and `Sequence<B>` are equal exactly when `A` and `B` are equal; and
+- types headed by different constructors or collection families are never equal merely because their values, storage, or realizations could look alike.
+
+Record field enumeration/declaration order is not a logical type-equality dimension. Source type identity, Core type-definition identity, physical layout compatibility, serialization compatibility, or implementation representation does not make two Model logical types equal.
+
 ## Intrinsic logical scalars
 
 Each intrinsic logical scalar has the semantic member domain of the corresponding accepted Runen scalar kind:
@@ -52,7 +66,7 @@ A represented Model logical **field key** is an abstract logical schema identifi
 
 A represented logical record type is one finite map from pairwise-distinct field keys to represented Model logical types.
 
-Two logical record types are equal exactly when they have the same field-key set and, for every key in that set, the mapped logical types are equal. Enumeration, declaration, construction, storage, or presentation order is not a record-type identity dimension.
+The logical type-equality relation above determines record type equality from field-key/type mappings. Enumeration, declaration, construction, storage, or presentation order is not a record-type identity dimension.
 
 A value of one logical record type contains exactly one value of the declared logical type for every field key in that record type and contains no additional field. A record value has no hidden row, entity, source-declaration, allocation, address, or storage identity.
 
