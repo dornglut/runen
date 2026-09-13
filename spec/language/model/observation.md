@@ -56,7 +56,7 @@ For any already-represented pure Model query relation whose input is the observe
 
 The singleton retains the exact observation identity it identifies. Two distinct observation identities of the same domain do not collapse into one singleton context merely because their observed logical roots are Model-equivalent. This rule distinguishes the underlying admitted observations; it does not define general `ObservationSet` equality, hashing, ordering, or a Model value-equivalence relation for observation contexts.
 
-Because the represented singleton contains exactly one domain/observation association, it has no cross-domain compatibility question. This does **not** imply that this singleton can be combined with any other observation, and it supplies no admission, consistency, synchronization, or snapshot guarantee for a future multi-domain context.
+Because the represented singleton contains exactly one domain/observation association, it has no cross-domain compatibility question. The singleton rules alone do not determine whether or how another observation can participate in the same context; multi-domain admission is defined only by a separately represented profile such as the bounded two-domain profile below or by a future stronger contract.
 
 Singleton construction does not identify `o` with a state revision, revision position, timestamp, frame, transaction, causal frontier, freshness or progress token, ECS change cursor, physical snapshot, storage object, or another realization identity. It also defines no runtime acquisition, retention, reacquisition, unavailable-observation failure, durability, replication, enumeration order, serialization, or physical realization contract.
 
@@ -64,6 +64,34 @@ This first singleton form deliberately does not define the general membership st
 
 The singleton form is sufficient to serve as one source `ObservationSet` wherever another Model contract already refers to the corresponding admitted source observation context. Defining that source context does not by itself define freshness/staleness policy, a materialized or maintained target, propagation progress, reconciliation, or target visibility.
 
+## First represented two-domain `ObservationSet`
+
+For two pairs `(D1, o1)` and `(D2, o2)` already admitted under the single-domain profile above, where `D1` and `D2` are distinct state-domain identities, define the bounded two-domain observation context:
+
+```text
+two_domain_observation_set((D1, o1), (D2, o2))
+```
+
+This context is a valid `ObservationSet` containing exactly the two admitted domain-scoped observation associations. It is immutable for its evaluation or reaction wave.
+
+The bounded context is admitted exactly when both member pairs are already admitted by the single-domain observation relation and `D1 != D2`. No additional generic compatibility or joint-admission predicate is required merely to form this read-only evaluation context.
+
+The context supplies exactly `observed_value(D1, o1)` as the logical root associated with `D1` and exactly `observed_value(D2, o2)` as the logical root associated with `D2`. A consumer may explicitly supply either or both roots to an already-represented pure Model semantic relation when that relation's own input-type and admission rules permit it. This profile does not redefine projection, filtering, joining, grouping, cardinality, `distinct`, another query relation, or rule derivation semantics.
+
+The two written associations have no semantic member order. Reversing their presentation or construction order cannot change which observed root is associated with either state domain or change the meaning of a represented pure evaluation that consumes those roots. This invariance does not define general `ObservationSet` equality, hashing, ordering, iteration, or serialization.
+
+Like the singleton form, the two-domain context is an evaluation-context construct rather than represented Model logical data. It is not a Model `Relation`, `Bag`, or `Sequence`, has no Model value-equivalence relation, and gains no query-data membership, source syntax, row/entity/stable-key identity, serialization identity, or storage identity. Model-equivalent observed roots do not collapse distinct state-domain identities or observation identities.
+
+Forming the context asserts no cross-domain consistency relation beyond the two explicit observation associations. In particular, it does not assert one synchronized or global snapshot, equal or ordered state revisions, predecessor/successor relations, timestamps, frames, transactions, clock-domain alignment, causal frontiers, freshness positions, propagation progress, MVCC/history compatibility, cross-domain invariants, or atomic-read guarantees.
+
+A stronger consumer may require additional revision, transaction, causal, consistency, synchronization, or other relations before using a two-domain context for that stronger purpose. Those consumer-specific requirements do not become basic validity conditions for the bounded two-domain `ObservationSet` merely because they can relate the same member observations.
+
+Each member retains exactly its accepted domain-scoped observation identity and stable logical meaning. Advancing or changing live/current state in either domain after `o1` or `o2` is established cannot silently change the logical root selected by this context. Physical acquisition order, storage order, allocation identity, or representation cannot become semantic context order or cross-domain consistency.
+
+Reading two roots through this context does not authorize a rule to mutate or commit two state domains. The mutation and cross-domain coordination rules remain owned by [Model rules](rules.md).
+
+This first multi-domain profile is deliberately bounded to exactly two distinct state domains. It does not define contexts with more than two domains, multiple observations from one state domain in one context, a general finite map/set/list/container representation, general multi-domain equality or traversal, cross-domain synchronization protocols, observation acquisition/retention/reacquisition/failure, durability, replication, freshness/materialization/maintenance semantics, stable entity/key identity, source/compiler query IR, or runtime/database APIs.
+
 `observe` requests logical observation semantics; it does not mandate one incremental realization.
 
-The compatibility and admission rules for composing observations from multiple state domains are not defined by this revision.
+Beyond the bounded two-distinct-domain profile above, the general membership, compatibility, and admission rules for composing observations from multiple state domains are not defined by this revision.
