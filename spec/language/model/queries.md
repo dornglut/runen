@@ -12,7 +12,7 @@ Query results preserve multiplicity by default using Bag semantics from `data.md
 
 Projection does not silently deduplicate Model-equivalent output values. If two input occurrences produce Model-equivalent outputs, their occurrences remain represented by Bag multiplicity unless an explicitly defined multiplicity-removal operation applies.
 
-The first represented multiplicity-removal operation is the bounded `distinct` relation defined below.
+The first represented multiplicity-removal operation is the bounded `distinct` relation defined below. The exact Bag-cardinality aggregate below observes the complete input multiplicity but does not remove, normalize, or rewrite it.
 
 ## Bounded record-field projection
 
@@ -196,7 +196,42 @@ Grouping by ordinary projected logical values does not establish a persistent en
 
 After a well-formed input and admitted `R` and `K` are established, the represented grouping relation is pure, non-faulting, non-diverging, and deterministic. It consumes no state domain, `ObservationSet`, clock, external observation, stable identity, physical storage/index, freshness, or incremental-maintenance behavior.
 
-The represented grouping relation above defines only the non-empty partition of `Bag<R>` induced by equivalence of an existing bounded field restriction. It does not define aggregate functions or aggregate result values; `count`, sum, minimum/maximum, average, reductions, or aggregate absence rules; record-shaped group/aggregate output; fresh or derived field keys; generic grouping-key expressions; source grouping syntax; ordering/comparator semantics; stable group/entity identity; Relation or Sequence grouping; state-backed grouping; or planner/storage/incremental behavior.
+The represented grouping relation above defines only the non-empty partition of `Bag<R>` induced by equivalence of an existing bounded field restriction. It does not itself apply aggregates to groups or construct group-plus-aggregate output records. The exact Bag-cardinality aggregate below remains a separate scalar relation over one Bag. This grouping relation does not define sum, minimum/maximum, average, other reductions, aggregate absence rules, record-shaped group/aggregate output, fresh or derived field keys, generic grouping-key expressions, source grouping syntax, ordering/comparator semantics, stable group/entity identity, Relation or Sequence grouping, state-backed grouping, or planner/storage/incremental behavior.
+
+## Bag cardinality
+
+For every represented Model logical type `T`, the exact Bag-cardinality aggregate has exactly this semantic type:
+
+```text
+bag_cardinality : Bag<T> -> Cardinality
+```
+
+`Cardinality` is the Model logical scalar owned by `data.md`; its members are exactly the non-negative finite mathematical integers and it has no fixed maximum member.
+
+For an input `B : Bag<T>`, `bag_cardinality(B)` is exactly the concrete Bag size owned by `data.md`: the finite sum of the positive multiplicities of every `T` Model-equivalence class in `B`.
+
+This notation identifies only the semantic aggregate relation. It does not define source aggregate syntax, a generic reduction expression or callback, a query expression AST, compiler IR, an implementation API, a physical integer representation, or planner/storage behavior.
+
+Consequences follow directly from the accepted Bag and `Cardinality` semantics:
+
+- the empty Bag yields exactly `0 : Cardinality`;
+- one input equivalence class at multiplicity `m` contributes exactly `m` to the result;
+- multiplicities of distinct input classes are summed exactly, without deduplication, normalization, wrapping, saturation, truncation, or a fixed-width overflow rule;
+- Model-equivalent Bags yield Model-equivalent `Cardinality` results because Bag equivalence requires every element equivalence class to have the same multiplicity in both Bags;
+- the result depends only on the Bag equivalence-class/multiplicity mapping and does not select an element representative;
+- Bag storage, hash, iteration, worker, scheduler, or another physical traversal order cannot affect the result;
+- Optional tags, NaN equivalence, signed-zero distinction, records, and nested collection structure in `T` affect how input occurrences form Model-equivalence classes and multiplicities under existing rules, but every represented occurrence still contributes exactly once through that multiplicity;
+- the result creates no record type, field key, source name, group identity, stable entity identity, or ordering relation.
+
+The semantic sum is finite because one `Bag<T>` contains finitely many equivalence classes and every represented class multiplicity is positive and finite. The result is nevertheless not bounded by any fixed-width integer domain. A physical or verification realization may use arbitrary implementation machinery, but it MUST NOT introduce a semantic maximum, wrapping, saturation, overflow fault, rejection, or other result not admitted by the exact `Cardinality` domain.
+
+`Cardinality` being the result type does not make fixed-width integers implicitly convertible to or from it, does not define arithmetic/comparison/order operations on it, and does not create a Core/source type identity or reification. Those require separately accepted consumer contracts.
+
+After one finite input Bag is established, `bag_cardinality` is pure, deterministic, non-faulting, and non-diverging. It consumes no state domain, `ObservationSet`, clock, external observation, stable identity, physical storage/index, freshness, or incremental-maintenance behavior.
+
+This relation returns a Model value. It does not define static query-cardinality/type inference or an abstract cardinality-analysis domain.
+
+This first slice admits only `Bag<T>` input. Relation or Sequence cardinality operations; sum, minimum/maximum, average, Boolean aggregates, generic reductions, aggregate mapping over a Relation of groups, record-shaped aggregate output, and source aggregate syntax are not defined by this relation.
 
 ## Bag distinct
 
@@ -235,7 +270,9 @@ The accepted base query operations are represented illustratively by `from`, `wh
 
 The existence of those operation names does not supply semantics that their canonical owners have not yet defined. In particular, Model value equivalence is not by itself a query predicate language, aggregate equality rule, or ordering relation. The bounded field-equivalence filter, bounded disjoint-record field-equivalence join, and bounded record-field partition grouping above are explicit operation-specific consumers of that equivalence relation and do not broaden it beyond those contracts.
 
-The exact evaluator relations represented by this revision are the bounded Bag record-field projection, the bounded Bag record-field equivalence filter, the bounded disjoint-record Bag field-equivalence join, the bounded Bag record-field partition grouping, and the bounded Bag `distinct` relation. They do not define general `select`/`derive`, general predicate/filter expressions, general joins, general grouping expressions or aggregate production, aggregation, or ordering semantics.
+The type parameter `T` and record field types in the represented relations range over represented Model logical types under the existing structural admission rules. Adding `Cardinality` to the logical type algebra therefore permits existing generic relations such as `distinct`, and existing record projection/filter/join/grouping relations where their ordinary type constraints are met, to contain or operate on `Cardinality` values without adding Cardinality-specific query semantics.
+
+The exact evaluator relations represented by this revision are the bounded Bag record-field projection, the bounded Bag record-field equivalence filter, the bounded disjoint-record Bag field-equivalence join, the bounded Bag record-field partition grouping, exact Bag cardinality, and the bounded Bag `distinct` relation. They do not define general `select`/`derive`, general predicate/filter expressions, general joins, general grouping expressions, aggregate functions beyond exact Bag cardinality, general aggregation expressions, or ordering semantics.
 
 ## Ordering
 
@@ -249,4 +286,4 @@ A physical realization MUST NOT manufacture an implicit semantic tie-breaker fro
 
 This revision does not define the ordering relation for logical scalar/record values, absence ordering, comparator semantics, or exact `order by` typing/execution.
 
-The exact aggregation relations, general query typing, general query-schema propagation beyond the represented bounded projection and disjoint-record join, general predicate absence behavior beyond the represented field-equivalence filter and join, general filtering execution, general join execution beyond the represented bounded disjoint-record relation, general grouping execution beyond the represented bounded record-field partition, general projection expressions, and static cardinality rules are not defined by this revision.
+Aggregation beyond exact Bag cardinality, general query typing, general query-schema propagation beyond the represented bounded projection and disjoint-record join, general predicate absence behavior beyond the represented field-equivalence filter and join, general filtering execution, general join execution beyond the represented bounded disjoint-record relation, general grouping execution beyond the represented bounded record-field partition, general projection expressions, and static cardinality rules are not defined by this revision.
