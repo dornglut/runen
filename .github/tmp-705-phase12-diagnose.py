@@ -2,15 +2,6 @@ from pathlib import Path
 import re
 
 
-def replace_exact(path: str, old: str, new: str, count: int = 1) -> None:
-    p = Path(path)
-    text = p.read_text()
-    found = text.count(old)
-    if found != count:
-        raise SystemExit(f"{path}: expected {count} anchors, found {found}: {old[:120]!r}")
-    p.write_text(text.replace(old, new, count))
-
-
 # #705 explicitly authorizes mechanical migration of historical Program test fixtures.
 # Work test-only and skip every literal that already declares external requirements,
 # including Rust shorthand fields such as `external_callables,`.
@@ -49,6 +40,18 @@ def migrate_read_only_hir_test(path: str) -> None:
     p = Path(path)
     text = p.read_text()
 
+    # Indexed compilation function access is a Function place, so borrow it explicitly.
+    text, indexed_body_count = re.subn(
+        r'\b([A-Za-z_][A-Za-z0-9_]*\.functions\[[^\]\n]+\])\s*\.body\b',
+        r'runen_body(&\1)',
+        text,
+    )
+    text, indexed_parameter_count = re.subn(
+        r'\b([A-Za-z_][A-Za-z0-9_]*\.functions\[[^\]\n]+\])\s*\.parameters\b',
+        r'runen_parameters(&\1)',
+        text,
+    )
+
     # Calls through the common test helper need wrapping before simple aliases.
     text, call_body_count = re.subn(
         r'function\(([^)\n]+)\)\s*\.body\b',
@@ -74,8 +77,8 @@ def migrate_read_only_hir_test(path: str) -> None:
         text,
     )
 
-    needs_body = call_body_count + body_count > 0
-    needs_parameters = call_parameter_count + parameter_count > 0
+    needs_body = indexed_body_count + call_body_count + body_count > 0
+    needs_parameters = indexed_parameter_count + call_parameter_count + parameter_count > 0
     if not needs_body and not needs_parameters:
         raise SystemExit(f'{path}: no compiler-named Function body/parameter accesses found')
 
@@ -90,12 +93,20 @@ def migrate_read_only_hir_test(path: str) -> None:
         raise SystemExit(f'{path}: test insertion anchor missing')
     text = text.replace(anchor, helpers + anchor, 1)
 
-    # Exhaust the simple/direct legacy spellings in each explicitly selected inspection file.
+    # Exhaust the selected legacy spellings in each explicitly compiler-selected inspection file.
     legacy_body = re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\s*\.body\b', text)
     legacy_parameters = re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\s*\.parameters\b', text)
-    if legacy_body or legacy_parameters:
+    legacy_indexed_body = re.findall(
+        r'\b[A-Za-z_][A-Za-z0-9_]*\.functions\[[^\]\n]+\]\s*\.body\b', text
+    )
+    legacy_indexed_parameters = re.findall(
+        r'\b[A-Za-z_][A-Za-z0-9_]*\.functions\[[^\]\n]+\]\s*\.parameters\b', text
+    )
+    if legacy_body or legacy_parameters or legacy_indexed_body or legacy_indexed_parameters:
         raise SystemExit(
-            f'{path}: legacy direct Function fields remain: body={legacy_body} parameters={legacy_parameters}'
+            f'{path}: legacy Function fields remain: '
+            f'body={legacy_body + legacy_indexed_body} '
+            f'parameters={legacy_parameters + legacy_indexed_parameters}'
         )
     p.write_text(text)
 
@@ -123,6 +134,18 @@ for path in [
     'crates/runen-hir/tests/integer_multiplication.rs',
     'crates/runen-hir/tests/floating_division.rs',
     'crates/runen-hir/tests/literals.rs',
+    'crates/runen-hir/tests/statics.rs',
+    'crates/runen-hir/tests/closures.rs',
+    'crates/runen-hir/tests/floating_subtraction.rs',
+    'crates/runen-hir/tests/integer_xor.rs',
+    'crates/runen-hir/tests/marker_traits.rs',
+    'crates/runen-hir/tests/faults.rs',
+    'crates/runen-hir/tests/integer_equality.rs',
+    'crates/runen-hir/tests/integer_negation.rs',
+    'crates/runen-hir/tests/floating_multiplication.rs',
+    'crates/runen-hir/tests/boolean_conjunction.rs',
+    'crates/runen-hir/tests/conditionals.rs',
+    'crates/runen-hir/tests/refutable_record_selection.rs',
 ]:
     migrate_read_only_hir_test(path)
 
