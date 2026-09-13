@@ -4,7 +4,7 @@ Status: **provisional normative; incomplete**
 
 This document owns the represented Model logical type/value foundation, explicit absence, closed structural records, finite logical collection values, and Model value equivalence. These semantics are independent of one physical storage, indexing, execution, serialization, or incremental-maintenance representation.
 
-The represented scalar member domains consume the accepted semantic value domains from [Core value and storage semantics](../core/value-storage.md), [Core integer semantics](../core/numerics/integers.md), and [Core floating-point semantics](../core/numerics/floating-point.md). This reuse is value-domain reuse only: Model logical type identity does not become Core per-program type-definition identity, Core storage identity, source declaration identity, or a physical representation guarantee.
+The represented scalar member domains consume the accepted semantic value domains from [Core value and storage semantics](../core/value-storage.md), [Core integer semantics](../core/numerics/integers.md), and [Core floating-point semantics](../core/numerics/floating-point.md). The exact `F16`/`F32`/`F64` names below consume the already accepted mapping from those names to binary-floating format parameters in [Source type foundation](../source/types.md); that dependency supplies only the corresponding semantic member domains and does not import source type identity or source syntax into Model. This reuse is value-domain reuse only: Model logical type identity does not become Core per-program type-definition identity, Core storage identity, source declaration identity, or a physical representation guarantee.
 
 ## Logical type algebra
 
@@ -41,7 +41,7 @@ Each intrinsic logical scalar has the semantic member domain of the correspondin
 
 - `Bool` has exactly `true` and `false`;
 - each fixed-width integer type has the accepted mathematical value domain for that exact signedness and width; and
-- `F16`, `F32`, and `F64` have the accepted binary-floating semantic member domains for those exact formats, including signed zero, signed infinity, and a non-empty NaN class.
+- `F16`, `F32`, and `F64` have the accepted binary-floating semantic member domains selected by their exact accepted format parameters, including signed zero, signed infinity, and a non-empty NaN class.
 
 A Model scalar type is not identified by a Core type-definition token, source type declaration, physical machine type, ABI type, byte encoding, or backend type. Sharing a semantic scalar member domain does not create cross-stratum type identity or an implicit conversion.
 
