@@ -39,6 +39,7 @@ jobs:
           python .github/tmp-705-phase3.py
           python .github/tmp-705-phase4.py
           python .github/tmp-705-phase4-fix.py
+          python .github/tmp-705-phase5-prep.py
           python .github/tmp-705-phase5.py
           cargo +stable fmt --all
           git diff --check
