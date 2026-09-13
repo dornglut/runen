@@ -72,7 +72,7 @@ fn projection_of_empty_bag_has_exact_restricted_record_type() {
 
     assert_eq!(result.element_type(), &expected_type);
     assert_eq!(result.class_count(), 0);
-    assert_eq!(result.total_multiplicity(), 0);
+    assert_eq!(result.total_multiplicity().unwrap(), 0);
 }
 
 #[test]
@@ -105,7 +105,7 @@ fn empty_projection_collapses_to_one_empty_record_class_without_losing_occurrenc
 
     assert_eq!(result.element_type(), &LogicalType::Record(empty_type));
     assert_eq!(result.class_count(), 1);
-    assert_eq!(result.total_multiplicity(), 3);
+    assert_eq!(result.total_multiplicity().unwrap(), 3);
     assert_eq!(result.multiplicity_of(&empty_value), 3);
 }
 
@@ -156,7 +156,7 @@ fn projection_merges_removed_differences_and_sums_multiplicity() {
 
     assert_eq!(input.class_count(), 2);
     assert_eq!(result.class_count(), 1);
-    assert_eq!(result.total_multiplicity(), 3);
+    assert_eq!(result.total_multiplicity().unwrap(), 3);
     assert_eq!(result.multiplicity_of(&expected), 3);
 }
 
@@ -232,7 +232,7 @@ fn projection_reuses_optional_and_nested_collection_equivalence() {
 
     let result = project_fields(&input, &[key(1)]).unwrap();
     assert_eq!(result.class_count(), 2);
-    assert_eq!(result.total_multiplicity(), 3);
+    assert_eq!(result.total_multiplicity().unwrap(), 3);
 
     let output_type = RecordType::new([(key(1), optional_nested_type)]).unwrap();
     let expected_present = record(
@@ -311,7 +311,7 @@ fn projection_reuses_nan_equivalence_and_signed_zero_distinction() {
     );
 
     assert_eq!(result.class_count(), 3);
-    assert_eq!(result.total_multiplicity(), 4);
+    assert_eq!(result.total_multiplicity().unwrap(), 4);
     assert_eq!(result.multiplicity_of(&expected_nan), 2);
     assert_eq!(result.multiplicity_of(&expected_plus_zero), 1);
     assert_eq!(result.multiplicity_of(&expected_minus_zero), 1);

@@ -14,5 +14,6 @@ pub use data::{
     RecordType, RelationValue, SequenceValue, Value, model_equivalent,
 };
 pub use query::{
-    distinct, filter_field_equivalent, group_by_fields, join_fields_equivalent, project_fields,
+    bag_cardinality, distinct, filter_field_equivalent, group_by_fields, join_fields_equivalent,
+    project_fields,
 };

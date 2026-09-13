@@ -254,7 +254,7 @@ fn relation_and_bag_are_equivalence_class_values_not_insertion_order() {
     )
     .unwrap();
     assert_eq!(bag_left.class_count(), 2);
-    assert_eq!(bag_left.total_multiplicity(), 3);
+    assert_eq!(bag_left.total_multiplicity().unwrap(), 3);
     assert_eq!(bag_left.multiplicity_of(&nan_a), 2);
     assert!(bag_left.contains_equivalent(&nan_b));
     assert!(model_equivalent(

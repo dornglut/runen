@@ -173,7 +173,7 @@ fn join_multiplies_multiplicity_and_preserves_distinct_matching_pairs() {
 
     let result = join_fields_equivalent(&left, key(1), &right, key(3)).unwrap();
     assert_eq!(result.class_count(), 4);
-    assert_eq!(result.total_multiplicity(), 12);
+    assert_eq!(result.total_multiplicity().unwrap(), 12);
 
     let true_one = record(
         &output_type,
@@ -314,7 +314,7 @@ fn join_uses_exact_optional_absence_and_present_equivalence() {
     );
 
     assert_eq!(result.class_count(), 2);
-    assert_eq!(result.total_multiplicity(), 2);
+    assert_eq!(result.total_multiplicity().unwrap(), 2);
     assert_eq!(result.multiplicity_of(&expected_absent), 1);
     assert_eq!(result.multiplicity_of(&expected_present), 1);
     assert_eq!(result.multiplicity_of(&forbidden_cross), 0);
@@ -446,7 +446,7 @@ fn join_reuses_nan_equivalence_and_signed_zero_distinction() {
     );
 
     assert_eq!(result.class_count(), 2);
-    assert_eq!(result.total_multiplicity(), 2);
+    assert_eq!(result.total_multiplicity().unwrap(), 2);
     assert_eq!(result.multiplicity_of(&expected_nan), 1);
     assert_eq!(result.multiplicity_of(&expected_plus), 1);
     assert_eq!(result.multiplicity_of(&forbidden_mixed), 0);
@@ -491,7 +491,7 @@ fn join_reuses_recursive_nested_bag_equivalence() {
     .unwrap();
     let result = join_fields_equivalent(&left, key(1), &right, key(3)).unwrap();
     assert_eq!(result.class_count(), 1);
-    assert_eq!(result.total_multiplicity(), 1);
+    assert_eq!(result.total_multiplicity().unwrap(), 1);
 }
 
 #[test]
