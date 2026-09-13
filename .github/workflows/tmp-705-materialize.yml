@@ -1,0 +1,117 @@
+name: Temporary P0-D #705 clean materialization
+
+on:
+  push:
+    branches:
+      - p0d-705-external-callable-impl
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tmp-705-materialize
+  cancel-in-progress: false
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out staging head
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+      - name: Install maintained Rust toolchain
+        shell: bash
+        run: rustup toolchain install stable --profile minimal
+      - name: Materialize exact clean candidate
+        id: candidate
+        shell: bash
+        env:
+          BASE: 8e7e0d36bf8e3c000295bd1d607297f024dfdbe4
+          BASE_TREE: 0f637c32df99d3f6644f9cc2c2f33c6c6d5a9244
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse origin/main)" = "$BASE"
+          test "$(git rev-parse "$BASE^{tree}")" = "$BASE_TREE"
+
+          python .github/tmp-705-phase1.py
+          python .github/tmp-705-phase1-fix.py
+          python .github/tmp-705-phase2.py
+          python .github/tmp-705-phase3.py
+          python .github/tmp-705-phase4.py
+          python .github/tmp-705-phase4-fix.py
+          python .github/tmp-705-phase5-prep.py
+          python .github/tmp-705-phase5-prep3.py
+          python .github/tmp-705-phase5-diagnose.py
+          python .github/tmp-705-phase5-script-fix.py
+          python .github/tmp-705-phase5-script-fix2.py
+          python .github/tmp-705-phase5.py
+          python .github/tmp-705-phase5-test-fix.py
+          python .github/tmp-705-phase6.py
+          python .github/tmp-705-phase7.py
+          python .github/tmp-705-phase8.py
+          python .github/tmp-705-phase9.py
+          python .github/tmp-705-phase10.py
+          python .github/tmp-705-phase11.py
+          python .github/tmp-705-phase12-diagnose.py
+          python .github/tmp-705-phase13.py
+          python .github/tmp-705-phase14.py
+          python .github/tmp-705-phase15.py
+          python .github/tmp-705-phase16.py
+          python .github/tmp-705-phase17.py
+
+          cargo +stable fmt --all
+          git diff --check
+
+          rm -f .github/tmp-705-*
+          rm -f .github/workflows/tmp-705-*.yml
+          git add -A
+          git diff --cached --check
+
+          if git diff --cached --name-only | grep -E '^\.github/(tmp-705-|workflows/tmp-705-)' ; then
+            echo 'temporary #705 harness leaked into candidate' >&2
+            exit 1
+          fi
+
+          tree="$(git write-tree)"
+          export GIT_AUTHOR_NAME='github-actions[bot]'
+          export GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com'
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+          export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          commit="$(printf '%s\n\n%s\n' \
+            'P0-D: implement declaration-only scalar external callables' \
+            'Implements #705.' | git commit-tree "$tree" -p "$BASE")"
+
+          git checkout --detach "$commit"
+          test "$(git rev-parse HEAD^)" = "$BASE"
+          test "$(git rev-parse HEAD^{tree})" = "$tree"
+          test -z "$(git status --porcelain)"
+          if find .github -maxdepth 2 -name 'tmp-705-*' -print -quit | grep -q .; then
+            echo 'temporary #705 artifact present in clean candidate' >&2
+            exit 1
+          fi
+          git diff --check "$BASE" "$commit"
+
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          echo "tree=$tree" >> "$GITHUB_OUTPUT"
+          echo "candidate_commit=$commit"
+          echo "candidate_tree=$tree"
+      - name: Focused exact-candidate conformance
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +stable test -p runen-syntax --test external_callables
+          cargo +stable test -p runen-hir --test external_callables
+          cargo +stable test -p runen-core-ir --test external_callables
+          cargo +stable test -p runen-core-lowering --test external_callables
+          cargo +stable test -p runen-reference --test external_callables
+      - name: Canonical exact-candidate validation
+        shell: bash
+        run: cargo +stable validate
+      - name: Publish exact clean candidate
+        shell: bash
+        env:
+          CANDIDATE: ${{ steps.candidate.outputs.commit }}
+        run: |
+          set -euo pipefail
+          git push origin "$CANDIDATE:refs/heads/p0d-705-external-callable-clean"
