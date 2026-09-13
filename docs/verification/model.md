@@ -7,7 +7,7 @@ Status: **non-normative assurance guidance**
 The canonical normative owners are:
 
 - `spec/language/model/data.md` for represented logical types, explicit absence, structural records, finite Relation/Bag/Sequence values, and Model value equivalence;
-- `spec/language/model/queries.md` for the accepted bounded record-field projection and `distinct : Bag<T> -> Relation<T>` evaluator relations.
+- `spec/language/model/queries.md` for the accepted bounded record-field projection, bounded record-field equivalence filter, and `distinct : Bag<T> -> Relation<T>` evaluator relations.
 
 ## Verification representation
 
@@ -19,9 +19,11 @@ The oracle uses finite verification fixtures only.
 - Relation and Bag fixtures store private Model-equivalence-class keys. Their deterministic `BTreeSet`/`BTreeMap` order is implementation machinery and is not exposed as semantic iteration order or representative selection.
 - Sequence fixtures retain semantic positional order through bounded verification-only position access. The Rust `usize` carrier is not source indexing syntax or a language indexing-base rule.
 
-Public validated constructors reject values whose recursive logical shape does not match the declared Model type. The fixture error type, including rejection of invalid projection fixtures, is verification machinery rather than a compiler diagnostic or normative runtime query-fault contract.
+Public validated constructors reject values whose recursive logical shape does not match the declared Model type. The fixture error type, including rejection of invalid bounded-query fixtures, is verification machinery rather than a compiler diagnostic or normative runtime query-fault contract.
 
 The projection API accepts a Rust slice of verification-only `FieldKey` values solely as a finite carrier for the accepted semantic retained-key set. Slice order is not Model order, and duplicate candidate keys are idempotent set membership. Projection restricts private record equivalence-class keys directly and merges multiplicities with checked arithmetic; it never selects or exposes representative record values or private tree order.
+
+The bounded field-equivalence filter uses one verification-only `FieldKey` and one exact typed `Value` as carriers for its accepted predicate inputs. It compares the selected entry in each private record equivalence-class key with the constant value's private equivalence key and copies matching record classes with their unchanged multiplicities. It does not reconstruct or select a representative record, expose private tree order, or use host equality in place of Model equivalence.
 
 ## Executable evidence
 
@@ -35,9 +37,10 @@ The current oracle exercises exactly the accepted represented subset:
 - finite Relation membership, Bag multiplicity, and Sequence positional behavior;
 - recursive equivalence through optional, record, and collection nesting;
 - `distinct : Bag<T> -> Relation<T>` as direct equivalence-class support mapping;
-- bounded `project_fields<K> : Bag<R> -> Bag<R|K>` record-field restriction, including exact retained field identities/types, representative-free class projection, and occurrence-preserving multiplicity aggregation when projected classes merge.
+- bounded `project_fields<K> : Bag<R> -> Bag<R|K>` record-field restriction, including exact retained field identities/types, representative-free class projection, and occurrence-preserving multiplicity aggregation when projected classes merge;
+- bounded `filter_field_equivalent<k, v> : Bag<R> -> Bag<R>` record-field equivalence filtering, including exact field/value type admission, representative-free matching, exact retained multiplicity, tagged optional absence/presence, same-type NaN matching, signed-zero distinction, and recursive nested-value equivalence.
 
-Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. Projection tests additionally vary retained-key candidate order and record-field construction order. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
+Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. Projection tests additionally vary retained-key candidate order and record-field construction order. Bounded filter tests vary record-field construction and Bag occurrence order and exercise exact typed rejection, multiplicity, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
 
 ## Deliberate boundaries
 
@@ -45,7 +48,7 @@ This executable evidence does not define or implement:
 
 - source Model syntax or source-to-Model lowering;
 - compiler Model IR, generic query ASTs, planners, indexes, storage layouts, or runtime/database architecture;
-- general projection expressions or field creation/rename/derivation, filtering, joins, grouping, aggregation, ordering, or static query type/cardinality inference beyond the accepted bounded record-field projection and `distinct` relations;
+- general projection expressions or field creation/rename/derivation, general filtering beyond the accepted bounded field-equivalence relation, joins, grouping, aggregation, ordering, or static query type/cardinality inference beyond the accepted bounded record-field projection, bounded field-equivalence filter, and `distinct` relations;
 - state-domain execution, revision/visibility behavior, `ObservationSet` admission or multi-domain compatibility;
 - stable entity/row key semantics;
 - materialization, freshness, incremental maintenance, differential update algorithms, or replication;
