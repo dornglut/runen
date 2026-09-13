@@ -21,8 +21,7 @@ fn function<'a>(hir: &'a TypedCompilation, name: &str) -> &'a runen_hir::Functio
 }
 
 fn returned<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
-    function(hir, name)
-        .body
+    runen_body(function(hir, name))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -50,6 +49,12 @@ fn equality(value: &Value) -> (BooleanEqualityRelation, &Value, &Value) {
         panic!("expected Boolean equality HIR");
     };
     (*relation, left, right)
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]
@@ -216,22 +221,22 @@ fn f(flag: Bool) -> Bool {
     .expect("generic Value consumers accept transparent grouping");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     assert!(matches!(initializer.kind, ValueKind::BindingUse { .. }));
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     assert!(matches!(value.kind, ValueKind::BindingUse { .. }));
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     assert!(matches!(arguments[0].kind, ValueKind::BindingUse { .. }));
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -250,11 +255,11 @@ fn grouped_conditions_reuse_existing_condition_values_and_post_condition_ownersh
     let hir = build("fn control(flag: Bool) { if ((flag)) {} while (flag) { break; } }")
         .expect("grouped conditions erase to existing HIR values");
     let control = function(&hir, "control");
-    let Statement::If { condition, .. } = &control.body.statements[0] else {
+    let Statement::If { condition, .. } = &runen_body(control).statements[0] else {
         panic!("expected if statement");
     };
     assert!(matches!(condition.kind, ValueKind::BindingUse { .. }));
-    let Statement::While { condition, .. } = &control.body.statements[1] else {
+    let Statement::While { condition, .. } = &runen_body(control).statements[1] else {
         panic!("expected while statement");
     };
     assert!(matches!(condition.kind, ValueKind::BindingUse { .. }));

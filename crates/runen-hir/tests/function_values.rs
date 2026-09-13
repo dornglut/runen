@@ -33,6 +33,18 @@ fn function_type(ty: Type) -> FunctionTypeId {
     id
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn equal_structural_function_types_share_one_canonical_handle_and_nested_types_resolve() {
     let hir = build(
@@ -42,10 +54,10 @@ fn equal_structural_function_types_share_one_canonical_handle_and_nested_types_r
     )
     .expect("concrete function types are valid");
     let use_fn = function(&hir, "use");
-    let a = function_type(use_fn.parameters[0].ty);
-    let b = function_type(use_fn.parameters[1].ty);
+    let a = function_type(runen_parameters(use_fn)[0].ty);
+    let b = function_type(runen_parameters(use_fn)[1].ty);
     assert_eq!(a, b);
-    let nested = function_type(use_fn.parameters[2].ty);
+    let nested = function_type(runen_parameters(use_fn)[2].ty);
     assert_ne!(a, nested);
     assert_eq!(hir.function_type(nested).parameters, &[Type::Function(a)]);
     assert_eq!(
@@ -78,7 +90,7 @@ fn function_values_form_contextually_and_remain_distinct_payloads_under_equal_ty
         Statement::Assignment {
             value: assigned, ..
         },
-    ] = use_fn.body.statements.as_slice()
+    ] = runen_body(use_fn).statements.as_slice()
     else {
         panic!("expected two locals and one assignment");
     };
@@ -92,8 +104,7 @@ fn function_values_form_contextually_and_remain_distinct_payloads_under_equal_ty
     assert_eq!(left.ty, right.ty);
     assert!(matches!(assigned.kind, ValueKind::BindingUse { .. }));
 
-    let returned = use_fn
-        .body
+    let returned = runen_body(use_fn)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -113,7 +124,7 @@ fn indirect_no_result_call_uses_the_same_call_target_relation() {
         Statement::Call {
             target, arguments, ..
         },
-    ] = use_fn.body.statements.as_slice()
+    ] = runen_body(use_fn).statements.as_slice()
     else {
         panic!("expected one call statement");
     };
@@ -127,8 +138,7 @@ fn direct_calls_remain_direct_and_non_callable_locals_block_module_fallback() {
         "fn target(value: I64) -> I64 { return value; } fn good() -> I64 { return target(1); }",
     )
     .expect("ordinary direct call remains valid");
-    let returned = function(&hir, "good")
-        .body
+    let returned = runen_body(function(&hir, "good"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -180,7 +190,7 @@ fn abstract_components_and_function_valued_record_fields_remain_excluded() {
 #[test]
 fn shared_reference_function_type_contract_is_derived_once_and_retained() {
     let hir = build("fn use(f: fn(&I64) -> &I64) {}").expect("shared result has unique origin");
-    let function_type = function_type(function(&hir, "use").parameters[0].ty);
+    let function_type = function_type(runen_parameters(function(&hir, "use"))[0].ty);
     assert_eq!(
         hir.function_type(function_type)
             .safe_reference_result_contract,
@@ -201,11 +211,11 @@ fn unequal_function_type_structures_use_distinct_canonical_handles() {
     )
     .expect("distinct concrete function-type structures are valid");
     let use_fn = function(&hir, "use");
-    let a = function_type(use_fn.parameters[0].ty);
-    let b = function_type(use_fn.parameters[1].ty);
-    let c = function_type(use_fn.parameters[2].ty);
-    let identity = function_type(use_fn.parameters[3].ty);
-    let child = function_type(use_fn.parameters[4].ty);
+    let a = function_type(runen_parameters(use_fn)[0].ty);
+    let b = function_type(runen_parameters(use_fn)[1].ty);
+    let c = function_type(runen_parameters(use_fn)[2].ty);
+    let identity = function_type(runen_parameters(use_fn)[3].ty);
+    let child = function_type(runen_parameters(use_fn)[4].ty);
     assert_ne!(a, b);
     assert_ne!(a, c);
     assert_ne!(identity, child);

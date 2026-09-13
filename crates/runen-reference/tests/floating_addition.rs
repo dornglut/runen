@@ -41,6 +41,7 @@ fn execute_float_add_with_contract(
     let result = Place::local(LocalId(0));
     let program = Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -329,6 +330,7 @@ fn produced_nan_survives_copy_move_and_later_float_add() {
     let result = Place::local(LocalId(2));
     let program = Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -451,6 +453,7 @@ fn nan_class_round_trips_through_call_argument_and_result() {
 
     let validated = validate_program(Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![caller, identity],
     })
@@ -480,6 +483,7 @@ fn struct_transport_preserves_nan_class_without_member_identity() {
     let pair = Place::local(LocalId(1));
     let program = Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -545,6 +549,7 @@ fn operand_effects_precede_exactly_one_float_add_write() {
     let one = positive_normal(1_u64 << 23, 0);
     let program = Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![Function {
             name: "entry".into(),

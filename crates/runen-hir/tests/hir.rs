@@ -19,6 +19,18 @@ fn has_diagnostic(
     errors.iter().any(|error| predicate(error.kind))
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn rejects_syntax_dirty_units_before_semantic_hir() {
     let source = parse("fn broken( {}");
@@ -47,11 +59,11 @@ fn same_module_units_support_order_independent_forward_lookup() {
     assert_eq!(second.records.len(), 1);
     assert_eq!(second.functions.len(), 1);
     assert_eq!(
-        first.functions[0].parameters[0].ty,
+        runen_parameters(&first.functions[0])[0].ty,
         Type::Record(first.records[0].id)
     );
     assert_eq!(
-        second.functions[0].parameters[0].ty,
+        runen_parameters(&second.functions[0])[0].ty,
         Type::Record(second.records[0].id)
     );
 }
@@ -115,7 +127,7 @@ fn resolves_signatures_and_rejects_duplicate_parameters() {
     let valid = parse("record Ticket {} fn f(a: I64, b: Ticket,) -> Ticket { return b; }");
     let hir =
         build_typed_hir(&[unit(ModuleId::new(1), &valid)]).expect("signature types must resolve");
-    assert_eq!(hir.functions[0].parameters.len(), 2);
+    assert_eq!(runen_parameters(&hir.functions[0]).len(), 2);
     assert_eq!(
         hir.functions[0].result,
         Some(Type::Record(hir.records[0].id))
@@ -167,7 +179,7 @@ fn intrinsic_uses_duplicate_but_nominal_record_uses_consume() {
         .iter()
         .find(|function| function.name == "f")
         .unwrap();
-    let Statement::Call { arguments, .. } = &f.body.statements[0] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[0] else {
         panic!("expected call statement");
     };
     let ValueKind::BindingUse { ownership, .. } = arguments[0].kind else {
@@ -368,7 +380,7 @@ fn distinct_aliases_may_target_one_module_and_resolve_one_nominal_record() {
     ])
     .expect("two aliases may resolve to the same target module");
     assert_eq!(
-        hir.functions[0].parameters[0].ty,
+        runen_parameters(&hir.functions[0])[0].ty,
         hir.functions[0].result.unwrap()
     );
 }
@@ -429,9 +441,9 @@ fn qualified_types_require_exported_records_and_work_in_all_current_type_positio
         .find(|function| function.name == "f")
         .unwrap();
     assert_eq!(holder.fields[0].ty, Type::Record(ticket));
-    assert_eq!(function.parameters[0].ty, Type::Record(ticket));
+    assert_eq!(runen_parameters(function)[0].ty, Type::Record(ticket));
     assert_eq!(function.result, Some(Type::Record(ticket)));
-    let Statement::Local { ty, .. } = function.body.statements[0] else {
+    let Statement::Local { ty, .. } = runen_body(function).statements[0] else {
         panic!("expected local statement");
     };
     assert_eq!(ty, Type::Record(ticket));
@@ -466,13 +478,12 @@ fn qualified_calls_require_exported_functions_and_support_nested_values() {
     let Statement::Call {
         target: CallTarget::Direct { function, .. },
         ..
-    } = f.body.statements[0]
+    } = runen_body(f).statements[0]
     else {
         panic!("expected qualified call statement");
     };
     assert_eq!(hir.function(function).name, "sink");
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .unwrap()

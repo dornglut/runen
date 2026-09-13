@@ -120,6 +120,7 @@ fn direct_child_call_keeps_carrierless_parent_conflict_while_result_lives() {
     };
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, direct_child_callee(replace_i64, shared_i64)],
@@ -191,6 +192,7 @@ fn direct_child_call_does_not_recreate_a_parent_carrier() {
     };
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, direct_child_callee(replace_i64, shared_i64)],
@@ -272,6 +274,7 @@ fn dropping_direct_child_result_releases_the_only_child_branch_and_parent() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, direct_child_callee(replace_i64, shared_i64)],
@@ -359,6 +362,7 @@ fn identity_forwarding_of_a_returned_direct_child_preserves_ancestry() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![
@@ -415,6 +419,7 @@ fn nested_direct_child_forwarding_is_valid_but_second_derivation_is_not() {
         ),
     };
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types: types.clone(),
         functions: vec![forward, direct_child_callee(replace_i64, shared_i64)],
@@ -458,6 +463,7 @@ fn nested_direct_child_forwarding_is_valid_but_second_derivation_is_not() {
         ),
     };
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![derive_again, direct_child_callee(replace_i64, shared_i64)],
@@ -514,6 +520,7 @@ fn direct_child_contracts_remain_independently_validatable_under_recursion() {
         ),
     };
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types: types.clone(),
         functions: vec![recursive],
@@ -579,6 +586,7 @@ fn direct_child_contracts_remain_independently_validatable_under_recursion() {
         ),
     };
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![left, right],
@@ -633,6 +641,7 @@ fn fault_and_divergence_require_no_synthesized_direct_child_result() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![fault, diverge],

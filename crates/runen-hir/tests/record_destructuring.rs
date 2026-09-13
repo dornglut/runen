@@ -34,6 +34,18 @@ fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool
     diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_resolved_pattern_facts_in_source_order() {
     let hir = build(
@@ -49,7 +61,7 @@ fn retains_resolved_pattern_facts_in_source_order() {
         scrutinee,
         bindings,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected record destructuring statement");
     };
@@ -57,7 +69,7 @@ fn retains_resolved_pattern_facts_in_source_order() {
     assert_eq!(*record, hir.records[1].id);
     assert_eq!(
         scrutinee,
-        &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+        &RecordPatternScrutinee::DirectRoot(runen_parameters(f)[0].binding)
     );
     assert_eq!(bindings.len(), 3);
     assert_eq!(
@@ -100,7 +112,7 @@ fn recursive_pattern_retains_full_leaf_paths_in_depth_first_source_order() {
          }",
     );
     let f = function(&hir, "f");
-    let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
+    let Statement::RecordDestructure { bindings, .. } = &runen_body(f).statements[0] else {
         panic!("expected recursive record destructuring");
     };
     assert_eq!(
@@ -142,7 +154,7 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
 
     for name in ["call", "construct", "field"] {
         let Statement::RecordDestructure { scrutinee, .. } =
-            &function(&hir, name).body.statements[0]
+            &runen_body(function(&hir, name)).statements[0]
         else {
             panic!("expected producer-backed pattern");
         };
@@ -157,7 +169,8 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
         );
     }
 
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "call").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &runen_body(function(&hir, "call")).statements[0]
     else {
         panic!("expected call-backed pattern");
     };
@@ -176,7 +189,7 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
     ));
 
     let Statement::RecordDestructure { scrutinee, .. } =
-        &function(&hir, "construct").body.statements[0]
+        &runen_body(function(&hir, "construct")).statements[0]
     else {
         panic!("expected construction-backed pattern");
     };
@@ -192,7 +205,7 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
     ));
 
     let Statement::RecordDestructure { scrutinee, .. } =
-        &function(&hir, "field").body.statements[0]
+        &runen_body(function(&hir, "field")).statements[0]
     else {
         panic!("expected field-backed pattern");
     };
@@ -212,7 +225,7 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
     ));
 
     let Statement::RecordDestructure { scrutinee, .. } =
-        &function(&hir, "owned").body.statements[0]
+        &runen_body(function(&hir, "owned")).statements[0]
     else {
         panic!("expected all-consumed pattern");
     };
@@ -228,7 +241,7 @@ fn producer_backed_scrutinees_retain_typed_value_and_canonical_cleanup_paths() {
         scrutinee,
         bindings,
         ..
-    } = &function(&hir, "empty").body.statements[0]
+    } = &runen_body(function(&hir, "empty")).statements[0]
     else {
         panic!("expected zero-field producer-backed pattern");
     };
@@ -260,7 +273,8 @@ fn recursive_producer_cleanup_is_maximal_recursive_frontier_in_reverse_structura
              }; \
          }",
     );
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &runen_body(function(&hir, "f")).statements[0]
     else {
         panic!("expected recursive producer pattern");
     };
@@ -280,7 +294,7 @@ fn recursive_producer_no_consume_keeps_complete_root_and_all_transferred_is_empt
          }",
     );
     let Statement::RecordDestructure { scrutinee, .. } =
-        &function(&all_dup, "f").body.statements[0]
+        &runen_body(function(&all_dup, "f")).statements[0]
     else {
         panic!("expected producer pattern");
     };
@@ -301,7 +315,7 @@ fn recursive_producer_no_consume_keeps_complete_root_and_all_transferred_is_empt
          }",
     );
     let Statement::RecordDestructure { scrutinee, .. } =
-        &function(&all_moved, "f").body.statements[0]
+        &runen_body(function(&all_moved, "f")).statements[0]
     else {
         panic!("expected producer pattern");
     };
@@ -329,7 +343,7 @@ fn producer_lookup_occurs_before_pattern_bindings_enter_scope() {
         scrutinee,
         bindings,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected record destructuring statement");
     };
@@ -346,8 +360,7 @@ fn producer_lookup_occurs_before_pattern_bindings_enter_scope() {
             ..
         }
     ));
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -478,7 +491,8 @@ fn partially_available_intermediate_can_recurse_to_disjoint_leaf_and_zero_field_
              } = root; \
          }",
     );
-    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[1]
+    let Statement::RecordDestructure { bindings, .. } =
+        &runen_body(function(&hir, "f")).statements[1]
     else {
         panic!("expected recursive pattern");
     };
@@ -515,7 +529,8 @@ fn zero_leaf_nonduplicable_leaf_consumption_is_retained_at_full_nested_path() {
         "record Empty {} record Inner { empty: Empty } record Outer { inner: Inner } \
          fn f(root: Outer) { let Outer { inner: Inner { empty: moved } } = root; }",
     );
-    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[0]
+    let Statement::RecordDestructure { bindings, .. } =
+        &runen_body(function(&hir, "f")).statements[0]
     else {
         panic!("expected recursive pattern");
     };
@@ -607,7 +622,7 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
     for name in ["direct", "call", "construct", "field"] {
         let Statement::RecordDestructure {
             record, bindings, ..
-        } = &function(&hir, name).body.statements[0]
+        } = &runen_body(function(&hir, name)).statements[0]
         else {
             panic!("expected record destructuring in {name}");
         };
@@ -619,7 +634,7 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
     }
 
     let Statement::RecordDestructure { scrutinee, .. } =
-        &function(&hir, "direct").body.statements[0]
+        &runen_body(function(&hir, "direct")).statements[0]
     else {
         panic!("direct pattern");
     };
@@ -631,7 +646,7 @@ fn qualified_top_head_reuses_existing_hir_for_all_scrutinee_categories() {
         ("field", "field"),
     ] {
         let Statement::RecordDestructure { scrutinee, .. } =
-            &function(&hir, name).body.statements[0]
+            &runen_body(function(&hir, name)).statements[0]
         else {
             panic!("producer pattern");
         };
@@ -913,8 +928,7 @@ fn all_duplicable_pattern_leaves_root_available_for_later_whole_use() {
          }",
     );
     let f = function(&hir, "f");
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -938,8 +952,7 @@ fn mixed_pattern_consumes_exact_field_but_preserves_disjoint_field_access() {
          }",
     );
     let f = function(&hir, "f");
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -980,7 +993,7 @@ fn pattern_head_and_root_use_their_distinct_lookup_relations() {
     );
     let f = function(&hir, "f");
     assert!(matches!(
-        f.body.statements[1],
+        runen_body(f).statements[1],
         Statement::RecordDestructure { .. }
     ));
 
@@ -1017,13 +1030,15 @@ fn zero_field_pattern_is_noop_and_zero_leaf_field_still_records_consumption() {
          fn field(root: Holder) { let Holder { empty: moved } = root; }",
     );
 
-    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "empty").body.statements[0]
+    let Statement::RecordDestructure { bindings, .. } =
+        &runen_body(function(&hir, "empty")).statements[0]
     else {
         panic!("expected empty record destructuring");
     };
     assert!(bindings.is_empty());
 
-    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "field").body.statements[0]
+    let Statement::RecordDestructure { bindings, .. } =
+        &runen_body(function(&hir, "field")).statements[0]
     else {
         panic!("expected field record destructuring");
     };
@@ -1042,7 +1057,7 @@ fn nested_block_cleanup_uses_reverse_depth_first_pattern_binding_order() {
          }",
     );
     let f = function(&hir, "f");
-    let Statement::Block(block) = &f.body.statements[0] else {
+    let Statement::Block(block) = &runen_body(f).statements[0] else {
         panic!("expected nested block");
     };
     let Statement::RecordDestructure { bindings, .. } = &block.statements[0] else {
@@ -1077,11 +1092,10 @@ fn pattern_bindings_are_immutable_and_enter_normal_local_lookup_after_declaratio
          }",
     );
     let f = function(&hir, "f");
-    let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
+    let Statement::RecordDestructure { bindings, .. } = &runen_body(f).statements[0] else {
         panic!("expected pattern statement");
     };
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -1104,7 +1118,8 @@ fn pattern_bindings_are_immutable_and_enter_normal_local_lookup_after_declaratio
     ));
 
     let ordinary = build("fn local() { let mut value: I8 = 1; value = 2; }");
-    let Statement::Local { mutability, .. } = &function(&ordinary, "local").body.statements[0]
+    let Statement::Local { mutability, .. } =
+        &runen_body(function(&ordinary, "local")).statements[0]
     else {
         panic!("expected ordinary local");
     };

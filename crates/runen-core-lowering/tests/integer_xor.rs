@@ -61,6 +61,13 @@ fn execute_source(source: &str, entry_name: &str) -> runen_reference::ExecutionR
         .expect("safe lowered execution is defined")
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
 #[test]
 fn integer_xor_lowers_to_one_fresh_result_with_move_operands_and_no_rewrite_or_cfg() {
     let lowered = lower_source("fn f(left: I8, right: I8) -> I8 { return left ^ right; }");
@@ -200,8 +207,7 @@ fn grouped_nested_xor_emits_one_core_xor_per_source_xor_in_dependency_order() {
 #[test]
 fn lowering_rejects_malformed_integer_xor_retained_type_facts() {
     let mut non_integer = hir("fn f(left: I8, right: I8) -> I8 { return left ^ right; }");
-    let value = non_integer.functions[0]
-        .body
+    let value = runen_body_mut(&mut non_integer.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -215,8 +221,7 @@ fn lowering_rejects_malformed_integer_xor_retained_type_facts() {
     );
 
     let mut left_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left ^ right; }");
-    let value = left_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut left_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -233,8 +238,7 @@ fn lowering_rejects_malformed_integer_xor_retained_type_facts() {
     );
 
     let mut right_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left ^ right; }");
-    let value = right_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut right_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

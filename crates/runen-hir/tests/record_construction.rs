@@ -46,12 +46,17 @@ fn function<'a>(hir: &'a runen_hir::TypedCompilation, name: &str) -> &'a runen_h
 }
 
 fn returned_value(function: &runen_hir::Function) -> &Value {
-    function
-        .body
+    runen_body(function)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
         .expect("result-bearing test function has a returned value")
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]
@@ -464,19 +469,28 @@ fn construction_composes_with_every_current_value_consumer() {
     );
 
     let all = function(&hir, "all");
-    assert!(matches!(all.body.statements[0], Statement::Local { .. }));
     assert!(matches!(
-        all.body.statements[1],
+        runen_body(all).statements[0],
+        Statement::Local { .. }
+    ));
+    assert!(matches!(
+        runen_body(all).statements[1],
         Statement::Assignment { .. }
     ));
-    assert!(matches!(all.body.statements[2], Statement::Local { .. }));
-    assert!(matches!(all.body.statements[3], Statement::Call { .. }));
+    assert!(matches!(
+        runen_body(all).statements[2],
+        Statement::Local { .. }
+    ));
+    assert!(matches!(
+        runen_body(all).statements[3],
+        Statement::Call { .. }
+    ));
     assert!(matches!(
         returned_value(all).kind,
         ValueKind::RecordConstruction { .. }
     ));
 
-    let Statement::Local { initializer, .. } = &all.body.statements[2] else {
+    let Statement::Local { initializer, .. } = &runen_body(all).statements[2] else {
         unreachable!();
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -506,13 +520,22 @@ fn qualified_construction_composes_with_current_value_consumers() {
     .expect("qualified construction must remain the existing value producer");
 
     let all = function(&hir, "all");
-    assert!(matches!(all.body.statements[0], Statement::Local { .. }));
     assert!(matches!(
-        all.body.statements[1],
+        runen_body(all).statements[0],
+        Statement::Local { .. }
+    ));
+    assert!(matches!(
+        runen_body(all).statements[1],
         Statement::Assignment { .. }
     ));
-    assert!(matches!(all.body.statements[2], Statement::Local { .. }));
-    assert!(matches!(all.body.statements[3], Statement::Call { .. }));
+    assert!(matches!(
+        runen_body(all).statements[2],
+        Statement::Local { .. }
+    ));
+    assert!(matches!(
+        runen_body(all).statements[3],
+        Statement::Call { .. }
+    ));
     assert!(matches!(
         returned_value(all).kind,
         ValueKind::RecordConstruction { .. }
@@ -557,7 +580,7 @@ fn qualified_construction_field_receiver_retains_existing_ownership_and_conditio
     assert_eq!(*ownership, OwnedUse::Consume);
     assert_eq!(cleanup.paths, vec![vec![2], vec![1]]);
 
-    let Statement::If { condition, .. } = &function(&hir, "cond").body.statements[0] else {
+    let Statement::If { condition, .. } = &runen_body(function(&hir, "cond")).statements[0] else {
         panic!("expected conditional");
     };
     let ValueKind::FieldValueUse {
@@ -658,7 +681,8 @@ fn qualified_construction_inside_field_producer_can_feed_same_module_pattern() {
     ])
     .expect("qualified construction field result may match a same-module pattern head");
 
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &runen_body(function(&hir, "f")).statements[0]
     else {
         panic!("expected record destructuring");
     };

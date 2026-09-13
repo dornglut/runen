@@ -44,6 +44,13 @@ impl RuntimeFloatValue {
         Self::Represented(value)
     }
 
+    pub(super) fn from_observed(value: ObservedBinaryFloatValue) -> Self {
+        match value {
+            ObservedBinaryFloatValue::Represented(value) => Self::Represented(value),
+            ObservedBinaryFloatValue::NaNClass => Self::NaNClass,
+        }
+    }
+
     pub(super) fn into_observed(self) -> ObservedBinaryFloatValue {
         match self {
             Self::Represented(value) => ObservedBinaryFloatValue::Represented(value),

@@ -42,6 +42,12 @@ fn integer_mul(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
     (left, right)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn all_eight_fixed_width_integer_types_retain_explicit_multiplication_hir() {
     let hir = build(
@@ -66,8 +72,7 @@ fn all_eight_fixed_width_integer_types_retain_explicit_multiplication_hir() {
         ("u32_mul", IntrinsicType::U32),
         ("u64_mul", IntrinsicType::U64),
     ] {
-        let value = function(&hir, name)
-            .body
+        let value = runen_body(function(&hir, name))
             .terminal_return
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
@@ -213,8 +218,7 @@ fn grouping_and_mixed_tiers_retain_explicit_operation_tree() {
     )
     .expect("grouping and mixed tiers retain explicit arithmetic HIR");
 
-    let tighter = function(&hir, "tighter")
-        .body
+    let tighter = runen_body(function(&hir, "tighter"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -224,8 +228,7 @@ fn grouping_and_mixed_tiers_retain_explicit_operation_tree() {
     };
     integer_mul(right, IntrinsicType::I8);
 
-    let override_left = function(&hir, "override_left")
-        .body
+    let override_left = runen_body(function(&hir, "override_left"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -233,8 +236,7 @@ fn grouping_and_mixed_tiers_retain_explicit_operation_tree() {
     let (left, _) = integer_mul(override_left, IntrinsicType::I8);
     assert!(matches!(left.kind, ValueKind::IntegerAdd { .. }));
 
-    let repeat = function(&hir, "repeat")
-        .body
+    let repeat = runen_body(function(&hir, "repeat"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -242,8 +244,7 @@ fn grouping_and_mixed_tiers_retain_explicit_operation_tree() {
     let (_, right) = integer_mul(repeat, IntrinsicType::I8);
     integer_mul(right, IntrinsicType::I8);
 
-    let sub_right = function(&hir, "sub_right")
-        .body
+    let sub_right = runen_body(function(&hir, "sub_right"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -268,22 +269,22 @@ fn integer_multiplication_flows_through_existing_generic_value_consumers() {
     .expect("IntegerMul composes through generic Value consumers");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     integer_mul(initializer, IntrinsicType::I8);
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     integer_mul(value, IntrinsicType::I8);
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     integer_mul(&arguments[0], IntrinsicType::I8);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -291,8 +292,7 @@ fn integer_multiplication_flows_through_existing_generic_value_consumers() {
     };
     integer_mul(&fields[0].value, IntrinsicType::I8);
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

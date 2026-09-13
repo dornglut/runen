@@ -22,8 +22,7 @@ fn function<'a>(hir: &'a TypedCompilation, name: &str) -> &'a runen_hir::Functio
 }
 
 fn returned<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
-    function(hir, name)
-        .body
+    runen_body(function(hir, name))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -52,6 +51,12 @@ fn unavailable_count(errors: &[Diagnostic]) -> usize {
         .iter()
         .filter(|error| error.kind == DiagnosticKind::UnavailableBinding)
         .count()
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]
@@ -330,14 +335,14 @@ fn integer_comparisons_are_bool_conditions_and_condition_context_never_anchors_l
     )
     .expect("anchored integer comparison yields Bool for represented control flow");
     let f = function(&hir, "f");
-    let Statement::If { condition, .. } = &f.body.statements[0] else {
+    let Statement::If { condition, .. } = &runen_body(f).statements[0] else {
         panic!("expected if statement");
     };
     assert_eq!(
         integer_comparison(condition).1,
         Type::Intrinsic(IntrinsicType::I32)
     );
-    let Statement::While { condition, .. } = &f.body.statements[1] else {
+    let Statement::While { condition, .. } = &runen_body(f).statements[1] else {
         panic!("expected while statement");
     };
     assert_eq!(

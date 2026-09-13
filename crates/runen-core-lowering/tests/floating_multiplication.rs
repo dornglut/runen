@@ -54,6 +54,13 @@ fn float_mul_contract(statement: &CoreStatement) -> CoreNumericContract {
     *contract
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
 #[test]
 fn float_mul_lowers_to_one_fresh_standard_result_with_move_operands_and_no_cfg() {
     let lowered = lower_source("fn f(left: F32, right: F32) -> F32 { return left * right; }");
@@ -117,8 +124,7 @@ fn float_mul_numeric_contracts_lower_one_to_one_without_redefaulting() {
     );
 
     let mut reproducible = hir("fn f(a: F32, b: F32) -> F32 { return a * b; }");
-    let value = reproducible.functions[0]
-        .body
+    let value = runen_body_mut(&mut reproducible.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

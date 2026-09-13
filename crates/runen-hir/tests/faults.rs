@@ -23,14 +23,20 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_payload_free_root_fault_and_no_normal_continuation() {
     let hir = build("fn f() { fault; }").expect("payload-free fault is valid");
     let f = function(&hir, "f");
 
-    assert!(!f.body.has_normal_continuation);
-    assert!(f.body.terminal_return.is_none());
-    let [Statement::Fault { location }] = f.body.statements.as_slice() else {
+    assert!(!runen_body(f).has_normal_continuation);
+    assert!(runen_body(f).terminal_return.is_none());
+    let [Statement::Fault { location }] = runen_body(f).statements.as_slice() else {
         panic!("expected one retained fault statement");
     };
     assert_eq!(location.unit, 0);
@@ -41,10 +47,10 @@ fn result_bearing_function_may_end_only_by_fault() {
     let hir = build("fn f() -> I64 { fault; }").expect("abnormal path needs no result value");
     let f = function(&hir, "f");
 
-    assert!(!f.body.has_normal_continuation);
-    assert!(f.body.terminal_return.is_none());
+    assert!(!runen_body(f).has_normal_continuation);
+    assert!(runen_body(f).terminal_return.is_none());
     assert!(matches!(
-        f.body.statements.as_slice(),
+        runen_body(f).statements.as_slice(),
         [Statement::Fault { .. }]
     ));
 }
@@ -54,7 +60,7 @@ fn nested_faulting_block_has_no_normal_cleanup() {
     let hir = build("record Ticket {} fn make() -> Ticket { return Ticket {}; } fn f() { { let ticket: Ticket = make(); fault; } }")
         .expect("faulting nested block is valid");
     let f = function(&hir, "f");
-    let [Statement::Block(block)] = f.body.statements.as_slice() else {
+    let [Statement::Block(block)] = runen_body(f).statements.as_slice() else {
         panic!("expected one nested block");
     };
 
@@ -128,11 +134,11 @@ fn explicit_fault_and_normal_arm_use_only_the_normal_arm_state() {
 fn fault_fault_and_return_fault_conditionals_have_zero_normal_continuation() {
     let both_fault = build("fn f(flag: Bool) -> I64 { if flag { fault; } else { fault; } }")
         .expect("two faulting arms complete result-bearing function abnormally");
-    assert!(!function(&both_fault, "f").body.has_normal_continuation);
+    assert!(!runen_body(function(&both_fault, "f")).has_normal_continuation);
 
     let mixed = build("fn f(flag: Bool) -> I64 { if flag { return 1; } else { fault; } }")
         .expect("return/fault arms have zero normal outcome");
-    assert!(!function(&mixed, "f").body.has_normal_continuation);
+    assert!(!runen_body(function(&mixed, "f")).has_normal_continuation);
 }
 
 #[test]
@@ -141,7 +147,13 @@ fn call_to_faulting_callee_remains_statically_normally_continuable() {
         .expect("callee fault possibility is dynamic, not interprocedural completion inference");
     let f = function(&hir, "f");
 
-    assert!(f.body.has_normal_continuation);
-    assert!(matches!(f.body.statements[0], Statement::Call { .. }));
-    assert!(matches!(f.body.statements[1], Statement::Local { .. }));
+    assert!(runen_body(f).has_normal_continuation);
+    assert!(matches!(
+        runen_body(f).statements[0],
+        Statement::Call { .. }
+    ));
+    assert!(matches!(
+        runen_body(f).statements[1],
+        Statement::Local { .. }
+    ));
 }

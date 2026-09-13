@@ -25,8 +25,7 @@ fn errors(source: &str) -> Vec<runen_hir::Diagnostic> {
 fn returned_literal(source_type: &str, spelling: &str) -> LiteralValue {
     let source = format!("fn value() -> {source_type} {{ return {spelling}; }}");
     let hir = build(&source);
-    let value = hir.functions[0]
-        .body
+    let value = runen_body(&hir.functions[0])
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -47,6 +46,12 @@ fn normal(sign: BinaryFloatSign, significand: u64, exponent: i16) -> BinaryFloat
 
 fn subnormal(sign: BinaryFloatSign, significand: u64) -> BinaryFloatValue {
     BinaryFloatValue::Subnormal { sign, significand }
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]
@@ -379,19 +384,19 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         .find(|function| function.name == "test")
         .expect("test function");
 
-    let Statement::Local { initializer, .. } = &test.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(test).statements[0] else {
         panic!("expected literal local initializer");
     };
     assert_eq!(initializer.ty, Type::Intrinsic(IntrinsicType::U64));
     assert_eq!(initializer.kind, ValueKind::Literal(LiteralValue::U64(1)));
 
-    let Statement::Assignment { value, .. } = &test.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(test).statements[1] else {
         panic!("expected literal assignment");
     };
     assert_eq!(value.ty, Type::Intrinsic(IntrinsicType::U64));
     assert_eq!(value.kind, ValueKind::Literal(LiteralValue::U64(2)));
 
-    let Statement::Local { initializer, .. } = &test.body.statements[2] else {
+    let Statement::Local { initializer, .. } = &runen_body(test).statements[2] else {
         panic!("expected result-bearing call initializer");
     };
     let ValueKind::Call {
@@ -409,7 +414,7 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         ValueKind::Literal(LiteralValue::U64(u64::MAX))
     );
 
-    let Statement::Local { initializer, .. } = &test.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(test).statements[3] else {
         panic!("expected floating local initializer");
     };
     assert_eq!(initializer.ty, Type::Intrinsic(IntrinsicType::F32));
@@ -422,12 +427,12 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         )))
     );
 
-    let Statement::Assignment { value, .. } = &test.body.statements[4] else {
+    let Statement::Assignment { value, .. } = &runen_body(test).statements[4] else {
         panic!("expected floating literal assignment");
     };
     assert_eq!(value.ty, Type::Intrinsic(IntrinsicType::F32));
 
-    let Statement::Local { initializer, .. } = &test.body.statements[5] else {
+    let Statement::Local { initializer, .. } = &runen_body(test).statements[5] else {
         panic!("expected floating result-bearing call initializer");
     };
     let ValueKind::Call {
@@ -444,7 +449,7 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         ValueKind::Literal(LiteralValue::F32(_))
     ));
 
-    let Statement::Local { initializer, .. } = &test.body.statements[6] else {
+    let Statement::Local { initializer, .. } = &runen_body(test).statements[6] else {
         panic!("expected floating record initializer");
     };
     let Type::Record(record) = initializer.ty else {
@@ -460,8 +465,7 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         ValueKind::Literal(LiteralValue::F32(_))
     ));
 
-    let returned = test
-        .body
+    let returned = runen_body(test)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -472,7 +476,7 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         .functions
         .iter()
         .find(|function| function.name == "direct_return")
-        .and_then(|function| function.body.terminal_return.as_ref())
+        .and_then(|function| runen_body(function).terminal_return.as_ref())
         .and_then(|returned| returned.value.as_ref())
         .expect("direct literal return");
     assert_eq!(direct_return.ty, Type::Intrinsic(IntrinsicType::I16));
@@ -485,7 +489,7 @@ fn every_value_consumer_supplies_its_required_type_without_consuming_unrelated_b
         .functions
         .iter()
         .find(|function| function.name == "float_return")
-        .and_then(|function| function.body.terminal_return.as_ref())
+        .and_then(|function| runen_body(function).terminal_return.as_ref())
         .and_then(|returned| returned.value.as_ref())
         .expect("direct floating literal return");
     assert_eq!(float_return.ty, Type::Intrinsic(IntrinsicType::F32));

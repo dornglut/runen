@@ -4,8 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    FieldValueReceiver, IntrinsicType, LiteralValue, ModuleId, OwnedUse, SourceUnit, Type,
-    ValueKind, build_typed_hir,
+    FieldValueReceiver, FunctionExecution, IntrinsicType, LiteralValue, ModuleId, OwnedUse,
+    SourceUnit, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -22,6 +22,13 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted HIR must lower through canonical Core validation")
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a CoreFunction {
@@ -233,7 +240,8 @@ fn producer_zero_leaf_cleanup_is_retained_in_hir_but_erases_to_no_core_drop() {
         .find(|function| function.name == "f")
         .expect("HIR f");
     let returned = f_hir
-        .body
+        .runen_body()
+        .expect("f has Runen execution origin")
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -486,8 +494,7 @@ fn consuming_field_composes_with_record_construction_and_return_cleanup() {
 fn lowering_rejects_empty_resolved_field_path_as_invalid_hir() {
     let mut compilation =
         hir("record Box { value: I8 } fn read(root: Box) -> I8 { return root.value; }");
-    let value = compilation.functions[0]
-        .body
+    let value = runen_body_mut(&mut compilation.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -514,8 +521,7 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
     let mut wrong_ownership = hir("record Box { value: I8 } \
          fn make() -> Box { return Box { value: 1 }; } \
          fn f() -> I8 { return make().value; }");
-    let wrong_ownership_value = wrong_ownership.functions[1]
-        .body
+    let wrong_ownership_value = runen_body_mut(&mut wrong_ownership.functions[1])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -534,8 +540,7 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
     let mut wrong_category = hir("record Box { value: I8 } \
          fn make() -> Box { return Box { value: 1 }; } \
          fn f() -> I8 { return make().value; }");
-    let wrong_category_value = wrong_category.functions[1]
-        .body
+    let wrong_category_value = runen_body_mut(&mut wrong_category.functions[1])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -562,8 +567,7 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
          fn make() -> Box { return Box { token: Token { value: 1 }, tail: 2 }; } \
          fn f() -> Token { return make().token; }",
     );
-    let wrong_type_value = wrong_type.functions[1]
-        .body
+    let wrong_type_value = runen_body_mut(&mut wrong_type.functions[1])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -585,8 +589,7 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
          fn make() -> Box { return Box { token: Token { value: 1 }, tail: 2 }; } \
          fn f() -> Token { return make().token; }",
     );
-    let overlap_value = overlap.functions[1]
-        .body
+    let overlap_value = runen_body_mut(&mut overlap.functions[1])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -610,8 +613,7 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
          fn make() -> Box { return Box { token: Token { value: 1 }, tail: 2 }; } \
          fn f() -> Token { return make().token; }",
     );
-    let consume_value = incomplete_consume.functions[1]
-        .body
+    let consume_value = runen_body_mut(&mut incomplete_consume.functions[1])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -633,8 +635,7 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
     let mut incomplete_duplicate = hir("record Box { value: I8, tail: I8 } \
          fn make() -> Box { return Box { value: 1, tail: 2 }; } \
          fn f() -> I8 { return make().value; }");
-    let duplicate_value = incomplete_duplicate.functions[1]
-        .body
+    let duplicate_value = runen_body_mut(&mut incomplete_duplicate.functions[1])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

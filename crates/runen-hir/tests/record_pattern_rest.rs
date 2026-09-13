@@ -33,6 +33,18 @@ fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool
     diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn rest_authorizes_only_missing_fields_while_no_rest_remains_exhaustive() {
     let hir = build(
@@ -44,13 +56,13 @@ fn rest_authorizes_only_missing_fields_while_no_rest_remains_exhaustive() {
         scrutinee,
         bindings,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected record destructuring statement");
     };
     assert_eq!(
         scrutinee,
-        &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+        &RecordPatternScrutinee::DirectRoot(runen_parameters(f)[0].binding)
     );
     assert_eq!(bindings.len(), 1);
     assert_eq!(bindings[0].fields, vec![0]);
@@ -88,13 +100,13 @@ fn direct_root_rest_preserves_omitted_ownership_and_rest_only_is_noop() {
         scrutinee,
         bindings,
         ..
-    } = &selected.body.statements[0]
+    } = &runen_body(selected).statements[0]
     else {
         panic!("expected selected-field pattern");
     };
     assert_eq!(
         scrutinee,
-        &RecordPatternScrutinee::DirectRoot(selected.parameters[0].binding)
+        &RecordPatternScrutinee::DirectRoot(runen_parameters(selected)[0].binding)
     );
     assert_eq!(bindings.len(), 1);
     assert_eq!(bindings[0].fields, vec![0]);
@@ -105,17 +117,17 @@ fn direct_root_rest_preserves_omitted_ownership_and_rest_only_is_noop() {
         scrutinee,
         bindings,
         ..
-    } = &rest_only.body.statements[0]
+    } = &runen_body(rest_only).statements[0]
     else {
         panic!("expected rest-only pattern");
     };
     assert_eq!(
         scrutinee,
-        &RecordPatternScrutinee::DirectRoot(rest_only.parameters[0].binding)
+        &RecordPatternScrutinee::DirectRoot(runen_parameters(rest_only)[0].binding)
     );
     assert!(bindings.is_empty());
     assert!(matches!(
-        rest_only.body.statements[1],
+        runen_body(rest_only).statements[1],
         Statement::Call { .. }
     ));
 }
@@ -134,7 +146,7 @@ fn nested_direct_root_rest_only_touches_explicit_leaf_paths() {
          }",
     );
     let f = function(&hir, "f");
-    let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
+    let Statement::RecordDestructure { bindings, .. } = &runen_body(f).statements[0] else {
         panic!("expected nested record destructuring");
     };
     assert_eq!(bindings.len(), 1);
@@ -160,7 +172,7 @@ fn producer_rest_uses_existing_remaining_frontier_and_rest_only_keeps_root() {
         scrutinee,
         bindings,
         ..
-    } = &function(&hir, "partial").body.statements[0]
+    } = &runen_body(function(&hir, "partial")).statements[0]
     else {
         panic!("expected producer-backed partial pattern");
     };
@@ -184,7 +196,7 @@ fn producer_rest_uses_existing_remaining_frontier_and_rest_only_keeps_root() {
         scrutinee,
         bindings,
         ..
-    } = &function(&hir, "rest_only").body.statements[0]
+    } = &runen_body(function(&hir, "rest_only")).statements[0]
     else {
         panic!("expected producer-backed rest-only pattern");
     };
@@ -209,7 +221,8 @@ fn nested_producer_rest_cleanup_is_existing_maximal_frontier() {
                  Outer { inner: Inner { moved: Token {}, omitted: Token {} }, tail: Token {} }; \
          }",
     );
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &runen_body(function(&hir, "f")).statements[0]
     else {
         panic!("expected nested producer-backed pattern");
     };
@@ -237,7 +250,7 @@ fn zero_field_rest_and_post_cleanup_binding_scope_are_preserved() {
     );
 
     let Statement::RecordDestructure { bindings, .. } =
-        &function(&hir, "direct").body.statements[0]
+        &runen_body(function(&hir, "direct")).statements[0]
     else {
         panic!("expected direct zero-field rest pattern");
     };
@@ -247,7 +260,7 @@ fn zero_field_rest_and_post_cleanup_binding_scope_are_preserved() {
         scrutinee,
         bindings,
         ..
-    } = &function(&hir, "producer").body.statements[0]
+    } = &runen_body(function(&hir, "producer")).statements[0]
     else {
         panic!("expected producer zero-field rest pattern");
     };
@@ -261,11 +274,10 @@ fn zero_field_rest_and_post_cleanup_binding_scope_are_preserved() {
     ));
 
     let scoped = function(&hir, "scoped");
-    let Statement::RecordDestructure { bindings, .. } = &scoped.body.statements[0] else {
+    let Statement::RecordDestructure { bindings, .. } = &runen_body(scoped).statements[0] else {
         panic!("expected scoped producer pattern");
     };
-    let returned = scoped
-        .body
+    let returned = runen_body(scoped)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -294,7 +306,7 @@ fn qualified_foreign_rest_may_omit_private_field_but_not_select_it() {
     ])
     .expect("rest may omit a private foreign field");
     let f = function(&hir, "f");
-    let Statement::RecordDestructure { bindings, .. } = &f.body.statements[0] else {
+    let Statement::RecordDestructure { bindings, .. } = &runen_body(f).statements[0] else {
         panic!("expected qualified foreign pattern");
     };
     assert_eq!(bindings.len(), 1);

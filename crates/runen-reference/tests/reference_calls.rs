@@ -83,6 +83,7 @@ fn transferred_shared_reference_reads_suspended_caller_storage() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -174,6 +175,7 @@ fn exclusive_replace_parameter_moves_and_restores_suspended_caller_target() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -283,6 +285,7 @@ fn temporary_child_borrowed_call_restores_parent_at_runtime() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -413,6 +416,7 @@ fn nested_borrowed_call_resolves_original_target_across_three_frames() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, middle, inner],
@@ -489,6 +493,7 @@ fn call_fault_cleanup_destroys_callee_carrier_before_caller_storage_ends() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -578,6 +583,7 @@ fn shared_reference_result_round_trip_remains_dereferenceable_in_caller() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, identity],
@@ -667,6 +673,7 @@ fn shared_copy_return_cleanup_preserves_returned_carrier() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, copy_identity],
@@ -786,6 +793,7 @@ fn returned_shared_child_keeps_parent_delegated_until_result_destruction() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, identity],
@@ -902,6 +910,7 @@ fn nested_shared_reference_result_forwarding_preserves_original_target() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, middle, inner],
@@ -981,6 +990,7 @@ fn contract_bearing_fault_initializes_no_result_destination() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, fault],

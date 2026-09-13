@@ -6,7 +6,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    IntrinsicType, ModuleId, RawPointerPointee, SourceUnit, Type, TypedCompilation, build_typed_hir,
+    FunctionExecution, IntrinsicType, ModuleId, RawPointerPointee, SourceUnit, Type,
+    TypedCompilation, build_typed_hir,
 };
 use runen_reference::{
     Machine, ObservedValue, TerminalStatus, VerificationEventKind, VerificationWriteKind,
@@ -26,6 +27,13 @@ fn hir(source: &str) -> TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted raw-pointer HIR must lower to validated Core")
+}
+
+fn runen_parameters_mut(function: &mut runen_hir::Function) -> &mut [runen_hir::Parameter] {
+    let FunctionExecution::Runen { parameters, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    parameters
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -433,7 +441,7 @@ fn lowering_rejects_malformed_raw_pointer_interfaces_instead_of_widening_source(
     );
 
     let mut parameter = hir("fn f(x: I64) {}");
-    parameter.functions[0].parameters[0].ty = raw_i64;
+    runen_parameters_mut(&mut parameter.functions[0])[0].ty = raw_i64;
     assert_eq!(
         lower(&parameter),
         Err(LoweringError::InvalidHirInvariant(

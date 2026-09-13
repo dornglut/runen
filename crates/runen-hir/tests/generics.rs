@@ -26,6 +26,18 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_ordered_function_type_parameter_identity_and_abstract_signature() {
     let hir = build("fn choose[T, U](left: T, right: U) -> T { return left; }")
@@ -50,11 +62,11 @@ fn retains_ordered_function_type_parameter_identity_and_abstract_signature() {
         }
     );
     assert_eq!(
-        choose.parameters[0].ty,
+        runen_parameters(choose)[0].ty,
         Type::Parameter(choose.type_parameters[0].id)
     );
     assert_eq!(
-        choose.parameters[1].ty,
+        runen_parameters(choose)[1].ty,
         Type::Parameter(choose.type_parameters[1].id)
     );
     assert_eq!(
@@ -72,8 +84,7 @@ fn abstract_whole_binding_use_is_consuming_even_when_a_call_substitutes_i64() {
     .expect("explicit concrete generic application is valid");
 
     let id = function(&hir, "id");
-    let returned = id
-        .body
+    let returned = runen_body(id)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -84,8 +95,7 @@ fn abstract_whole_binding_use_is_consuming_even_when_a_call_substitutes_i64() {
     assert_eq!(ownership, OwnedUse::Consume);
 
     let caller = function(&hir, "caller");
-    let call = caller
-        .body
+    let call = runen_body(caller)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -124,8 +134,7 @@ fn generic_call_composes_an_enclosing_abstract_slot_without_reidentifying_it() {
     .expect("abstract generic application inside generic body is valid");
     let outer = function(&hir, "outer");
     let outer_slot = outer.type_parameters[0].id;
-    let call = outer
-        .body
+    let call = runen_body(outer)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -155,9 +164,9 @@ fn bare_type_parameter_shadows_same_named_nominal_in_signature_and_local_type_po
     .expect("type parameter shadows same-module record in bare admitted type positions");
     let f = function(&hir, "f");
     let slot = f.type_parameters[0].id;
-    assert_eq!(f.parameters[0].ty, Type::Parameter(slot));
+    assert_eq!(runen_parameters(f)[0].ty, Type::Parameter(slot));
     assert_eq!(f.result, Some(Type::Parameter(slot)));
-    let [Statement::Local { ty, .. }] = f.body.statements.as_slice() else {
+    let [Statement::Local { ty, .. }] = runen_body(f).statements.as_slice() else {
         panic!("expected one ordinary local declaration");
     };
     assert_eq!(*ty, Type::Parameter(slot));
@@ -197,10 +206,9 @@ fn qualified_type_positions_and_arguments_never_select_a_local_type_parameter() 
 
     let dep_t = hir.records[0].id;
     let f = function(&hir, "f");
-    assert_eq!(f.parameters[0].ty, Type::Record(dep_t));
+    assert_eq!(runen_parameters(f)[0].ty, Type::Record(dep_t));
     assert_eq!(f.result, Some(Type::Record(dep_t)));
-    let call = f
-        .body
+    let call = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -324,8 +332,7 @@ fn direct_and_mutual_generic_recursion_retain_explicit_abstract_applications() {
     for name in ["recursive", "left", "right"] {
         let function = function(&hir, name);
         let slot = function.type_parameters[0].id;
-        let returned = function
-            .body
+        let returned = runen_body(function)
             .terminal_return
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
@@ -375,8 +382,7 @@ fn caller_private_record_is_an_admitted_argument_to_accessible_exported_generic(
         .find(|record| record.name == "Local")
         .expect("caller local record exists")
         .id;
-    let call = f
-        .body
+    let call = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -404,7 +410,7 @@ fn generic_call_statement_retains_exact_type_arguments() {
             target: CallTarget::Direct { type_arguments, .. },
             ..
         },
-    ] = f.body.statements.as_slice()
+    ] = runen_body(f).statements.as_slice()
     else {
         panic!("expected one retained call statement");
     };

@@ -4,7 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::lower;
 use runen_hir::{
-    ModuleId, NumericContract as HirNumericContract, SourceUnit, ValueKind, build_typed_hir,
+    FunctionExecution, ModuleId, NumericContract as HirNumericContract, SourceUnit, ValueKind,
+    build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -20,6 +21,13 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -117,8 +125,7 @@ fn float_div_numeric_contracts_lower_one_to_one_without_redefaulting() {
     );
 
     let mut reproducible = hir("fn f(a: F32, b: F32) -> F32 { return a / b; }");
-    let value = reproducible.functions[0]
-        .body
+    let value = runen_body_mut(&mut reproducible.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

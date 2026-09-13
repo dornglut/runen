@@ -58,6 +58,18 @@ fn selection(statement: &Statement) -> SelectionView<'_> {
     )
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_independent_test_and_binding_orders_with_exact_materialized_values() {
     let hir = build(
@@ -71,11 +83,12 @@ fn retains_independent_test_and_binding_orders_with_exact_materialized_values() 
     )
     .expect("bounded refutable selection must build");
     let f = function(&hir, "f");
-    let (scrutinee, tests, bindings, mismatch_cleanup, _, _) = selection(&f.body.statements[0]);
+    let (scrutinee, tests, bindings, mismatch_cleanup, _, _) =
+        selection(&runen_body(f).statements[0]);
 
     assert_eq!(
         scrutinee,
-        &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+        &RecordPatternScrutinee::DirectRoot(runen_parameters(f)[0].binding)
     );
     assert!(mismatch_cleanup.is_none());
     assert_eq!(tests.len(), 2);
@@ -113,7 +126,7 @@ fn nested_tests_rest_and_bindings_retain_complete_depth_first_paths() {
     )
     .expect("nested refutable pattern with rest must build");
     let (scrutinee, tests, bindings, _, _, mismatch) =
-        selection(&function(&hir, "f").body.statements[0]);
+        selection(&runen_body(function(&hir, "f")).statements[0]);
     assert!(matches!(scrutinee, RecordPatternScrutinee::DirectRoot(_)));
     assert!(mismatch.is_none());
     assert_eq!(
@@ -143,7 +156,7 @@ fn strict_upper_bounds_retain_exact_signed_and_unsigned_types_and_values() {
          fn f(root: R) { if let R { signed: < -1, unsigned: < 200 } = (root) {} }",
     )
     .expect("signed and unsigned strict upper bounds must build");
-    let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    let (_, tests, bindings, _, _, _) = selection(&runen_body(function(&hir, "f")).statements[0]);
     assert!(bindings.is_empty());
     assert_eq!(tests.len(), 2);
     assert_eq!(tests[0].kind, RecordPatternTestKind::StrictUpperBound);
@@ -168,7 +181,7 @@ fn producer_retains_success_frontier_and_distinct_complete_root_mismatch_cleanup
     )
     .expect("producer-backed refutable selection must build");
     let (scrutinee, tests, bindings, mismatch_cleanup, _, mismatch_block) =
-        selection(&function(&hir, "f").body.statements[0]);
+        selection(&runen_body(function(&hir, "f")).statements[0]);
     assert_eq!(tests.len(), 1);
     assert_eq!(tests[0].kind, RecordPatternTestKind::Equality);
     assert_eq!(bindings.len(), 2);
@@ -204,7 +217,7 @@ fn test_only_producer_keeps_complete_root_on_success_and_mismatch() {
     )
     .expect("one test and zero bindings is a valid refutable pattern");
     let (scrutinee, tests, bindings, mismatch_cleanup, _, _) =
-        selection(&function(&hir, "f").body.statements[0]);
+        selection(&runen_body(function(&hir, "f")).statements[0]);
     assert_eq!(tests.len(), 1);
     assert_eq!(tests[0].kind, RecordPatternTestKind::Equality);
     assert!(bindings.is_empty());
@@ -227,7 +240,7 @@ fn test_only_producer_keeps_complete_root_on_success_and_mismatch() {
 fn ordering_only_pattern_satisfies_refutability_requirement() {
     let hir = build("record R { value: I8 } fn f(root: R) { if let R { value: < 3 } = (root) {} }")
         .expect("one strict-upper-bound test is refutable without equality");
-    let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    let (_, tests, bindings, _, _, _) = selection(&runen_body(function(&hir, "f")).statements[0]);
     assert_eq!(tests.len(), 1);
     assert_eq!(tests[0].kind, RecordPatternTestKind::StrictUpperBound);
     assert_eq!(tests[0].value, LiteralValue::I8(3));
@@ -344,7 +357,8 @@ fn success_bindings_are_success_scoped_and_mismatch_may_reuse_the_same_key() {
          }",
     )
     .expect("sibling success/mismatch scopes may independently use one key");
-    let (_, _, bindings, _, success, mismatch) = selection(&function(&hir, "f").body.statements[0]);
+    let (_, _, bindings, _, success, mismatch) =
+        selection(&runen_body(function(&hir, "f")).statements[0]);
     assert_eq!(bindings.len(), 1);
     assert!(matches!(success.statements[0], Statement::Call { .. }));
     let mismatch = mismatch.expect("explicit mismatch block");
@@ -547,11 +561,14 @@ fn omitted_mismatch_is_the_sole_normal_outcome_when_success_faults() {
     )
     .expect("omitted mismatch must carry the unchanged normal state without a synthetic scope");
     let f = function(&hir, "f");
-    let (_, _, bindings, _, success, mismatch) = selection(&f.body.statements[0]);
+    let (_, _, bindings, _, success, mismatch) = selection(&runen_body(f).statements[0]);
     assert!(bindings.is_empty());
     assert!(!success.has_normal_continuation);
     assert!(mismatch.is_none());
-    assert!(matches!(f.body.statements[1], Statement::Local { .. }));
+    assert!(matches!(
+        runen_body(f).statements[1],
+        Statement::Local { .. }
+    ));
 }
 
 #[test]
@@ -632,7 +649,7 @@ fn composite_targets_retain_explicit_test_identity_and_independent_depth_first_o
          }",
     )
     .expect("bounded same-path composites must build");
-    let (_, tests, bindings, _, _, _) = selection(&function(&hir, "f").body.statements[0]);
+    let (_, tests, bindings, _, _, _) = selection(&runen_body(function(&hir, "f")).statements[0]);
 
     assert_eq!(
         tests
@@ -686,7 +703,7 @@ fn producer_composite_keeps_tested_path_for_success_cleanup_and_binding_is_succe
     )
     .expect("producer composite must duplicate only on success");
     let (scrutinee, tests, bindings, mismatch_cleanup, success, mismatch) =
-        selection(&function(&hir, "f").body.statements[0]);
+        selection(&runen_body(function(&hir, "f")).statements[0]);
 
     assert_eq!(tests.len(), 1);
     assert_eq!(bindings.len(), 2);

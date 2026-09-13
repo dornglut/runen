@@ -41,6 +41,12 @@ fn integer_neg(value: &Value, ty: IntrinsicType) -> &Value {
     operand
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn all_eight_fixed_width_integer_types_retain_explicit_negation_hir() {
     let hir = build(
@@ -65,8 +71,7 @@ fn all_eight_fixed_width_integer_types_retain_explicit_negation_hir() {
         ("u32_neg", IntrinsicType::U32),
         ("u64_neg", IntrinsicType::U64),
     ] {
-        let value = function(&hir, name)
-            .body
+        let value = runen_body(function(&hir, name))
             .terminal_return
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
@@ -177,8 +182,7 @@ fn signed_literal_and_integer_negation_remain_distinct_for_unsigned_requirements
 
     let hir = build("fn good() -> U8 { return -(1); }")
         .expect("parenthesized unsigned literal can be integer-negated");
-    let value = function(&hir, "good")
-        .body
+    let value = runen_body(function(&hir, "good"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -230,8 +234,7 @@ fn nested_and_mixed_arithmetic_retain_explicit_source_operation_tree() {
     )
     .expect("nested and mixed integer negation is valid");
 
-    let nested = function(&hir, "nested")
-        .body
+    let nested = runen_body(function(&hir, "nested"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -242,8 +245,7 @@ fn nested_and_mixed_arithmetic_retain_explicit_source_operation_tree() {
         ValueKind::Literal(LiteralValue::I8(-1))
     ));
 
-    let grouped = function(&hir, "grouped")
-        .body
+    let grouped = runen_body(function(&hir, "grouped"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -251,8 +253,7 @@ fn nested_and_mixed_arithmetic_retain_explicit_source_operation_tree() {
     let operand = integer_neg(grouped, IntrinsicType::I8);
     assert!(matches!(operand.kind, ValueKind::IntegerAdd { .. }));
 
-    let multiplied = function(&hir, "multiplied")
-        .body
+    let multiplied = runen_body(function(&hir, "multiplied"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -279,22 +280,22 @@ fn integer_negation_flows_through_existing_generic_value_consumers() {
     .expect("IntegerNeg composes through generic Value consumers");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     integer_neg(initializer, IntrinsicType::I8);
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     integer_neg(value, IntrinsicType::I8);
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     integer_neg(&arguments[0], IntrinsicType::I8);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -302,8 +303,7 @@ fn integer_negation_flows_through_existing_generic_value_consumers() {
     };
     integer_neg(&fields[0].value, IntrinsicType::I8);
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

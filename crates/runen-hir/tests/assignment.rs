@@ -24,6 +24,12 @@ fn count_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> u
     errors.iter().filter(|error| error.kind == kind).count()
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_local_mutability_and_resolved_assignment_identity() {
     let hir = build("fn f(input: I64) { let mut x: I64 = input; x = input; }")
@@ -34,7 +40,7 @@ fn retains_local_mutability_and_resolved_assignment_identity() {
         binding,
         mutability,
         ..
-    } = function.body.statements[0]
+    } = runen_body(function).statements[0]
     else {
         panic!("expected mutable local");
     };
@@ -45,7 +51,7 @@ fn retains_local_mutability_and_resolved_assignment_identity() {
         fields,
         value,
         ..
-    } = &function.body.statements[1]
+    } = &runen_body(function).statements[1]
     else {
         panic!("expected resolved assignment");
     };
@@ -76,7 +82,7 @@ fn retains_exact_resolved_field_assignment_path_and_type() {
         .iter()
         .find(|function| function.name == "f")
         .unwrap();
-    let Statement::Local { binding, .. } = function.body.statements[0] else {
+    let Statement::Local { binding, .. } = runen_body(function).statements[0] else {
         panic!("expected mutable root local");
     };
     let Statement::Assignment {
@@ -84,7 +90,7 @@ fn retains_exact_resolved_field_assignment_path_and_type() {
         fields,
         value,
         ..
-    } = &function.body.statements[1]
+    } = &runen_body(function).statements[1]
     else {
         panic!("expected field assignment");
     };
@@ -121,7 +127,7 @@ fn mutable_unavailable_binding_can_be_reinitialized_and_used_again() {
         .find(|function| function.name == "f")
         .unwrap();
 
-    let Statement::Assignment { value, .. } = &function.body.statements[2] else {
+    let Statement::Assignment { value, .. } = &runen_body(function).statements[2] else {
         panic!("expected reinitializing assignment");
     };
     let ValueKind::BindingUse { ownership, .. } = value.kind else {
@@ -129,7 +135,7 @@ fn mutable_unavailable_binding_can_be_reinitialized_and_used_again() {
     };
     assert_eq!(ownership, OwnedUse::Consume);
     assert!(matches!(
-        function.body.statements[3],
+        runen_body(function).statements[3],
         Statement::Call { .. }
     ));
 }
@@ -191,7 +197,7 @@ fn self_assignment_uses_existing_duplicate_or_consume_semantics() {
     let scalar = build("fn f(input: I64) { let mut x: I64 = input; x = x; x = x; }")
         .expect("duplicable self-assignment must validate");
     let scalar_function = &scalar.functions[0];
-    for statement in &scalar_function.body.statements[1..] {
+    for statement in &runen_body(scalar_function).statements[1..] {
         let Statement::Assignment { value, .. } = statement else {
             panic!("expected assignment");
         };
@@ -210,7 +216,7 @@ fn self_assignment_uses_existing_duplicate_or_consume_semantics() {
         .iter()
         .find(|function| function.name == "f")
         .unwrap();
-    let Statement::Assignment { value, .. } = &function.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(function).statements[1] else {
         panic!("expected assignment");
     };
     let ValueKind::BindingUse { ownership, .. } = value.kind else {
@@ -230,7 +236,7 @@ fn call_rhs_ownership_effects_precede_assignment_reavailability() {
         .iter()
         .find(|function| function.name == "f")
         .unwrap();
-    let Statement::Assignment { value, .. } = &function.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(function).statements[1] else {
         panic!("expected assignment");
     };
     let ValueKind::Call {
@@ -246,8 +252,7 @@ fn call_rhs_ownership_effects_precede_assignment_reavailability() {
     };
     assert_eq!(ownership, OwnedUse::Consume);
     assert!(
-        function
-            .body
+        runen_body(function)
             .terminal_return
             .as_ref()
             .unwrap()

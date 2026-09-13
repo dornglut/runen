@@ -8,6 +8,10 @@ pub struct TypeId(pub u32);
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct FunctionId(pub u32);
 
+/// Stable-in-one-program identity for one declaration-only external callable requirement.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ExternalCallableId(pub u32);
+
 /// Stable-in-one-program identity for one execution-persistent storage declaration.
 ///
 /// This declaration identity is distinct from every dynamic [`StorageInstanceId`]

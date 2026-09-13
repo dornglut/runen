@@ -49,6 +49,7 @@ fn execute_integer_add(scalar: ScalarType, left: Value, right: Value) -> Executi
     };
     let validated = validate_program(Program {
         persistent: vec![],
+        external_callables: vec![],
         types,
         functions: vec![function],
     })

@@ -89,6 +89,7 @@ fn result_is_preserved_across_callee_cleanup_and_caller_resumes_after_cleanup() 
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -208,6 +209,7 @@ fn reused_vacant_result_destination_is_initialized_without_replacement_destructi
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -309,6 +311,7 @@ fn defined_fault_propagates_through_two_suspended_callers_with_exact_cleanup() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![outer, middle, inner],
@@ -377,6 +380,7 @@ fn faulting_result_call_does_not_write_destination_or_follow_normal_continuation
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -476,6 +480,7 @@ fn repeated_no_result_calls_get_fresh_activation_and_storage_and_resume_normally
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -548,6 +553,7 @@ fn intra_activation_raw_pointer_ub_remains_an_ub_boundary() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![function],
@@ -599,6 +605,7 @@ fn execute_constant_branch(condition: bool) -> runen_reference::ExecutionReport 
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![function],
@@ -651,6 +658,7 @@ fn execute_stored_bool_branch(copy: bool) -> runen_reference::ExecutionReport {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![function],
@@ -756,6 +764,7 @@ fn runtime_branch_condition_ub_reaches_neither_successor() {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![function],

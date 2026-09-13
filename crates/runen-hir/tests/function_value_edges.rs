@@ -25,6 +25,12 @@ fn function<'a>(hir: &'a TypedCompilation, name: &str) -> &'a runen_hir::Functio
         .unwrap_or_else(|| panic!("missing HIR function {name}"))
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn qualified_exported_function_forms_a_value_but_private_member_does_not() {
     let dependency = parse(
@@ -43,13 +49,12 @@ fn qualified_exported_function_forms_a_value_but_private_member_does_not() {
     ])
     .expect("exported non-generic function is an accessible function value");
     let use_fn = function(&hir, "use");
-    let initializer = match &use_fn.body.statements[0] {
+    let initializer = match &runen_body(use_fn).statements[0] {
         runen_hir::Statement::Local { initializer, .. } => initializer,
         other => panic!("expected function-valued local, found {other:?}"),
     };
     assert!(matches!(initializer.kind, ValueKind::FunctionValue { .. }));
-    let returned = use_fn
-        .body
+    let returned = runen_body(use_fn)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -145,8 +150,7 @@ fn indirect_shared_identity_result_preserves_the_caller_origin_contract() {
         use_fn.safe_reference_result_contract,
         SafeReferenceResultContract::SharedIdentity { origin: 1 }
     );
-    let returned = use_fn
-        .body
+    let returned = runen_body(use_fn)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -172,8 +176,7 @@ fn indirect_shared_direct_child_result_preserves_parent_ancestry() {
         use_fn.safe_reference_result_contract,
         SafeReferenceResultContract::SharedDirectChild { origin: 1 }
     );
-    let returned = use_fn
-        .body
+    let returned = runen_body(use_fn)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -196,8 +199,7 @@ fn recursive_and_mutual_indirect_calls_validate_without_target_set_analysis() {
          }",
     )
     .expect("self-indirect recursion is statically valid without target expansion");
-    let returned = function(&recursive, "recurse")
-        .body
+    let returned = runen_body(function(&recursive, "recurse"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -222,8 +224,7 @@ fn recursive_and_mutual_indirect_calls_validate_without_target_set_analysis() {
     )
     .expect("mutual indirect recursion is statically valid without target expansion");
     for name in ["left", "right"] {
-        let returned = function(&mutual, name)
-            .body
+        let returned = runen_body(function(&mutual, name))
             .terminal_return
             .as_ref()
             .and_then(|returned| returned.value.as_ref())

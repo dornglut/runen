@@ -3,7 +3,9 @@ use runen_core_ir::{
     ValidatedProgram,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
+use runen_hir::{
+    FunctionExecution, IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir,
+};
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
@@ -19,6 +21,13 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -186,8 +195,7 @@ fn grouped_nested_additions_lower_one_core_add_per_represented_addition() {
 #[test]
 fn lowering_rejects_non_integer_retained_integer_add_result_fact() {
     let mut compilation = hir("fn f(left: I8, right: I8) -> I8 { return left + right; }");
-    let value = compilation.functions[0]
-        .body
+    let value = runen_body_mut(&mut compilation.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -205,8 +213,7 @@ fn lowering_rejects_non_integer_retained_integer_add_result_fact() {
 #[test]
 fn lowering_rejects_integer_add_operand_type_facts_that_do_not_match_result() {
     let mut left_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left + right; }");
-    let value = left_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut left_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -223,8 +230,7 @@ fn lowering_rejects_integer_add_operand_type_facts_that_do_not_match_result() {
     );
 
     let mut right_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left + right; }");
-    let value = right_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut right_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

@@ -17,7 +17,7 @@ fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
     hir.functions
         .iter()
         .find(|function| function.name == name)
-        .and_then(|function| function.body.terminal_return.as_ref())
+        .and_then(|function| runen_body(function).terminal_return.as_ref())
         .and_then(|returned| returned.value.as_ref())
         .unwrap_or_else(|| panic!("missing returned value for {name}"))
 }
@@ -53,6 +53,12 @@ fn unavailable_count(errors: &[Diagnostic]) -> usize {
         .iter()
         .filter(|error| error.kind == DiagnosticKind::UnavailableBinding)
         .count()
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]

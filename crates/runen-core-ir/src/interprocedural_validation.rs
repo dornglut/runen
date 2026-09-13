@@ -2,9 +2,10 @@ use std::collections::{HashMap, HashSet, VecDeque};
 
 use crate::interprocedural::{Body, Function, Program, Terminator};
 use crate::{
-    BasicBlockId, BorrowKind, CallableInterface, FunctionId, LoanDecl, LoanId, LocalId, Operand,
-    PersistentId, Place, PlaceAccess, Projection, ReferenceAccess, ReferencePermission,
-    SafeReferenceResultContract, ScalarType, Statement, TypeId, TypeKind, TypeTable, Value,
+    BasicBlockId, BorrowKind, CallableInterface, ExternalCallableId, FunctionId, LoanDecl, LoanId,
+    LocalId, Operand, PersistentId, Place, PlaceAccess, Projection, ReferenceAccess,
+    ReferencePermission, SafeReferenceResultContract, ScalarType, Statement, TypeId, TypeKind,
+    TypeTable, Value,
 };
 
 /// Function-scoped location within program-level Core MIR.
@@ -27,6 +28,12 @@ pub enum MirLocation {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum MirValidationErrorKind {
     InvalidFunction(FunctionId),
+    InvalidExternalCallable(ExternalCallableId),
+    InvalidExternalCallableType {
+        external: ExternalCallableId,
+        ty: TypeId,
+    },
+    ExternalCallableRequiresNoReferenceResultContract(ExternalCallableId),
     InvalidPersistent(PersistentId),
     InvalidPersistentType {
         persistent: PersistentId,
@@ -189,6 +196,7 @@ impl ValidatedProgram {
 pub fn validate_program(program: Program) -> Result<ValidatedProgram, MirValidationError> {
     validate_type_table(&program.types)?;
     validate_persistent_declarations(&program)?;
+    validate_external_callable_declarations(&program)?;
 
     for (index, function) in program.functions.iter().enumerate() {
         validate_function_declarations(&program.types, function_id(index), function)?;
@@ -203,6 +211,59 @@ pub fn validate_program(program: Program) -> Result<ValidatedProgram, MirValidat
     }
 
     Ok(ValidatedProgram { program })
+}
+
+fn validate_external_callable_declarations(program: &Program) -> Result<(), MirValidationError> {
+    for (index, declaration) in program.external_callables.iter().enumerate() {
+        let external = ExternalCallableId(
+            u32::try_from(index).expect("external callable declaration index exceeds u32::MAX"),
+        );
+        if !matches!(
+            declaration.interface.safe_reference_result_contract,
+            SafeReferenceResultContract::None
+        ) {
+            return Err(program_error(
+                MirValidationErrorKind::ExternalCallableRequiresNoReferenceResultContract(external),
+            ));
+        }
+        for ty in declaration
+            .interface
+            .parameters
+            .iter()
+            .copied()
+            .chain(declaration.interface.result)
+        {
+            if program.types.get(ty).is_none() {
+                return Err(program_error(MirValidationErrorKind::UnknownType(ty)));
+            }
+            if !is_external_scalar_type(&program.types, ty) {
+                return Err(program_error(
+                    MirValidationErrorKind::InvalidExternalCallableType { external, ty },
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn is_external_scalar_type(types: &TypeTable, ty: TypeId) -> bool {
+    matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(
+            ScalarType::Bool
+                | ScalarType::I8
+                | ScalarType::I16
+                | ScalarType::I32
+                | ScalarType::I64
+                | ScalarType::U8
+                | ScalarType::U16
+                | ScalarType::U32
+                | ScalarType::U64
+                | ScalarType::F16
+                | ScalarType::F32
+                | ScalarType::F64
+        ))
+    )
 }
 
 fn validate_persistent_declarations(program: &Program) -> Result<(), MirValidationError> {
@@ -606,6 +667,28 @@ fn validate_static_terminator(
                 .expect("declaration validation establishes the direct-call interface");
             validate_static_call_destination(&program.types, body, &interface, destination, point)?;
             validate_static_call_arguments(program, body, &interface, arguments, point)
+        }
+        Terminator::ExternalCall {
+            external,
+            arguments,
+            destination,
+            target,
+        } => {
+            require_target(body, *target, point)?;
+            let declaration = program.external_callable(*external).ok_or_else(|| {
+                point_error(
+                    point,
+                    MirValidationErrorKind::InvalidExternalCallable(*external),
+                )
+            })?;
+            validate_static_call_destination(
+                &program.types,
+                body,
+                &declaration.interface,
+                destination,
+                point,
+            )?;
+            validate_static_call_arguments(program, body, &declaration.interface, arguments, point)
         }
         Terminator::IndirectCall {
             callable,
@@ -1817,6 +1900,37 @@ fn validate_path_state(
                             callee: None,
                             arguments,
                             destination,
+                            may_fault: true,
+                        },
+                        &point,
+                    )?,
+                    DefinedStep::NoDefinedContinuation
+                ) {
+                    continue 'worklist;
+                }
+                state.current = *target;
+                worklist.push_back(state);
+            }
+            Terminator::ExternalCall {
+                external,
+                arguments,
+                destination,
+                target,
+            } => {
+                let declaration = program
+                    .external_callable(*external)
+                    .expect("static validation establishes external call target");
+                if matches!(
+                    validate_call_state(
+                        types,
+                        body,
+                        &mut state,
+                        CallStateInput {
+                            interface: &declaration.interface,
+                            callee: None,
+                            arguments,
+                            destination,
+                            may_fault: false,
                         },
                         &point,
                     )?,
@@ -1847,6 +1961,7 @@ fn validate_path_state(
                             callee: Some(callee),
                             arguments,
                             destination,
+                            may_fault: true,
                         },
                         &point,
                     )?,
@@ -1868,6 +1983,7 @@ struct CallStateInput<'a> {
     callee: Option<&'a Operand>,
     arguments: &'a [Operand],
     destination: &'a Option<Place>,
+    may_fault: bool,
 }
 
 fn validate_call_state(
@@ -1882,6 +1998,7 @@ fn validate_call_state(
         callee,
         arguments,
         destination,
+        may_fault,
     } = call;
 
     if let Some(destination) = destination {
@@ -1921,9 +2038,11 @@ fn validate_call_state(
         require_call_value_admissible(types, *ty, value, state, point)?;
     }
 
-    let mut fault_state = state.clone();
-    destroy_transient_values(types, &held, &mut fault_state);
-    cleanup_function(types, body, &mut fault_state, point)?;
+    if may_fault {
+        let mut fault_state = state.clone();
+        destroy_transient_values(types, &held, &mut fault_state);
+        cleanup_function(types, body, &mut fault_state, point)?;
+    }
 
     for (ty, value) in &held {
         restore_transferred_referents(types, *ty, value, state);

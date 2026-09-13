@@ -159,6 +159,7 @@ pub enum SyntaxKind {
     ClosureInitializer,
     ClosureCaptures,
     StaticDeclaration,
+    ExternalFunctionDeclaration,
 }
 
 impl SyntaxKind {
@@ -336,6 +337,7 @@ impl Language for RunenLanguage {
             134 => SyntaxKind::ClosureInitializer,
             135 => SyntaxKind::ClosureCaptures,
             136 => SyntaxKind::StaticDeclaration,
+            137 => SyntaxKind::ExternalFunctionDeclaration,
             other => panic!("unknown Runen syntax kind {other}"),
         }
     }

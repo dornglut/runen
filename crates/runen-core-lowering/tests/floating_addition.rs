@@ -79,6 +79,13 @@ fn represented_normal(significand: u64, exponent: i16) -> ObservedBinaryFloatVal
     })
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
 #[test]
 fn float_add_lowers_to_one_fresh_standard_result_with_move_operands_and_no_cfg() {
     let lowered = lower_source("fn f(left: F32, right: F32) -> F32 { return left + right; }");
@@ -156,8 +163,7 @@ fn numeric_contracts_lower_one_to_one_without_redefaulting() {
     );
 
     let mut reproducible = hir("fn f(a: F32, b: F32) -> F32 { return a + b; }");
-    let value = reproducible.functions[0]
-        .body
+    let value = runen_body_mut(&mut reproducible.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -294,8 +300,7 @@ fn grouped_nested_float_additions_lower_one_core_add_per_hir_addition() {
 #[test]
 fn lowering_rejects_non_floating_retained_float_add_result_fact() {
     let mut compilation = hir("fn f(left: F32, right: F32) -> F32 { return left + right; }");
-    let value = compilation.functions[0]
-        .body
+    let value = runen_body_mut(&mut compilation.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -313,8 +318,7 @@ fn lowering_rejects_non_floating_retained_float_add_result_fact() {
 #[test]
 fn lowering_rejects_float_add_operand_type_facts_that_do_not_match_result() {
     let mut left_mismatch = hir("fn f(left: F32, right: F32) -> F32 { return left + right; }");
-    let value = left_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut left_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -331,8 +335,7 @@ fn lowering_rejects_float_add_operand_type_facts_that_do_not_match_result() {
     );
 
     let mut right_mismatch = hir("fn f(left: F32, right: F32) -> F32 { return left + right; }");
-    let value = right_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut right_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

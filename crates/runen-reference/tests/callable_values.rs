@@ -82,6 +82,7 @@ fn indirect_call_dispatches_function_value_and_returns_through_existing_activati
     };
 
     let report = execute(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, target],
@@ -165,6 +166,7 @@ fn stored_copy_and_move_preserve_exact_function_identity() {
     };
 
     let report = execute(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, first, second],
@@ -195,6 +197,7 @@ fn top_level_callable_result_observes_function_entity_identity_only() {
     let target = no_result_target("target", Terminator::Return(None));
 
     let report = execute(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![entry, target],
@@ -257,6 +260,7 @@ fn indirect_runtime_evaluates_callee_before_arguments() {
     };
 
     let report = execute(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, target],
@@ -310,6 +314,7 @@ fn indirect_fault_uses_existing_fault_propagation_and_skips_normal_continuation(
     let target = no_result_target("faulting-target", Terminator::Fault(Fault::new("indirect")));
 
     let report = execute(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, target],
@@ -402,6 +407,7 @@ fn indirect_shared_identity_result_preserves_caller_reference_authority() {
     };
 
     let report = execute(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, identity],
@@ -525,6 +531,7 @@ fn indirect_shared_direct_child_result_preserves_ancestry_until_child_destructio
     };
 
     let report = execute(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, direct_child],

@@ -22,8 +22,7 @@ fn function<'a>(hir: &'a TypedCompilation, name: &str) -> &'a runen_hir::Functio
 }
 
 fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
-    function(hir, name)
-        .body
+    runen_body(function(hir, name))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -32,6 +31,12 @@ fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
 
 fn has_kind(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
     errors.iter().any(|error| error.kind == kind)
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]
@@ -53,18 +58,18 @@ fn f() -> I64 {
     .expect("intrinsic scalar constants are valid");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("first statement must be the first local");
     };
     assert_eq!(initializer.ty, Type::Intrinsic(IntrinsicType::I64));
     assert_eq!(initializer.kind, ValueKind::Literal(LiteralValue::I64(-42)));
 
-    let Statement::Local { initializer, .. } = &f.body.statements[1] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[1] else {
         panic!("second statement must be the second local");
     };
     assert_eq!(initializer.kind, ValueKind::Literal(LiteralValue::I64(-42)));
 
-    let Statement::If { condition, .. } = &f.body.statements[2] else {
+    let Statement::If { condition, .. } = &runen_body(f).statements[2] else {
         panic!("third statement must be the conditional");
     };
     assert_eq!(condition.kind, ValueKind::Literal(LiteralValue::Bool(true)));
@@ -154,7 +159,7 @@ fn f(seed: I64) -> I64 {
     .expect("constant production composes with represented value contexts and generic bodies");
 
     let f = function(&hir, "f");
-    let Statement::Assignment { value, .. } = &f.body.statements[4] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[4] else {
         panic!("fifth statement must be the whole-binding assignment");
     };
     assert_eq!(value.ty, Type::Intrinsic(IntrinsicType::I64));

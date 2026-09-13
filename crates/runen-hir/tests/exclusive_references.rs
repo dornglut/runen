@@ -35,6 +35,18 @@ fn exclusive_i64() -> Type {
     }
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn replacement_reference_type_is_nonduplicable_and_type_mut_is_not_binding_mutability() {
     let hir = compile(
@@ -55,7 +67,7 @@ fn replacement_reference_type_is_nonduplicable_and_type_mut_is_not_binding_mutab
         mutability,
         initializer,
         ..
-    } = &f.body.statements[1]
+    } = &runen_body(f).statements[1]
     else {
         panic!("expected replacement-capable reference local");
     };
@@ -67,7 +79,7 @@ fn replacement_reference_type_is_nonduplicable_and_type_mut_is_not_binding_mutab
             target,
             fields,
             permission: ReferencePermission::ExclusiveReplace,
-        } if *target == match &f.body.statements[0] {
+        } if *target == match &runen_body(f).statements[0] {
             Statement::Local { binding, .. } => *binding,
             _ => panic!("expected mutable ordinary local"),
         } && fields.is_empty()
@@ -76,7 +88,7 @@ fn replacement_reference_type_is_nonduplicable_and_type_mut_is_not_binding_mutab
     let Statement::Local {
         initializer: dereference,
         ..
-    } = &f.body.statements[2]
+    } = &runen_body(f).statements[2]
     else {
         panic!("expected dereference result local");
     };
@@ -146,11 +158,11 @@ fn projected_replacement_root_and_reborrow_retain_exact_paths_and_permission() {
     let Statement::Local {
         binding: root_binding,
         ..
-    } = &root.body.statements[0]
+    } = &runen_body(root).statements[0]
     else {
         panic!("expected mutable root local");
     };
-    let Statement::Local { initializer, .. } = &root.body.statements[1] else {
+    let Statement::Local { initializer, .. } = &runen_body(root).statements[1] else {
         panic!("expected projected replacement-root local");
     };
     assert!(matches!(
@@ -163,7 +175,7 @@ fn projected_replacement_root_and_reborrow_retain_exact_paths_and_permission() {
     ));
 
     let child = function(&hir, "child");
-    let Statement::Local { initializer, .. } = &child.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(child).statements[0] else {
         panic!("expected projected replacement-child local");
     };
     assert!(matches!(
@@ -172,7 +184,7 @@ fn projected_replacement_root_and_reborrow_retain_exact_paths_and_permission() {
             reference,
             fields,
             permission: ReferencePermission::ExclusiveReplace,
-        } if *reference == child.parameters[0].binding && fields.as_slice() == [0, 0]
+        } if *reference == runen_parameters(child)[0].binding && fields.as_slice() == [0, 0]
     ));
 }
 
@@ -212,7 +224,7 @@ fn replacement_reference_binding_use_moves_the_carrier() {
     let hir = compile("fn f(r: &mut I64) { let moved: &mut I64 = r; }")
         .expect("replacement-capable reference carriers move between immutable reference locals");
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected moved replacement-reference local");
     };
     assert!(matches!(
@@ -220,7 +232,7 @@ fn replacement_reference_binding_use_moves_the_carrier() {
         ValueKind::BindingUse {
             binding,
             ownership: OwnedUse::Consume,
-        } if binding == f.parameters[0].binding
+        } if binding == runen_parameters(f)[0].binding
     ));
 }
 
@@ -239,7 +251,7 @@ fn nonduplicable_external_referent_must_be_restored_after_move() {
         binding: moved_binding,
         initializer,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected moved referent local");
     };
@@ -248,12 +260,12 @@ fn nonduplicable_external_referent_must_be_restored_after_move() {
         ValueKind::ReferenceDereference {
             reference,
             ownership: OwnedUse::Consume,
-        } if reference == f.parameters[0].binding
+        } if reference == runen_parameters(f)[0].binding
     ));
     assert!(matches!(
-        &f.body.statements[1],
+        &runen_body(f).statements[1],
         Statement::ReferenceAssign { reference, value, .. }
-            if *reference == f.parameters[0].binding
+            if *reference == runen_parameters(f)[0].binding
                 && matches!(
                     value.kind,
                     ValueKind::BindingUse {
@@ -282,7 +294,7 @@ fn complete_reborrow_preserves_permission_without_strengthening() {
     )
     .expect("complete Shared and replacement-capable child reborrows must validate");
     let f = function(&hir, "f");
-    let Statement::Block(shared_block) = &f.body.statements[0] else {
+    let Statement::Block(shared_block) = &runen_body(f).statements[0] else {
         panic!("expected Shared reborrow block");
     };
     let Statement::Local { initializer, .. } = &shared_block.statements[0] else {
@@ -294,10 +306,10 @@ fn complete_reborrow_preserves_permission_without_strengthening() {
             reference,
             fields,
             permission: ReferencePermission::Shared,
-        } if *reference == f.parameters[0].binding && fields.is_empty()
+        } if *reference == runen_parameters(f)[0].binding && fields.is_empty()
     ));
 
-    let Statement::Block(exclusive_block) = &f.body.statements[1] else {
+    let Statement::Block(exclusive_block) = &runen_body(f).statements[1] else {
         panic!("expected replacement child block");
     };
     let Statement::Local { initializer, .. } = &exclusive_block.statements[0] else {
@@ -309,7 +321,7 @@ fn complete_reborrow_preserves_permission_without_strengthening() {
             reference,
             fields,
             permission: ReferencePermission::ExclusiveReplace,
-        } if *reference == f.parameters[0].binding && fields.is_empty()
+        } if *reference == runen_parameters(f)[0].binding && fields.is_empty()
     ));
 
     let errors = compile("fn f(r: &I64) { let child: &mut I64 = &mut *r; }")
@@ -330,7 +342,7 @@ fn projected_shared_child_from_replacement_parent_is_bounded_to_selected_field()
     )
     .expect("Shared projected child may borrow an admissible field of a nonduplicable replacement parent");
     let f = function(&hir, "f");
-    let Statement::Block(block) = &f.body.statements[0] else {
+    let Statement::Block(block) = &runen_body(f).statements[0] else {
         panic!("expected projected child block");
     };
     let Statement::Local { initializer, .. } = &block.statements[0] else {
@@ -342,7 +354,7 @@ fn projected_shared_child_from_replacement_parent_is_bounded_to_selected_field()
             reference,
             fields,
             permission: ReferencePermission::Shared,
-        } if *reference == f.parameters[0].binding && fields.as_slice() == [0]
+        } if *reference == runen_parameters(f)[0].binding && fields.as_slice() == [0]
     ));
 
     let errors = compile(

@@ -10,13 +10,13 @@ use crate::{
     Accessibility, AssignmentMutability, BinaryFloatSign, BinaryFloatValue, BindingId, Block, Body,
     BooleanEqualityRelation, CallTarget, CleanupPath, Closure, ClosureCapture, ClosureId,
     Diagnostic, DiagnosticKind, Duplicability, Field, FieldReceiverTransientCleanup,
-    FieldValueReceiver, Function, FunctionId, FunctionType, FunctionTypeId, IntrinsicType,
-    LiteralValue, MarkerImplementation, MarkerImplementationTarget, MarkerTrait, MarkerTraitId,
-    Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee, Record,
-    RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee, RecordPatternTest,
-    RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission, ReferenceReferent,
-    Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement, Static, StaticId,
-    Type, TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
+    FieldValueReceiver, Function, FunctionExecution, FunctionId, FunctionType, FunctionTypeId,
+    IntrinsicType, LiteralValue, MarkerImplementation, MarkerImplementationTarget, MarkerTrait,
+    MarkerTraitId, Module, ModuleId, NumericContract, OwnedUse, Parameter, RawPointerPointee,
+    Record, RecordFieldValue, RecordId, RecordPatternBinding, RecordPatternScrutinee,
+    RecordPatternTest, RecordPatternTestKind, RecordPatternTransientCleanup, ReferencePermission,
+    ReferenceReferent, Return, SafeReferenceResultContract, SourceLocation, SourceUnit, Statement,
+    Static, StaticId, Type, TypeParameter, TypeParameterId, TypedCompilation, Value, ValueKind,
     type_is_duplicable_in_records,
 };
 
@@ -103,6 +103,18 @@ struct MarkerImplementationSyntax {
 }
 
 #[derive(Debug, Clone)]
+enum FunctionHeaderExecution {
+    Runen {
+        parameters: Vec<Parameter>,
+        function_type: Option<FunctionTypeId>,
+        body: SyntaxNode,
+    },
+    External {
+        parameters: Vec<IntrinsicType>,
+    },
+}
+
+#[derive(Debug, Clone)]
 struct FunctionHeader {
     id: FunctionId,
     module: ModuleId,
@@ -110,12 +122,48 @@ struct FunctionHeader {
     name: String,
     accessibility: Accessibility,
     type_parameters: Vec<TypeParameter>,
-    parameters: Vec<Parameter>,
     result: Option<Type>,
     safe_reference_result_contract: SafeReferenceResultContract,
-    function_type: Option<FunctionTypeId>,
-    body: SyntaxNode,
+    execution: FunctionHeaderExecution,
     location: SourceLocation,
+}
+
+impl FunctionHeader {
+    fn parameter_types(&self) -> Vec<Type> {
+        match &self.execution {
+            FunctionHeaderExecution::Runen { parameters, .. } => {
+                parameters.iter().map(|parameter| parameter.ty).collect()
+            }
+            FunctionHeaderExecution::External { parameters } => {
+                parameters.iter().copied().map(Type::Intrinsic).collect()
+            }
+        }
+    }
+
+    fn runen_parameters(&self) -> Option<&[Parameter]> {
+        match &self.execution {
+            FunctionHeaderExecution::Runen { parameters, .. } => Some(parameters),
+            FunctionHeaderExecution::External { .. } => None,
+        }
+    }
+
+    fn runen_body(&self) -> Option<&SyntaxNode> {
+        match &self.execution {
+            FunctionHeaderExecution::Runen { body, .. } => Some(body),
+            FunctionHeaderExecution::External { .. } => None,
+        }
+    }
+
+    fn function_type(&self) -> Option<FunctionTypeId> {
+        match self.execution {
+            FunctionHeaderExecution::Runen { function_type, .. } => function_type,
+            FunctionHeaderExecution::External { .. } => None,
+        }
+    }
+
+    fn is_external(&self) -> bool {
+        matches!(self.execution, FunctionHeaderExecution::External { .. })
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -691,30 +739,40 @@ pub(crate) fn build(units: &[SourceUnit<'_>]) -> Result<TypedCompilation, Vec<Di
 
     let mut functions = Vec::with_capacity(headers.len());
     for header in &headers {
-        let body = validate_body(
-            header,
-            &modules,
-            &imports,
-            &constants,
-            &statics,
-            &records,
-            &headers,
-            &function_types,
-            &closures,
-            &marker_implementation_relation,
-            &mut next_binding,
-            &mut diagnostics,
-        );
+        let execution = match &header.execution {
+            FunctionHeaderExecution::Runen { parameters, .. } => {
+                let body = validate_body(
+                    header,
+                    &modules,
+                    &imports,
+                    &constants,
+                    &statics,
+                    &records,
+                    &headers,
+                    &function_types,
+                    &closures,
+                    &marker_implementation_relation,
+                    &mut next_binding,
+                    &mut diagnostics,
+                );
+                FunctionExecution::Runen {
+                    parameters: parameters.clone(),
+                    body,
+                }
+            }
+            FunctionHeaderExecution::External { parameters } => FunctionExecution::External {
+                parameters: parameters.clone(),
+            },
+        };
         functions.push(Function {
             id: header.id,
             module: header.module,
             name: header.name.clone(),
             accessibility: header.accessibility,
             type_parameters: header.type_parameters.clone(),
-            parameters: header.parameters.clone(),
             result: header.result,
             safe_reference_result_contract: header.safe_reference_result_contract,
-            body,
+            execution,
             location: header.location,
         });
     }
@@ -910,6 +968,51 @@ fn collect_declarations(
                         name,
                         accessibility,
                         duplicability_selection,
+                        node: item,
+                        location,
+                    });
+                }
+                SyntaxKind::ExternalFunctionDeclaration => {
+                    let id = FunctionId(functions.len());
+                    let mut identifiers = item
+                        .children_with_tokens()
+                        .filter_map(|element| element.into_token())
+                        .filter(|token| token.kind() == SyntaxKind::Ident);
+                    let introducer = identifiers
+                        .next()
+                        .expect("syntax-clean external declaration has contextual introducer");
+                    debug_assert_eq!(key(&introducer), "external");
+                    let name_token = identifiers
+                        .next()
+                        .expect("syntax-clean external declaration has one declaration name");
+                    debug_assert!(identifiers.next().is_none());
+                    let name = key(&name_token);
+                    let accessibility = declaration_accessibility(&item);
+                    let location = location(unit_index, &item);
+                    if insert_entity(
+                        &mut modules,
+                        unit.module,
+                        &name,
+                        EntityId::Function(id),
+                        accessibility,
+                    ) {
+                        modules
+                            .get_mut(&unit.module)
+                            .expect("module inserted")
+                            .functions
+                            .push(id);
+                    } else {
+                        diagnostics.push(Diagnostic {
+                            kind: DiagnosticKind::DuplicateModuleBinding,
+                            location,
+                        });
+                    }
+                    functions.push(FunctionSyntax {
+                        id,
+                        module: unit.module,
+                        unit: unit_index,
+                        name,
+                        accessibility,
                         node: item,
                         location,
                     });
@@ -1527,6 +1630,55 @@ struct HeaderResolutionContext<'a> {
     function_types: &'a RefCell<Vec<FunctionType>>,
 }
 
+fn resolve_external_function_header(function: &FunctionSyntax) -> FunctionHeader {
+    debug_assert_eq!(
+        function.node.kind(),
+        SyntaxKind::ExternalFunctionDeclaration
+    );
+    let parameter_list = direct_child(&function.node, SyntaxKind::ParameterList);
+    let parameters = parameter_list
+        .children()
+        .filter(|node| node.kind() == SyntaxKind::TypeRef)
+        .map(|type_node| {
+            let token = type_node
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .find(|token| !token.kind().is_trivia())
+                .expect("syntax-clean external parameter has one intrinsic type token");
+            intrinsic_type(token.kind())
+                .expect("syntax-clean external parameter type is represented intrinsic")
+        })
+        .collect::<Vec<_>>();
+    let result = function
+        .node
+        .children()
+        .find(|node| node.kind() == SyntaxKind::ResultClause)
+        .map(|clause| {
+            let type_node = direct_child(&clause, SyntaxKind::TypeRef);
+            let token = type_node
+                .children_with_tokens()
+                .filter_map(|element| element.into_token())
+                .find(|token| !token.kind().is_trivia())
+                .expect("syntax-clean external result has one intrinsic type token");
+            Type::Intrinsic(
+                intrinsic_type(token.kind())
+                    .expect("syntax-clean external result type is represented intrinsic"),
+            )
+        });
+    FunctionHeader {
+        id: function.id,
+        module: function.module,
+        unit: function.unit,
+        name: function.name.clone(),
+        accessibility: function.accessibility,
+        type_parameters: Vec::new(),
+        result,
+        safe_reference_result_contract: SafeReferenceResultContract::None,
+        execution: FunctionHeaderExecution::External { parameters },
+        location: function.location,
+    }
+}
+
 fn resolve_function_headers(
     syntax: &[FunctionSyntax],
     context: &HeaderResolutionContext<'_>,
@@ -1542,6 +1694,11 @@ fn resolve_function_headers(
     } = context;
     let mut headers = Vec::with_capacity(syntax.len());
     for function in syntax {
+        if function.node.kind() == SyntaxKind::ExternalFunctionDeclaration {
+            headers.push(resolve_external_function_header(function));
+            continue;
+        }
+        debug_assert_eq!(function.node.kind(), SyntaxKind::FunctionDefinition);
         let mut type_parameter_names = BTreeSet::new();
         let type_parameters = function
             .node
@@ -1755,11 +1912,13 @@ fn resolve_function_headers(
             name: function.name.clone(),
             accessibility: function.accessibility,
             type_parameters,
-            parameters,
             result,
             safe_reference_result_contract,
-            function_type,
-            body,
+            execution: FunctionHeaderExecution::Runen {
+                parameters,
+                function_type,
+                body,
+            },
             location: function.location,
         });
     }
@@ -2509,8 +2668,14 @@ fn validate_body(
     next_binding: &mut usize,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Body {
+    let parameters = header
+        .runen_parameters()
+        .expect("body validation requires Runen execution origin");
+    let body = header
+        .runen_body()
+        .expect("body validation requires Runen execution origin");
     let mut state = SemanticState::default();
-    for (slot, parameter) in header.parameters.iter().enumerate() {
+    for (slot, parameter) in parameters.iter().enumerate() {
         let reference_authority = match parameter.ty {
             Type::SafeReference { permission, .. } => {
                 if permission == ReferencePermission::ExclusiveReplace {
@@ -2548,7 +2713,7 @@ fn validate_body(
             state
                 .bindings
                 .values()
-                .find(|binding| binding.id == header.parameters[origin].binding)
+                .find(|binding| binding.id == parameters[origin].binding)
                 .and_then(|binding| binding.reference_authority)
                 .expect("safe-reference result origin parameter has activation authority"),
         ),
@@ -2567,14 +2732,7 @@ fn validate_body(
         safe_reference_result_origin_authority,
         closure_body: false,
     };
-    validate_body_sequence(
-        header,
-        &header.body,
-        &context,
-        state,
-        next_binding,
-        diagnostics,
-    )
+    validate_body_sequence(header, body, &context, state, next_binding, diagnostics)
 }
 
 fn validate_body_sequence(
@@ -3742,11 +3900,13 @@ fn validate_closure_declaration(
         name: name.clone(),
         accessibility: Accessibility::ModulePrivate,
         type_parameters: Vec::new(),
-        parameters: parameters.clone(),
         result,
         safe_reference_result_contract,
-        function_type: None,
-        body: body_node.clone(),
+        execution: FunctionHeaderExecution::Runen {
+            parameters: parameters.clone(),
+            function_type: None,
+            body: body_node.clone(),
+        },
         location: declaration_location,
     };
     let diagnostics_before_body = diagnostics.len();
@@ -5599,7 +5759,10 @@ fn validate_external_referent_restoration(
     location: SourceLocation,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
-    for (slot, parameter) in header.parameters.iter().enumerate() {
+    let parameters = header
+        .runen_parameters()
+        .expect("safe-result continuation validation requires Runen execution origin");
+    for (slot, parameter) in parameters.iter().enumerate() {
         if matches!(
             parameter.ty,
             Type::SafeReference {
@@ -6946,7 +7109,14 @@ fn validate_function_value(
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Option<ProducedValue> {
     let target = &context.headers[function.0];
-    let Some(function_type) = target.function_type else {
+    if target.is_external() {
+        diagnostics.push(Diagnostic {
+            kind: DiagnosticKind::ExternalFunctionValue,
+            location: value_location,
+        });
+        return None;
+    }
+    let Some(function_type) = target.function_type() else {
         diagnostics.push(Diagnostic {
             kind: DiagnosticKind::GenericFunctionValue,
             location: value_location,
@@ -9408,9 +9578,9 @@ fn resolve_call_application(
     }
 
     let parameter_types = target
-        .parameters
-        .iter()
-        .map(|parameter| instantiate_call_type(parameter.ty, target, &type_arguments))
+        .parameter_types()
+        .into_iter()
+        .map(|parameter| instantiate_call_type(parameter, target, &type_arguments))
         .collect::<Vec<_>>();
     let result = target
         .result

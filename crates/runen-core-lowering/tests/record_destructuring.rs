@@ -4,8 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    ModuleId, RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit, Statement, Type,
-    build_typed_hir,
+    FunctionExecution, ModuleId, RecordPatternScrutinee, RecordPatternTransientCleanup, SourceUnit,
+    Statement, Type, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -22,6 +22,13 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted HIR must lower through canonical Core validation")
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a CoreFunction {
@@ -370,7 +377,7 @@ fn lowering_rejects_invalid_recursive_pattern_path() {
     let mut compilation = hir("record Inner { value: I8 } record Outer { inner: Inner } \
          fn f(root: Outer) { let Outer { inner: Inner { value: item } } = root; }");
     let Statement::RecordDestructure { bindings, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -391,7 +398,7 @@ fn lowering_rejects_overlapping_retained_binding_paths() {
          fn f(root: Outer) { let Outer { inner: Inner { value: item }, other: other } = root; }",
     );
     let Statement::RecordDestructure { bindings, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -411,7 +418,7 @@ fn lowering_rejects_pattern_record_root_identity_mismatch() {
          fn f(root: A) { let A { value: extracted } = root; }");
     let other = compilation.records[1].id;
     let Statement::RecordDestructure { record, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -431,7 +438,7 @@ fn lowering_rejects_producer_record_identity_mismatch() {
          fn f() { let A { value: extracted } = A { value: 1 }; }");
     let other = compilation.records[1].id;
     let Statement::RecordDestructure { record, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -450,7 +457,7 @@ fn lowering_rejects_retained_pattern_binding_type_mismatch() {
     let mut compilation = hir("record Pair { left: I8, right: U8 } \
          fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
     let Statement::RecordDestructure { bindings, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -469,7 +476,7 @@ fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicabil
     let mut compilation = hir("record Pair { left: I8, right: U8 } \
          fn f(root: Pair) { let Pair { left: a, right: b } = root; }");
     let Statement::RecordDestructure { bindings, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -497,7 +504,7 @@ fn lowering_uses_retained_recursive_transient_cleanup_without_rederiving_frontie
          }",
     );
     let Statement::RecordDestructure { scrutinee, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };
@@ -537,7 +544,7 @@ fn lowering_rejects_overlapping_retained_transient_cleanup_paths() {
          }",
     );
     let Statement::RecordDestructure { scrutinee, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected pattern statement");
     };

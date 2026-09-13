@@ -31,12 +31,17 @@ fn boolean_and(value: &Value) -> (&Value, &Value) {
     (left, right)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_explicit_exact_bool_conjunction_hir() {
     let hir = build("fn f(a: Bool, b: Bool) -> Bool { return a && b; }")
         .expect("Boolean conjunction must build");
-    let returned = function(&hir, "f")
-        .body
+    let returned = runen_body(function(&hir, "f"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -173,8 +178,7 @@ fn right_type_failure_rolls_back_successful_left_consumption() {
 fn grouped_nested_conjunctions_retain_independent_explicit_hir_nodes() {
     let hir = build("fn f(a: Bool, b: Bool, c: Bool) -> Bool { return a && (b && c); }")
         .expect("grouped nesting is represented");
-    let returned = function(&hir, "f")
-        .body
+    let returned = runen_body(function(&hir, "f"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -203,7 +207,7 @@ fn conjunction_is_accepted_by_existing_value_consumers_and_conditions() {
     .expect("conjunction remains an ordinary typed value producer");
     let f = function(&hir, "f");
 
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected record-construction local declaration");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -212,34 +216,33 @@ fn conjunction_is_accepted_by_existing_value_consumers_and_conditions() {
     assert_eq!(fields.len(), 1);
     assert!(matches!(fields[0].value.kind, ValueKind::BooleanAnd { .. }));
 
-    let Statement::Local { initializer, .. } = &f.body.statements[1] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[1] else {
         panic!("expected Bool local declaration");
     };
     assert!(matches!(initializer.kind, ValueKind::BooleanAnd { .. }));
 
-    let Statement::Assignment { value, .. } = &f.body.statements[2] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[2] else {
         panic!("expected assignment");
     };
     assert!(matches!(value.kind, ValueKind::BooleanAnd { .. }));
 
-    let Statement::Call { arguments, .. } = &f.body.statements[3] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[3] else {
         panic!("expected call statement");
     };
     assert_eq!(arguments.len(), 1);
     assert!(matches!(arguments[0].kind, ValueKind::BooleanAnd { .. }));
 
-    let Statement::If { condition, .. } = &f.body.statements[4] else {
+    let Statement::If { condition, .. } = &runen_body(f).statements[4] else {
         panic!("expected if statement");
     };
     assert!(matches!(condition.kind, ValueKind::BooleanAnd { .. }));
 
-    let Statement::While { condition, .. } = &f.body.statements[5] else {
+    let Statement::While { condition, .. } = &runen_body(f).statements[5] else {
         panic!("expected while statement");
     };
     assert!(matches!(condition.kind, ValueKind::BooleanAnd { .. }));
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -251,8 +254,7 @@ fn conjunction_is_accepted_by_existing_value_consumers_and_conditions() {
 fn existing_boolean_operators_stay_nested_inside_conjunction_hir() {
     let hir = build("fn f(a: Bool, b: Bool, c: Bool) -> Bool { return !a == b && c; }")
         .expect("existing Boolean prefix and equality operators compose inside conjunction");
-    let returned = function(&hir, "f")
-        .body
+    let returned = runen_body(function(&hir, "f"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

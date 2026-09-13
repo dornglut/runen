@@ -11,6 +11,7 @@ fn execute_direct_result(scalar: ScalarType, value: Value) -> runen_reference::E
     let mut types = TypeTable::new();
     let result_ty = types.push(TypeDef::scalar("result", scalar));
     let program = Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![Function {
@@ -113,6 +114,7 @@ fn floating_value_survives_init_copy_and_move_exactly() {
     });
     let expected = observed_from_constant(&input);
     let program = Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![Function {
@@ -165,6 +167,7 @@ fn floating_value_survives_assignment_and_move_exactly() {
     });
     let expected = observed_from_constant(&replacement);
     let program = Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![Function {
@@ -264,6 +267,7 @@ fn f64_round_trips_through_direct_call_argument_and_result() {
     };
 
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -296,6 +300,7 @@ fn mixed_floating_struct_round_trips_through_storage() {
     ]);
     let expected = observed_from_constant(&input);
     let program = Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![Function {

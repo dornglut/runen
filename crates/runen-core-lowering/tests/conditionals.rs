@@ -37,6 +37,13 @@ fn moved_local(operand: &Operand) -> Option<LocalId> {
     place.projections.is_empty().then_some(place.local)
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
 #[test]
 fn branch_consumes_one_lowered_bool_condition_temporary() {
     let lowered = lower_source("fn f(flag: Bool) { if flag {} else {} }");
@@ -199,7 +206,7 @@ fn non_bool_retained_conditional_is_rejected_as_hir_invariant() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let HirStatement::If { condition, .. } = &mut f.body.statements[0] else {
+    let HirStatement::If { condition, .. } = &mut runen_body_mut(f).statements[0] else {
         panic!("expected HIR conditional");
     };
     condition.ty = Type::Intrinsic(IntrinsicType::I64);
@@ -364,7 +371,7 @@ fn lowering_rejects_normal_cleanup_on_no_normal_block() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let HirStatement::If { then_block, .. } = &mut f.body.statements[0] else {
+    let HirStatement::If { then_block, .. } = &mut runen_body_mut(f).statements[0] else {
         panic!("expected HIR conditional");
     };
     let HirStatement::Local { binding, .. } = &then_block.statements[0] else {
@@ -393,7 +400,7 @@ fn lowering_rejects_retained_continuation_that_disagrees_with_sequence() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    f.body.has_normal_continuation = true;
+    runen_body_mut(f).has_normal_continuation = true;
 
     assert_eq!(
         lower(&compilation),

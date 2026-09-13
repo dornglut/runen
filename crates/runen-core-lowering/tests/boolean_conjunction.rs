@@ -3,7 +3,9 @@ use runen_core_ir::{
     ValidatedProgram, Value as CoreValue,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
+use runen_hir::{
+    FunctionExecution, IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir,
+};
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
 use runen_syntax::{Parse, parse_source};
 
@@ -19,6 +21,13 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -224,8 +233,7 @@ fn conjunction_uses_only_existing_core_init_and_control_flow_operations() {
 #[test]
 fn lowering_rejects_malformed_retained_conjunction_type_facts() {
     let mut result_mismatch = hir("fn f(a: Bool, b: Bool) -> Bool { return a && b; }");
-    let value = result_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut result_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -239,8 +247,7 @@ fn lowering_rejects_malformed_retained_conjunction_type_facts() {
     );
 
     let mut left_mismatch = hir("fn f(a: Bool, b: Bool) -> Bool { return a && b; }");
-    let value = left_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut left_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -257,8 +264,7 @@ fn lowering_rejects_malformed_retained_conjunction_type_facts() {
     );
 
     let mut right_mismatch = hir("fn f(a: Bool, b: Bool) -> Bool { return a && b; }");
-    let value = right_mismatch.functions[0]
-        .body
+    let value = runen_body_mut(&mut right_mismatch.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

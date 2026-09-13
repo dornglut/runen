@@ -83,6 +83,7 @@ fn shared_reference_parameter_reads_suspended_caller_storage() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -169,6 +170,7 @@ fn exclusive_replace_parameter_may_move_then_restore_before_return() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -199,6 +201,7 @@ fn reference_result_type_remains_outside_the_transfer_boundary() {
 
     assert!(
         validate_program(Program {
+            external_callables: vec![],
             persistent: vec![],
             types,
             functions: vec![function],
@@ -243,6 +246,7 @@ fn reference_parameter_referent_may_not_contain_raw_or_nested_reference_leaves()
 
         assert!(
             validate_program(Program {
+                external_callables: vec![],
                 persistent: vec![],
                 types: types.clone(),
                 functions: vec![function],
@@ -298,6 +302,7 @@ fn call_result_destination_is_admitted_before_argument_effects() {
     };
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -375,6 +380,7 @@ fn call_arguments_are_left_to_right_before_final_reference_admission() {
     };
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -460,6 +466,7 @@ fn call_retains_all_arguments_before_checking_full_reference_authority() {
     };
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -501,6 +508,7 @@ fn reference_parameter_return_requires_live_external_referent_but_fault_does_not
         ),
     };
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types: types.clone(),
         functions: vec![invalid_return],
@@ -528,6 +536,7 @@ fn reference_parameter_return_requires_live_external_referent_but_fault_does_not
         ),
     };
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![fault],
@@ -628,6 +637,7 @@ fn temporary_child_borrowed_call_restores_parent_authority() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, callee],
@@ -749,6 +759,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, middle, inner],
@@ -758,6 +769,7 @@ fn nested_borrowed_call_restores_authority_through_each_activation() {
 
 fn expect_function_error(types: TypeTable, function: Function, expected: MirValidationErrorKind) {
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![function],
@@ -1001,6 +1013,7 @@ fn shared_identity_result_preserves_origin_through_move_copy_and_storage() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![by_move, by_copy, through_storage],
@@ -1087,6 +1100,7 @@ fn shared_identity_result_forwards_through_nested_and_recursive_contract_calls()
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![identity, forward, recursive],
@@ -1190,6 +1204,7 @@ fn caller_created_shared_child_result_keeps_parent_delegated_until_result_drop()
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, identity],
@@ -1436,6 +1451,7 @@ fn shared_identity_result_destination_is_admitted_before_argument_effects() {
     };
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, identity],

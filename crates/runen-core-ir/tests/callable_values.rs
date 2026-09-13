@@ -50,6 +50,7 @@ fn callable_signature_cycles_are_non_structural_but_struct_cycles_remain_invalid
     ));
     assert_eq!(callable, TypeId(0));
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types: callable_types,
         functions: Vec::new(),
@@ -63,6 +64,7 @@ fn callable_signature_cycles_are_non_structural_but_struct_cycles_remain_invalid
     ));
     assert_eq!(recursive, TypeId(0));
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types: structural_types,
         functions: Vec::new(),
@@ -86,6 +88,7 @@ fn callable_interface_admission_reuses_existing_transfer_safety() {
     ));
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: Vec::new(),
@@ -128,6 +131,7 @@ fn equal_callable_interfaces_allow_formation_under_distinct_nominal_type_ids() {
     );
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, no_result_target("target")],
@@ -165,6 +169,7 @@ fn exact_callable_type_identity_is_preserved_through_storage_and_indirect_calls(
     );
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, no_result_target("target")],
@@ -196,6 +201,7 @@ fn function_value_formation_rejects_unknown_non_callable_and_mismatched_targets(
         )],
     );
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![unknown_caller],
@@ -221,6 +227,7 @@ fn function_value_formation_rejects_unknown_non_callable_and_mismatched_targets(
         )],
     );
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![non_callable_caller, no_result_target("target")],
@@ -256,6 +263,7 @@ fn function_value_formation_rejects_unknown_non_callable_and_mismatched_targets(
         vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
     );
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![mismatch_caller, mismatch_target],
@@ -314,6 +322,7 @@ fn indirect_call_validates_result_interface_and_initializes_normal_destination()
     };
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, target],
@@ -359,6 +368,7 @@ fn indirect_call_evaluates_callee_before_arguments() {
     );
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller, target],
@@ -405,6 +415,7 @@ fn indirect_result_destination_is_admitted_before_callee_effects() {
     );
 
     let error = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![caller],
@@ -443,6 +454,7 @@ fn recursive_indirect_call_graph_is_language_valid_without_static_expansion() {
     );
 
     validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![recursive],

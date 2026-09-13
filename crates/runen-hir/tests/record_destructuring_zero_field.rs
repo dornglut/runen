@@ -1,6 +1,12 @@
 use runen_hir::{ModuleId, SourceUnit, Statement, build_typed_hir};
 use runen_syntax::parse_source;
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn zero_field_pattern_does_not_require_whole_root_availability() {
     let source = "record Empty {} fn take(value: Empty) {} fn f(root: Empty) { take(root); let Empty {} = root; }";
@@ -15,7 +21,7 @@ fn zero_field_pattern_does_not_require_whole_root_availability() {
         .find(|function| function.name == "f")
         .expect("test function");
 
-    let Statement::RecordDestructure { bindings, .. } = &function.body.statements[1] else {
+    let Statement::RecordDestructure { bindings, .. } = &runen_body(function).statements[1] else {
         panic!("expected zero-field record destructuring");
     };
     assert!(bindings.is_empty());
