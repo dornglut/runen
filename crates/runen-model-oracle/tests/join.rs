@@ -269,6 +269,13 @@ fn join_reuses_nan_equivalence_and_signed_zero_distinction() {
         RecordType::new([(key(1), LogicalType::F64), (key(2), LogicalType::U8)]).unwrap();
     let right_type =
         RecordType::new([(key(3), LogicalType::F64), (key(4), LogicalType::U8)]).unwrap();
+    let output_type = RecordType::new([
+        (key(1), LogicalType::F64),
+        (key(2), LogicalType::U8),
+        (key(3), LogicalType::F64),
+        (key(4), LogicalType::U8),
+    ])
+    .unwrap();
 
     let left_nan = record(
         &left_type,
@@ -328,8 +335,64 @@ fn join_reuses_nan_equivalence_and_signed_zero_distinction() {
     )
     .unwrap();
     let result = join_fields_equivalent(&left, key(1), &right, key(3)).unwrap();
+
+    let expected_nan = record(
+        &output_type,
+        vec![
+            (
+                key(1),
+                Value::float(FloatValue::nan(
+                    FloatFormat::F64,
+                    NaNRealizationId::new(777),
+                )),
+            ),
+            (key(2), Value::u8(1)),
+            (
+                key(3),
+                Value::float(FloatValue::nan(
+                    FloatFormat::F64,
+                    NaNRealizationId::new(555),
+                )),
+            ),
+            (key(4), Value::u8(3)),
+        ],
+    );
+    let expected_plus = record(
+        &output_type,
+        vec![
+            (
+                key(1),
+                Value::float(FloatValue::positive_zero(FloatFormat::F64)),
+            ),
+            (key(2), Value::u8(2)),
+            (
+                key(3),
+                Value::float(FloatValue::positive_zero(FloatFormat::F64)),
+            ),
+            (key(4), Value::u8(5)),
+        ],
+    );
+    let forbidden_mixed = record(
+        &output_type,
+        vec![
+            (
+                key(1),
+                Value::float(FloatValue::positive_zero(FloatFormat::F64)),
+            ),
+            (key(2), Value::u8(2)),
+            (
+                key(3),
+                Value::float(FloatValue::negative_zero(FloatFormat::F64)),
+            ),
+            (key(4), Value::u8(4)),
+        ],
+    );
+
     assert_eq!(result.class_count(), 2);
     assert_eq!(result.total_multiplicity(), 2);
+    assert_eq!(result.multiplicity_of(&expected_nan), 1);
+    assert_eq!(result.multiplicity_of(&expected_plus), 1);
+    assert_eq!(result.multiplicity_of(&forbidden_mixed), 0);
 }
 
 #[test]
