@@ -52,6 +52,7 @@ jobs:
           python .github/tmp-705-phase9.py
           python .github/tmp-705-phase10.py
           python .github/tmp-705-phase11.py
+          python .github/tmp-705-phase12-diagnose.py
           cargo +stable fmt --all
           git diff --check
       - name: Test syntax external declarations
