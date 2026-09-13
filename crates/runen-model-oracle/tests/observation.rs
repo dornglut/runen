@@ -299,3 +299,172 @@ fn state_backed_query_pipeline_consumes_the_actually_observed_bag() {
         &Value::cardinality_from_u128(1)
     ));
 }
+
+#[test]
+fn singleton_context_requires_admitted_observation_and_preserves_association() {
+    let domain_id = StateDomainId::new(80);
+    let observation = ObservationId::new(1);
+    let root = BagValue::new(
+        LogicalType::Bool,
+        [Value::bool(true), Value::bool(false)],
+    )
+    .unwrap();
+    let domain = ObservedBagDomain::new(domain_id, LogicalType::Bool, [(observation, root)])
+        .unwrap();
+
+    assert!(
+        domain
+            .singleton_observation_set(ObservationId::new(999))
+            .is_none()
+    );
+
+    let singleton = domain.singleton_observation_set(observation).unwrap();
+    assert_eq!(singleton.domain_id(), domain_id);
+    assert_eq!(singleton.observation_id(), observation);
+    assert!(bags_equivalent(
+        singleton.observed_bag(),
+        domain.observed_bag(observation).unwrap()
+    ));
+}
+
+#[test]
+fn singleton_context_preserves_direct_query_meaning() {
+    let record_type = row_type();
+    let element_type = LogicalType::Record(record_type.clone());
+    let observation = ObservationId::new(2);
+    let domain = ObservedBagDomain::new(
+        StateDomainId::new(81),
+        element_type,
+        [(
+            observation,
+            BagValue::new(
+                LogicalType::Record(record_type.clone()),
+                [
+                    row(&record_type, true, 1),
+                    row(&record_type, false, 2),
+                    row(&record_type, true, 3),
+                ],
+            )
+            .unwrap(),
+        )],
+    )
+    .unwrap();
+
+    let direct_filtered = filter_field_equivalent(
+        domain.observed_bag(observation).unwrap(),
+        ENABLED,
+        &Value::bool(true),
+    )
+    .unwrap();
+    let singleton = domain.singleton_observation_set(observation).unwrap();
+    let singleton_filtered =
+        filter_field_equivalent(singleton.observed_bag(), ENABLED, &Value::bool(true)).unwrap();
+
+    assert!(bags_equivalent(&direct_filtered, &singleton_filtered));
+    assert!(model_equivalent(
+        &bag_cardinality(&direct_filtered),
+        &bag_cardinality(&singleton_filtered)
+    ));
+    assert!(model_equivalent(
+        &bag_cardinality(&singleton_filtered),
+        &Value::cardinality_from_u128(2)
+    ));
+}
+
+#[test]
+fn equivalent_roots_do_not_collapse_distinct_singleton_observation_identity() {
+    let first = ObservationId::new(3);
+    let second = ObservationId::new(4);
+    let first_root = BagValue::new(
+        LogicalType::F32,
+        [Value::float(FloatValue::nan(
+            FloatFormat::F32,
+            NaNRealizationId::new(10),
+        ))],
+    )
+    .unwrap();
+    let second_root = BagValue::new(
+        LogicalType::F32,
+        [Value::float(FloatValue::nan(
+            FloatFormat::F32,
+            NaNRealizationId::new(20),
+        ))],
+    )
+    .unwrap();
+    let domain = ObservedBagDomain::new(
+        StateDomainId::new(82),
+        LogicalType::F32,
+        [(first, first_root), (second, second_root)],
+    )
+    .unwrap();
+
+    let first_context = domain.singleton_observation_set(first).unwrap();
+    let second_context = domain.singleton_observation_set(second).unwrap();
+
+    assert_ne!(first_context.observation_id(), second_context.observation_id());
+    assert_eq!(first_context.domain_id(), second_context.domain_id());
+    assert!(bags_equivalent(
+        first_context.observed_bag(),
+        second_context.observed_bag()
+    ));
+}
+
+#[test]
+fn singleton_context_domain_scope_and_construction_order_are_independent() {
+    let shared_observation = ObservationId::new(5);
+    let left_domain = ObservedBagDomain::new(
+        StateDomainId::new(83),
+        LogicalType::Bool,
+        [(shared_observation, BagValue::new(LogicalType::Bool, [Value::bool(true)]).unwrap())],
+    )
+    .unwrap();
+    let right_domain = ObservedBagDomain::new(
+        StateDomainId::new(84),
+        LogicalType::Bool,
+        [(shared_observation, BagValue::new(LogicalType::Bool, [Value::bool(false)]).unwrap())],
+    )
+    .unwrap();
+
+    let left_context = left_domain
+        .singleton_observation_set(shared_observation)
+        .unwrap();
+    let right_context = right_domain
+        .singleton_observation_set(shared_observation)
+        .unwrap();
+    assert_ne!(left_context.domain_id(), right_context.domain_id());
+    assert_eq!(
+        left_context.observation_id(),
+        right_context.observation_id()
+    );
+
+    let first = ObservationId::new(6);
+    let second = ObservationId::new(7);
+    let first_root = BagValue::new(LogicalType::Bool, [Value::bool(true)]).unwrap();
+    let second_root = BagValue::new(LogicalType::Bool, [Value::bool(false)]).unwrap();
+    let forward = ObservedBagDomain::new(
+        StateDomainId::new(85),
+        LogicalType::Bool,
+        [(first, first_root.clone()), (second, second_root.clone())],
+    )
+    .unwrap();
+    let reverse = ObservedBagDomain::new(
+        StateDomainId::new(85),
+        LogicalType::Bool,
+        [(second, second_root), (first, first_root)],
+    )
+    .unwrap();
+
+    for observation in [first, second] {
+        let forward_context = forward.singleton_observation_set(observation).unwrap();
+        let reverse_context = reverse.singleton_observation_set(observation).unwrap();
+        assert_eq!(forward_context.domain_id(), reverse_context.domain_id());
+        assert_eq!(
+            forward_context.observation_id(),
+            reverse_context.observation_id()
+        );
+        assert!(bags_equivalent(
+            forward_context.observed_bag(),
+            reverse_context.observed_bag()
+        ));
+    }
+}
