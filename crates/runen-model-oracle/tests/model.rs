@@ -70,18 +70,14 @@ fn record_value_equivalence_ignores_field_construction_order() {
 
 #[test]
 fn empty_structural_values_are_valid() {
-    let empty_record_type =
-        RecordType::new(std::iter::empty::<(FieldKey, LogicalType)>()).unwrap();
+    let empty_record_type = RecordType::new(std::iter::empty::<(FieldKey, LogicalType)>()).unwrap();
     let empty_record = Value::record(
         empty_record_type.clone(),
         std::iter::empty::<(FieldKey, Value)>(),
     )
     .unwrap();
-    let second_empty_record = Value::record(
-        empty_record_type,
-        std::iter::empty::<(FieldKey, Value)>(),
-    )
-    .unwrap();
+    let second_empty_record =
+        Value::record(empty_record_type, std::iter::empty::<(FieldKey, Value)>()).unwrap();
     assert!(model_equivalent(&empty_record, &second_empty_record));
 
     assert!(
@@ -262,7 +258,10 @@ fn relation_and_bag_are_equivalence_class_values_not_insertion_order() {
 fn sequence_preserves_equivalent_occurrences_and_semantic_order() {
     let duplicate = SequenceValue::new(LogicalType::I32, [Value::i32(1), Value::i32(1)]).unwrap();
     assert_eq!(duplicate.len(), 2);
-    assert!(model_equivalent(duplicate.at(0).unwrap(), duplicate.at(1).unwrap()));
+    assert!(model_equivalent(
+        duplicate.at(0).unwrap(),
+        duplicate.at(1).unwrap()
+    ));
 
     let first = Value::i32(1);
     let second = Value::i32(2);
