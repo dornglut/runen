@@ -149,6 +149,47 @@ fn distinct_observations_may_expose_model_equivalent_nan_roots() {
 }
 
 #[test]
+fn same_observation_across_realizations_is_compared_by_model_equivalence() {
+    let domain_id = StateDomainId::new(41);
+    let observation = ObservationId::new(13);
+    let first_root = BagValue::new(
+        LogicalType::F32,
+        [Value::float(FloatValue::nan(
+            FloatFormat::F32,
+            NaNRealizationId::new(7),
+        ))],
+    )
+    .unwrap();
+    let second_root = BagValue::new(
+        LogicalType::F32,
+        [Value::float(FloatValue::nan(
+            FloatFormat::F32,
+            NaNRealizationId::new(8),
+        ))],
+    )
+    .unwrap();
+
+    let first_realization = ObservedBagDomain::new(
+        domain_id,
+        LogicalType::F32,
+        [(observation, first_root)],
+    )
+    .unwrap();
+    let second_realization = ObservedBagDomain::new(
+        domain_id,
+        LogicalType::F32,
+        [(observation, second_root)],
+    )
+    .unwrap();
+
+    assert_eq!(first_realization.domain_id(), second_realization.domain_id());
+    assert!(bags_equivalent(
+        first_realization.observed_bag(observation).unwrap(),
+        second_realization.observed_bag(observation).unwrap()
+    ));
+}
+
+#[test]
 fn observation_token_is_scoped_by_domain_fixture() {
     let observation = ObservationId::new(7);
     let true_root = BagValue::new(LogicalType::Bool, [Value::bool(true)]).unwrap();
