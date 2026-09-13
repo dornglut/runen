@@ -20,13 +20,13 @@ observed_result(M, r) : T
 
 The notation identifies the logical relation only. It does not define source syntax, a runtime API, a storage handle, a Core borrow, an Exec resource, a database cursor, a physical snapshot object, or an implementation representation for `M`, `r`, or the observed result.
 
-A realization may copy, reconstruct, cache, materialize, or otherwise produce any representative of the determined Model-equivalence class. Representative choice, allocation identity, address, storage layout, index shape, traversal order, caching strategy, and physical snapshot machinery are not result-target observation semantics.
+A realization may copy, reconstruct, cache, or otherwise produce any representative of the determined Model-equivalence class. Representative choice, allocation identity, address, storage layout, index shape, traversal order, caching strategy, and physical snapshot machinery are not result-target observation semantics.
 
 The same admitted `(M, r)` MUST NOT determine two non-equivalent logical result values. Replacing, relocating, compacting, caching differently, or otherwise changing a physical realization after `r` is established cannot silently change the logical result denoted by that observation under this relation.
 
 This stability is semantic target-observation identity, not a retention or availability guarantee. This profile does not require an implementation to retain physical data for `r`, make `r` reacquirable, or define a runtime failure when an unavailable target observation is requested. The relation applies when `(M, r)` is admitted.
 
-Result target identity, target observation identity, and Model value equivalence are distinct. Two distinct result targets MAY expose Model-equivalent logical result values and remain distinct targets. Two distinct target observations of one result target MAY determine Model-equivalent logical result values and remain distinct observations.
+Result target identity, target observation identity, and Model value equivalence are distinct. Two distinct result targets MAY expose Model-equivalent logical result values and remain distinct targets. Distinct target observations of one result target MAY determine either Model-equivalent or non-equivalent logical result values and remain distinct observations. This permission does not define any transition, ordering, predecessor/successor, update, or visibility relation between those observations.
 
 Target observation identity is also distinct from source-domain observation identity and source `ObservationSet` identity. Equal observed result values do not establish that two target observations represent the same source observation context.
 
