@@ -36,6 +36,18 @@ fn shared_reference(referent: ReferenceReferent) -> Type {
     }
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_exact_shared_reference_identity_and_duplicates_reference_bindings() {
     let hir = compile("fn f(x: I64, r: &I64) { let s: &I64 = r; }")
@@ -43,12 +55,12 @@ fn retains_exact_shared_reference_identity_and_duplicates_reference_bindings() {
     let f = function(&hir, "f");
     let reference_ty = shared_reference(ReferenceReferent::Intrinsic(IntrinsicType::I64));
 
-    assert_eq!(f.parameters[1].ty, reference_ty);
+    assert_eq!(runen_parameters(f)[1].ty, reference_ty);
     assert!(hir.type_is_duplicable(reference_ty));
 
     let Statement::Local {
         ty, initializer, ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected Shared-reference local");
     };
@@ -59,7 +71,7 @@ fn retains_exact_shared_reference_identity_and_duplicates_reference_bindings() {
         ValueKind::BindingUse {
             binding,
             ownership: OwnedUse::Duplicate,
-        } if binding == f.parameters[1].binding
+        } if binding == runen_parameters(f)[1].binding
     ));
 }
 
@@ -73,7 +85,7 @@ fn root_borrow_and_dereference_retain_exact_binding_identities() {
         binding: reference_binding,
         initializer: borrow,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected reference local");
     };
@@ -83,14 +95,14 @@ fn root_borrow_and_dereference_retain_exact_binding_identities() {
             target,
             fields,
             permission: ReferencePermission::Shared,
-        } if *target == f.parameters[0].binding && fields.is_empty()
+        } if *target == runen_parameters(f)[0].binding && fields.is_empty()
     ));
     assert_eq!(
         borrow.ty,
         shared_reference(ReferenceReferent::Intrinsic(IntrinsicType::I64))
     );
 
-    let Statement::Local { initializer, .. } = &f.body.statements[1] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[1] else {
         panic!("expected dereference result local");
     };
     assert_eq!(initializer.ty, Type::Intrinsic(IntrinsicType::I64));
@@ -120,7 +132,7 @@ fn shared_field_roots_retain_exact_ordered_paths_and_final_referents() {
     let Statement::Local {
         initializer: direct,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected direct field-root local");
     };
@@ -134,13 +146,13 @@ fn shared_field_roots_retain_exact_ordered_paths_and_final_referents() {
             target,
             fields,
             permission: ReferencePermission::Shared,
-        } if *target == f.parameters[0].binding && fields.as_slice() == [0]
+        } if *target == runen_parameters(f)[0].binding && fields.as_slice() == [0]
     ));
 
     let Statement::Local {
         initializer: nested,
         ..
-    } = &f.body.statements[1]
+    } = &runen_body(f).statements[1]
     else {
         panic!("expected nested field-root local");
     };
@@ -154,7 +166,7 @@ fn shared_field_roots_retain_exact_ordered_paths_and_final_referents() {
             target,
             fields,
             permission: ReferencePermission::Shared,
-        } if *target == f.parameters[0].binding && fields.as_slice() == [0, 0]
+        } if *target == runen_parameters(f)[0].binding && fields.as_slice() == [0, 0]
     ));
 }
 
@@ -213,7 +225,7 @@ fn shared_field_relative_reborrows_retain_exact_paths_and_final_referents() {
     let inner = hir.records[0].id;
 
     for (index, expected_fields, expected_ty) in [
-        (0, Vec::<usize>::new(), f.parameters[0].ty),
+        (0, Vec::<usize>::new(), runen_parameters(f)[0].ty),
         (
             1,
             vec![0],
@@ -225,7 +237,7 @@ fn shared_field_relative_reborrows_retain_exact_paths_and_final_referents() {
             shared_reference(ReferenceReferent::Intrinsic(IntrinsicType::I64)),
         ),
     ] {
-        let Statement::Local { initializer, .. } = &f.body.statements[index] else {
+        let Statement::Local { initializer, .. } = &runen_body(f).statements[index] else {
             panic!("expected reborrow local");
         };
         assert_eq!(initializer.ty, expected_ty);
@@ -235,7 +247,7 @@ fn shared_field_relative_reborrows_retain_exact_paths_and_final_referents() {
                 reference,
                 fields,
                 permission: ReferencePermission::Shared,
-            } if *reference == f.parameters[0].binding && *fields == expected_fields
+            } if *reference == runen_parameters(f)[0].binding && *fields == expected_fields
         ));
     }
 }
@@ -500,7 +512,7 @@ fn shared_reference_result_retains_identity_contract_and_shared_precedence() {
         local.safe_reference_result_contract,
         SafeReferenceResultContract::SharedIdentity { origin: 0 }
     );
-    let Statement::Local { initializer, .. } = &local.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(local).statements[0] else {
         panic!("expected copied Shared-reference local");
     };
     assert!(matches!(
@@ -508,7 +520,7 @@ fn shared_reference_result_retains_identity_contract_and_shared_precedence() {
         ValueKind::BindingUse {
             binding,
             ownership: OwnedUse::Duplicate,
-        } if binding == local.parameters[0].binding
+        } if binding == runen_parameters(local)[0].binding
     ));
 }
 
@@ -542,7 +554,7 @@ fn field_relative_child_survives_transport_and_identity_call_without_becoming_id
     )
     .expect("field-relative child authority must survive local and call transport");
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected projected child local");
     };
     assert!(matches!(
@@ -551,7 +563,7 @@ fn field_relative_child_survives_transport_and_identity_call_without_becoming_id
             reference,
             fields,
             permission: ReferencePermission::Shared,
-        } if *reference == f.parameters[0].binding && fields.as_slice() == [0]
+        } if *reference == runen_parameters(f)[0].binding && fields.as_slice() == [0]
     ));
 }
 
@@ -623,8 +635,7 @@ fn shared_reference_identity_composes_through_nested_recursive_and_mutual_calls(
     }
 
     let outer = function(&hir, "outer");
-    let returned = outer
-        .body
+    let returned = runen_body(outer)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -638,8 +649,7 @@ fn shared_reference_identity_composes_through_nested_recursive_and_mutual_calls(
     ));
 
     let recursive = function(&hir, "recursive");
-    let returned = recursive
-        .body
+    let returned = runen_body(recursive)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -853,7 +863,7 @@ fn external_reference_parameters_duplicate_and_dereference_without_local_target_
         binding: local_reference,
         initializer,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected copied reference local");
     };
@@ -862,11 +872,10 @@ fn external_reference_parameters_duplicate_and_dereference_without_local_target_
         ValueKind::BindingUse {
             binding,
             ownership: OwnedUse::Duplicate,
-        } if binding == f.parameters[0].binding
+        } if binding == runen_parameters(f)[0].binding
     ));
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

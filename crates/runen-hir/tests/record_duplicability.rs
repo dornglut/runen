@@ -35,6 +35,12 @@ fn invalid_selection_count(errors: &[runen_hir::Diagnostic]) -> usize {
         .count()
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_independent_record_classifications_and_type_query() {
     let hir = compile(
@@ -161,8 +167,7 @@ fn selected_whole_binding_duplicates_while_unselected_record_consumes() {
          fn f(value: Token) { take(value); take(value); }",
     )
     .expect("selected record binding can be used repeatedly");
-    let calls = function(&selected, "f")
-        .body
+    let calls = runen_body(function(&selected, "f"))
         .statements
         .iter()
         .filter_map(|statement| match statement {
@@ -205,8 +210,7 @@ fn selected_record_field_duplicates_from_binding_and_producer_receivers() {
     )
     .expect("selected record fields duplicate without consuming their paths");
 
-    let binding_calls = function(&hir, "from_binding")
-        .body
+    let binding_calls = runen_body(function(&hir, "from_binding"))
         .statements
         .iter()
         .filter_map(|statement| match statement {
@@ -226,7 +230,7 @@ fn selected_record_field_duplicates_from_binding_and_producer_receivers() {
         ));
     }
 
-    let producer_argument = match &function(&hir, "from_producer").body.statements[0] {
+    let producer_argument = match &runen_body(function(&hir, "from_producer")).statements[0] {
         Statement::Call { arguments, .. } => &arguments[0],
         _ => panic!("expected call statement"),
     };
@@ -262,7 +266,7 @@ fn record_patterns_duplicate_selected_leaves_and_consume_unselected_siblings() {
     )
     .expect("record-aware pattern ownership is valid");
 
-    let direct = match &function(&hir, "direct").body.statements[0] {
+    let direct = match &runen_body(function(&hir, "direct")).statements[0] {
         Statement::RecordDestructure {
             scrutinee,
             bindings,
@@ -279,7 +283,7 @@ fn record_patterns_duplicate_selected_leaves_and_consume_unselected_siblings() {
     assert_eq!(direct[1].fields, vec![1]);
     assert_eq!(direct[1].ownership, OwnedUse::Consume);
 
-    match &function(&hir, "producer").body.statements[0] {
+    match &runen_body(function(&hir, "producer")).statements[0] {
         Statement::RecordDestructure {
             scrutinee: RecordPatternScrutinee::Producer { cleanup, .. },
             bindings,
@@ -307,7 +311,7 @@ fn nested_pattern_leaf_uses_the_selected_record_classification() {
     )
     .expect("nested selected leaf duplicates");
 
-    match &function(&hir, "f").body.statements[0] {
+    match &runen_body(function(&hir, "f")).statements[0] {
         Statement::RecordDestructure { bindings, .. } => {
             assert_eq!(bindings.len(), 1);
             assert_eq!(bindings[0].fields, vec![0, 0]);
@@ -329,9 +333,9 @@ fn selected_record_use_preserves_conditional_ownership_state() {
     )
     .expect("selected record duplication leaves both conditional outcomes available");
 
-    assert_eq!(function(&hir, "f").body.statements.len(), 2);
+    assert_eq!(runen_body(function(&hir, "f")).statements.len(), 2);
     assert!(matches!(
-        function(&hir, "f").body.statements[0],
+        runen_body(function(&hir, "f")).statements[0],
         Statement::If { .. }
     ));
 }

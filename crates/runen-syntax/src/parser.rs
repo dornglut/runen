@@ -60,6 +60,9 @@ impl Parser<'_> {
                 Some(SyntaxKind::KwExport) if self.at_contextual_ident(1, "static") => {
                     self.parse_static_declaration(true);
                 }
+                Some(SyntaxKind::KwExport) if self.at_contextual_ident(1, "external") => {
+                    self.parse_external_function_declaration(true);
+                }
                 Some(SyntaxKind::KwExport) => match self.peek_nontrivia(1) {
                     Some(SyntaxKind::KwRecord) => self.parse_record_definition(true),
                     Some(SyntaxKind::KwFn) => self.parse_function_definition(true),
@@ -81,6 +84,9 @@ impl Parser<'_> {
                 }
                 Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "static") => {
                     self.parse_static_declaration(false);
+                }
+                Some(SyntaxKind::Ident) if self.at_contextual_ident(0, "external") => {
+                    self.parse_external_function_declaration(false);
                 }
                 Some(_) => {
                     self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Item));
@@ -309,6 +315,83 @@ impl Parser<'_> {
         self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
         self.expect(SyntaxKind::Colon, ExpectedSyntax::Colon);
         self.parse_type();
+        self.builder.finish_node();
+    }
+
+    fn parse_external_function_declaration(&mut self, exported: bool) {
+        debug_assert!(self.at_contextual_ident(usize::from(exported), "external"));
+        self.builder
+            .start_node(SyntaxKind::ExternalFunctionDeclaration.into());
+        if exported {
+            self.expect(SyntaxKind::KwExport, ExpectedSyntax::Item);
+        }
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Item);
+        self.expect(SyntaxKind::KwFn, ExpectedSyntax::Item);
+        self.expect(SyntaxKind::Ident, ExpectedSyntax::Identifier);
+        self.builder.start_node(SyntaxKind::ParameterList.into());
+        if self.expect(SyntaxKind::LParen, ExpectedSyntax::LeftParen) {
+            self.bump_trivia();
+            while !self.at(SyntaxKind::RParen) && self.current().is_some() {
+                if self.at(SyntaxKind::Arrow)
+                    || self.at(SyntaxKind::LBrace)
+                    || self.at(SyntaxKind::LBracket)
+                    || self.at_any(TOP_LEVEL_STARTERS)
+                {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::RightParen));
+                    break;
+                }
+                self.parse_external_intrinsic_type();
+                if self.eat(SyntaxKind::Comma) {
+                    self.bump_trivia();
+                    continue;
+                }
+                if !self.at(SyntaxKind::RParen) {
+                    self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::CommaOrRightParen));
+                    self.recover_until(&[
+                        SyntaxKind::Comma,
+                        SyntaxKind::RParen,
+                        SyntaxKind::Arrow,
+                        SyntaxKind::Semicolon,
+                        SyntaxKind::LBrace,
+                        SyntaxKind::LBracket,
+                        SyntaxKind::KwImport,
+                        SyntaxKind::KwExport,
+                        SyntaxKind::KwFn,
+                        SyntaxKind::KwRecord,
+                    ]);
+                    self.eat(SyntaxKind::Comma);
+                }
+                self.bump_trivia();
+            }
+            self.expect(SyntaxKind::RParen, ExpectedSyntax::RightParen);
+        }
+        self.builder.finish_node();
+
+        if self.at(SyntaxKind::Arrow) {
+            self.builder.start_node(SyntaxKind::ResultClause.into());
+            self.bump();
+            self.parse_external_intrinsic_type();
+            self.builder.finish_node();
+        }
+        self.expect(SyntaxKind::Semicolon, ExpectedSyntax::Semicolon);
+        self.builder.finish_node();
+    }
+
+    fn parse_external_intrinsic_type(&mut self) {
+        self.builder.start_node(SyntaxKind::TypeRef.into());
+        if self.current().is_some_and(is_intrinsic_type_start) {
+            self.bump();
+        } else {
+            self.error_here(SyntaxErrorKind::Expected(ExpectedSyntax::Type));
+            if self.current().is_some()
+                && !self.at(SyntaxKind::Comma)
+                && !self.at(SyntaxKind::RParen)
+                && !self.at(SyntaxKind::Arrow)
+                && !self.at(SyntaxKind::Semicolon)
+            {
+                self.recover_one();
+            }
+        }
         self.builder.finish_node();
     }
 

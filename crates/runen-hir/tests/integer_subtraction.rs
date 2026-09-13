@@ -53,6 +53,12 @@ fn integer_add(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
     (left, right)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn all_eight_fixed_width_integer_types_retain_explicit_subtraction_hir() {
     let hir = build(
@@ -77,8 +83,7 @@ fn all_eight_fixed_width_integer_types_retain_explicit_subtraction_hir() {
         ("u32_sub", IntrinsicType::U32),
         ("u64_sub", IntrinsicType::U64),
     ] {
-        let value = function(&hir, name)
-            .body
+        let value = runen_body(function(&hir, name))
             .terminal_return
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
@@ -195,8 +200,7 @@ fn operand_literal_materialization_precedes_arithmetic_and_is_not_folded() {
 fn signed_literal_right_operand_is_retained_as_existing_literal_hir() {
     let hir = build("fn f(a: I8) -> I8 { return a--1; }")
         .expect("adjacent subtraction and signed literal are valid");
-    let value = function(&hir, "f")
-        .body
+    let value = runen_body(function(&hir, "f"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -217,8 +221,7 @@ fn grouping_retains_explicit_nested_and_mixed_addition_subtraction_hir() {
     )
     .expect("grouping admits explicit Add/Sub trees");
 
-    let left = function(&hir, "left")
-        .body
+    let left = runen_body(function(&hir, "left"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -226,8 +229,7 @@ fn grouping_retains_explicit_nested_and_mixed_addition_subtraction_hir() {
     let (left_inner, _) = integer_sub(left, IntrinsicType::I8);
     integer_add(left_inner, IntrinsicType::I8);
 
-    let right = function(&hir, "right")
-        .body
+    let right = runen_body(function(&hir, "right"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -235,8 +237,7 @@ fn grouping_retains_explicit_nested_and_mixed_addition_subtraction_hir() {
     let (_, right_inner) = integer_sub(right, IntrinsicType::I8);
     integer_sub(right_inner, IntrinsicType::I8);
 
-    let mixed = function(&hir, "mixed")
-        .body
+    let mixed = runen_body(function(&hir, "mixed"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -261,22 +262,22 @@ fn integer_subtraction_flows_through_existing_generic_value_consumers() {
     .expect("IntegerSub composes through generic Value consumers");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     integer_sub(initializer, IntrinsicType::I8);
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     integer_sub(value, IntrinsicType::I8);
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     integer_sub(&arguments[0], IntrinsicType::I8);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -284,8 +285,7 @@ fn integer_subtraction_flows_through_existing_generic_value_consumers() {
     };
     integer_sub(&fields[0].value, IntrinsicType::I8);
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

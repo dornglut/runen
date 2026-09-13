@@ -780,7 +780,19 @@ pub struct Body {
     pub has_normal_continuation: bool,
 }
 
-/// One resolved source function entity and its typed body.
+/// Category-specific execution origin for one resolved source function entity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum FunctionExecution {
+    Runen {
+        parameters: Vec<Parameter>,
+        body: Body,
+    },
+    External {
+        parameters: Vec<IntrinsicType>,
+    },
+}
+
+/// One resolved source function entity with exactly one execution origin.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub id: FunctionId,
@@ -788,11 +800,45 @@ pub struct Function {
     pub name: String,
     pub accessibility: Accessibility,
     pub type_parameters: Vec<TypeParameter>,
-    pub parameters: Vec<Parameter>,
     pub result: Option<Type>,
     pub safe_reference_result_contract: SafeReferenceResultContract,
-    pub body: Body,
+    pub execution: FunctionExecution,
     pub location: SourceLocation,
+}
+
+impl Function {
+    #[must_use]
+    pub fn parameter_types(&self) -> Vec<Type> {
+        match &self.execution {
+            FunctionExecution::Runen { parameters, .. } => {
+                parameters.iter().map(|parameter| parameter.ty).collect()
+            }
+            FunctionExecution::External { parameters } => {
+                parameters.iter().copied().map(Type::Intrinsic).collect()
+            }
+        }
+    }
+
+    #[must_use]
+    pub fn runen_parameters(&self) -> Option<&[Parameter]> {
+        match &self.execution {
+            FunctionExecution::Runen { parameters, .. } => Some(parameters),
+            FunctionExecution::External { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub fn runen_body(&self) -> Option<&Body> {
+        match &self.execution {
+            FunctionExecution::Runen { body, .. } => Some(body),
+            FunctionExecution::External { .. } => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_external(&self) -> bool {
+        matches!(self.execution, FunctionExecution::External { .. })
+    }
 }
 
 /// One source module represented in this typed compilation.
@@ -932,6 +978,7 @@ pub enum DiagnosticKind {
     ImmutableAssignmentTarget,
     ExpectedFunction,
     GenericFunctionValue,
+    ExternalFunctionValue,
     ClosureInGenericFunction,
     NestedClosureDeclaration,
     DuplicateClosureCapture,

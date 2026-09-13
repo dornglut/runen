@@ -25,6 +25,18 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_raw_pointer_types_formation_copy_and_valid_retargeting() {
     let hir = compile(
@@ -47,19 +59,19 @@ fn retains_raw_pointer_types_formation_copy_and_valid_retargeting() {
         ty,
         initializer,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected scalar raw-pointer local");
     };
     assert_eq!(*ty, scalar_ty);
     assert!(matches!(
         initializer.kind,
-        ValueKind::RawAddressRoot { target } if target == f.parameters[0].binding
+        ValueKind::RawAddressRoot { target } if target == runen_parameters(f)[0].binding
     ));
 
     let Statement::Local {
         ty, initializer, ..
-    } = &f.body.statements[1]
+    } = &runen_body(f).statements[1]
     else {
         panic!("expected copied raw-pointer local");
     };
@@ -72,15 +84,15 @@ fn retains_raw_pointer_types_formation_copy_and_valid_retargeting() {
         } if binding == *scalar
     ));
 
-    let Statement::Assignment { value, .. } = &f.body.statements[3] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[3] else {
         panic!("expected ordinary pointer retarget assignment");
     };
     assert!(matches!(
         value.kind,
-        ValueKind::RawAddressRoot { target } if target == f.parameters[1].binding
+        ValueKind::RawAddressRoot { target } if target == runen_parameters(f)[1].binding
     ));
 
-    let Statement::Local { ty, .. } = &f.body.statements[4] else {
+    let Statement::Local { ty, .. } = &runen_body(f).statements[4] else {
         panic!("expected nominal raw-pointer local");
     };
     assert_eq!(*ty, point_ty);

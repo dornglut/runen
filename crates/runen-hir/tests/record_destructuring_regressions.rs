@@ -33,13 +33,26 @@ fn has_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool
     diagnostics.iter().any(|diagnostic| diagnostic.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn one_level_pattern_binding_identities_remain_distinct() {
     let hir = build(
         "record Token {} record Mixed { first: I8, token: Token, last: U8 } \
          fn f(root: Mixed) { let Mixed { last: z, token: moved, first: a } = root; }",
     );
-    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[0]
+    let Statement::RecordDestructure { bindings, .. } =
+        &runen_body(function(&hir, "f")).statements[0]
     else {
         panic!("expected record destructuring statement");
     };
@@ -117,13 +130,13 @@ fn all_nonduplicable_one_level_fields_remain_independent_consumes() {
         scrutinee,
         bindings,
         ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected record destructuring statement");
     };
     assert_eq!(
         scrutinee,
-        &RecordPatternScrutinee::DirectRoot(f.parameters[0].binding)
+        &RecordPatternScrutinee::DirectRoot(runen_parameters(f)[0].binding)
     );
     assert_eq!(
         bindings
@@ -151,7 +164,7 @@ fn one_level_pattern_bindings_obey_child_scope_lookup() {
          }",
     );
     let f = function(&hir, "f");
-    let Statement::Block(outer) = &f.body.statements[0] else {
+    let Statement::Block(outer) = &runen_body(f).statements[0] else {
         panic!("expected outer child block");
     };
     let Statement::RecordDestructure { bindings, .. } = &outer.statements[0] else {
@@ -187,8 +200,7 @@ fn one_level_disjoint_field_access_remains_available_after_partial_pattern() {
              return root.count; \
          }",
     );
-    let returned = function(&hir, "f")
-        .body
+    let returned = runen_body(function(&hir, "f"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -209,7 +221,8 @@ fn one_level_leaf_types_remain_exact() {
         "record Pair { left: I8, right: U8 } \
          fn f(root: Pair) { let Pair { left: left, right: right } = root; }",
     );
-    let Statement::RecordDestructure { bindings, .. } = &function(&hir, "f").body.statements[0]
+    let Statement::RecordDestructure { bindings, .. } =
+        &runen_body(function(&hir, "f")).statements[0]
     else {
         panic!("expected record destructuring statement");
     };

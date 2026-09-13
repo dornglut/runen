@@ -84,6 +84,13 @@ fn execute_source(source: &str, entry_name: &str) -> runen_reference::ExecutionR
         .expect("safe lowered reference execution is defined")
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
 #[test]
 fn maps_only_used_shared_reference_types_once_per_hir_type() {
     let no_references = lower_source("fn f(x: I64) { let y: I64 = x; }");
@@ -886,7 +893,7 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
 
     let mut consuming_shared = hir("fn f(r: &I64) { let s: &I64 = r; }");
     let HirStatement::Local { initializer, .. } =
-        &mut consuming_shared.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut consuming_shared.functions[0]).statements[0]
     else {
         panic!("expected reference local");
     };
@@ -903,7 +910,7 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
 
     let mut duplicating_replacement = hir("fn f(r: &mut I64) { let moved: &mut I64 = r; }");
     let HirStatement::Local { initializer, .. } =
-        &mut duplicating_replacement.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut duplicating_replacement.functions[0]).statements[0]
     else {
         panic!("expected replacement-reference local");
     };
@@ -921,7 +928,7 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
     let mut projected_type_mismatch = hir("record copy Pair { left: I64 }\
          fn f(r: &Pair) { let child: &I64 = &*r.left; }");
     let HirStatement::Local { initializer, .. } =
-        &mut projected_type_mismatch.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut projected_type_mismatch.functions[0]).statements[0]
     else {
         panic!("expected projected reference local");
     };

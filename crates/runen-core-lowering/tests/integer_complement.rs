@@ -78,6 +78,20 @@ fn execute_source(source: &str, entry_name: &str) -> runen_reference::ExecutionR
         .expect("safe lowered execution is defined")
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
+fn runen_parameters_mut(function: &mut runen_hir::Function) -> &mut [runen_hir::Parameter] {
+    let runen_hir::FunctionExecution::Runen { parameters, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    parameters
+}
+
 #[test]
 fn integer_complement_lowers_to_existing_integer_sub_with_same_type_minus_one_and_move() {
     let lowered = lower_source("fn f(value: I8) -> I8 { return ~value; }");
@@ -193,8 +207,7 @@ fn producer_completes_before_integer_complement_subtraction_is_emitted() {
 #[test]
 fn lowering_rejects_non_integer_retained_integer_complement_result_fact() {
     let mut compilation = hir("fn f(value: I8) -> I8 { return ~value; }");
-    let value = compilation.functions[0]
-        .body
+    let value = runen_body_mut(&mut compilation.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -212,8 +225,7 @@ fn lowering_rejects_non_integer_retained_integer_complement_result_fact() {
 #[test]
 fn lowering_rejects_integer_complement_operand_type_fact_that_differs_from_result() {
     let mut compilation = hir("fn f(value: I8) -> I8 { return ~value; }");
-    let value = compilation.functions[0]
-        .body
+    let value = runen_body_mut(&mut compilation.functions[0])
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -234,7 +246,7 @@ fn lowering_rejects_integer_complement_operand_type_fact_that_differs_from_resul
 #[test]
 fn lowering_rejects_malformed_operand_source_local_type_mismatch_without_conversion() {
     let mut compilation = hir("fn f(value: I8) -> I8 { return ~value; }");
-    compilation.functions[0].parameters[0].ty = Type::Intrinsic(IntrinsicType::I16);
+    runen_parameters_mut(&mut compilation.functions[0])[0].ty = Type::Intrinsic(IntrinsicType::I16);
 
     let Err(LoweringError::CoreValidation(error)) = lower(&compilation) else {
         panic!("mismatched operand source local must be rejected by Core validation");

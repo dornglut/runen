@@ -38,6 +38,12 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
     let hir = build(
@@ -49,7 +55,7 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
     .expect("disjoint sibling blocks may reuse one local key");
     let f = function(&hir, "f");
 
-    let first = block(&f.body.statements[0]);
+    let first = block(&runen_body(f).statements[0]);
     assert!(first.has_normal_continuation);
     assert!(first.terminal_return.is_none());
     let Statement::Local {
@@ -69,7 +75,7 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
         vec![cleanup(*first_b, &[]), cleanup(*first_a, &[])]
     );
 
-    let second = block(&f.body.statements[1]);
+    let second = block(&runen_body(f).statements[1]);
     let Statement::Local {
         binding: second_a, ..
     } = &second.statements[0]
@@ -78,7 +84,7 @@ fn retains_nested_structure_cleanup_order_and_distinct_sibling_bindings() {
     };
     assert_ne!(*first_a, *second_a);
     assert_eq!(second.normal_cleanup, vec![cleanup(*second_a, &[])]);
-    assert!(f.body.has_normal_continuation);
+    assert!(runen_body(f).has_normal_continuation);
 }
 
 #[test]
@@ -123,17 +129,17 @@ fn ancestor_assignment_state_persists_after_child_exit() {
 
     let Statement::Local {
         binding: x_binding, ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("expected root mutable local");
     };
-    let child = block(&f.body.statements[1]);
+    let child = block(&runen_body(f).statements[1]);
     let Statement::Assignment { target, .. } = &child.statements[0] else {
         panic!("expected child assignment");
     };
     assert_eq!(*target, *x_binding);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[2] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[2] else {
         panic!("expected post-block local");
     };
     let ValueKind::BindingUse { binding, ownership } = initializer.kind else {
@@ -152,7 +158,7 @@ fn consumed_child_local_is_omitted_from_normal_cleanup() {
     )
     .expect("consumed child local is valid and needs no normal-exit cleanup");
     let f = function(&hir, "f");
-    let child = block(&f.body.statements[0]);
+    let child = block(&runen_body(f).statements[0]);
 
     assert!(child.normal_cleanup.is_empty());
     assert!(child.has_normal_continuation);
@@ -173,7 +179,7 @@ fn partial_child_cleanup_records_exact_remaining_frontier_order() {
     )
     .expect("partial child ownership must be represented in HIR cleanup");
     let f = function(&hir, "f");
-    let child = block(&f.body.statements[0]);
+    let child = block(&runen_body(f).statements[0]);
     let Statement::Local { binding, .. } = &child.statements[0] else {
         panic!("expected child pair local");
     };
@@ -199,7 +205,7 @@ fn zero_leaf_remaining_subvalue_is_retained_as_source_cleanup_fact() {
     )
     .expect("zero-leaf source ownership remains a HIR cleanup fact");
     let f = function(&hir, "f");
-    let child = block(&f.body.statements[0]);
+    let child = block(&runen_body(f).statements[0]);
     let Statement::Local { binding, .. } = &child.statements[0] else {
         panic!("expected mixed local");
     };
@@ -215,7 +221,7 @@ fn recursively_zero_leaf_complete_value_is_retained_as_cleanup_fact() {
     )
     .expect("fully available zero-leaf record remains source-owned until scope exit");
     let f = function(&hir, "f");
-    let child = block(&f.body.statements[0]);
+    let child = block(&runen_body(f).statements[0]);
     let Statement::Local { binding, .. } = &child.statements[0] else {
         panic!("expected wrapper local");
     };
@@ -238,7 +244,7 @@ fn separately_consumed_siblings_can_exhaust_remaining_frontier() {
     )
     .expect("all child subvalues may be consumed separately");
     let f = function(&hir, "f");
-    let child = block(&f.body.statements[0]);
+    let child = block(&runen_body(f).statements[0]);
     assert!(child.normal_cleanup.is_empty());
 }
 
@@ -247,7 +253,7 @@ fn recursively_nested_blocks_retain_independent_cleanup_selections() {
     let hir = build("fn f() { { let outer: I64 = 1; { let inner: I64 = 2; } } }")
         .expect("recursive blocks must validate");
     let f = function(&hir, "f");
-    let outer = block(&f.body.statements[0]);
+    let outer = block(&runen_body(f).statements[0]);
     let Statement::Local {
         binding: outer_binding,
         ..
@@ -273,13 +279,13 @@ fn returning_nested_block_retains_return_and_no_normal_cleanup() {
     let hir = build("fn f() { { let child: I64 = 1; return; } }")
         .expect("terminal nested return must validate");
     let f = function(&hir, "f");
-    let child = block(&f.body.statements[0]);
+    let child = block(&runen_body(f).statements[0]);
 
     assert!(!child.has_normal_continuation);
     assert!(child.terminal_return.is_some());
     assert!(child.normal_cleanup.is_empty());
-    assert!(!f.body.has_normal_continuation);
-    assert!(f.body.terminal_return.is_none());
+    assert!(!runen_body(f).has_normal_continuation);
+    assert!(runen_body(f).terminal_return.is_none());
 }
 
 #[test]
@@ -287,7 +293,7 @@ fn nested_result_return_satisfies_root_result_obligation() {
     let hir = build("fn f(value: I64) -> I64 { { return value; } }")
         .expect("nested result return terminates the activation");
     let f = function(&hir, "f");
-    let child = block(&f.body.statements[0]);
+    let child = block(&runen_body(f).statements[0]);
 
     assert!(!child.has_normal_continuation);
     assert!(
@@ -297,7 +303,7 @@ fn nested_result_return_satisfies_root_result_obligation() {
             .and_then(|returned| returned.value.as_ref())
             .is_some()
     );
-    assert!(!f.body.has_normal_continuation);
+    assert!(!runen_body(f).has_normal_continuation);
 }
 
 #[test]

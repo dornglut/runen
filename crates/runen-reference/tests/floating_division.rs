@@ -69,6 +69,7 @@ fn execute_float_div_with_contract(
     let result = Place::local(LocalId(0));
     let program = Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -341,6 +342,7 @@ fn produced_nan_is_a_runtime_operand_and_propagates_through_float_div() {
     let one = positive_normal(1_u64 << 23, 0);
     let program = Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![Function {
             name: "entry".into(),
@@ -496,6 +498,7 @@ fn operand_effects_precede_exactly_one_distinct_float_div_write() {
     let two = positive_normal(1_u64 << 23, 1);
     let program = Program {
         persistent: vec![],
+        external_callables: Vec::new(),
         types,
         functions: vec![Function {
             name: "entry".into(),

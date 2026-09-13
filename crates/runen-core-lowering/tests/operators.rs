@@ -3,7 +3,9 @@ use runen_core_ir::{
     ValidatedProgram, Value as CoreValue,
 };
 use runen_core_lowering::{LoweringError, lower};
-use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};
+use runen_hir::{
+    FunctionExecution, IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir,
+};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -18,6 +20,13 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -202,8 +211,7 @@ fn lowering_rejects_non_bool_retained_outer_boolean_not_fact() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let value = f
-        .body
+    let value = runen_body_mut(f)
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -226,8 +234,7 @@ fn lowering_rejects_non_bool_retained_boolean_not_operand_fact() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let value = f
-        .body
+    let value = runen_body_mut(f)
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -515,8 +522,7 @@ fn lowering_rejects_non_bool_retained_outer_boolean_equality_fact() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let value = f
-        .body
+    let value = runen_body_mut(f)
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -539,8 +545,7 @@ fn lowering_rejects_non_bool_retained_boolean_equality_left_fact() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let value = f
-        .body
+    let value = runen_body_mut(f)
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -566,8 +571,7 @@ fn lowering_rejects_non_bool_retained_boolean_equality_right_fact() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let value = f
-        .body
+    let value = runen_body_mut(f)
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())

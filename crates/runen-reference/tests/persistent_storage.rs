@@ -30,6 +30,7 @@ fn persistent_instances_are_distinct_from_each_other_and_from_frame_storage() {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![
             PersistentDecl::new(i64_ty, Value::I64(1)),
@@ -70,6 +71,7 @@ fn repeated_persistent_reads_are_non_consuming() {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(21))],
         functions: vec![function],
@@ -132,6 +134,7 @@ fn persistent_shared_root_crosses_activation_and_reads_through_reference() {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(73))],
         functions: vec![caller, callee],
@@ -171,6 +174,7 @@ fn normal_terminal_cleanup_drops_outer_persistent_reference_before_extent_end() 
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(5))],
         functions: vec![function],
@@ -211,6 +215,7 @@ fn fault_terminal_cleanup_drops_outer_persistent_reference_before_extent_end() {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(8))],
         functions: vec![function],

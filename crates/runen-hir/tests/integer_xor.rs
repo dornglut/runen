@@ -42,6 +42,12 @@ fn integer_xor(value: &Value, ty: IntrinsicType) -> (&Value, &Value) {
     (left, right)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn all_eight_fixed_width_integer_types_retain_explicit_xor_hir() {
     let hir = build(
@@ -66,8 +72,7 @@ fn all_eight_fixed_width_integer_types_retain_explicit_xor_hir() {
         ("u32_xor", IntrinsicType::U32),
         ("u64_xor", IntrinsicType::U64),
     ] {
-        let value = function(&hir, name)
-            .body
+        let value = runen_body(function(&hir, name))
             .terminal_return
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
@@ -102,7 +107,8 @@ fn surrounding_exact_type_selects_both_xor_operands_without_defaulting() {
         ("i8_value", IntrinsicType::I8),
         ("u64_value", IntrinsicType::U64),
     ] {
-        let Statement::Local { initializer, .. } = &function(&hir, name).body.statements[0] else {
+        let Statement::Local { initializer, .. } = &runen_body(function(&hir, name)).statements[0]
+        else {
             panic!("expected XOR local");
         };
         let (left, right) = integer_xor(initializer, ty);
@@ -258,22 +264,22 @@ fn xor_composes_through_existing_generic_value_consumers() {
     .expect("IntegerXor composes through generic Value consumers");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     integer_xor(initializer, IntrinsicType::I8);
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     integer_xor(value, IntrinsicType::I8);
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     integer_xor(&arguments[0], IntrinsicType::I8);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -281,8 +287,7 @@ fn xor_composes_through_existing_generic_value_consumers() {
     };
     integer_xor(&fields[0].value, IntrinsicType::I8);
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

@@ -31,8 +31,7 @@ fn function<'a>(hir: &'a runen_hir::TypedCompilation, name: &str) -> &'a runen_h
 }
 
 fn returned_value(function: &runen_hir::Function) -> &Value {
-    function
-        .body
+    runen_body(function)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -62,6 +61,18 @@ fn count_kind(diagnostics: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> us
         .count()
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn resolves_paths_and_retains_duplicate_ownership() {
     let hir = build(
@@ -76,7 +87,7 @@ fn resolves_paths_and_retains_duplicate_ownership() {
     let FieldValueReceiver::Binding { binding, ty } = receiver else {
         panic!("expected binding field receiver");
     };
-    assert_eq!(*binding, one.parameters[0].binding);
+    assert_eq!(*binding, runen_parameters(one)[0].binding);
     assert_eq!(*ty, Type::Record(hir.records[1].id));
     assert_eq!(fields, &[0]);
     assert_eq!(ownership, OwnedUse::Duplicate);
@@ -87,7 +98,7 @@ fn resolves_paths_and_retains_duplicate_ownership() {
     let FieldValueReceiver::Binding { binding, .. } = receiver else {
         panic!("expected binding field receiver");
     };
-    assert_eq!(*binding, nested.parameters[0].binding);
+    assert_eq!(*binding, runen_parameters(nested)[0].binding);
     assert_eq!(fields, &[1, 1]);
     assert_eq!(ownership, OwnedUse::Duplicate);
 }
@@ -123,7 +134,7 @@ fn root_lookup_uses_active_binding_precedence_without_category_bypass() {
     let FieldValueReceiver::Binding { binding, .. } = receiver else {
         panic!("expected field use rooted in parameter");
     };
-    assert_eq!(*binding, f.parameters[0].binding);
+    assert_eq!(*binding, runen_parameters(f)[0].binding);
     assert_eq!(fields, &[0]);
     assert_eq!(ownership, OwnedUse::Duplicate);
     assert_eq!(returned_value(f).ty, Type::Intrinsic(IntrinsicType::I8));
@@ -369,7 +380,7 @@ fn producer_bool_field_composes_as_existing_conditional_value() {
          fn make() -> Flag { return Flag { ready: true }; } \
          fn f() { if make().ready {} }",
     );
-    let Statement::If { condition, .. } = &function(&hir, "f").body.statements[0] else {
+    let Statement::If { condition, .. } = &runen_body(function(&hir, "f")).statements[0] else {
         panic!("expected conditional");
     };
     assert_eq!(condition.ty, Type::Intrinsic(IntrinsicType::Bool));
@@ -408,7 +419,8 @@ fn producer_record_field_pattern_keeps_field_and_pattern_transients_distinct() {
          fn make() -> Outer { return Outer { inner: Inner { token: Token { value: 1 }, count: 2 }, pad: 3 }; } \
          fn f() { let Inner { token: moved, count: copied } = make().inner; }",
     );
-    let Statement::RecordDestructure { scrutinee, .. } = &function(&hir, "f").body.statements[0]
+    let Statement::RecordDestructure { scrutinee, .. } =
+        &runen_body(function(&hir, "f")).statements[0]
     else {
         panic!("expected record destructuring");
     };
@@ -486,7 +498,7 @@ fn nonduplicable_final_field_is_consumed_and_retained_in_hir() {
     let FieldValueReceiver::Binding { binding, .. } = receiver else {
         panic!("expected binding receiver");
     };
-    assert_eq!(*binding, f.parameters[0].binding);
+    assert_eq!(*binding, runen_parameters(f)[0].binding);
     assert_eq!(fields, &[0]);
     assert_eq!(ownership, OwnedUse::Consume);
 }
@@ -575,8 +587,8 @@ fn repeated_duplicate_access_leaves_root_available_for_whole_consumption() {
          }",
     );
     let f = function(&hir, "f");
-    assert_eq!(f.body.statements.len(), 2);
-    for statement in &f.body.statements {
+    assert_eq!(runen_body(f).statements.len(), 2);
+    for statement in &runen_body(f).statements {
         let Statement::Local { initializer, .. } = statement else {
             panic!("expected local");
         };
@@ -631,8 +643,11 @@ fn mutable_partial_root_whole_replacement_restores_full_availability() {
          }",
     );
     let f = function(&hir, "f");
-    assert_eq!(f.body.statements.len(), 4);
-    assert!(matches!(f.body.statements[2], Statement::Assignment { .. }));
+    assert_eq!(runen_body(f).statements.len(), 4);
+    assert!(matches!(
+        runen_body(f).statements[2],
+        Statement::Assignment { .. }
+    ));
 }
 
 #[test]
@@ -647,10 +662,10 @@ fn assignment_rhs_can_consume_target_field_before_successful_whole_reset() {
          }",
     );
     let f = function(&hir, "f");
-    let Statement::Local { binding, .. } = &f.body.statements[0] else {
+    let Statement::Local { binding, .. } = &runen_body(f).statements[0] else {
         panic!("expected mutable holder local");
     };
-    let Statement::Assignment { target, value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { target, value, .. } = &runen_body(f).statements[1] else {
         panic!("expected whole-binding assignment");
     };
     assert_eq!(*target, *binding);
@@ -669,7 +684,7 @@ fn assignment_rhs_can_consume_target_field_before_successful_whole_reset() {
         receiver,
         FieldValueReceiver::Binding { binding: consumed, .. } if consumed == binding
     ));
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected post-assignment call");
     };
     assert!(matches!(
@@ -939,7 +954,7 @@ fn qualified_producer_exported_bool_field_composes_with_conditionals() {
     ])
     .expect("exported Bool field from qualified producer must remain a conditional value");
 
-    let Statement::If { condition, .. } = &function(&hir, "f").body.statements[0] else {
+    let Statement::If { condition, .. } = &runen_body(function(&hir, "f")).statements[0] else {
         panic!("expected conditional");
     };
     let ValueKind::FieldValueUse {

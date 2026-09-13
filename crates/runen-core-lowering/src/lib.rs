@@ -32,6 +32,7 @@ struct Lowerer<'a> {
     compilation: &'a hir::TypedCompilation,
     types: TypeMap,
     persistent: BTreeMap<hir::StaticId, core::PersistentId>,
+    external_callables: BTreeMap<hir::FunctionId, core::ExternalCallableId>,
     specializations: Vec<SpecializationKey>,
     functions: BTreeMap<SpecializationKey, core::FunctionId>,
     closure_functions: BTreeMap<hir::ClosureId, core::FunctionId>,
@@ -47,6 +48,21 @@ impl<'a> Lowerer<'a> {
             if persistent.insert(static_decl.id, id).is_some() {
                 return Err(LoweringError::InvalidHirInvariant(
                     "duplicate HIR static identity",
+                ));
+            }
+        }
+        let mut external_callables = BTreeMap::new();
+        for function in &compilation.functions {
+            if !function.is_external() {
+                continue;
+            }
+            let id = core::ExternalCallableId(index_u32(
+                external_callables.len(),
+                "Core external callable identity",
+            )?);
+            if external_callables.insert(function.id, id).is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "duplicate HIR external function identity",
                 ));
             }
         }
@@ -68,6 +84,7 @@ impl<'a> Lowerer<'a> {
             compilation,
             types,
             persistent,
+            external_callables,
             specializations,
             functions,
             closure_functions,
@@ -85,6 +102,7 @@ impl<'a> Lowerer<'a> {
             compilation: self.compilation,
             types: &self.types,
             persistent: &self.persistent,
+            external_callables: &self.external_callables,
             functions: &self.functions,
             closure_functions: &self.closure_functions,
         };
@@ -115,8 +133,41 @@ impl<'a> Lowerer<'a> {
                 ))
             })
             .collect::<Result<Vec<_>, LoweringError>>()?;
+        let external_callables = self
+            .compilation
+            .functions
+            .iter()
+            .filter(|function| function.is_external())
+            .map(|function| {
+                let parameters = function
+                    .parameter_types()
+                    .into_iter()
+                    .map(|ty| self.types.get(ty))
+                    .collect::<Result<Vec<_>, LoweringError>>()?;
+                let result = function.result.map(|ty| self.types.get(ty)).transpose()?;
+                if !matches!(
+                    function.safe_reference_result_contract,
+                    hir::SafeReferenceResultContract::None
+                ) {
+                    return Err(LoweringError::InvalidHirInvariant(
+                        "HIR external function retains a safe-reference result contract",
+                    ));
+                }
+                Ok(core::ExternalCallableDecl::new(core::CallableInterface {
+                    parameters,
+                    result,
+                    safe_reference_result_contract: core::SafeReferenceResultContract::None,
+                }))
+            })
+            .collect::<Result<Vec<_>, LoweringError>>()?;
+        if external_callables.len() != self.external_callables.len() {
+            return Err(LoweringError::InvalidHirInvariant(
+                "HIR external function map and declaration sequence disagree",
+            ));
+        }
         let program = core::Program {
             persistent,
+            external_callables,
             types: self.types.types,
             functions,
         };
@@ -213,6 +264,11 @@ fn specialization_key_for_call(
     type_arguments: &[hir::Type],
 ) -> Result<SpecializationKey, LoweringError> {
     let target = find_function(compilation, function)?;
+    if target.is_external() {
+        return Err(LoweringError::InvalidHirInvariant(
+            "external HIR function requested a Core function specialization",
+        ));
+    }
     if type_arguments.len() != target.type_parameters.len() {
         return Err(LoweringError::InvalidHirInvariant(
             "HIR call type-argument arity does not match its target declaration",
@@ -248,6 +304,14 @@ fn discover_specializations(
     let mut seen = BTreeSet::new();
 
     for function in &compilation.functions {
+        if function.is_external() {
+            if !function.type_parameters.is_empty() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "HIR external function unexpectedly has type parameters",
+                ));
+            }
+            continue;
+        }
         if function.type_parameters.is_empty() {
             let specialization = SpecializationKey {
                 function: function.id,
@@ -282,13 +346,13 @@ fn discover_specializations(
         let specialization = specializations[cursor].clone();
         validate_specialization_key(compilation, &specialization)?;
         let function = find_function(compilation, specialization.function)?;
+        let body = function
+            .runen_body()
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "Core function specialization names an external HIR function",
+            ))?;
         let mut discovered = Vec::new();
-        collect_body_specializations(
-            compilation,
-            &specialization,
-            &function.body,
-            &mut discovered,
-        )?;
+        collect_body_specializations(compilation, &specialization, body, &mut discovered)?;
         for target in discovered {
             if !seen.insert(target.clone()) {
                 continue;
@@ -399,6 +463,7 @@ fn collect_statement_specializations(
                     function,
                     type_arguments,
                 } = target
+                    && !find_function(compilation, *function)?.is_external()
                 {
                     specializations.push(specialization_key_for_call(
                         compilation,
@@ -492,6 +557,7 @@ fn collect_value_specializations(
                 function,
                 type_arguments,
             } = target
+                && !find_function(compilation, *function)?.is_external()
             {
                 specializations.push(specialization_key_for_call(
                     compilation,
@@ -1063,15 +1129,19 @@ fn collect_used_function_types(
 ) -> BTreeSet<hir::FunctionTypeId> {
     let mut function_types = BTreeSet::new();
     for function in &compilation.functions {
-        for parameter in &function.parameters {
-            if let hir::Type::Function(id) = parameter.ty {
-                function_types.insert(id);
+        if let Some(parameters) = function.runen_parameters() {
+            for parameter in parameters {
+                if let hir::Type::Function(id) = parameter.ty {
+                    function_types.insert(id);
+                }
             }
         }
         if let Some(hir::Type::Function(id)) = function.result {
             function_types.insert(id);
         }
-        collect_statement_function_types(&function.body.statements, &mut function_types);
+        if let Some(body) = function.runen_body() {
+            collect_statement_function_types(&body.statements, &mut function_types);
+        }
     }
     for closure in &compilation.closures {
         for parameter in &closure.parameters {
@@ -1179,13 +1249,15 @@ fn collect_used_safe_reference_types(
         }
     }
     for function in &compilation.functions {
-        for parameter in &function.parameters {
-            if let hir::Type::SafeReference {
-                referent,
-                permission,
-            } = parameter.ty
-            {
-                references.insert((referent, permission));
+        if let Some(parameters) = function.runen_parameters() {
+            for parameter in parameters {
+                if let hir::Type::SafeReference {
+                    referent,
+                    permission,
+                } = parameter.ty
+                {
+                    references.insert((referent, permission));
+                }
             }
         }
         if let Some(hir::Type::SafeReference {
@@ -1195,7 +1267,9 @@ fn collect_used_safe_reference_types(
         {
             references.insert((referent, permission));
         }
-        collect_statement_safe_reference_types(&function.body.statements, &mut references);
+        if let Some(body) = function.runen_body() {
+            collect_statement_safe_reference_types(&body.statements, &mut references);
+        }
     }
     for closure in &compilation.closures {
         for parameter in &closure.parameters {
@@ -1278,7 +1352,9 @@ fn collect_used_raw_pointer_types(
 ) -> BTreeSet<hir::RawPointerPointee> {
     let mut pointees = BTreeSet::new();
     for function in &compilation.functions {
-        collect_statement_raw_pointer_types(&function.body.statements, &mut pointees);
+        if let Some(body) = function.runen_body() {
+            collect_statement_raw_pointer_types(&body.statements, &mut pointees);
+        }
     }
     for closure in &compilation.closures {
         collect_statement_raw_pointer_types(&closure.body.statements, &mut pointees);
@@ -1370,6 +1446,7 @@ struct FunctionLoweringContext<'a> {
     compilation: &'a hir::TypedCompilation,
     types: &'a TypeMap,
     persistent: &'a BTreeMap<hir::StaticId, core::PersistentId>,
+    external_callables: &'a BTreeMap<hir::FunctionId, core::ExternalCallableId>,
     functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
     closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
 }
@@ -1378,6 +1455,7 @@ struct FunctionLowerer<'a> {
     compilation: &'a hir::TypedCompilation,
     types: FunctionTypeMap<'a>,
     persistent: &'a BTreeMap<hir::StaticId, core::PersistentId>,
+    external_callables: &'a BTreeMap<hir::FunctionId, core::ExternalCallableId>,
     functions: &'a BTreeMap<SpecializationKey, core::FunctionId>,
     closure_functions: &'a BTreeMap<hir::ClosureId, core::FunctionId>,
     name: String,
@@ -1401,13 +1479,24 @@ impl<'a> FunctionLowerer<'a> {
         specialization: &'a SpecializationKey,
     ) -> Result<Self, LoweringError> {
         validate_specialization_key(context.compilation, specialization)?;
+        let parameters = function
+            .runen_parameters()
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "Core function lowering requires Runen HIR execution origin",
+            ))?;
+        let body = function
+            .runen_body()
+            .ok_or(LoweringError::InvalidHirInvariant(
+                "Core function lowering requires Runen HIR execution origin",
+            ))?;
         if specialization.function != function.id {
             return Err(LoweringError::InvalidHirInvariant(
                 "Core lowering specialization does not match its HIR function",
             ));
         }
         if function
-            .parameters
+            .runen_parameters()
+            .expect("Runen execution origin established above")
             .iter()
             .any(|parameter| matches!(parameter.ty, hir::Type::RawPointer(_)))
         {
@@ -1431,12 +1520,13 @@ impl<'a> FunctionLowerer<'a> {
                 specialization,
             },
             persistent: context.persistent,
+            external_callables: context.external_callables,
             functions: context.functions,
             closure_functions: context.closure_functions,
             name: function.name.clone(),
             result: function.result,
             safe_reference_result_contract: function.safe_reference_result_contract,
-            body: function.body.clone(),
+            body: body.clone(),
             entry_capture_initializers: Vec::new(),
             locals: Vec::new(),
             bindings: BTreeMap::new(),
@@ -1447,7 +1537,7 @@ impl<'a> FunctionLowerer<'a> {
             loops: Vec::new(),
         };
 
-        for parameter in &function.parameters {
+        for parameter in parameters {
             let local = lowerer.push_source_local(parameter.name.clone(), parameter.ty, false)?;
             if lowerer.bindings.insert(parameter.binding, local).is_some() {
                 return Err(LoweringError::InvalidHirInvariant(
@@ -1457,7 +1547,7 @@ impl<'a> FunctionLowerer<'a> {
             lowerer.parameter_locals.push(local);
         }
 
-        lowerer.register_source_locals(&function.body.statements)?;
+        lowerer.register_source_locals(&body.statements)?;
 
         Ok(lowerer)
     }
@@ -1482,6 +1572,7 @@ impl<'a> FunctionLowerer<'a> {
                 specialization,
             },
             persistent: context.persistent,
+            external_callables: context.external_callables,
             functions: context.functions,
             closure_functions: context.closure_functions,
             name: format!("$closure-wrapper-{closure_index}"),
@@ -4278,26 +4369,46 @@ impl<'a> FunctionLowerer<'a> {
         arguments: Vec<core::Operand>,
         destination: Option<core::Place>,
     ) -> Result<(), LoweringError> {
-        let target = specialization_key_for_call(
-            self.compilation,
-            self.types.specialization,
-            function,
-            type_arguments,
-        )?;
-        let target_function =
-            self.functions
-                .get(&target)
-                .copied()
-                .ok_or(LoweringError::InvalidHirInvariant(
-                    "reachable HIR specialization is absent from function map",
-                ))?;
+        let target_declaration = find_function(self.compilation, function)?;
         let continuation = self.new_block()?;
-        self.terminate_current(core::Terminator::Call {
-            function: target_function,
-            arguments,
-            destination,
-            target: continuation,
-        })?;
+        if target_declaration.is_external() {
+            if !type_arguments.is_empty() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "external HIR direct call unexpectedly has type arguments",
+                ));
+            }
+            let external = self.external_callables.get(&function).copied().ok_or(
+                LoweringError::InvalidHirInvariant(
+                    "HIR external function is absent from external callable map",
+                ),
+            )?;
+            self.terminate_current(core::Terminator::ExternalCall {
+                external,
+                arguments,
+                destination,
+                target: continuation,
+            })?;
+        } else {
+            let target = specialization_key_for_call(
+                self.compilation,
+                self.types.specialization,
+                function,
+                type_arguments,
+            )?;
+            let target_function =
+                self.functions
+                    .get(&target)
+                    .copied()
+                    .ok_or(LoweringError::InvalidHirInvariant(
+                        "reachable HIR specialization is absent from function map",
+                    ))?;
+            self.terminate_current(core::Terminator::Call {
+                function: target_function,
+                arguments,
+                destination,
+                target: continuation,
+            })?;
+        }
         self.current = continuation.0 as usize;
         Ok(())
     }

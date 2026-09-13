@@ -1,8 +1,9 @@
 //! Canonical program-level Core MIR for the currently represented proving subset.
 
 use crate::{
-    BasicBlockId, CallableInterface, Fault, FunctionId, LoanDecl, LocalDecl, LocalId, Operand,
-    PersistentDecl, PersistentId, Place, SafeReferenceResultContract, Statement, TypeId, TypeTable,
+    BasicBlockId, CallableInterface, ExternalCallableId, Fault, FunctionId, LoanDecl, LocalDecl,
+    LocalId, Operand, PersistentDecl, PersistentId, Place, SafeReferenceResultContract, Statement,
+    TypeId, TypeTable,
 };
 
 /// End of one program-level Core basic block.
@@ -16,6 +17,12 @@ pub enum Terminator {
     },
     Call {
         function: FunctionId,
+        arguments: Vec<Operand>,
+        destination: Option<Place>,
+        target: BasicBlockId,
+    },
+    ExternalCall {
+        external: ExternalCallableId,
         arguments: Vec<Operand>,
         destination: Option<Place>,
         target: BasicBlockId,
@@ -109,11 +116,25 @@ impl Function {
     }
 }
 
+/// One declaration-only external callable requirement.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ExternalCallableDecl {
+    pub interface: CallableInterface,
+}
+
+impl ExternalCallableDecl {
+    #[must_use]
+    pub const fn new(interface: CallableInterface) -> Self {
+        Self { interface }
+    }
+}
+
 /// One finite Core program with one shared type-identity domain.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Program {
     pub types: TypeTable,
     pub persistent: Vec<PersistentDecl>,
+    pub external_callables: Vec<ExternalCallableDecl>,
     pub functions: Vec<Function>,
 }
 
@@ -121,6 +142,11 @@ impl Program {
     #[must_use]
     pub fn persistent(&self, id: PersistentId) -> Option<&PersistentDecl> {
         self.persistent.get(id.0 as usize)
+    }
+
+    #[must_use]
+    pub fn external_callable(&self, id: ExternalCallableId) -> Option<&ExternalCallableDecl> {
+        self.external_callables.get(id.0 as usize)
     }
 
     #[must_use]

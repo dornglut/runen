@@ -135,6 +135,7 @@ pub enum UndefinedBehaviorKind {
 mod floating;
 mod interprocedural;
 pub use interprocedural::{
-    ActivationId, EntryError, ExecutionReport, Machine, TerminalStatus, UndefinedBehavior,
+    ActivationId, EntryError, ExecutionReport, ExternalProviderAdmissionError,
+    ExternalProviderBinding, ExternalScalarValue, Machine, TerminalStatus, UndefinedBehavior,
     VerificationEvent, VerificationEventKind,
 };

@@ -41,6 +41,12 @@ fn transfer_cleanup(statement: &Statement) -> &[CleanupPath] {
     }
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_exact_bool_condition_body_and_normal_cleanup() {
     let hir = build(
@@ -50,8 +56,8 @@ fn retains_exact_bool_condition_body_and_normal_cleanup() {
     )
     .expect("valid bounded while");
     let f = function(&hir, "f");
-    assert!(f.body.has_normal_continuation);
-    let (condition, body) = while_statement(&f.body.statements[0]);
+    assert!(runen_body(f).has_normal_continuation);
+    let (condition, body) = while_statement(&runen_body(f).statements[0]);
 
     assert_eq!(condition.ty, Type::Intrinsic(IntrinsicType::Bool));
     let ValueKind::BindingUse { ownership, .. } = condition.kind else {
@@ -125,7 +131,7 @@ fn transfer_cleanup_is_innermost_first_and_reverse_declaration_order_per_scope()
     )
     .expect("nested transfer cleanup is valid");
     let f = function(&hir, "f");
-    let (_, body) = while_statement(&f.body.statements[0]);
+    let (_, body) = while_statement(&runen_body(f).statements[0]);
     let Statement::Local {
         binding: outer_a, ..
     } = &body.statements[0]
@@ -182,7 +188,7 @@ fn transfer_cleanup_uses_only_remaining_child_ownership() {
     )
     .expect("partial body-local ownership can be cleaned on transfer");
     let f = function(&hir, "f");
-    let (_, body) = while_statement(&f.body.statements[0]);
+    let (_, body) = while_statement(&runen_body(f).statements[0]);
     let Statement::Local { binding: child, .. } = &body.statements[0] else {
         panic!("child local");
     };
@@ -207,7 +213,7 @@ fn completely_consumed_child_is_not_cleaned_twice() {
     )
     .expect("consumed child needs no transfer cleanup");
     let f = function(&hir, "f");
-    let (_, body) = while_statement(&f.body.statements[0]);
+    let (_, body) = while_statement(&runen_body(f).statements[0]);
     assert!(transfer_cleanup(&body.statements[2]).is_empty());
 }
 
@@ -219,7 +225,7 @@ fn zero_leaf_child_cleanup_is_retained_in_hir() {
     )
     .expect("zero-leaf cleanup is structurally represented");
     let f = function(&hir, "f");
-    let (_, body) = while_statement(&f.body.statements[0]);
+    let (_, body) = while_statement(&runen_body(f).statements[0]);
     let Statement::Local { binding, .. } = &body.statements[0] else {
         panic!("child local");
     };
@@ -242,11 +248,11 @@ fn transfer_cleanup_does_not_include_enclosing_target_bindings() {
     let f = function(&hir, "f");
     let Statement::Local {
         binding: parent, ..
-    } = &f.body.statements[0]
+    } = &runen_body(f).statements[0]
     else {
         panic!("parent local");
     };
-    let (_, body) = while_statement(&f.body.statements[1]);
+    let (_, body) = while_statement(&runen_body(f).statements[1]);
     let Statement::Local { binding: child, .. } = &body.statements[0] else {
         panic!("child local");
     };
@@ -397,7 +403,7 @@ fn inner_loop_transfer_cleanup_stops_at_inner_body_scope() {
     )
     .expect("inner transfer targets only the inner loop");
     let f = function(&hir, "f");
-    let (_, outer_body) = while_statement(&f.body.statements[0]);
+    let (_, outer_body) = while_statement(&runen_body(f).statements[0]);
     let Statement::Local { binding: outer, .. } = &outer_body.statements[0] else {
         panic!("outer local");
     };

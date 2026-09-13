@@ -25,6 +25,12 @@ fn has_diagnostic(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> boo
     errors.iter().any(|error| error.kind == kind)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn closure_site_retains_fresh_opaque_type_capture_and_callable_interface() {
     let hir = build(
@@ -39,7 +45,7 @@ fn closure_site_retains_fresh_opaque_type_capture_and_callable_interface() {
         Statement::Closure {
             binding, closure, ..
         },
-    ] = use_fn.body.statements.as_slice()
+    ] = runen_body(use_fn).statements.as_slice()
     else {
         panic!("expected one closure declaration");
     };
@@ -54,8 +60,7 @@ fn closure_site_retains_fresh_opaque_type_capture_and_callable_interface() {
         Some(Type::Intrinsic(runen_hir::IntrinsicType::I64))
     );
 
-    let returned = use_fn
-        .body
+    let returned = runen_body(use_fn)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

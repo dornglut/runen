@@ -4,8 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    IntrinsicType, LiteralValue, ModuleId, RecordPatternTestKind, RecordPatternTransientCleanup,
-    SourceUnit, Statement, Type, build_typed_hir,
+    FunctionExecution, IntrinsicType, LiteralValue, ModuleId, RecordPatternTestKind,
+    RecordPatternTransientCleanup, SourceUnit, Statement, Type, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -62,15 +62,25 @@ fn integer_lts(function: &CoreFunction) -> Vec<(usize, &CoreStatement)> {
         .collect()
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
 fn selection_mut<'a>(
     compilation: &'a mut runen_hir::TypedCompilation,
     function_name: &str,
 ) -> &'a mut Statement {
-    compilation
+    let function = compilation
         .functions
         .iter_mut()
         .find(|function| function.name == function_name)
-        .and_then(|function| function.body.statements.first_mut())
+        .unwrap_or_else(|| panic!("missing function {function_name}"));
+    runen_body_mut(function)
+        .statements
+        .first_mut()
         .unwrap_or_else(|| panic!("missing selection statement for {function_name}"))
 }
 
@@ -1199,7 +1209,7 @@ fn lowering_rejects_composite_association_on_irrefutable_destructuring() {
     let mut compilation =
         hir("record R { value: I8 } fn f(root: R) { let R { value: bound } = root; }");
     let Statement::RecordDestructure { bindings, .. } =
-        &mut compilation.functions[0].body.statements[0]
+        &mut runen_body_mut(&mut compilation.functions[0]).statements[0]
     else {
         panic!("expected irrefutable record destructuring");
     };

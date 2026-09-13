@@ -36,6 +36,13 @@ fn moved_local(operand: &Operand) -> Option<LocalId> {
     place.projections.is_empty().then_some(place.local)
 }
 
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
 #[test]
 fn simple_while_uses_distinct_header_body_and_false_continuation() {
     let lowered = lower_source("fn f(flag: Bool) { while flag {} }");
@@ -538,13 +545,13 @@ fn invalid_retained_transfer_placement_is_a_lowering_invariant_failure() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let HirStatement::While { body, .. } = &f.body.statements[0] else {
+    let HirStatement::While { body, .. } = &runen_body_mut(f).statements[0] else {
         panic!("expected HIR while");
     };
     let transfer = body.statements[0].clone();
-    f.body.statements = vec![transfer];
-    f.body.terminal_return = None;
-    f.body.has_normal_continuation = false;
+    runen_body_mut(f).statements = vec![transfer];
+    runen_body_mut(f).terminal_return = None;
+    runen_body_mut(f).has_normal_continuation = false;
 
     assert_eq!(
         lower(&compilation),
@@ -562,7 +569,7 @@ fn non_bool_retained_while_is_rejected_as_hir_invariant() {
         .iter_mut()
         .find(|function| function.name == "f")
         .expect("function f");
-    let HirStatement::While { condition, .. } = &mut f.body.statements[0] else {
+    let HirStatement::While { condition, .. } = &mut runen_body_mut(f).statements[0] else {
         panic!("expected HIR while");
     };
     condition.ty = Type::Intrinsic(IntrinsicType::I64);

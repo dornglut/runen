@@ -21,8 +21,7 @@ fn function<'a>(hir: &'a TypedCompilation, name: &str) -> &'a runen_hir::Functio
 }
 
 fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
-    function(hir, name)
-        .body
+    runen_body(function(hir, name))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -56,6 +55,12 @@ fn unavailable_count(errors: &[Diagnostic]) -> usize {
         .iter()
         .filter(|error| error.kind == DiagnosticKind::UnavailableBinding)
         .count()
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]
@@ -395,12 +400,12 @@ fn floating_addition_flows_through_existing_generic_value_consumers() {
     .expect("FloatAdd contracts compose through generic Value consumers");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     float_add(initializer, IntrinsicType::F32);
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     assert_eq!(
@@ -408,12 +413,12 @@ fn floating_addition_flows_through_existing_generic_value_consumers() {
         NumericContract::Fast
     );
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     float_add(&arguments[0], IntrinsicType::F32);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {

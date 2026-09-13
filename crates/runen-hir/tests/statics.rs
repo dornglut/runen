@@ -37,8 +37,7 @@ fn function<'a>(hir: &'a TypedCompilation, name: &str) -> &'a runen_hir::Functio
 }
 
 fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
-    function(hir, name)
-        .body
+    runen_body(function(hir, name))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -47,6 +46,12 @@ fn returned_value<'a>(hir: &'a TypedCompilation, name: &str) -> &'a Value {
 
 fn has_kind(errors: &[runen_hir::Diagnostic], kind: DiagnosticKind) -> bool {
     errors.iter().any(|error| error.kind == kind)
+}
+
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
 }
 
 #[test]
@@ -93,7 +98,7 @@ fn static_reads_are_non_consuming_and_anchor_existing_comparison_selection() {
     )
     .expect("repeated static reads and comparison anchoring are valid");
     let ok = function(&hir, "ok");
-    for statement in &ok.body.statements {
+    for statement in &runen_body(ok).statements {
         let Statement::Local { initializer, .. } = statement else {
             panic!("expected only local statements");
         };
@@ -143,7 +148,7 @@ fn qualified_shared_static_roots_enforce_export_and_keep_static_identity() {
     )
     .expect("qualified exported static is a valid Shared root");
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("first statement must bind the qualified static root");
     };
     assert_eq!(
@@ -192,8 +197,8 @@ fn only_complete_shared_static_roots_are_semantically_admitted() {
     )
     .expect("multiple complete Shared static roots are valid");
     let read = function(&hir, "read");
-    assert_eq!(read.body.statements.len(), 2);
-    for statement in &read.body.statements {
+    assert_eq!(runen_body(read).statements.len(), 2);
+    for statement in &runen_body(read).statements {
         let Statement::Local { initializer, .. } = statement else {
             panic!("static roots must be retained as local initializers");
         };

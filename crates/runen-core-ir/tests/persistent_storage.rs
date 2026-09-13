@@ -61,6 +61,7 @@ fn persistent_read_is_typed_and_non_consuming() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(21))],
         functions: vec![function],
@@ -73,6 +74,7 @@ fn persistent_declaration_rejects_non_language_scalar_and_interior_mutability() 
     let mut types = TypeTable::new();
     let tracked = types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     let error = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(tracked, Value::TrackedFixture(1))],
         functions: Vec::new(),
@@ -90,6 +92,7 @@ fn persistent_declaration_rejects_non_language_scalar_and_interior_mutability() 
     let mut types = TypeTable::new();
     let interior = types.push(TypeDef::scalar("I64", ScalarType::I64).with_interior_mutability());
     let error = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(interior, Value::I64(1))],
         functions: Vec::new(),
@@ -109,6 +112,7 @@ fn persistent_initializer_must_match_exact_declared_type() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let error = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::Bool(true))],
         functions: Vec::new(),
@@ -165,6 +169,7 @@ fn persistent_root_is_shared_only_and_can_have_multiple_carriers() {
     };
 
     validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(7))],
         functions: vec![function],
@@ -195,6 +200,7 @@ fn persistent_root_is_shared_only_and_can_have_multiple_carriers() {
         ),
     };
     let error = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(7))],
         functions: vec![function],
@@ -232,6 +238,7 @@ fn fresh_persistent_root_cannot_satisfy_shared_identity_result_contract() {
     };
 
     let error = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: vec![PersistentDecl::new(i64_ty, Value::I64(7))],
         functions: vec![function],
@@ -261,6 +268,7 @@ fn missing_persistent_identity_is_rejected_at_operand_site() {
         ),
     };
     let error = validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: Vec::new(),
         functions: vec![function],
@@ -277,6 +285,7 @@ fn empty_persistent_sequence_preserves_existing_program_shape() {
     let mut types = TypeTable::new();
     let _ = types.push(TypeDef::scalar("I64", ScalarType::I64));
     validate_program(Program {
+        external_callables: vec![],
         types,
         persistent: Vec::new(),
         functions: vec![no_result_function()],

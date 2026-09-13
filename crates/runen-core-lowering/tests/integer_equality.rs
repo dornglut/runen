@@ -54,9 +54,16 @@ fn returned_value_mut<'a>(
         .functions
         .iter_mut()
         .find(|function| function.name == name)
-        .and_then(|function| function.body.terminal_return.as_mut())
+        .and_then(|function| runen_body_mut(function).terminal_return.as_mut())
         .and_then(|returned| returned.value.as_mut())
         .unwrap_or_else(|| panic!("missing HIR return value for {name}"))
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let runen_hir::FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
 }
 
 #[test]

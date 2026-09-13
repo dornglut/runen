@@ -54,6 +54,12 @@ fn boolean_equality(value: &Value) -> (BooleanEqualityRelation, &Value, &Value) 
     (*relation, left, right)
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_bool_literal_and_nested_boolean_not_structure() {
     let hir = build(
@@ -62,8 +68,7 @@ fn retains_bool_literal_and_nested_boolean_not_structure() {
     )
     .expect("Boolean-not values are valid");
 
-    let literal = function(&hir, "literal")
-        .body
+    let literal = runen_body(function(&hir, "literal"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -74,8 +79,7 @@ fn retains_bool_literal_and_nested_boolean_not_structure() {
         ValueKind::Literal(runen_hir::LiteralValue::Bool(true))
     ));
 
-    let nested = function(&hir, "nested")
-        .body
+    let nested = runen_body(function(&hir, "nested"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -187,8 +191,7 @@ fn direct_call_and_field_operands_retain_existing_value_semantics() {
     )
     .expect("represented Bool producers remain valid Boolean-not operands");
 
-    let call = function(&hir, "call")
-        .body
+    let call = runen_body(function(&hir, "call"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -211,8 +214,7 @@ fn direct_call_and_field_operands_retain_existing_value_semantics() {
         }
     ));
 
-    let field = function(&hir, "field")
-        .body
+    let field = runen_body(function(&hir, "field"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -243,22 +245,22 @@ fn boolean_not_flows_through_all_generic_value_consumers() {
     .expect("Boolean-not composes through generic Value receiving paths");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     boolean_not(initializer);
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     boolean_not(value);
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     boolean_not(&arguments[0]);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -266,8 +268,7 @@ fn boolean_not_flows_through_all_generic_value_consumers() {
     };
     boolean_not(&fields[0].value);
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -280,11 +281,11 @@ fn if_and_while_reuse_the_same_boolean_not_hir_and_commit_operand_state() {
     let hir = build("fn control(flag: Bool) { if !flag {} while !!flag { break; } }")
         .expect("Boolean-not conditions are represented through the generic Value kind");
     let control = function(&hir, "control");
-    let Statement::If { condition, .. } = &control.body.statements[0] else {
+    let Statement::If { condition, .. } = &runen_body(control).statements[0] else {
         panic!("expected if statement");
     };
     boolean_not(condition);
-    let Statement::While { condition, .. } = &control.body.statements[1] else {
+    let Statement::While { condition, .. } = &runen_body(control).statements[1] else {
         panic!("expected while statement");
     };
     boolean_not(boolean_not(condition));
@@ -307,8 +308,7 @@ fn boolean_equality_retains_relation_identity_and_exact_bool_operands() {
     )
     .expect("both Boolean equality relations are represented");
 
-    let equal = function(&hir, "equal")
-        .body
+    let equal = runen_body(function(&hir, "equal"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -318,8 +318,7 @@ fn boolean_equality_retains_relation_identity_and_exact_bool_operands() {
     boolean_not(left);
     assert!(matches!(right.kind, ValueKind::BindingUse { .. }));
 
-    let different = function(&hir, "different")
-        .body
+    let different = runen_body(function(&hir, "different"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -466,8 +465,7 @@ fn equality_operands_reuse_call_field_construction_and_prefix_semantics() {
     )
     .expect("call, field, and prefix producers retain their existing equality operand semantics");
 
-    let returned = function(&hir, "f")
-        .body
+    let returned = runen_body(function(&hir, "f"))
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -530,22 +528,22 @@ fn boolean_equality_flows_through_all_generic_value_consumers() {
     .expect("Boolean equality composes through every generic Value receiving path");
 
     let f = function(&hir, "f");
-    let Statement::Local { initializer, .. } = &f.body.statements[0] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[0] else {
         panic!("expected local declaration");
     };
     boolean_equality(initializer);
 
-    let Statement::Assignment { value, .. } = &f.body.statements[1] else {
+    let Statement::Assignment { value, .. } = &runen_body(f).statements[1] else {
         panic!("expected assignment");
     };
     boolean_equality(value);
 
-    let Statement::Call { arguments, .. } = &f.body.statements[2] else {
+    let Statement::Call { arguments, .. } = &runen_body(f).statements[2] else {
         panic!("expected call statement");
     };
     boolean_equality(&arguments[0]);
 
-    let Statement::Local { initializer, .. } = &f.body.statements[3] else {
+    let Statement::Local { initializer, .. } = &runen_body(f).statements[3] else {
         panic!("expected record-construction local");
     };
     let ValueKind::RecordConstruction { fields, .. } = &initializer.kind else {
@@ -553,18 +551,17 @@ fn boolean_equality_flows_through_all_generic_value_consumers() {
     };
     boolean_equality(&fields[0].value);
 
-    let Statement::If { condition, .. } = &f.body.statements[4] else {
+    let Statement::If { condition, .. } = &runen_body(f).statements[4] else {
         panic!("expected if statement");
     };
     boolean_equality(condition);
 
-    let Statement::While { condition, .. } = &f.body.statements[5] else {
+    let Statement::While { condition, .. } = &runen_body(f).statements[5] else {
         panic!("expected while statement");
     };
     boolean_equality(condition);
 
-    let returned = f
-        .body
+    let returned = runen_body(f)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())

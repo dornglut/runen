@@ -43,11 +43,17 @@ fn conditional(
     (condition, then_block, else_block.as_deref())
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_exact_bool_condition_and_explicit_arm_blocks() {
     let hir = build("fn f(flag: Bool) { if flag {} else {} }").expect("valid conditional");
     let f = function(&hir, "f");
-    let (condition, then_block, else_block) = conditional(&f.body.statements[0]);
+    let (condition, then_block, else_block) = conditional(&runen_body(f).statements[0]);
 
     assert_eq!(condition.ty, Type::Intrinsic(IntrinsicType::Bool));
     let ValueKind::BindingUse { ownership, .. } = condition.kind else {
@@ -91,7 +97,7 @@ fn direct_call_and_field_conditions_retain_existing_value_forms() {
     )
     .expect("represented Bool producers are valid conditions");
 
-    let (call, _, _) = conditional(&function(&hir, "call_condition").body.statements[0]);
+    let (call, _, _) = conditional(&runen_body(function(&hir, "call_condition")).statements[0]);
     assert!(matches!(
         call.kind,
         ValueKind::Call {
@@ -100,7 +106,7 @@ fn direct_call_and_field_conditions_retain_existing_value_forms() {
         }
     ));
 
-    let (field, _, _) = conditional(&function(&hir, "field_condition").body.statements[0]);
+    let (field, _, _) = conditional(&runen_body(function(&hir, "field_condition")).statements[0]);
     assert!(matches!(
         field.kind,
         ValueKind::FieldValueUse {
@@ -167,7 +173,7 @@ fn sibling_arm_locals_reuse_keys_with_distinct_binding_identities() {
     let hir = build("fn f(flag: Bool) { if flag { let x: I64 = 1; } else { let x: I64 = 2; } }")
         .expect("sibling arm scopes may reuse one local key");
     let f = function(&hir, "f");
-    let (_, then_block, else_block) = conditional(&f.body.statements[0]);
+    let (_, then_block, else_block) = conditional(&runen_body(f).statements[0]);
     let Statement::Local {
         binding: then_binding,
         ..
@@ -205,7 +211,7 @@ fn arm_normal_cleanup_is_retained_before_join() {
     )
     .expect("arm-local ownership is cleaned before the ownership join");
     let f = function(&hir, "f");
-    let (_, then_block, _) = conditional(&f.body.statements[0]);
+    let (_, then_block, _) = conditional(&runen_body(f).statements[0]);
     let Statement::Local { binding, .. } = &then_block.statements[0] else {
         panic!("expected arm local");
     };
@@ -430,12 +436,12 @@ fn two_returning_arms_remove_normal_continuation_and_satisfy_result_obligation()
     )
     .expect("two returning arms terminate every represented static path");
     let f = function(&hir, "f");
-    let (_, then_block, else_block) = conditional(&f.body.statements[0]);
+    let (_, then_block, else_block) = conditional(&runen_body(f).statements[0]);
 
     assert!(!then_block.has_normal_continuation);
     assert!(!else_block.expect("explicit else").has_normal_continuation);
-    assert!(!f.body.has_normal_continuation);
-    assert!(f.body.terminal_return.is_none());
+    assert!(!runen_body(f).has_normal_continuation);
+    assert!(runen_body(f).terminal_return.is_none());
 }
 
 #[test]
@@ -474,5 +480,5 @@ fn nested_zero_one_two_normal_composition_is_recursive() {
     )
     .expect("nested zero-normal conditional composes into the outer arm");
 
-    assert!(!function(&hir, "f").body.has_normal_continuation);
+    assert!(!runen_body(function(&hir, "f")).has_normal_continuation);
 }

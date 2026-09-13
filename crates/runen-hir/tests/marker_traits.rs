@@ -25,6 +25,18 @@ fn function<'a>(hir: &'a TypedCompilation, name: &str) -> &'a runen_hir::Functio
         .unwrap_or_else(|| panic!("missing HIR function {name}"))
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn retains_nominal_traits_implementations_and_exact_requirement_sets() {
     let hir = build(
@@ -142,7 +154,10 @@ fn marker_reference_lookup_uses_module_domain_not_generic_slot_domain() {
     let marker = hir.marker_traits[0].id;
     let f = function(&hir, "f");
     assert!(f.type_parameters[0].requirements.contains(&marker));
-    assert_eq!(f.parameters[0].ty, Type::Parameter(f.type_parameters[0].id));
+    assert_eq!(
+        runen_parameters(f)[0].ty,
+        Type::Parameter(f.type_parameters[0].id)
+    );
 
     let errors = build("record R {} fn f[T: R](value: T) {}")
         .expect_err("wrong-category module binding selected for marker reference is final");
@@ -303,8 +318,7 @@ fn concrete_generic_argument_requires_exact_global_implementation() {
     )
     .expect("exact concrete implementation discharges marker obligation");
     let caller = function(&accepted, "caller");
-    let returned = caller
-        .body
+    let returned = runen_body(caller)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -341,7 +355,7 @@ fn abstract_generic_evidence_propagates_only_from_enclosing_declared_requirement
     )
     .expect("enclosing exact marker requirement discharges abstract application");
     let outer = function(&accepted, "outer");
-    assert_eq!(outer.body.statements.len(), 1);
+    assert_eq!(runen_body(outer).statements.len(), 1);
 
     let errors = build(
         "trait Marker; impl I64: Marker; \
@@ -386,8 +400,7 @@ fn marker_requirement_does_not_widen_generic_body_operational_capabilities() {
     let hir = build("trait Copy; fn id[T: Copy](value: T) -> T { return value; }")
         .expect("marker spelling Copy still leaves an abstract value opaque");
     let id = function(&hir, "id");
-    let returned = id
-        .body
+    let returned = runen_body(id)
         .terminal_return
         .as_ref()
         .and_then(|returned| returned.value.as_ref())
@@ -428,5 +441,9 @@ fn coherent_implementation_is_global_evidence_without_importing_impl_module() {
     ])
     .expect("application consults global proposition without importing impl module");
     assert_eq!(hir.marker_implementations.len(), 1);
-    assert!(function(&hir, "use_ticket").body.terminal_return.is_some());
+    assert!(
+        runen_body(function(&hir, "use_ticket"))
+            .terminal_return
+            .is_some()
+    );
 }

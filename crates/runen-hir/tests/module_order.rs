@@ -5,6 +5,18 @@ fn parse(source: &str) -> Parse {
     parse_source(source.as_bytes()).expect("valid UTF-8 test source")
 }
 
+fn runen_body(function: &runen_hir::Function) -> &runen_hir::Body {
+    function
+        .runen_body()
+        .expect("test function has Runen execution origin")
+}
+
+fn runen_parameters(function: &runen_hir::Function) -> &[runen_hir::Parameter] {
+    function
+        .runen_parameters()
+        .expect("test function has Runen execution origin")
+}
+
 #[test]
 fn qualified_resolution_ignores_import_item_and_unit_presentation_order() {
     let target =
@@ -42,11 +54,10 @@ fn qualified_resolution_ignores_import_item_and_unit_presentation_order() {
             .find(|function| function.name == "use_ticket")
             .expect("importing function exists");
 
-        assert_eq!(function.parameters[0].ty, Type::Record(ticket));
+        assert_eq!(runen_parameters(function)[0].ty, Type::Record(ticket));
         assert_eq!(function.result, Some(Type::Record(ticket)));
 
-        let returned = function
-            .body
+        let returned = runen_body(function)
             .terminal_return
             .as_ref()
             .and_then(|returned| returned.value.as_ref())
@@ -85,5 +96,5 @@ fn import_target_alias_matches_concrete_alias_by_normalized_lexical_key() {
         .iter()
         .find(|function| function.name == "use_ticket")
         .expect("importing function exists");
-    assert_eq!(function.parameters[0].ty, Type::Record(ticket));
+    assert_eq!(runen_parameters(function)[0].ty, Type::Record(ticket));
 }

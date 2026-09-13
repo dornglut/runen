@@ -29,6 +29,7 @@ fn execute_fault(code: &str) -> TerminalStatus {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types: TypeTable::new(),
         functions: vec![function],
@@ -83,6 +84,7 @@ fn explicit_fault_cleans_live_locals_once_in_reverse_declaration_order() {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![function],
@@ -124,6 +126,7 @@ fn result_bearing_top_level_fault_produces_no_normal_result() {
         ),
     };
     let validated = validate_program(Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![function],

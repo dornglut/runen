@@ -2,6 +2,7 @@ use runen_core_ir::{Body, Function, Program, SafeReferenceResultContract, TypeTa
 
 pub fn one_function_program(types: TypeTable, body: Body) -> Program {
     Program {
+        external_callables: vec![],
         persistent: vec![],
         types,
         functions: vec![Function {

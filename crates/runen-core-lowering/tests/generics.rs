@@ -4,8 +4,8 @@ use runen_core_ir::{
 };
 use runen_core_lowering::{LoweringError, lower};
 use runen_hir::{
-    CallTarget, IntrinsicType, ModuleId, ReferencePermission, ReferenceReferent, SourceUnit, Type,
-    ValueKind, build_typed_hir,
+    CallTarget, FunctionExecution, IntrinsicType, ModuleId, ReferencePermission, ReferenceReferent,
+    SourceUnit, Type, ValueKind, build_typed_hir,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -22,6 +22,20 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 
 fn lower_source(source: &str) -> ValidatedProgram {
     lower(&hir(source)).expect("accepted generic HIR must lower to validated concrete Core")
+}
+
+fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
+    let FunctionExecution::Runen { body, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    body
+}
+
+fn runen_parameters_mut(function: &mut runen_hir::Function) -> &mut [runen_hir::Parameter] {
+    let FunctionExecution::Runen { parameters, .. } = &mut function.execution else {
+        panic!("test mutation requires Runen execution origin");
+    };
+    parameters
 }
 
 fn functions_named<'a>(program: &'a runen_core_ir::Program, name: &str) -> Vec<&'a CoreFunction> {
@@ -288,8 +302,7 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         .iter_mut()
         .find(|function| function.name == "root")
         .expect("root exists");
-    let call = root
-        .body
+    let call = runen_body_mut(root)
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
@@ -316,13 +329,12 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         .expect("generic exists")
         .type_parameters[0]
         .id;
-    unresolved_abstract
+    let root = unresolved_abstract
         .functions
         .iter_mut()
         .find(|function| function.name == "root")
-        .expect("root exists")
-        .parameters[0]
-        .ty = Type::Parameter(slot);
+        .expect("root exists");
+    runen_parameters_mut(root)[0].ty = Type::Parameter(slot);
     assert!(matches!(
         lower(&unresolved_abstract),
         Err(LoweringError::InvalidHirInvariant(_))
@@ -335,8 +347,7 @@ fn forged_generic_hir_invariants_are_rejected_instead_of_repaired() {
         .iter_mut()
         .find(|function| function.name == "root")
         .expect("root exists");
-    let call = root
-        .body
+    let call = runen_body_mut(root)
         .terminal_return
         .as_mut()
         .and_then(|returned| returned.value.as_mut())
