@@ -1,4 +1,5 @@
 from pathlib import Path
+import re
 
 for path in Path('.').rglob('*.rs'):
     if path.as_posix() == 'crates/runen-core-ir/tests/external_callables.rs':
@@ -8,6 +9,10 @@ for path in Path('.').rglob('*.rs'):
         text = text.replace('    external_callables: Vec::new(),\n', '')
         text = text.replace('        external_callables: Vec::new(),\n', '')
         text = text.replace('            external_callables: Vec::new(),\n', '')
+        # The phase-1 staging insertion was placed between the opening brace and the
+        # constructor's original newline. Removing only the inserted line would leave
+        # two newlines; restore the original constructor/function text shape exactly.
+        text = re.sub(r'((?:core::)?Program\s*\{)\n\n', r'\1\n', text)
         path.write_text(text)
 
 syntax_test = Path('crates/runen-syntax/tests/external_callables.rs')
@@ -23,4 +28,4 @@ text = text.replace(
     1,
 )
 syntax_test.write_text(text)
-print('removed unsafe broad fixture migration and aligned focused syntax harness')
+print('removed unsafe broad fixture migration, restored constructor text, and aligned focused syntax harness')
