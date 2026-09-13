@@ -132,7 +132,8 @@ Consequences follow from the accepted record, Bag, Optional, floating, and recur
 - one left class can match multiple distinct right classes, which produce distinct merged output classes because all right-side fields are preserved;
 - multiple distinct left classes can match one right class analogously;
 - distinct matching input class pairs cannot silently merge in the output because the disjoint result schema preserves both complete input records;
-- when `T` is `Optional<U>`, `Absent` matches `Absent`; `Present(a)` matches `Present(b)` exactly when `a` and `b` are Model-equivalent; `Absent` does not match `Present(_)`. There is no SQL NULL/unknown behavior;
+- when `T` is `Optional<U>`, `Absent` matches exactly `Absent`, `Present(a)` matches `Present(b)` exactly when `a` and `b` are Model-equivalent under `U`, and `Absent` never matches `Present(_)`;
+- this Optional behavior introduces no SQL `NULL`, unknown predicate result, truthiness, implicit Boolean conversion, coalescing, or absent propagation;
 - for floating `T`, every same-type NaN selected value matches a same-type NaN selected value under accepted Model equivalence;
 - for floating `T`, `+0` and `-0` selected values do not match each other because they are not Model-equivalent;
 - represented records, optionals, Relations, Bags, and Sequences used as `T` follow their existing recursive Model value-equivalence rules without a join-specific comparison relation.
