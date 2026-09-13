@@ -93,8 +93,8 @@ fn exact_sum_uses_exact_exec_occurrences_without_value_deduplication() {
     let incorporated_values = admitted_values(&reduction, &submitted, &incorporated)
         .expect("reordered occurrence coverage is exact");
 
-    let exact =
-        reduce_sum(format, &produced_values).expect("covered contributions are valid numeric inputs");
+    let exact = reduce_sum(format, &produced_values)
+        .expect("covered contributions are valid numeric inputs");
     assert_eq!(
         reduce_sum(format, &incorporated_values).expect("same covered inputs in another order"),
         exact
@@ -123,9 +123,7 @@ fn exact_sum_uses_exact_exec_occurrences_without_value_deduplication() {
         .contribution(iteration(2), 11)
         .expect("second participant can use the same fixture token");
     let with_substituted_producer = [substituted_producer, produced[1], produced[2]];
-    assert!(
-        admitted_values(&reduction, &submitted, &with_substituted_producer).is_none()
-    );
+    assert!(admitted_values(&reduction, &submitted, &with_substituted_producer).is_none());
 
     // Rejected occurrence collections never reach the numeric oracle through
     // `admitted_values`. Exec occurrence coverage is the admission boundary for
@@ -158,12 +156,9 @@ fn fast_tree_candidates_vary_over_the_same_exactly_covered_exec_occurrences() {
         sum_leaf(format, first_values[1]),
     )
     .expect("accepted tree node");
-    let first_candidate = add_standard_tree_node(
-        format,
-        first_pair,
-        sum_leaf(format, first_values[2]),
-    )
-    .expect("accepted tree candidate");
+    let first_candidate =
+        add_standard_tree_node(format, first_pair, sum_leaf(format, first_values[2]))
+            .expect("accepted tree candidate");
 
     let second_pair = add_standard_tree_node(
         format,
@@ -171,12 +166,9 @@ fn fast_tree_candidates_vary_over_the_same_exactly_covered_exec_occurrences() {
         sum_leaf(format, second_values[1]),
     )
     .expect("accepted tree node");
-    let second_candidate = add_standard_tree_node(
-        format,
-        second_pair,
-        sum_leaf(format, second_values[2]),
-    )
-    .expect("accepted tree candidate");
+    let second_candidate =
+        add_standard_tree_node(format, second_pair, sum_leaf(format, second_values[2]))
+            .expect("accepted tree candidate");
 
     assert_eq!(
         first_candidate,
