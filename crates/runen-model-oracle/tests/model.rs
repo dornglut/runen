@@ -30,7 +30,7 @@ fn record_values_reject_missing_extra_and_wrong_type_fields() {
     let record_type = RecordType::new([(key(1), LogicalType::I32)]).unwrap();
 
     assert_eq!(
-        Value::record(record_type.clone(), []).unwrap_err(),
+        Value::record(record_type.clone(), []).err().unwrap(),
         FixtureError::MissingField(key(1))
     );
     assert_eq!(
@@ -38,11 +38,14 @@ fn record_values_reject_missing_extra_and_wrong_type_fields() {
             record_type.clone(),
             [(key(1), Value::i32(1)), (key(2), Value::bool(true))]
         )
-        .unwrap_err(),
+        .err()
+        .unwrap(),
         FixtureError::ExtraField(key(2))
     );
     assert_eq!(
-        Value::record(record_type, [(key(1), Value::bool(true))]).unwrap_err(),
+        Value::record(record_type, [(key(1), Value::bool(true))])
+            .err()
+            .unwrap(),
         FixtureError::TypeMismatch {
             expected: LogicalType::I32,
             actual: LogicalType::Bool,
@@ -120,21 +123,27 @@ fn typed_absence_and_nested_optional_tags_remain_distinct() {
 #[test]
 fn nested_constructors_reject_type_mismatch() {
     assert_eq!(
-        Value::present(LogicalType::I32, Value::bool(true)).unwrap_err(),
+        Value::present(LogicalType::I32, Value::bool(true))
+            .err()
+            .unwrap(),
         FixtureError::TypeMismatch {
             expected: LogicalType::I32,
             actual: LogicalType::Bool,
         }
     );
     assert_eq!(
-        BagValue::new(LogicalType::I32, [Value::bool(true)]).unwrap_err(),
+        BagValue::new(LogicalType::I32, [Value::bool(true)])
+            .err()
+            .unwrap(),
         FixtureError::TypeMismatch {
             expected: LogicalType::I32,
             actual: LogicalType::Bool,
         }
     );
     assert_eq!(
-        SequenceValue::new(LogicalType::I32, [Value::u32(1)]).unwrap_err(),
+        SequenceValue::new(LogicalType::I32, [Value::u32(1)])
+            .err()
+            .unwrap(),
         FixtureError::TypeMismatch {
             expected: LogicalType::I32,
             actual: LogicalType::U32,
