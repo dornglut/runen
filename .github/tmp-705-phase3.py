@@ -22,4 +22,11 @@ replace_exact(
     count=3,
 )
 
-print("staged compiler-proven #705 Program fixture migration batch 1")
+replace_exact(
+    "crates/runen-reference/tests/integer_equality.rs",
+    "    let validated = validate_program(Program {\n        persistent: vec![],\n        types,\n        functions:",
+    "    let validated = validate_program(Program {\n        persistent: vec![],\n        external_callables: Vec::new(),\n        types,\n        functions:",
+    count=3,
+)
+
+print("staged compiler-proven #705 Program fixture migration batches 1-2")
