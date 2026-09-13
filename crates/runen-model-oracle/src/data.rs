@@ -632,11 +632,13 @@ impl BagValue {
     /// Return the total occurrence count only when it fits the bounded `u64`
     /// fixture carrier. This is not the semantic `bag_cardinality` operation.
     pub fn total_multiplicity(&self) -> Result<u64, FixtureError> {
-        self.classes.values().try_fold(0_u64, |total, multiplicity| {
-            total
-                .checked_add(*multiplicity)
-                .ok_or(FixtureError::MultiplicityOverflow)
-        })
+        self.classes
+            .values()
+            .try_fold(0_u64, |total, multiplicity| {
+                total
+                    .checked_add(*multiplicity)
+                    .ok_or(FixtureError::MultiplicityOverflow)
+            })
     }
 
     pub fn multiplicity_of(&self, value: &Value) -> u64 {
