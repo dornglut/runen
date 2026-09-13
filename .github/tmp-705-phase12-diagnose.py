@@ -12,7 +12,8 @@ def replace_exact(path: str, old: str, new: str, count: int = 1) -> None:
 
 
 # #705 explicitly authorizes mechanical migration of historical Program test fixtures.
-# Work test-only and skip every literal that already declares external requirements.
+# Work test-only and skip every literal that already declares external requirements,
+# including Rust shorthand fields such as `external_callables,`.
 def migrate_program_test_fixtures() -> int:
     migrated = 0
     for p in sorted(Path('crates').glob('*/tests/**/*.rs')):
@@ -27,7 +28,7 @@ def migrate_program_test_fixtures() -> int:
             if functions is None:
                 continue
             prefix_to_functions = suffix[:functions.start()]
-            if re.search(r'\n[ \t]*external_callables\s*:', prefix_to_functions):
+            if re.search(r'\bexternal_callables\b', prefix_to_functions):
                 continue
             first_field = re.match(r'\n(?P<indent>[ \t]+)', suffix)
             if first_field is None:
