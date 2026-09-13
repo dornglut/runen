@@ -53,6 +53,7 @@ jobs:
           python .github/tmp-705-phase10.py
           python .github/tmp-705-phase11.py
           python .github/tmp-705-phase12-diagnose.py
+          python .github/tmp-705-phase13.py
           cargo +stable fmt --all
           git diff --check
       - name: Focused external-callable conformance
