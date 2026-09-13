@@ -1,4 +1,4 @@
-name: Temporary P0-D #705 phase11 diagnosis
+name: Temporary P0-D #705 staged compiler gate
 
 on:
   push:
@@ -26,6 +26,9 @@ jobs:
           set -euo pipefail
           test "$(git rev-parse origin/main)" = "8e7e0d36bf8e3c000295bd1d607297f024dfdbe4"
           test "$(git rev-parse 8e7e0d36bf8e3c000295bd1d607297f024dfdbe4^{tree})" = "0f637c32df99d3f6644f9cc2c2f33c6c6d5a9244"
+      - name: Install maintained Rust toolchain
+        shell: bash
+        run: rustup toolchain install stable --profile minimal
       - name: Apply staged implementation through batch 8
         shell: bash
         run: |
@@ -48,6 +51,37 @@ jobs:
           python .github/tmp-705-phase8.py
           python .github/tmp-705-phase9.py
           python .github/tmp-705-phase10.py
-      - name: Diagnose phase11 anchors
+      - name: Apply compiler-proven batch 9
         shell: bash
-        run: python .github/tmp-705-phase12-diagnose.py
+        run: python .github/tmp-705-phase11.py
+      - name: Format and diff hygiene
+        shell: bash
+        run: |
+          cargo +stable fmt --all
+          git diff --check
+      - name: Test syntax external declarations
+        shell: bash
+        run: cargo +stable test -p runen-syntax --test external_callables
+      - name: Test typed HIR external functions
+        shell: bash
+        run: cargo +stable test -p runen-hir --test external_callables
+      - name: Test Core external-call substrate
+        shell: bash
+        run: cargo +stable test -p runen-core-ir --test external_callables
+      - name: Test Core lowering external functions
+        shell: bash
+        run: cargo +stable test -p runen-core-lowering --test external_callables
+      - name: Test reference provider admission and execution
+        shell: bash
+        run: cargo +stable test -p runen-reference --test external_callables
+      - name: Compile changed libraries
+        shell: bash
+        run: |
+          cargo +stable check -p runen-syntax --lib
+          cargo +stable check -p runen-hir --lib
+          cargo +stable check -p runen-core-ir --lib
+          cargo +stable check -p runen-core-lowering --lib
+          cargo +stable check -p runen-reference --lib
+      - name: Enumerate remaining workspace obligations
+        shell: bash
+        run: cargo +stable check --workspace --all-targets --keep-going
