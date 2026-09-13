@@ -12,6 +12,8 @@ Query results preserve multiplicity by default using Bag semantics from `data.md
 
 Projection does not silently deduplicate Model-equivalent output values. If two input occurrences produce Model-equivalent outputs, their occurrences remain represented by Bag multiplicity unless an explicitly defined multiplicity-removal operation applies.
 
+Filtering preserves the multiplicity of each retained input equivalence class unless an explicitly defined operation states otherwise.
+
 The first represented multiplicity-removal operation is the bounded `distinct` relation defined below.
 
 ## Bounded record-field projection
@@ -55,6 +57,47 @@ After a well-formed input and admitted field-key subset are established, the rep
 
 This revision defines only field restriction over `Bag<R>`. It does not define projection that creates, renames, derives, computes, or collides fields; projection over non-record values; Relation or Sequence projection; a general `select`/`derive` expression relation; or source spelling for projection.
 
+## Bounded record-field equivalence filtering
+
+Let `R` be one represented closed structural record type from `data.md`. Let `k` be one logical field key present in `R`, let the declared logical type of that field be exactly `T`, and let `v` be one represented Model value of exactly logical type `T`.
+
+The represented bounded record-field equivalence filter has exactly this semantic type:
+
+```text
+filter_field_equivalent<k, v> : Bag<R> -> Bag<R>
+```
+
+This notation identifies the semantic relation only. It does not define source `where` syntax, generic arguments, a query expression AST, compiler IR, a predicate-function value, or an implementation API.
+
+The relation is admitted only when `k` exists in `R`, its declared logical type is exactly `T`, and `v` has exactly logical type `T`. A missing field key or mismatched comparison value is outside this represented relation rather than a runtime query fault.
+
+For one record value `r : R`, the record is retained exactly when the value of field `k` in `r` is Model-equivalent under `data.md` to `v`. This relation explicitly consumes canonical Model value equivalence for this one bounded predicate. It does not make Model value equivalence source `==`, SQL equality, a universal query predicate language, a join condition, a grouping rule, an ordering relation, or a general comparison API.
+
+The predicate is well-defined on Bag equivalence classes without selecting a representative. If two values of `R` are Model-equivalent, record equivalence requires their corresponding values at `k` to be Model-equivalent. Because Model value equivalence is an equivalence relation, either both field values are equivalent to `v` or neither is. Each input record equivalence class therefore has one representative-independent retain/reject result.
+
+For an input `B : Bag<R>`, every retained input `R` equivalence class appears in the output with exactly its input multiplicity. Every rejected class has output multiplicity zero. Filtering cannot increase a class multiplicity, merge distinct record classes, split one class, normalize multiplicity, or silently deduplicate.
+
+Consequences follow from the accepted record, Bag, Optional, floating, and recursive Model value-equivalence semantics:
+
+- the empty input Bag yields the empty output Bag;
+- when no input class matches `v` at `k`, the output Bag is empty;
+- when every input class matches, the output Bag is Model-equivalent to the input Bag;
+- a retained class with multiplicity greater than one keeps exactly that multiplicity;
+- two non-equivalent input record classes remain distinct output classes even when both selected field values are equivalent to `v`;
+- when `T` is `Optional<U>`, `Absent` matches exactly `Absent`, `Present(a)` matches `Present(b)` exactly when `a` and `b` are Model-equivalent under `U`, and `Absent` never matches `Present(_)`;
+- this Optional behavior introduces no SQL `NULL`, unknown predicate result, truthiness, implicit Boolean conversion, coalescing, or absent propagation;
+- for floating `T`, every same-type NaN field value matches a same-type NaN `v` under the accepted Model equivalence;
+- for floating `T`, `+0` and `-0` do not match each other because they are not Model-equivalent;
+- represented records, optionals, Relations, Bags, and Sequences used as `T` follow their existing recursive Model value-equivalence rules without a filter-specific comparison relation.
+
+The input and output are Bags and therefore have no semantic iteration order. Field declaration, construction, enumeration, storage, index, hash, worker, scheduler, or presentation order cannot affect whether a class is retained or what multiplicity it has.
+
+The field key `k` keeps exactly its existing logical field-key identity from `R`. This relation creates no field, rename, derived field, collision rule, source-name lookup, declaration-position identity, stable entity/row identity, physical column identity, storage/index identity, or serialization identity.
+
+After a well-formed input and admitted `R`, `k`, `T`, and `v` are established, the represented filter is pure, non-faulting, non-diverging, and deterministic. It consumes no state domain, `ObservationSet`, clock, external observation, stable entity identity, physical storage/index, or incremental-maintenance behavior.
+
+This revision defines only field-equivalence filtering over `Bag<R>`. It does not define Boolean-field truth filtering, truthiness, generic predicate or callback values, scalar ordering/comparator predicates, general `where` expressions, Relation or Sequence filtering, joins, grouping, aggregation, ordering, or source spelling for filtering.
+
 ## Bag distinct
 
 For every represented Model logical type `T`, the first `distinct` relation has exactly this type:
@@ -90,9 +133,9 @@ This first slice admits only `Bag<T>` input. `distinct` over Relation or Sequenc
 
 The accepted base query operations are represented illustratively by `from`, `where`, `select`, `derive`, `join`, `group`, `aggregate`, `distinct`, and `order` or `order by`.
 
-The existence of those operation names does not supply semantics that their canonical owners have not yet defined. In particular, Model value equivalence is not by itself a query predicate language, join condition, grouping rule, aggregate equality rule, or ordering relation.
+The existence of those operation names does not supply semantics that their canonical owners have not yet defined. In particular, Model value equivalence is not by itself a query predicate language, join condition, grouping rule, aggregate equality rule, or ordering relation. The bounded field-equivalence filter above is an explicit operation-specific consumer of that equivalence relation and does not broaden it beyond that contract.
 
-The exact evaluator relations represented by this revision are the bounded Bag record-field projection above and the bounded Bag `distinct` relation. Neither relation defines general `select`/`derive`, predicate/filter, join, grouping, aggregation, or ordering semantics.
+The exact evaluator relations represented by this revision are the bounded Bag record-field projection, the bounded Bag record-field equivalence filter, and the bounded Bag `distinct` relation. They do not define general `select`/`derive`, general predicate/filter expressions, join, grouping, aggregation, or ordering semantics.
 
 ## Ordering
 
@@ -106,4 +149,4 @@ A physical realization MUST NOT manufacture an implicit semantic tie-breaker fro
 
 This revision does not define the ordering relation for logical scalar/record values, absence ordering, comparator semantics, or exact `order by` typing/execution.
 
-The exact join, grouping, aggregation, general query typing, general query-schema propagation beyond the represented bounded projection, predicate absence behavior, filtering execution, general projection expressions, and static cardinality rules are not defined by this revision.
+The exact join, grouping, aggregation, general query typing, general query-schema propagation beyond the represented bounded projection, general predicate absence behavior beyond the represented field-equivalence filter, general filtering execution, general projection expressions, and static cardinality rules are not defined by this revision.
