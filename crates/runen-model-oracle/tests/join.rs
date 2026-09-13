@@ -96,10 +96,29 @@ fn join_empty_and_no_match_preserve_exact_disjoint_union_type() {
         &right_type,
         vec![(key(3), Value::i32(7)), (key(4), Value::u8(1))],
     );
-    let right = BagValue::new(LogicalType::Record(right_type.clone()), [right_record]).unwrap();
-    let empty_result = join_fields_equivalent(&empty_left, key(1), &right, key(3)).unwrap();
-    assert_eq!(empty_result.element_type(), &output_type);
-    assert!(empty_result.is_empty());
+    let right = BagValue::new(
+        LogicalType::Record(right_type.clone()),
+        [right_record.clone()],
+    )
+    .unwrap();
+    let empty_left_result = join_fields_equivalent(&empty_left, key(1), &right, key(3)).unwrap();
+    assert_eq!(empty_left_result.element_type(), &output_type);
+    assert!(empty_left_result.is_empty());
+
+    let matching_left_record = record(
+        &left_type,
+        vec![(key(1), Value::i32(7)), (key(2), Value::bool(false))],
+    );
+    let matching_left = BagValue::new(
+        LogicalType::Record(left_type.clone()),
+        [matching_left_record],
+    )
+    .unwrap();
+    let empty_right = BagValue::new(LogicalType::Record(right_type.clone()), []).unwrap();
+    let empty_right_result =
+        join_fields_equivalent(&matching_left, key(1), &empty_right, key(3)).unwrap();
+    assert_eq!(empty_right_result.element_type(), &output_type);
+    assert!(empty_right_result.is_empty());
 
     let left_record = record(
         &left_type,
@@ -211,7 +230,14 @@ fn join_uses_exact_optional_absence_and_present_equivalence() {
     let left_type =
         RecordType::new([(key(1), optional_i32.clone()), (key(2), LogicalType::U8)]).unwrap();
     let right_type =
-        RecordType::new([(key(3), optional_i32), (key(4), LogicalType::U8)]).unwrap();
+        RecordType::new([(key(3), optional_i32.clone()), (key(4), LogicalType::U8)]).unwrap();
+    let output_type = RecordType::new([
+        (key(1), optional_i32.clone()),
+        (key(2), LogicalType::U8),
+        (key(3), optional_i32),
+        (key(4), LogicalType::U8),
+    ])
+    .unwrap();
 
     let left_absent = record(
         &left_type,
@@ -259,8 +285,49 @@ fn join_uses_exact_optional_absence_and_present_equivalence() {
     )
     .unwrap();
     let result = join_fields_equivalent(&left, key(1), &right, key(3)).unwrap();
+
+    let expected_absent = record(
+        &output_type,
+        vec![
+            (key(1), Value::absent(LogicalType::I32)),
+            (key(2), Value::u8(1)),
+            (key(3), Value::absent(LogicalType::I32)),
+            (key(4), Value::u8(3)),
+        ],
+    );
+    let expected_present = record(
+        &output_type,
+        vec![
+            (
+                key(1),
+                Value::present(LogicalType::I32, Value::i32(7)).unwrap(),
+            ),
+            (key(2), Value::u8(2)),
+            (
+                key(3),
+                Value::present(LogicalType::I32, Value::i32(7)).unwrap(),
+            ),
+            (key(4), Value::u8(4)),
+        ],
+    );
+    let forbidden_cross = record(
+        &output_type,
+        vec![
+            (key(1), Value::absent(LogicalType::I32)),
+            (key(2), Value::u8(1)),
+            (
+                key(3),
+                Value::present(LogicalType::I32, Value::i32(7)).unwrap(),
+            ),
+            (key(4), Value::u8(4)),
+        ],
+    );
+
     assert_eq!(result.class_count(), 2);
     assert_eq!(result.total_multiplicity(), 2);
+    assert_eq!(result.multiplicity_of(&expected_absent), 1);
+    assert_eq!(result.multiplicity_of(&expected_present), 1);
+    assert_eq!(result.multiplicity_of(&forbidden_cross), 0);
 }
 
 #[test]
