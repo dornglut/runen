@@ -11,26 +11,37 @@ def replace_exact(path: str, old: str, new: str, count: int = 1) -> None:
     p.write_text(text.replace(old, new, count))
 
 
-# Compiler-named Core test support has no external requirements.
-replace_exact(
-    'crates/runen-core-ir/tests/support/mod.rs',
-    '''    Program {\n        persistent: vec![],\n        types,\n        functions: vec![Function {\n''',
-    '''    Program {\n        persistent: vec![],\n        external_callables: vec![],\n        types,\n        functions: vec![Function {\n''',
-)
+# #705 explicitly authorizes mechanical migration of historical Program test fixtures.
+# Work test-only and skip every literal that already declares external requirements.
+def migrate_program_test_fixtures() -> int:
+    migrated = 0
+    for p in sorted(Path('crates').glob('*/tests/**/*.rs')):
+        text = p.read_text()
+        positions = [match.start() for match in re.finditer(r'\bProgram\s*\{', text)]
+        if not positions:
+            continue
+        for start in reversed(positions):
+            open_end = text.find('{', start) + 1
+            suffix = text[open_end:]
+            functions = re.search(r'\n(?P<indent>[ \t]*)functions\s*:', suffix)
+            if functions is None:
+                continue
+            prefix_to_functions = suffix[:functions.start()]
+            if re.search(r'\n[ \t]*external_callables\s*:', prefix_to_functions):
+                continue
+            first_field = re.match(r'\n(?P<indent>[ \t]+)', suffix)
+            if first_field is None:
+                raise SystemExit(f'{p}: Program literal does not use multiline test-fixture formatting')
+            indent = first_field.group('indent')
+            text = text[:open_end] + f'\n{indent}external_callables: vec![],' + text[open_end:]
+            migrated += 1
+        p.write_text(text)
+    if migrated == 0:
+        raise SystemExit('expected at least one historical Program test fixture to migrate')
+    return migrated
 
-# The issue explicitly authorizes mechanical empty external-declaration fixture migration.
-for path, expected in [
-    ('crates/runen-core-ir/tests/interprocedural.rs', 34),
-    ('crates/runen-reference/tests/floating_multiplication.rs', 3),
-    ('crates/runen-reference/tests/integer_multiplication.rs', 1),
-    ('crates/runen-reference/tests/floating_constants.rs', 5),
-]:
-    p = Path(path)
-    text = p.read_text()
-    count = text.count('Program {')
-    if count != expected:
-        raise SystemExit(f'{path}: expected {expected} Program fixtures, found {count}')
-    p.write_text(text.replace('Program {', 'Program {\n        external_callables: vec![],', expected))
+
+migrated_programs = migrate_program_test_fixtures()
 
 
 def migrate_read_only_hir_test(path: str) -> None:
@@ -103,7 +114,15 @@ for path in [
     'crates/runen-hir/tests/exclusive_references.rs',
     'crates/runen-hir/tests/function_value_edges.rs',
     'crates/runen-hir/tests/generics.rs',
+    'crates/runen-hir/tests/assignment.rs',
+    'crates/runen-hir/tests/loops.rs',
+    'crates/runen-hir/tests/function_values.rs',
+    'crates/runen-hir/tests/integer_addition.rs',
+    'crates/runen-hir/tests/record_destructuring_regressions.rs',
+    'crates/runen-hir/tests/integer_multiplication.rs',
+    'crates/runen-hir/tests/floating_division.rs',
+    'crates/runen-hir/tests/literals.rs',
 ]:
     migrate_read_only_hir_test(path)
 
-print('staged compiler-proven #705 fixture and read-only HIR integration batch 10')
+print(f'staged #705 batch 10: {migrated_programs} historical Program fixtures plus compiler-selected read-only HIR tests')
