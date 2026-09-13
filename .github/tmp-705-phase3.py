@@ -29,4 +29,16 @@ replace_exact(
     count=3,
 )
 
-print("staged compiler-proven #705 Program fixture migration batches 1-2")
+replace_exact(
+    "crates/runen-reference/tests/floating_addition.rs",
+    "    let program = Program {\n        persistent: vec![],\n        types,\n        functions:",
+    "    let program = Program {\n        persistent: vec![],\n        external_callables: Vec::new(),\n        types,\n        functions:",
+    count=4,
+)
+replace_exact(
+    "crates/runen-reference/tests/floating_addition.rs",
+    "    let validated = validate_program(Program {\n        persistent: vec![],\n        types,\n        functions:",
+    "    let validated = validate_program(Program {\n        persistent: vec![],\n        external_callables: Vec::new(),\n        types,\n        functions:",
+)
+
+print("staged compiler-proven #705 Program fixture migration batches 1-3")
