@@ -104,6 +104,8 @@ Sequence position and order are semantic. A realization MUST NOT manufacture or 
 
 For a concrete collection value, Relation size is the number of represented equivalence classes, Bag size is the sum of represented class multiplicities, and Sequence length is its number of positions. These are concrete value facts only; they do not define static query-cardinality inference.
 
+The first exact Bag-to-Relation multiplicity-removal operation is owned by [Model queries](queries.md). This document supplies the collection and equivalence relations consumed by that operation; it does not own query execution semantics.
+
 ## Model value equivalence
 
 Every represented Model value has exactly one represented Model logical type. **Model value equivalence** is one typed equivalence relation over represented Model values. It is the canonical relation consumed by Relation membership and Bag multiplicity and may be consumed by later Model operations only when their canonical owners explicitly do so.
@@ -142,6 +144,6 @@ Model optionals, records, Relations, Bags, and Sequences do not automatically be
 
 ## Deliberate boundaries
 
-This revision does not define stable logical entity keys or row identity, source Model syntax, query predicates, exact `distinct` execution/result typing, joins, grouping, aggregation, query-schema propagation, static cardinality/type inference, state-domain interfaces or revision ordering, multi-domain ObservationSet compatibility, materialization/freshness/maintenance target contracts, infinite or streaming collections, graph/path algebra, Datalog recursion, CRDT/replication semantics, distributed transactions, serialization/wire formats, physical row/column layout, indexes, planner behavior, or storage algorithms.
+This revision does not define stable logical entity keys or row identity, source Model syntax, query predicates, `distinct` over Relation or Sequence, joins, grouping, aggregation, query-schema propagation, static cardinality/type inference, state-domain interfaces or revision ordering, multi-domain ObservationSet compatibility, materialization/freshness/maintenance target contracts, infinite or streaming collections, graph/path algebra, Datalog recursion, CRDT/replication semantics, distributed transactions, serialization/wire formats, physical row/column layout, indexes, planner behavior, or storage algorithms.
 
 Graph and Field are not universal base Model data categories in this revision. Specialized graph, path, spatial-field, sampled-field, or similar algebras require separate accepted contracts rather than acquiring implicit semantics from Model.
