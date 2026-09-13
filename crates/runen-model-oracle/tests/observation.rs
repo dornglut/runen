@@ -304,13 +304,9 @@ fn state_backed_query_pipeline_consumes_the_actually_observed_bag() {
 fn singleton_context_requires_admitted_observation_and_preserves_association() {
     let domain_id = StateDomainId::new(80);
     let observation = ObservationId::new(1);
-    let root = BagValue::new(
-        LogicalType::Bool,
-        [Value::bool(true), Value::bool(false)],
-    )
-    .unwrap();
-    let domain = ObservedBagDomain::new(domain_id, LogicalType::Bool, [(observation, root)])
-        .unwrap();
+    let root = BagValue::new(LogicalType::Bool, [Value::bool(true), Value::bool(false)]).unwrap();
+    let domain =
+        ObservedBagDomain::new(domain_id, LogicalType::Bool, [(observation, root)]).unwrap();
 
     assert!(
         domain
@@ -401,7 +397,10 @@ fn equivalent_roots_do_not_collapse_distinct_singleton_observation_identity() {
     let first_context = domain.singleton_observation_set(first).unwrap();
     let second_context = domain.singleton_observation_set(second).unwrap();
 
-    assert_ne!(first_context.observation_id(), second_context.observation_id());
+    assert_ne!(
+        first_context.observation_id(),
+        second_context.observation_id()
+    );
     assert_eq!(first_context.domain_id(), second_context.domain_id());
     assert!(bags_equivalent(
         first_context.observed_bag(),
@@ -415,13 +414,19 @@ fn singleton_context_domain_scope_and_construction_order_are_independent() {
     let left_domain = ObservedBagDomain::new(
         StateDomainId::new(83),
         LogicalType::Bool,
-        [(shared_observation, BagValue::new(LogicalType::Bool, [Value::bool(true)]).unwrap())],
+        [(
+            shared_observation,
+            BagValue::new(LogicalType::Bool, [Value::bool(true)]).unwrap(),
+        )],
     )
     .unwrap();
     let right_domain = ObservedBagDomain::new(
         StateDomainId::new(84),
         LogicalType::Bool,
-        [(shared_observation, BagValue::new(LogicalType::Bool, [Value::bool(false)]).unwrap())],
+        [(
+            shared_observation,
+            BagValue::new(LogicalType::Bool, [Value::bool(false)]).unwrap(),
+        )],
     )
     .unwrap();
 
