@@ -5,11 +5,7 @@ use runen_model_oracle::{
 };
 
 fn bool_bag(values: impl IntoIterator<Item = bool>) -> BagValue {
-    BagValue::new(
-        LogicalType::Bool,
-        values.into_iter().map(Value::bool),
-    )
-    .unwrap()
+    BagValue::new(LogicalType::Bool, values.into_iter().map(Value::bool)).unwrap()
 }
 
 fn bag_cardinality_correspondence_holds(
@@ -21,10 +17,7 @@ fn bag_cardinality_correspondence_holds(
         return false;
     };
 
-    model_equivalent(
-        observed_result,
-        &bag_cardinality(source.observed_bag()),
-    )
+    model_equivalent(observed_result, &bag_cardinality(source.observed_bag()))
 }
 
 #[test]
@@ -93,7 +86,10 @@ fn equivalent_results_do_not_collapse_distinct_source_or_target_observations() {
     )
     .unwrap();
 
-    assert_ne!(first_context.observation_id(), second_context.observation_id());
+    assert_ne!(
+        first_context.observation_id(),
+        second_context.observation_id()
+    );
     assert_ne!(first_target, second_target);
     assert!(bag_cardinality_correspondence_holds(
         &first_context,
@@ -131,10 +127,7 @@ fn one_target_observation_can_be_checked_against_multiple_explicit_source_contex
     let target = ObservedResultTarget::new(
         ResultTargetId::new(60),
         LogicalType::Cardinality,
-        [(
-            target_observation,
-            Value::cardinality_from_u128(2),
-        )],
+        [(target_observation, Value::cardinality_from_u128(2))],
     )
     .unwrap();
 
