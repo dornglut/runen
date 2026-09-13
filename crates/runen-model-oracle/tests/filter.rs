@@ -115,14 +115,14 @@ fn filter_preserves_distinct_matching_record_classes_and_exact_multiplicity() {
 #[test]
 fn filter_uses_exact_optional_absence_and_present_equivalence() {
     let optional_i32 = LogicalType::optional(LogicalType::I32);
-    let record_type = RecordType::new([
-        (key(1), optional_i32.clone()),
-        (key(2), LogicalType::U8),
-    ])
-    .unwrap();
+    let record_type =
+        RecordType::new([(key(1), optional_i32.clone()), (key(2), LogicalType::U8)]).unwrap();
     let absent = record(
         &record_type,
-        vec![(key(1), Value::absent(LogicalType::I32)), (key(2), Value::u8(1))],
+        vec![
+            (key(1), Value::absent(LogicalType::I32)),
+            (key(2), Value::u8(1)),
+        ],
     );
     let present_seven_a = record(
         &record_type,
@@ -207,27 +207,35 @@ fn filter_reuses_nan_equivalence_and_signed_zero_distinction() {
     let plus_zero = record(
         &record_type,
         vec![
-            (key(1), Value::float(FloatValue::positive_zero(FloatFormat::F64))),
+            (
+                key(1),
+                Value::float(FloatValue::positive_zero(FloatFormat::F64)),
+            ),
             (key(2), Value::u8(3)),
         ],
     );
     let minus_zero = record(
         &record_type,
         vec![
-            (key(1), Value::float(FloatValue::negative_zero(FloatFormat::F64))),
+            (
+                key(1),
+                Value::float(FloatValue::negative_zero(FloatFormat::F64)),
+            ),
             (key(2), Value::u8(4)),
         ],
     );
     let input = BagValue::new(
         LogicalType::Record(record_type),
-        [nan_a.clone(), plus_zero.clone(), nan_b.clone(), minus_zero.clone()],
+        [
+            nan_a.clone(),
+            plus_zero.clone(),
+            nan_b.clone(),
+            minus_zero.clone(),
+        ],
     )
     .unwrap();
 
-    let nan_target = Value::float(FloatValue::nan(
-        FloatFormat::F64,
-        NaNRealizationId::new(99),
-    ));
+    let nan_target = Value::float(FloatValue::nan(FloatFormat::F64, NaNRealizationId::new(99)));
     let nan_result = filter_field_equivalent(&input, key(1), &nan_target).unwrap();
     assert_eq!(nan_result.class_count(), 2);
     assert_eq!(nan_result.total_multiplicity(), 2);
@@ -261,8 +269,7 @@ fn filter_reuses_recursive_nested_bag_equivalence() {
         [Value::i32(2), Value::i32(1), Value::i32(1)],
     )
     .unwrap();
-    let nested_other =
-        BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(2)]).unwrap();
+    let nested_other = BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(2)]).unwrap();
 
     let left = record(
         &record_type,
