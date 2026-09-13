@@ -72,6 +72,8 @@ For two pairs `(D1, o1)` and `(D2, o2)` already admitted under the single-domain
 two_domain_observation_set((D1, o1), (D2, o2))
 ```
 
+The notation identifies this semantic context only. It does not define source syntax, a runtime API, an implementation container, or a physical pairing mechanism.
+
 This context is a valid `ObservationSet` containing exactly the two admitted domain-scoped observation associations. It is immutable for its evaluation or reaction wave.
 
 The bounded context is admitted exactly when both member pairs are already admitted by the single-domain observation relation and `D1 != D2`. No additional generic compatibility or joint-admission predicate is required merely to form this read-only evaluation context.
