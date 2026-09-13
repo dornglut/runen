@@ -104,9 +104,9 @@ if text.count(helper_anchor) != 1:
 text = text.replace(helper_anchor, helper, 1)
 old = '&mut compilation.functions[0].body.statements[0]'
 new = '&mut runen_body_mut(&mut compilation.functions[0]).statements[0]'
-if text.count(old) != 9:
+if text.count(old) != 8:
     raise SystemExit(f'record_destructuring body mutation anchors mismatch: {text.count(old)}')
-text = text.replace(old, new, 9)
+text = text.replace(old, new, 8)
 p.write_text(text)
 
 print('staged compiler-proven #705 workspace integration batch 5')
