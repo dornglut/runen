@@ -87,6 +87,9 @@ dependencies = [
 [[package]]
 name = "runen-exec-oracle"
 version = "0.0.0"
+dependencies = [
+ "runen-core-ir",
+]
 
 [[package]]
 name = "runen-hir"
