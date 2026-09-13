@@ -9,10 +9,8 @@ fn key(token: u32) -> FieldKey {
 
 #[test]
 fn structural_record_type_equality_ignores_construction_order() {
-    let left =
-        RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
-    let right =
-        RecordType::new([(key(2), LogicalType::Bool), (key(1), LogicalType::I32)]).unwrap();
+    let left = RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
+    let right = RecordType::new([(key(2), LogicalType::Bool), (key(1), LogicalType::I32)]).unwrap();
 
     assert_eq!(left, right);
     assert_eq!(left.field_count(), 2);
@@ -152,18 +150,9 @@ fn finite_float_boundaries_validate_for_all_formats() {
 
 #[test]
 fn floating_special_values_keep_exact_model_equivalence() {
-    let f16_nan_a = Value::float(FloatValue::nan(
-        FloatFormat::F16,
-        NaNRealizationId::new(1),
-    ));
-    let f16_nan_b = Value::float(FloatValue::nan(
-        FloatFormat::F16,
-        NaNRealizationId::new(2),
-    ));
-    let f32_nan = Value::float(FloatValue::nan(
-        FloatFormat::F32,
-        NaNRealizationId::new(1),
-    ));
+    let f16_nan_a = Value::float(FloatValue::nan(FloatFormat::F16, NaNRealizationId::new(1)));
+    let f16_nan_b = Value::float(FloatValue::nan(FloatFormat::F16, NaNRealizationId::new(2)));
+    let f32_nan = Value::float(FloatValue::nan(FloatFormat::F32, NaNRealizationId::new(1)));
     let plus_zero = Value::float(FloatValue::positive_zero(FloatFormat::F16));
     let minus_zero = Value::float(FloatValue::negative_zero(FloatFormat::F16));
     let plus_inf = Value::float(FloatValue::positive_infinity(FloatFormat::F16));
@@ -177,14 +166,8 @@ fn floating_special_values_keep_exact_model_equivalence() {
 
 #[test]
 fn relation_and_bag_are_equivalence_class_values_not_insertion_order() {
-    let nan_a = Value::float(FloatValue::nan(
-        FloatFormat::F32,
-        NaNRealizationId::new(10),
-    ));
-    let nan_b = Value::float(FloatValue::nan(
-        FloatFormat::F32,
-        NaNRealizationId::new(11),
-    ));
+    let nan_a = Value::float(FloatValue::nan(FloatFormat::F32, NaNRealizationId::new(10)));
+    let nan_b = Value::float(FloatValue::nan(FloatFormat::F32, NaNRealizationId::new(11)));
     let one = Value::float(FloatValue::finite(FloatFormat::F32, false, 1 << 23, 0).unwrap());
 
     let relation_left = RelationValue::new(
@@ -228,8 +211,7 @@ fn relation_and_bag_are_equivalence_class_values_not_insertion_order() {
 fn sequence_preserves_semantic_positions_and_order() {
     let first = Value::i32(1);
     let second = Value::i32(2);
-    let forward =
-        SequenceValue::new(LogicalType::I32, [first.clone(), second.clone()]).unwrap();
+    let forward = SequenceValue::new(LogicalType::I32, [first.clone(), second.clone()]).unwrap();
     let reverse = SequenceValue::new(LogicalType::I32, [second, first]).unwrap();
 
     assert_eq!(forward.len(), 2);
@@ -242,18 +224,14 @@ fn sequence_preserves_semantic_positions_and_order() {
 
 #[test]
 fn recursive_record_optional_and_collection_equivalence_is_structural() {
-    let record_type =
-        RecordType::new([(key(1), LogicalType::optional(LogicalType::F16))]).unwrap();
+    let record_type = RecordType::new([(key(1), LogicalType::optional(LogicalType::F16))]).unwrap();
     let left = Value::record(
         record_type.clone(),
         [(
             key(1),
             Value::present(
                 LogicalType::F16,
-                Value::float(FloatValue::nan(
-                    FloatFormat::F16,
-                    NaNRealizationId::new(1),
-                )),
+                Value::float(FloatValue::nan(FloatFormat::F16, NaNRealizationId::new(1))),
             )
             .unwrap(),
         )],
@@ -265,10 +243,7 @@ fn recursive_record_optional_and_collection_equivalence_is_structural() {
             key(1),
             Value::present(
                 LogicalType::F16,
-                Value::float(FloatValue::nan(
-                    FloatFormat::F16,
-                    NaNRealizationId::new(2),
-                )),
+                Value::float(FloatValue::nan(FloatFormat::F16, NaNRealizationId::new(2))),
             )
             .unwrap(),
         )],
@@ -313,14 +288,8 @@ fn distinct_is_exact_bag_support() {
 
 #[test]
 fn distinct_uses_nan_and_signed_zero_model_classes() {
-    let nan_a = Value::float(FloatValue::nan(
-        FloatFormat::F64,
-        NaNRealizationId::new(1),
-    ));
-    let nan_b = Value::float(FloatValue::nan(
-        FloatFormat::F64,
-        NaNRealizationId::new(2),
-    ));
+    let nan_a = Value::float(FloatValue::nan(FloatFormat::F64, NaNRealizationId::new(1)));
+    let nan_b = Value::float(FloatValue::nan(FloatFormat::F64, NaNRealizationId::new(2)));
     let plus_zero = Value::float(FloatValue::positive_zero(FloatFormat::F64));
     let minus_zero = Value::float(FloatValue::negative_zero(FloatFormat::F64));
     let input = BagValue::new(
@@ -337,10 +306,8 @@ fn distinct_uses_nan_and_signed_zero_model_classes() {
 
 #[test]
 fn nested_distinct_and_occurrence_order_are_semantically_irrelevant() {
-    let inner_left =
-        BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(1)]).unwrap();
-    let inner_right =
-        BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(1)]).unwrap();
+    let inner_left = BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(1)]).unwrap();
+    let inner_right = BagValue::new(LogicalType::I32, [Value::i32(1), Value::i32(1)]).unwrap();
     let element_type = LogicalType::bag(LogicalType::I32);
 
     let outer_left = BagValue::new(
