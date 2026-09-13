@@ -52,9 +52,9 @@ The bounded exact correspondence assertion is written abstractly as:
 corresponds(C, S, M, r)
 ```
 
-The notation identifies a semantic association only. It does not define source syntax, an API for creating correspondence, a runtime registration mechanism, a persistence record, or a physical dependency edge.
+The notation identifies a semantic association only. It does not define source syntax, an API for creating correspondence, a runtime registration mechanism, a persistence record, or a physical dependency edge. This profile defines the well-formedness and correctness obligations of a correspondence assertion once a stronger contract admits that assertion; it does not define which assertions are admitted or the mechanism that admits them.
 
-A correspondence assertion is well-formed only when `S` supplies exactly the logical input type `A` required by `C`, `C` produces exactly logical type `B`, and `M` has exactly result logical type `B`. The first profile is limited to a represented pure unary relation whose sole logical data input is the observed root supplied by `S`. Binary or multi-root relations, including the represented join, and arbitrary composition or pipelines are not covered merely because their component operations are represented.
+A correspondence assertion is well-formed only when `S` supplies exactly the logical input type `A` required by `C`, `C` produces exactly logical type `B`, and `M` has exactly result logical type `B`. The first profile is limited to a represented pure unary relation whose sole source-root argument is the observed root supplied by `S`; any other fixed semantic parameters remain exactly those already owned by `C`'s query contract and may themselves be represented Model values. Binary or multi-root relations, including the represented join, and arbitrary composition or pipelines are not covered merely because their component operations are represented.
 
 Correspondence is an **explicit admitted association**. It MUST NOT be inferred solely from Model-equivalent source evaluations or target result values. Equal results do not identify source observations, computation instances, target observations, or correspondence assertions.
 
