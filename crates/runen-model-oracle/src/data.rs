@@ -140,7 +140,12 @@ impl LogicalType {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+/// Verification-only semantic floating member fixture.
+///
+/// This type intentionally does not implement Rust `PartialEq`/`Eq`: Model
+/// value equivalence is the separately owned relation exposed through
+/// [`model_equivalent`] after wrapping the fixture with [`Value::float`].
+#[derive(Clone, Debug)]
 pub struct FloatValue {
     format: FloatFormat,
     kind: FloatKind,
