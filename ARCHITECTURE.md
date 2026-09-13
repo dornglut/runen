@@ -52,9 +52,9 @@ Future cross-stratum verification may compose independent proving packages only 
 
 ### `crates/runen-model-oracle`
 
-Owns executable verification-only conformance relations for the currently represented Model logical-data, value-equivalence, finite-collection, bounded query, and bounded single-domain observed Bag-root subset.
+Owns executable verification-only conformance relations for the currently represented Model logical-data, value-equivalence, finite-collection, bounded query, bounded single-domain observed Bag-root/singleton-observation-context, and bounded result-target observation subsets.
 
-It is not Runen source syntax, compiler Model IR, a planner, a storage engine, a runtime or database system, an incremental engine, and it owns no normative language semantics. Its abstract field, NaN-witness, state-domain, and observation tokens plus deterministic internal ordering exist only to make accepted Model contracts executable without exposing storage order, observation order, revision order, or representative selection as Model semantics.
+It is not Runen source syntax, compiler Model IR, a planner, a storage engine, a runtime or database system, an incremental engine, and it owns no normative language semantics. Its abstract field, NaN-witness, state-domain, source-observation, result-target, and target-observation tokens plus deterministic internal ordering exist only to make accepted Model contracts executable without exposing storage order, observation order, revision/freshness/progress order, or representative selection as Model semantics.
 
 The package has no dependency on another Runen package and remains independent of the source/HIR, Core/reference, and Exec package chains. Future cross-stratum or differential verification may compose independent proving packages only when an accepted semantic or assurance consumer requires that dependency; package convenience is not sufficient authority for coupling them.
 
