@@ -1,20 +1,20 @@
 from pathlib import Path
 
-files = [
-    'crates/runen-hir/tests/record_destructuring.rs',
-    'crates/runen-core-lowering/tests/record_duplicability.rs',
-    'crates/runen-hir/tests/grouping.rs',
-    'crates/runen-hir/tests/execution_static_storage.rs',
-    'crates/runen-core-lowering/tests/statics.rs',
-    'crates/runen-hir/tests/function_values.rs',
-]
-for path in files:
+for path in [
+    'crates/runen-core-lowering/tests/integer_addition.rs',
+    'crates/runen-core-lowering/tests/boolean_conjunction.rs',
+]:
+    text = Path(path).read_text()
     print(f'=== {path} ===')
-    lines = Path(path).read_text().splitlines()
-    for index, line in enumerate(lines, 1):
-        if '.body' in line or '.parameters' in line:
-            lo = max(0, index - 3)
-            hi = min(len(lines), index + 2)
-            print(f'-- around line {index} --')
-            for current in range(lo, hi):
-                print(f'{current + 1:4}: {lines[current]}')
+    import_anchor = 'use runen_hir::{IntrinsicType, ModuleId, SourceUnit, Type, ValueKind, build_typed_hir};\n'
+    helper_anchor = '''fn lower_source(source: &str) -> ValidatedProgram {\n    lower(&hir(source)).expect("accepted HIR must lower to validated Core")\n}\n\n'''
+    print('import_anchor_count=', text.count(import_anchor))
+    print('helper_anchor_count=', text.count(helper_anchor))
+    for label in ['compilation', 'left_mismatch', 'right_mismatch', 'result_mismatch']:
+        body_anchor = f'''    let value = {label}.functions[0]\n        .body\n        .terminal_return\n'''
+        count = text.count(body_anchor)
+        if count:
+            print(f'{label}_body_anchor_count=', count)
+    for index, line in enumerate(text.splitlines(), 1):
+        if 'use runen_hir' in line or '.body' in line or '.parameters' in line:
+            print(f'{index}: {line}')
