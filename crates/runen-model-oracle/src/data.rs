@@ -205,8 +205,8 @@ impl FloatValue {
         let (precision, emin, emax) = format.parameters();
         let normal_min = 1_u64 << (precision - 1);
         let normal_max = (1_u64 << precision) - 1;
-        let valid_normal = (normal_min..=normal_max).contains(&significand)
-            && (emin..=emax).contains(&exponent);
+        let valid_normal =
+            (normal_min..=normal_max).contains(&significand) && (emin..=emax).contains(&exponent);
         let valid_subnormal = (1..normal_min).contains(&significand) && exponent == emin;
 
         if !valid_normal && !valid_subnormal {
@@ -366,7 +366,10 @@ impl Value {
             ensure_type(expected, &value.ty)?;
         }
 
-        if let Some(extra) = values.keys().find(|key| !record_type.fields.contains_key(key)) {
+        if let Some(extra) = values
+            .keys()
+            .find(|key| !record_type.fields.contains_key(key))
+        {
             return Err(FixtureError::ExtraField(FieldKey::new(*extra)));
         }
 
@@ -417,9 +420,7 @@ impl Value {
             ValueKind::U64(value) => EquivalenceKey::U64(*value),
             ValueKind::Float(value) => EquivalenceKey::Float(value.equivalence_key()),
             ValueKind::Absent => EquivalenceKey::Absent,
-            ValueKind::Present(value) => {
-                EquivalenceKey::Present(Box::new(value.equivalence_key()))
-            }
+            ValueKind::Present(value) => EquivalenceKey::Present(Box::new(value.equivalence_key())),
             ValueKind::Record(fields) => EquivalenceKey::Record(
                 fields
                     .iter()
@@ -428,9 +429,9 @@ impl Value {
             ),
             ValueKind::Relation(value) => EquivalenceKey::Relation(value.classes.clone()),
             ValueKind::Bag(value) => EquivalenceKey::Bag(value.classes.clone()),
-            ValueKind::Sequence(value) => EquivalenceKey::Sequence(
-                value.values.iter().map(Value::equivalence_key).collect(),
-            ),
+            ValueKind::Sequence(value) => {
+                EquivalenceKey::Sequence(value.values.iter().map(Value::equivalence_key).collect())
+            }
         }
     }
 }
