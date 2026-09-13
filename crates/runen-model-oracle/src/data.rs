@@ -86,6 +86,10 @@ pub enum FixtureError {
         left: LogicalType,
         right: LogicalType,
     },
+    GroupingRequiresRecord {
+        actual: LogicalType,
+    },
+    GroupingFieldNotFound(FieldKey),
     InvalidFloatFiniteMember {
         format: FloatFormat,
         significand: u64,
@@ -852,6 +856,60 @@ pub(crate) fn join_record_fields_equivalent(
 
     Ok(BagValue {
         element_type: LogicalType::Record(output_record_type),
+        classes: output_classes,
+    })
+}
+
+pub(crate) fn group_record_fields(
+    bag: &BagValue,
+    grouping_fields: &[FieldKey],
+) -> Result<RelationValue, FixtureError> {
+    let LogicalType::Record(record_type) = &bag.element_type else {
+        return Err(FixtureError::GroupingRequiresRecord {
+            actual: bag.element_type.clone(),
+        });
+    };
+
+    let mut retained_keys = BTreeSet::new();
+    for field in grouping_fields {
+        let storage_key = field.storage_key();
+        if !record_type.fields.contains_key(&storage_key) {
+            return Err(FixtureError::GroupingFieldNotFound(*field));
+        }
+        retained_keys.insert(storage_key);
+    }
+
+    let mut groups: BTreeMap<EquivalenceKey, BTreeMap<EquivalenceKey, u64>> = BTreeMap::new();
+    for (class, multiplicity) in &bag.classes {
+        let EquivalenceKey::Record(fields) = class else {
+            unreachable!("validated Bag<Record> must contain record equivalence keys");
+        };
+
+        let mut projected_fields = BTreeMap::new();
+        for key in &retained_keys {
+            let Some(value) = fields.get(key) else {
+                unreachable!("validated record equivalence key must contain every declared field");
+            };
+            projected_fields.insert(*key, value.clone());
+        }
+
+        let group = groups
+            .entry(EquivalenceKey::Record(projected_fields))
+            .or_default();
+        if group.insert(class.clone(), *multiplicity).is_some() {
+            unreachable!("each input record equivalence class belongs to one grouping block");
+        }
+    }
+
+    let mut output_classes = BTreeSet::new();
+    for group in groups.into_values() {
+        if !output_classes.insert(EquivalenceKey::Bag(group)) {
+            unreachable!("distinct grouping blocks must remain distinct Bag equivalence classes");
+        }
+    }
+
+    Ok(RelationValue {
+        element_type: LogicalType::bag(bag.element_type.clone()),
         classes: output_classes,
     })
 }

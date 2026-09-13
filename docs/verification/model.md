@@ -7,7 +7,7 @@ Status: **non-normative assurance guidance**
 The canonical normative owners are:
 
 - `spec/language/model/data.md` for represented logical types, explicit absence, structural records, finite Relation/Bag/Sequence values, and Model value equivalence;
-- `spec/language/model/queries.md` for the accepted bounded record-field projection, bounded record-field equivalence filter, bounded disjoint-record field-equivalence join, and `distinct : Bag<T> -> Relation<T>` evaluator relations.
+- `spec/language/model/queries.md` for the accepted bounded record-field projection, bounded record-field equivalence filter, bounded disjoint-record field-equivalence join, bounded record-field partition grouping, and `distinct : Bag<T> -> Relation<T>` evaluator relations.
 
 ## Verification representation
 
@@ -27,6 +27,8 @@ The bounded field-equivalence filter uses one verification-only `FieldKey` and o
 
 The bounded disjoint-record field-equivalence join uses two verification-only `FieldKey` values as carriers for the accepted join fields. After validating disjoint record schemas and exact selected-field type equality, it compares the selected entries of private left/right record equivalence-class keys directly and merges complete matching key maps. Each matching input-class pair produces one unique output class, so duplicate output insertion is an internal invariant failure rather than a multiplicity-aggregation path. Matching multiplicities use checked `u64` multiplication only because the oracle fixture carrier is finite-width; `MultiplicityOverflow` is verification machinery and is not a normative Model query fault or semantic bound.
 
+The bounded record-field partition grouping uses a Rust slice of verification-only `FieldKey` values solely as a finite carrier for the accepted grouping-key set. After validating record input and admitted keys, it derives a private projected record-equivalence key for every complete input class, partitions those classes by that key, and emits each non-empty block directly as one private Bag equivalence key in an outer Relation. Input multiplicities are copied unchanged into their unique groups. Candidate order and duplicates are non-semantic, and neither record representatives nor group identities are introduced.
+
 ## Executable evidence
 
 The current oracle exercises exactly the accepted represented subset:
@@ -41,9 +43,10 @@ The current oracle exercises exactly the accepted represented subset:
 - `distinct : Bag<T> -> Relation<T>` as direct equivalence-class support mapping;
 - bounded `project_fields<K> : Bag<R> -> Bag<R|K>` record-field restriction, including exact retained field identities/types, representative-free class projection, and occurrence-preserving multiplicity aggregation when projected classes merge;
 - bounded `filter_field_equivalent<k, v> : Bag<R> -> Bag<R>` record-field equivalence filtering, including exact field/value type admission, representative-free matching, exact retained multiplicity, tagged optional absence/presence, same-type NaN matching, signed-zero distinction, and recursive nested-value equivalence;
-- bounded `join_fields_equivalent<kL, kR> : Bag<R> × Bag<S> -> Bag<R ⊎ S>` disjoint-record field-equivalence joining, including exact schema/key/type admission, representative-free matching and merge, pair/output distinction, multiplicity products, tagged optional behavior, same-type NaN matching, signed-zero distinction, and recursive nested-value equivalence.
+- bounded `join_fields_equivalent<kL, kR> : Bag<R> × Bag<S> -> Bag<R ⊎ S>` disjoint-record field-equivalence joining, including exact schema/key/type admission, representative-free matching and merge, pair/output distinction, multiplicity products, tagged optional behavior, same-type NaN matching, signed-zero distinction, and recursive nested-value equivalence;
+- bounded `group_by_fields<K> : Bag<R> -> Relation<Bag<R>>` record-field partition grouping, including exact key admission, representative-free projected-key partitioning, exact multiplicity preservation, empty/degenerate-key behavior, tagged Optional grouping, same-type NaN grouping, signed-zero distinction, recursive nested-value equivalence, and group-key recoverability through accepted projection plus `distinct`.
 
-Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. Projection tests additionally vary retained-key candidate order and record-field construction order. Bounded filter tests vary record-field construction and Bag occurrence order and exercise exact typed rejection, multiplicity, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. Bounded join tests vary record-field construction and Bag occurrence order and exercise schema/type rejection, empty/no-match cases, one-to-many and many-to-one matching, multiplicity products, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
+Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. Projection tests additionally vary retained-key candidate order and record-field construction order. Bounded filter tests vary record-field construction and Bag occurrence order and exercise exact typed rejection, multiplicity, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. Bounded join tests vary record-field construction and Bag occurrence order and exercise schema/type rejection, empty/no-match cases, one-to-many and many-to-one matching, multiplicity products, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. Bounded grouping tests vary record-field construction, Bag occurrence order, and grouping-key candidate order and exercise admission, empty input, empty/full key sets, multiplicity preservation, projected-key partitioning/recovery, Optional tags, NaN witnesses, signed zero, and nested Bag equivalence. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
 
 ## Deliberate boundaries
 
@@ -51,7 +54,7 @@ This executable evidence does not define or implement:
 
 - source Model syntax or source-to-Model lowering;
 - compiler Model IR, generic query ASTs, planners, indexes, storage layouts, or runtime/database architecture;
-- general projection expressions or field creation/rename/derivation, general filtering beyond the accepted bounded field-equivalence relation, general joins beyond the accepted bounded disjoint-record field-equivalence relation, grouping, aggregation, ordering, or static query type/cardinality inference beyond the accepted bounded record-field projection, bounded field-equivalence filter, bounded disjoint-record field-equivalence join, and `distinct` relations;
+- general projection expressions or field creation/rename/derivation, general filtering beyond the accepted bounded field-equivalence relation, general joins beyond the accepted bounded disjoint-record field-equivalence relation, general grouping beyond the accepted bounded record-field partition relation, aggregation, ordering, or static query type/cardinality inference beyond the accepted bounded record-field projection, bounded field-equivalence filter, bounded disjoint-record field-equivalence join, bounded record-field partition grouping, and `distinct` relations;
 - state-domain execution, revision/visibility behavior, `ObservationSet` admission or multi-domain compatibility;
 - stable entity/row key semantics;
 - materialization, freshness, incremental maintenance, differential update algorithms, or replication;

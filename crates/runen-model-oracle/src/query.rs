@@ -1,6 +1,7 @@
 use crate::data::{
     BagValue, FieldKey, FixtureError, RelationValue, Value, filter_record_field_equivalent,
-    join_record_fields_equivalent, project_record_fields, relation_from_support,
+    group_record_fields, join_record_fields_equivalent, project_record_fields,
+    relation_from_support,
 };
 
 /// Execute the accepted bounded record-field projection Model relation.
@@ -44,6 +45,19 @@ pub fn join_fields_equivalent(
     right_field: FieldKey,
 ) -> Result<BagValue, FixtureError> {
     join_record_fields_equivalent(left, left_field, right, right_field)
+}
+
+/// Execute the accepted bounded record-field partition grouping.
+///
+/// `grouping_fields` is a verification-only finite carrier for the semantic
+/// grouping-key set. Candidate order is not Model order and duplicate keys are
+/// idempotent set membership. Partitioning operates directly on private record
+/// equivalence-class keys without selecting representatives.
+pub fn group_by_fields(
+    input: &BagValue,
+    grouping_fields: &[FieldKey],
+) -> Result<RelationValue, FixtureError> {
+    group_record_fields(input, grouping_fields)
 }
 
 /// Execute the accepted `distinct : Bag<T> -> Relation<T>` Model relation.
