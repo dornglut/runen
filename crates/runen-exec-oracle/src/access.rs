@@ -52,11 +52,7 @@ impl Access {
     /// not establish that every other applicable semantic contract permits them.
     #[must_use]
     pub fn conflicts_with(&self, other: &Self) -> bool {
-        ordinary_accesses_conflict(
-            self.kind,
-            other.kind,
-            self.region.overlaps(&other.region),
-        )
+        ordinary_accesses_conflict(self.kind, other.kind, self.region.overlaps(&other.region))
     }
 
     /// Evaluates only the accepted mixed ordinary/non-atomic ↔ atomic-exchange
