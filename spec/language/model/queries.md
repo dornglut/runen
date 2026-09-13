@@ -12,8 +12,6 @@ Query results preserve multiplicity by default using Bag semantics from `data.md
 
 Projection does not silently deduplicate Model-equivalent output values. If two input occurrences produce Model-equivalent outputs, their occurrences remain represented by Bag multiplicity unless an explicitly defined multiplicity-removal operation applies.
 
-Filtering preserves the multiplicity of each retained input equivalence class unless an explicitly defined operation states otherwise.
-
 The first represented multiplicity-removal operation is the bounded `distinct` relation defined below.
 
 ## Bounded record-field projection
