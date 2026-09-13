@@ -45,6 +45,21 @@ pub enum ObservationFixtureError {
     },
 }
 
+/// Verification-only construction failures for the accepted bounded
+/// two-distinct-domain observation context.
+///
+/// These failures describe malformed finite conformance fixtures. They are not
+/// normative runtime acquisition, synchronization, or observation-failure
+/// categories.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TwoDomainObservationFixtureError {
+    SameDomain(StateDomainId),
+    ObservationNotAdmitted {
+        domain_id: StateDomainId,
+        observation_id: ObservationId,
+    },
+}
+
 /// Verification-only executable instantiation of the accepted single-domain
 /// observed-root profile for a `Bag<T>` logical root.
 ///
@@ -152,5 +167,84 @@ impl SingletonObservationSet<'_> {
 
     pub fn observed_bag(&self) -> &BagValue {
         self.observed_bag
+    }
+}
+
+struct TwoDomainObservationMember<'a> {
+    domain_id: StateDomainId,
+    observation_id: ObservationId,
+    observed_bag: &'a BagValue,
+}
+
+/// Verification-only executable evidence for the accepted bounded
+/// two-distinct-domain `ObservationSet` over `Bag<T>` roots.
+///
+/// The two constructor positions are fixture mechanics only. Public access is
+/// keyed by exact [`StateDomainId`], and this type intentionally exposes no
+/// positional member API, semantic equality, hashing, ordering, iteration,
+/// serialization, mutation, or general collection interface.
+pub struct TwoDomainObservationSet<'a> {
+    member_one: TwoDomainObservationMember<'a>,
+    member_two: TwoDomainObservationMember<'a>,
+}
+
+impl<'a> TwoDomainObservationSet<'a> {
+    pub fn new(
+        first_domain: &'a ObservedBagDomain,
+        first_observation: ObservationId,
+        second_domain: &'a ObservedBagDomain,
+        second_observation: ObservationId,
+    ) -> Result<Self, TwoDomainObservationFixtureError> {
+        let first_domain_id = first_domain.domain_id();
+        let second_domain_id = second_domain.domain_id();
+        if first_domain_id == second_domain_id {
+            return Err(TwoDomainObservationFixtureError::SameDomain(
+                first_domain_id,
+            ));
+        }
+
+        let first_bag = first_domain.observed_bag(first_observation).ok_or(
+            TwoDomainObservationFixtureError::ObservationNotAdmitted {
+                domain_id: first_domain_id,
+                observation_id: first_observation,
+            },
+        )?;
+        let second_bag = second_domain.observed_bag(second_observation).ok_or(
+            TwoDomainObservationFixtureError::ObservationNotAdmitted {
+                domain_id: second_domain_id,
+                observation_id: second_observation,
+            },
+        )?;
+
+        Ok(Self {
+            member_one: TwoDomainObservationMember {
+                domain_id: first_domain_id,
+                observation_id: first_observation,
+                observed_bag: first_bag,
+            },
+            member_two: TwoDomainObservationMember {
+                domain_id: second_domain_id,
+                observation_id: second_observation,
+                observed_bag: second_bag,
+            },
+        })
+    }
+
+    pub fn observation_id(&self, domain_id: StateDomainId) -> Option<ObservationId> {
+        self.member(domain_id).map(|member| member.observation_id)
+    }
+
+    pub fn observed_bag(&self, domain_id: StateDomainId) -> Option<&BagValue> {
+        self.member(domain_id).map(|member| member.observed_bag)
+    }
+
+    fn member(&self, domain_id: StateDomainId) -> Option<&TwoDomainObservationMember<'a>> {
+        if self.member_one.domain_id == domain_id {
+            Some(&self.member_one)
+        } else if self.member_two.domain_id == domain_id {
+            Some(&self.member_two)
+        } else {
+            None
+        }
     }
 }

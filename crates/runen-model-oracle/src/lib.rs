@@ -17,7 +17,7 @@ pub use data::{
 };
 pub use observation::{
     ObservationFixtureError, ObservationId, ObservedBagDomain, SingletonObservationSet,
-    StateDomainId,
+    StateDomainId, TwoDomainObservationFixtureError, TwoDomainObservationSet,
 };
 pub use query::{
     bag_cardinality, distinct, filter_field_equivalent, group_by_fields, join_fields_equivalent,
