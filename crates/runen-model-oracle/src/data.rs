@@ -73,6 +73,19 @@ pub enum FixtureError {
         actual: LogicalType,
     },
     FilterFieldNotFound(FieldKey),
+    JoinLeftRequiresRecord {
+        actual: LogicalType,
+    },
+    JoinRightRequiresRecord {
+        actual: LogicalType,
+    },
+    JoinOverlappingField(FieldKey),
+    JoinLeftFieldNotFound(FieldKey),
+    JoinRightFieldNotFound(FieldKey),
+    JoinFieldTypeMismatch {
+        left: LogicalType,
+        right: LogicalType,
+    },
     InvalidFloatFiniteMember {
         format: FloatFormat,
         significand: u64,
@@ -753,6 +766,92 @@ pub(crate) fn filter_record_field_equivalent(
 
     Ok(BagValue {
         element_type: bag.element_type.clone(),
+        classes: output_classes,
+    })
+}
+
+pub(crate) fn join_record_fields_equivalent(
+    left: &BagValue,
+    left_field: FieldKey,
+    right: &BagValue,
+    right_field: FieldKey,
+) -> Result<BagValue, FixtureError> {
+    let LogicalType::Record(left_type) = &left.element_type else {
+        return Err(FixtureError::JoinLeftRequiresRecord {
+            actual: left.element_type.clone(),
+        });
+    };
+    let LogicalType::Record(right_type) = &right.element_type else {
+        return Err(FixtureError::JoinRightRequiresRecord {
+            actual: right.element_type.clone(),
+        });
+    };
+
+    if let Some(key) = left_type
+        .fields
+        .keys()
+        .find(|key| right_type.fields.contains_key(key))
+    {
+        return Err(FixtureError::JoinOverlappingField(FieldKey::new(*key)));
+    }
+
+    let left_storage_key = left_field.storage_key();
+    let right_storage_key = right_field.storage_key();
+    let Some(left_field_type) = left_type.fields.get(&left_storage_key) else {
+        return Err(FixtureError::JoinLeftFieldNotFound(left_field));
+    };
+    let Some(right_field_type) = right_type.fields.get(&right_storage_key) else {
+        return Err(FixtureError::JoinRightFieldNotFound(right_field));
+    };
+    if left_field_type != right_field_type {
+        return Err(FixtureError::JoinFieldTypeMismatch {
+            left: left_field_type.clone(),
+            right: right_field_type.clone(),
+        });
+    }
+
+    let mut output_fields = left_type.fields.clone();
+    output_fields.extend(right_type.fields.clone());
+    let output_record_type = RecordType {
+        fields: output_fields,
+    };
+    let mut output_classes = BTreeMap::new();
+
+    for (left_class, left_multiplicity) in &left.classes {
+        let EquivalenceKey::Record(left_fields) = left_class else {
+            unreachable!("validated Bag<Record> must contain record equivalence keys");
+        };
+        let Some(left_value) = left_fields.get(&left_storage_key) else {
+            unreachable!("validated record equivalence key must contain every declared field");
+        };
+
+        for (right_class, right_multiplicity) in &right.classes {
+            let EquivalenceKey::Record(right_fields) = right_class else {
+                unreachable!("validated Bag<Record> must contain record equivalence keys");
+            };
+            let Some(right_value) = right_fields.get(&right_storage_key) else {
+                unreachable!("validated record equivalence key must contain every declared field");
+            };
+            if left_value != right_value {
+                continue;
+            }
+
+            let mut merged_fields = left_fields.clone();
+            merged_fields.extend(right_fields.clone());
+            let contribution = left_multiplicity
+                .checked_mul(*right_multiplicity)
+                .ok_or(FixtureError::MultiplicityOverflow)?;
+            if output_classes
+                .insert(EquivalenceKey::Record(merged_fields), contribution)
+                .is_some()
+            {
+                unreachable!("disjoint complete record schemas make join class pairs injective");
+            }
+        }
+    }
+
+    Ok(BagValue {
+        element_type: LogicalType::Record(output_record_type),
         classes: output_classes,
     })
 }
