@@ -59,6 +59,7 @@ jobs:
           python .github/tmp-705-phase15.py
           python .github/tmp-705-phase16.py
           python .github/tmp-705-phase17.py
+          python .github/tmp-705-phase18.py
 
           cargo +stable fmt --all
           git diff --check
@@ -114,4 +115,4 @@ jobs:
           CANDIDATE: ${{ steps.candidate.outputs.commit }}
         run: |
           set -euo pipefail
-          git push origin "$CANDIDATE:refs/heads/p0d-705-external-callable-clean"
+          git push --force origin "$CANDIDATE:refs/heads/p0d-705-external-callable-clean"
