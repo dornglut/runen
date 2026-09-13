@@ -52,8 +52,18 @@ jobs:
           python .github/tmp-705-phase9.py
           python .github/tmp-705-phase10.py
           python .github/tmp-705-phase11.py
+          python .github/tmp-705-phase12-diagnose.py
           cargo +stable fmt --all
           git diff --check
+      - name: Focused external-callable conformance
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +stable test -p runen-syntax --test external_callables
+          cargo +stable test -p runen-hir --test external_callables
+          cargo +stable test -p runen-core-ir --test external_callables
+          cargo +stable test -p runen-core-lowering --test external_callables
+          cargo +stable test -p runen-reference --test external_callables
       - name: Capture workspace compiler diagnostics
         shell: bash
         run: |
@@ -66,8 +76,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if git diff --quiet -- .github/tmp-705-workspace-errors.txt; then
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add .github/tmp-705-workspace-errors.txt
-          git commit -m "chore: record #705 workspace diagnostics [skip ci]"
+          git commit -m "chore: refresh #705 workspace diagnostics [skip ci]"
           git push origin HEAD:p0d-705-external-callable-impl
