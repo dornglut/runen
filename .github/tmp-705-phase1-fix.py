@@ -6,13 +6,15 @@ for path in Path('.').rglob('*.rs'):
         continue
     text = path.read_text()
     if 'external_callables: Vec::new(),' in text:
-        text = text.replace('    external_callables: Vec::new(),\n', '')
-        text = text.replace('        external_callables: Vec::new(),\n', '')
-        text = text.replace('            external_callables: Vec::new(),\n', '')
-        # The phase-1 staging insertion was placed between the opening brace and the
-        # constructor's original newline. Removing only the inserted line would leave
-        # two newlines; restore the original constructor/function text shape exactly.
-        text = re.sub(r'((?:core::)?Program\s*\{)\n\n', r'\1\n', text)
+        text = ''.join(
+            line
+            for line in text.splitlines(keepends=True)
+            if line.strip() != 'external_callables: Vec::new(),'
+        )
+        # The temporary phase-1 insertion was placed before the constructor's original
+        # newline. Restore only the whitespace-only line that removal can leave directly
+        # after a Program opener; do not normalize unrelated source formatting.
+        text = re.sub(r'((?:core::)?Program\s*\{)\n[ \t]*\n', r'\1\n', text)
         path.write_text(text)
 
 syntax_test = Path('crates/runen-syntax/tests/external_callables.rs')
