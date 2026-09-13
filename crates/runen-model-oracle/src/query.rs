@@ -1,5 +1,6 @@
 use crate::data::{
-    BagValue, FieldKey, FixtureError, RelationValue, project_record_fields, relation_from_support,
+    BagValue, FieldKey, FixtureError, RelationValue, Value, filter_record_field_equivalent,
+    project_record_fields, relation_from_support,
 };
 
 /// Execute the accepted bounded record-field projection Model relation.
@@ -13,6 +14,21 @@ pub fn project_fields(
     retained_fields: &[FieldKey],
 ) -> Result<BagValue, FixtureError> {
     project_record_fields(input, retained_fields)
+}
+
+/// Execute the accepted bounded record-field equivalence filter Model relation.
+///
+/// `field` and `value` are verification-only carriers for the accepted logical
+/// field key and exact typed comparison value. The implementation filters the
+/// Bag's private equivalence classes directly and never selects a record
+/// representative. Invalid fixture invocations are not normative runtime query
+/// faults.
+pub fn filter_field_equivalent(
+    input: &BagValue,
+    field: FieldKey,
+    value: &Value,
+) -> Result<BagValue, FixtureError> {
+    filter_record_field_equivalent(input, field, value)
 }
 
 /// Execute the accepted `distinct : Bag<T> -> Relation<T>` Model relation.

@@ -13,4 +13,4 @@ pub use data::{
     BagValue, FieldKey, FixtureError, FloatFormat, FloatValue, LogicalType, NaNRealizationId,
     RecordType, RelationValue, SequenceValue, Value, model_equivalent,
 };
-pub use query::{distinct, project_fields};
+pub use query::{distinct, filter_field_equivalent, project_fields};

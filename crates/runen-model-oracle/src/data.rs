@@ -69,6 +69,10 @@ pub enum FixtureError {
         actual: LogicalType,
     },
     ProjectionFieldNotFound(FieldKey),
+    FilterRequiresRecord {
+        actual: LogicalType,
+    },
+    FilterFieldNotFound(FieldKey),
     InvalidFloatFiniteMember {
         format: FloatFormat,
         significand: u64,
@@ -712,6 +716,43 @@ pub(crate) fn project_record_fields(
 
     Ok(BagValue {
         element_type: LogicalType::Record(output_record_type),
+        classes: output_classes,
+    })
+}
+
+pub(crate) fn filter_record_field_equivalent(
+    bag: &BagValue,
+    field: FieldKey,
+    value: &Value,
+) -> Result<BagValue, FixtureError> {
+    let LogicalType::Record(record_type) = &bag.element_type else {
+        return Err(FixtureError::FilterRequiresRecord {
+            actual: bag.element_type.clone(),
+        });
+    };
+
+    let storage_key = field.storage_key();
+    let Some(field_type) = record_type.fields.get(&storage_key) else {
+        return Err(FixtureError::FilterFieldNotFound(field));
+    };
+    ensure_type(field_type, &value.ty)?;
+
+    let target = value.equivalence_key();
+    let mut output_classes = BTreeMap::new();
+    for (class, multiplicity) in &bag.classes {
+        let EquivalenceKey::Record(fields) = class else {
+            unreachable!("validated Bag<Record> must contain record equivalence keys");
+        };
+        let Some(field_value) = fields.get(&storage_key) else {
+            unreachable!("validated record equivalence key must contain every declared field");
+        };
+        if field_value == &target {
+            output_classes.insert(class.clone(), *multiplicity);
+        }
+    }
+
+    Ok(BagValue {
+        element_type: bag.element_type.clone(),
         classes: output_classes,
     })
 }
