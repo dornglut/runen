@@ -107,4 +107,50 @@ impl ObservedBagDomain {
     pub fn observed_bag(&self, observation_id: ObservationId) -> Option<&BagValue> {
         self.observations.get(&observation_id.storage_key())
     }
+
+    /// Construct executable evidence for the accepted singleton
+    /// `ObservationSet` around one already-admitted observation.
+    ///
+    /// The returned Rust borrow is only verification machinery. It does not
+    /// define storage retention, reacquisition, a runtime handle, or a general
+    /// multi-domain `ObservationSet` representation. `None` means only that this
+    /// finite fixture has no observation under the supplied token.
+    pub fn singleton_observation_set(
+        &self,
+        observation_id: ObservationId,
+    ) -> Option<SingletonObservationSet<'_>> {
+        let observed_bag = self.observed_bag(observation_id)?;
+        Some(SingletonObservationSet {
+            domain_id: self.domain_id,
+            observation_id,
+            observed_bag,
+        })
+    }
+}
+
+/// Verification-only executable singleton observation context for one admitted
+/// `Bag<T>` root.
+///
+/// This type intentionally exposes no semantic equality, hashing, ordering,
+/// iteration, serialization, Model-value conversion, or general collection API.
+/// Its Rust lifetime only proves that the referenced finite fixture remains
+/// available while this conformance witness is used.
+pub struct SingletonObservationSet<'a> {
+    domain_id: StateDomainId,
+    observation_id: ObservationId,
+    observed_bag: &'a BagValue,
+}
+
+impl SingletonObservationSet<'_> {
+    pub const fn domain_id(&self) -> StateDomainId {
+        self.domain_id
+    }
+
+    pub const fn observation_id(&self) -> ObservationId {
+        self.observation_id
+    }
+
+    pub fn observed_bag(&self) -> &BagValue {
+        self.observed_bag
+    }
 }
