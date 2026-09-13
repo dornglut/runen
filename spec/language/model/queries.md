@@ -14,6 +14,47 @@ Projection does not silently deduplicate Model-equivalent output values. If two 
 
 The first represented multiplicity-removal operation is the bounded `distinct` relation defined below.
 
+## Bounded record-field projection
+
+Let `R` be one represented closed structural record type from `data.md`, and let `K` be one finite subset of the logical field keys of `R`.
+
+Write `R|K` for the restricted record type containing exactly the keys in `K`, with each retained key mapped to exactly the same represented Model logical type that key has in `R`.
+
+The represented bounded record-field projection relation has exactly this semantic type:
+
+```text
+project_fields<K> : Bag<R> -> Bag<R|K>
+```
+
+This notation identifies the semantic relation only. It does not define source syntax, generic arguments, a query expression AST, compiler IR, or an implementation API.
+
+The relation is admitted only when `K` is a subset of the field-key set of `R`. A requested key not present in `R` is therefore outside this represented relation rather than a runtime query fault.
+
+For one record value `r : R`, its restriction `r|K : R|K` contains exactly the value from `r` for each retained key in `K` and contains no other fields. Retained values are unchanged Model values: projection does not unwrap, coalesce, compare, normalize, or otherwise reinterpret scalar, optional, record, or nested collection values.
+
+Every retained field key keeps exactly its existing logical field-key identity and logical type from `R`. This relation creates no field key, field rename, derived field, field collision, source-name lookup, declaration-position identity, stable entity/row identity, physical column identity, storage/index identity, or serialization identity.
+
+Projection is well-defined on Bag equivalence classes without selecting a representative. If two values of `R` are Model-equivalent, record equivalence from `data.md` requires their corresponding values at every retained key to be Model-equivalent. Restricting either value to the same `K` therefore yields Model-equivalent values of `R|K`, so each input record equivalence class determines exactly one output record equivalence class.
+
+For an input `B : Bag<R>`, the output multiplicity of one `R|K` equivalence class is the finite sum of the multiplicities of all input `R` equivalence classes whose restrictions belong to that output class.
+
+Consequences follow from the accepted record, Bag, and Model value-equivalence semantics:
+
+- total Bag multiplicity is preserved;
+- projection does not silently deduplicate;
+- distinct input record classes can contribute to one output class when their differences occur only in removed fields;
+- input classes whose retained fields remain non-equivalent remain distinct output classes;
+- the empty input Bag yields the empty output Bag;
+- empty `K` is valid and yields the accepted empty structural record type; every input occurrence then restricts to the unique empty record value, so a non-empty input yields one output class whose multiplicity equals the input's total multiplicity;
+- when `K` is the complete field-key set of `R`, every record keeps all of its fields and the output Bag is Model-equivalent to the input Bag;
+- retained `Absent` and `Present` values, nested values, same-type NaNs, and signed zeros follow the existing recursive Model value-equivalence relation without projection-specific equality rules.
+
+The input and output are Bags and therefore have no semantic iteration order. Field declaration, construction, enumeration, storage, or presentation order cannot affect the result type, projected value, or multiplicity.
+
+After a well-formed input and admitted field-key subset are established, the represented projection is pure, non-faulting, non-diverging, and deterministic. It consumes no state domain, `ObservationSet`, clock, external observation, stable entity identity, physical storage/index, or incremental-maintenance behavior.
+
+This revision defines only field restriction over `Bag<R>`. It does not define projection that creates, renames, derives, computes, or collides fields; projection over non-record values; Relation or Sequence projection; a general `select`/`derive` expression relation; or source spelling for projection.
+
 ## Bag distinct
 
 For every represented Model logical type `T`, the first `distinct` relation has exactly this type:
@@ -51,7 +92,7 @@ The accepted base query operations are represented illustratively by `from`, `wh
 
 The existence of those operation names does not supply semantics that their canonical owners have not yet defined. In particular, Model value equivalence is not by itself a query predicate language, join condition, grouping rule, aggregate equality rule, or ordering relation.
 
-The bounded Bag `distinct` relation above is the only exact evaluator operation added by this revision; no semantics for the other illustrative names follow from it.
+The exact evaluator relations represented by this revision are the bounded Bag record-field projection above and the bounded Bag `distinct` relation. Neither relation defines general `select`/`derive`, predicate/filter, join, grouping, aggregation, or ordering semantics.
 
 ## Ordering
 
@@ -65,4 +106,4 @@ A physical realization MUST NOT manufacture an implicit semantic tie-breaker fro
 
 This revision does not define the ordering relation for logical scalar/record values, absence ordering, comparator semantics, or exact `order by` typing/execution.
 
-The exact join, grouping, aggregation, general query typing, query-schema propagation, predicate absence behavior, projection/filter execution, and static cardinality rules are not defined by this revision.
+The exact join, grouping, aggregation, general query typing, general query-schema propagation beyond the represented bounded projection, predicate absence behavior, filtering execution, general projection expressions, and static cardinality rules are not defined by this revision.
