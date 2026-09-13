@@ -65,6 +65,10 @@ pub enum FixtureError {
         expected: LogicalType,
         actual: LogicalType,
     },
+    ProjectionRequiresRecord {
+        actual: LogicalType,
+    },
+    ProjectionFieldNotFound(FieldKey),
     InvalidFloatFiniteMember {
         format: FloatFormat,
         significand: u64,
@@ -657,4 +661,57 @@ pub(crate) fn relation_from_support(bag: &BagValue) -> RelationValue {
         element_type: bag.element_type.clone(),
         classes: bag.classes.keys().cloned().collect(),
     }
+}
+
+pub(crate) fn project_record_fields(
+    bag: &BagValue,
+    retained_fields: &[FieldKey],
+) -> Result<BagValue, FixtureError> {
+    let LogicalType::Record(record_type) = &bag.element_type else {
+        return Err(FixtureError::ProjectionRequiresRecord {
+            actual: bag.element_type.clone(),
+        });
+    };
+
+    let mut output_fields = BTreeMap::new();
+    for key in retained_fields {
+        let storage_key = key.storage_key();
+        let Some(field_type) = record_type.fields.get(&storage_key) else {
+            return Err(FixtureError::ProjectionFieldNotFound(*key));
+        };
+        output_fields
+            .entry(storage_key)
+            .or_insert_with(|| field_type.clone());
+    }
+
+    let output_record_type = RecordType {
+        fields: output_fields.clone(),
+    };
+    let mut output_classes = BTreeMap::new();
+
+    for (class, multiplicity) in &bag.classes {
+        let EquivalenceKey::Record(fields) = class else {
+            unreachable!("validated Bag<Record> must contain record equivalence keys");
+        };
+
+        let mut projected_fields = BTreeMap::new();
+        for key in output_fields.keys() {
+            let Some(value) = fields.get(key) else {
+                unreachable!("validated record equivalence key must contain every declared field");
+            };
+            projected_fields.insert(*key, value.clone());
+        }
+
+        let count = output_classes
+            .entry(EquivalenceKey::Record(projected_fields))
+            .or_insert(0_u64);
+        *count = count
+            .checked_add(*multiplicity)
+            .ok_or(FixtureError::MultiplicityOverflow)?;
+    }
+
+    Ok(BagValue {
+        element_type: LogicalType::Record(output_record_type),
+        classes: output_classes,
+    })
 }
