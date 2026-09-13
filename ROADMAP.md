@@ -4,7 +4,7 @@ This document owns project sequencing and specification-closure planning. It is 
 
 ## Current baseline
 
-The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety, P0-B Exec resources/concurrency, P0-C numeric, and P0-D source-language foundations are closed; P0-E is the next sequencing frontier.
+The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety, P0-B Exec resources/concurrency, P0-C numeric, P0-D source-language, and P0-E Model foundations are closed; P0-F is the next sequencing frontier.
 
 ## P0-A — Value, memory, and safety
 
@@ -90,7 +90,11 @@ This closure applies only to the represented semantic external-call relation and
 
 **Depends on:** Core value/type rules and the required bridge/resource contracts.
 
-Close logical typing and absence semantics, joins, grouping/aggregation, cardinality/type inference, identity/keys, state-domain interface details, multi-domain observation compatibility, freshness, and complete observation/materialization/maintenance contracts.
+The represented Model foundation closes the P0-E obligations required by the current gate: finite structural logical types and values with explicit `Optional` absence, closed structural records, finite Relation/Bag/Sequence values, exact `Cardinality`, and canonical Model value equivalence; bounded pure query relations for record-field projection, exact field-equivalence filtering, disjoint-record field-equivalence joining, record-field partition grouping, exact Bag cardinality, and `distinct`; bounded state-backed evaluation through stable domain-scoped observation identity and one exact observed logical root per participating profile; immutable singleton and exactly-two-distinct-domain `ObservationSet` contexts without an implicit synchronized or global snapshot; and bounded result-target identity/observation plus explicit exact singleton-source/pure-unary-query/result-observation correspondence with from-scratch correctness, backed by executable Model-oracle evidence.
+
+This closure applies only to the relations and profiles that the accepted Model specification currently represents. It does not define a general query-expression/composition object or reusable static type/schema/cardinality inference; stable logical entity, row, or key identity; general projection, filtering, join, grouping, aggregate, ordering, or comparator families; a general state-domain interface or observation-to-revision/current/latest/visibility/durability/failure/replication/transaction/clock/causal/MVCC/history relation; arbitrary-N or repeated-domain `ObservationSet` membership/container semantics or stronger cross-domain synchronization; or target-specific freshness/staleness policy, lifecycle, creation/reuse, retention, update admission/visibility, progress, failure/reconciliation, and complete `materialize`/`maintain` behavior. Those remain consumer-dependent extensions requiring separately accepted concrete contracts.
+
+Query AST/IR, planner, storage/index/runtime/database architecture, incremental algorithms, and physical representation remain realization or design concerns unless a future normative consumer makes them semantic. Integrated Core/Exec/Model/source/backend preservation evidence remains P0-F rather than missing Model semantics. P0-E closure is not authority for behavior that a normative owner still marks open.
 
 **Gate:** a from-scratch evaluator can determine Model results independently of storage or incremental implementation choices.
 
