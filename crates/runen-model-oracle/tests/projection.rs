@@ -63,11 +63,8 @@ fn projection_key_candidates_are_an_unordered_idempotent_set() {
 
 #[test]
 fn projection_of_empty_bag_has_exact_restricted_record_type() {
-    let record_type = RecordType::new([
-        (key(1), LogicalType::I32),
-        (key(2), LogicalType::Bool),
-    ])
-    .unwrap();
+    let record_type =
+        RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
     let input = BagValue::new(LogicalType::Record(record_type), []).unwrap();
     let result = project_fields(&input, &[key(2)]).unwrap();
     let expected_type =
@@ -80,11 +77,8 @@ fn projection_of_empty_bag_has_exact_restricted_record_type() {
 
 #[test]
 fn empty_projection_collapses_to_one_empty_record_class_without_losing_occurrences() {
-    let record_type = RecordType::new([
-        (key(1), LogicalType::I32),
-        (key(2), LogicalType::Bool),
-    ])
-    .unwrap();
+    let record_type =
+        RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
     let input = BagValue::new(
         LogicalType::Record(record_type.clone()),
         [
@@ -106,11 +100,8 @@ fn empty_projection_collapses_to_one_empty_record_class_without_losing_occurrenc
 
     let result = project_fields(&input, &[]).unwrap();
     let empty_type = RecordType::new(std::iter::empty::<(FieldKey, LogicalType)>()).unwrap();
-    let empty_value = Value::record(
-        empty_type.clone(),
-        std::iter::empty::<(FieldKey, Value)>(),
-    )
-    .unwrap();
+    let empty_value =
+        Value::record(empty_type.clone(), std::iter::empty::<(FieldKey, Value)>()).unwrap();
 
     assert_eq!(result.element_type(), &LogicalType::Record(empty_type));
     assert_eq!(result.class_count(), 1);
@@ -120,11 +111,8 @@ fn empty_projection_collapses_to_one_empty_record_class_without_losing_occurrenc
 
 #[test]
 fn all_key_projection_is_model_equivalent_to_input() {
-    let record_type = RecordType::new([
-        (key(1), LogicalType::I32),
-        (key(2), LogicalType::Bool),
-    ])
-    .unwrap();
+    let record_type =
+        RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
     let input = BagValue::new(
         LogicalType::Record(record_type.clone()),
         [
@@ -141,19 +129,13 @@ fn all_key_projection_is_model_equivalent_to_input() {
     .unwrap();
 
     let result = project_fields(&input, &[key(2), key(1)]).unwrap();
-    assert!(model_equivalent(
-        &Value::bag(input),
-        &Value::bag(result)
-    ));
+    assert!(model_equivalent(&Value::bag(input), &Value::bag(result)));
 }
 
 #[test]
 fn projection_merges_removed_differences_and_sums_multiplicity() {
-    let record_type = RecordType::new([
-        (key(1), LogicalType::I32),
-        (key(2), LogicalType::Bool),
-    ])
-    .unwrap();
+    let record_type =
+        RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
     let retained_true = record(
         &record_type,
         vec![(key(1), Value::i32(7)), (key(2), Value::bool(true))],
@@ -180,11 +162,8 @@ fn projection_merges_removed_differences_and_sums_multiplicity() {
 
 #[test]
 fn projection_preserves_distinctions_that_remain_in_retained_fields() {
-    let record_type = RecordType::new([
-        (key(1), LogicalType::I32),
-        (key(2), LogicalType::Bool),
-    ])
-    .unwrap();
+    let record_type =
+        RecordType::new([(key(1), LogicalType::I32), (key(2), LogicalType::Bool)]).unwrap();
     let input = BagValue::new(
         LogicalType::Record(record_type.clone()),
         [
@@ -246,10 +225,7 @@ fn projection_reuses_optional_and_nested_collection_equivalence() {
                 &record_type,
                 vec![(key(1), present_right), (key(2), Value::u8(2))],
             ),
-            record(
-                &record_type,
-                vec![(key(1), absent), (key(2), Value::u8(3))],
-            ),
+            record(&record_type, vec![(key(1), absent), (key(2), Value::u8(3))]),
         ],
     )
     .unwrap();
@@ -261,29 +237,24 @@ fn projection_reuses_optional_and_nested_collection_equivalence() {
     let output_type = RecordType::new([(key(1), optional_nested_type)]).unwrap();
     let expected_present = record(
         &output_type,
-        vec![
-            (
-                key(1),
-                Value::present(
-                    LogicalType::bag(LogicalType::I32),
-                    Value::bag(
-                        BagValue::new(
-                            LogicalType::I32,
-                            [Value::i32(2), Value::i32(1), Value::i32(1)],
-                        )
-                        .unwrap(),
-                    ),
-                )
-                .unwrap(),
-            ),
-        ],
+        vec![(
+            key(1),
+            Value::present(
+                LogicalType::bag(LogicalType::I32),
+                Value::bag(
+                    BagValue::new(
+                        LogicalType::I32,
+                        [Value::i32(2), Value::i32(1), Value::i32(1)],
+                    )
+                    .unwrap(),
+                ),
+            )
+            .unwrap(),
+        )],
     );
     let expected_absent = record(
         &output_type,
-        vec![(
-            key(1),
-            Value::absent(LogicalType::bag(LogicalType::I32)),
-        )],
+        vec![(key(1), Value::absent(LogicalType::bag(LogicalType::I32)))],
     );
 
     assert_eq!(result.multiplicity_of(&expected_present), 2);
@@ -292,32 +263,17 @@ fn projection_reuses_optional_and_nested_collection_equivalence() {
 
 #[test]
 fn projection_reuses_nan_equivalence_and_signed_zero_distinction() {
-    let record_type = RecordType::new([
-        (key(1), LogicalType::F64),
-        (key(2), LogicalType::U8),
-    ])
-    .unwrap();
-    let nan_a = Value::float(FloatValue::nan(
-        FloatFormat::F64,
-        NaNRealizationId::new(1),
-    ));
-    let nan_b = Value::float(FloatValue::nan(
-        FloatFormat::F64,
-        NaNRealizationId::new(2),
-    ));
+    let record_type =
+        RecordType::new([(key(1), LogicalType::F64), (key(2), LogicalType::U8)]).unwrap();
+    let nan_a = Value::float(FloatValue::nan(FloatFormat::F64, NaNRealizationId::new(1)));
+    let nan_b = Value::float(FloatValue::nan(FloatFormat::F64, NaNRealizationId::new(2)));
     let plus_zero = Value::float(FloatValue::positive_zero(FloatFormat::F64));
     let minus_zero = Value::float(FloatValue::negative_zero(FloatFormat::F64));
     let input = BagValue::new(
         LogicalType::Record(record_type.clone()),
         [
-            record(
-                &record_type,
-                vec![(key(1), nan_a), (key(2), Value::u8(1))],
-            ),
-            record(
-                &record_type,
-                vec![(key(1), nan_b), (key(2), Value::u8(2))],
-            ),
+            record(&record_type, vec![(key(1), nan_a), (key(2), Value::u8(1))]),
+            record(&record_type, vec![(key(1), nan_b), (key(2), Value::u8(2))]),
             record(
                 &record_type,
                 vec![(key(1), plus_zero), (key(2), Value::u8(3))],
@@ -334,33 +290,24 @@ fn projection_reuses_nan_equivalence_and_signed_zero_distinction() {
     let output_type = RecordType::new([(key(1), LogicalType::F64)]).unwrap();
     let expected_nan = record(
         &output_type,
-        vec![
-            (
-                key(1),
-                Value::float(FloatValue::nan(
-                    FloatFormat::F64,
-                    NaNRealizationId::new(99),
-                )),
-            ),
-        ],
+        vec![(
+            key(1),
+            Value::float(FloatValue::nan(FloatFormat::F64, NaNRealizationId::new(99))),
+        )],
     );
     let expected_plus_zero = record(
         &output_type,
-        vec![
-            (
-                key(1),
-                Value::float(FloatValue::positive_zero(FloatFormat::F64)),
-            ),
-        ],
+        vec![(
+            key(1),
+            Value::float(FloatValue::positive_zero(FloatFormat::F64)),
+        )],
     );
     let expected_minus_zero = record(
         &output_type,
-        vec![
-            (
-                key(1),
-                Value::float(FloatValue::negative_zero(FloatFormat::F64)),
-            ),
-        ],
+        vec![(
+            key(1),
+            Value::float(FloatValue::negative_zero(FloatFormat::F64)),
+        )],
     );
 
     assert_eq!(result.class_count(), 3);
