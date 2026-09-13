@@ -14,9 +14,7 @@ pub use data::{
     BagValue, FieldKey, FixtureError, FloatFormat, FloatValue, LogicalType, NaNRealizationId,
     RecordType, RelationValue, SequenceValue, Value, model_equivalent,
 };
-pub use observation::{
-    ObservationFixtureError, ObservationId, ObservedBagDomain, StateDomainId,
-};
+pub use observation::{ObservationFixtureError, ObservationId, ObservedBagDomain, StateDomainId};
 pub use query::{
     bag_cardinality, distinct, filter_field_equivalent, group_by_fields, join_fields_equivalent,
     project_fields,
