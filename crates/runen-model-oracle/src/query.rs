@@ -1,7 +1,7 @@
 use crate::data::{
-    BagValue, FieldKey, FixtureError, RelationValue, Value, filter_record_field_equivalent,
-    group_record_fields, join_record_fields_equivalent, project_record_fields,
-    relation_from_support,
+    BagValue, FieldKey, FixtureError, RelationValue, Value, exact_bag_cardinality,
+    filter_record_field_equivalent, group_record_fields, join_record_fields_equivalent,
+    project_record_fields, relation_from_support,
 };
 
 /// Execute the accepted bounded record-field projection Model relation.
@@ -58,6 +58,16 @@ pub fn group_by_fields(
     grouping_fields: &[FieldKey],
 ) -> Result<RelationValue, FixtureError> {
     group_record_fields(input, grouping_fields)
+}
+
+/// Execute the accepted exact `bag_cardinality : Bag<T> -> Cardinality` relation.
+///
+/// The result is accumulated directly from the Bag's private class
+/// multiplicities into the arbitrary-precision verification carrier. It does
+/// not use the bounded `total_multiplicity` fixture helper, select element
+/// representatives, or expose private tree order.
+pub fn bag_cardinality(input: &BagValue) -> Value {
+    exact_bag_cardinality(input)
 }
 
 /// Execute the accepted `distinct : Bag<T> -> Relation<T>` Model relation.
