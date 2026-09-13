@@ -94,7 +94,7 @@ A `Relation<T>` value is a finite set of `T` value-equivalence classes. It there
 
 A `Bag<T>` value is a finite map from `T` value-equivalence classes to positive finite multiplicities. Two Model-equivalent occurrences contribute to the same class multiplicity rather than becoming distinct identity-bearing members. A class absent from the bag has multiplicity zero and therefore need not appear in the finite map.
 
-A `Sequence<T>` value has one finite length and exactly one `T` value at each ordinal position from zero through one less than that length. Equivalent values at distinct sequence positions remain distinct occurrences because position is semantic for Sequence.
+A `Sequence<T>` value has one finite length, one `T` value at each position, and one semantic finite linear order over those positions. Equivalent values at distinct sequence positions remain distinct occurrences because position and relative order are semantic for Sequence. This relation defines no numeric indexing base or source indexing syntax.
 
 Empty Relation, Bag, and Sequence values are valid.
 
@@ -122,7 +122,7 @@ For values of the same exact logical type, equivalence is defined recursively as
 - records: two values of the same logical record type are equivalent exactly when, for every field key in that type, the two corresponding field values are equivalent under the field's declared logical type;
 - `Relation<T>`: two values are equivalent exactly when they contain the same set of `T` equivalence classes;
 - `Bag<T>`: two values are equivalent exactly when every `T` equivalence class has the same multiplicity in both bags; and
-- `Sequence<T>`: two values are equivalent exactly when they have equal lengths and corresponding values at every position are equivalent under `T`.
+- `Sequence<T>`: two values are equivalent exactly when they have equal lengths and corresponding positions in their finite linear orders contain values equivalent under `T`.
 
 The accepted floating semantics make `+0` and `-0` distinct semantic floating members. They are therefore **not** Model-equivalent in this revision. No host floating equality convention may merge them.
 
