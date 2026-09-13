@@ -145,13 +145,13 @@ impl LogicalType {
 /// This type intentionally does not implement Rust `PartialEq`/`Eq`: Model
 /// value equivalence is the separately owned relation exposed through
 /// [`model_equivalent`] after wrapping the fixture with [`Value::float`].
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct FloatValue {
     format: FloatFormat,
     kind: FloatKind,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 enum FloatKind {
     PositiveZero,
     NegativeZero,
@@ -237,13 +237,13 @@ impl FloatValue {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Value {
     ty: LogicalType,
     kind: ValueKind,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 enum ValueKind {
     Bool(bool),
     I8(i8),
@@ -476,7 +476,7 @@ fn ensure_type(expected: &LogicalType, actual: &LogicalType) -> Result<(), Fixtu
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct RelationValue {
     element_type: LogicalType,
     classes: BTreeSet<EquivalenceKey>,
@@ -515,7 +515,7 @@ impl RelationValue {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct BagValue {
     element_type: LogicalType,
     classes: BTreeMap<EquivalenceKey, u64>,
@@ -572,7 +572,7 @@ impl BagValue {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct SequenceValue {
     element_type: LogicalType,
     values: Vec<Value>,
@@ -618,7 +618,7 @@ pub fn model_equivalent(left: &Value, right: &Value) -> bool {
     left.ty == right.ty && left.equivalence_key() == right.equivalence_key()
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum EquivalenceKey {
     Bool(bool),
     I8(i8),
@@ -638,7 +638,7 @@ enum EquivalenceKey {
     Sequence(Vec<EquivalenceKey>),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
 enum FloatEquivalenceKey {
     PositiveZero,
     NegativeZero,
