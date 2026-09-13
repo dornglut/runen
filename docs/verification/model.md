@@ -7,7 +7,7 @@ Status: **non-normative assurance guidance**
 The canonical normative owners are:
 
 - `spec/language/model/data.md` for represented logical types, explicit absence, structural records, finite Relation/Bag/Sequence values, and Model value equivalence;
-- `spec/language/model/queries.md` for the accepted bounded `distinct : Bag<T> -> Relation<T>` evaluator relation.
+- `spec/language/model/queries.md` for the accepted bounded record-field projection and `distinct : Bag<T> -> Relation<T>` evaluator relations.
 
 ## Verification representation
 
@@ -19,7 +19,9 @@ The oracle uses finite verification fixtures only.
 - Relation and Bag fixtures store private Model-equivalence-class keys. Their deterministic `BTreeSet`/`BTreeMap` order is implementation machinery and is not exposed as semantic iteration order or representative selection.
 - Sequence fixtures retain semantic positional order through bounded verification-only position access. The Rust `usize` carrier is not source indexing syntax or a language indexing-base rule.
 
-Public validated constructors reject values whose recursive logical shape does not match the declared Model type. The fixture error type is verification machinery, not a compiler diagnostic contract.
+Public validated constructors reject values whose recursive logical shape does not match the declared Model type. The fixture error type, including rejection of invalid projection fixtures, is verification machinery rather than a compiler diagnostic or normative runtime query-fault contract.
+
+The projection API accepts a Rust slice of verification-only `FieldKey` values solely as a finite carrier for the accepted semantic retained-key set. Slice order is not Model order, and duplicate candidate keys are idempotent set membership. Projection restricts private record equivalence-class keys directly and merges multiplicities with checked arithmetic; it never selects or exposes representative record values or private tree order.
 
 ## Executable evidence
 
@@ -32,9 +34,10 @@ The current oracle exercises exactly the accepted represented subset:
 - canonical typed Model value equivalence, including same-type NaN collapse and distinct `+0`/`-0` members;
 - finite Relation membership, Bag multiplicity, and Sequence positional behavior;
 - recursive equivalence through optional, record, and collection nesting;
-- `distinct : Bag<T> -> Relation<T>` as direct equivalence-class support mapping.
+- `distinct : Bag<T> -> Relation<T>` as direct equivalence-class support mapping;
+- bounded `project_fields<K> : Bag<R> -> Bag<R|K>` record-field restriction, including exact retained field identities/types, representative-free class projection, and occurrence-preserving multiplicity aggregation when projected classes merge.
 
-Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
+Tests intentionally vary construction and occurrence order where Relation/Bag semantics are unordered. Projection tests additionally vary retained-key candidate order and record-field construction order. A passing result must not depend on host hashing, private tree order, allocation identity, addresses, source declaration identity, SQL behavior, or a selected representative occurrence.
 
 ## Deliberate boundaries
 
@@ -42,7 +45,7 @@ This executable evidence does not define or implement:
 
 - source Model syntax or source-to-Model lowering;
 - compiler Model IR, generic query ASTs, planners, indexes, storage layouts, or runtime/database architecture;
-- projection, filtering, joins, grouping, aggregation, ordering, or static query type/cardinality inference beyond the already accepted bounded `distinct` relation;
+- general projection expressions or field creation/rename/derivation, filtering, joins, grouping, aggregation, ordering, or static query type/cardinality inference beyond the accepted bounded record-field projection and `distinct` relations;
 - state-domain execution, revision/visibility behavior, `ObservationSet` admission or multi-domain compatibility;
 - stable entity/row key semantics;
 - materialization, freshness, incremental maintenance, differential update algorithms, or replication;
