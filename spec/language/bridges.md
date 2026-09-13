@@ -8,11 +8,17 @@ Core, Exec, and Model compose only through explicit semantic bridges.
 
 A Model observation reifies as either an ordinary immutable Core value or an explicit logical handle whose operations are defined by its contract.
 
-A Model logical value is not identified by the physical storage layout of its realization.
+The scalar member domains reused by [Model logical data](model/data.md) do not make a Model logical scalar type identical to any Core per-program type definition. A concrete Model-to-Core reification contract must establish the exact Core result type/value or logical-handle contract it produces.
+
+Model `Optional`, structural record, Relation, Bag, and Sequence types/values do not automatically become Core structural aggregates, storage, or other Core values merely because a realization can represent them physically.
+
+A Model logical value is not identified by the physical storage layout, allocation identity, address, index, source declaration, or Core storage identity of its realization.
 
 Observing Model state MUST NOT implicitly create a lexical Core borrow directly into arbitrary state-domain internal storage.
 
 ## Core to Model
+
+An ordinary Core value does not automatically acquire Model logical type identity, record/schema identity, collection membership, absence semantics, or Model value equivalence. A Core-to-Model crossing requires an explicit semantic bridge/consumer contract.
 
 Ordinary lexical mutation MUST NOT directly mutate arbitrary state-domain internals through a Core reference.
 
@@ -46,4 +52,4 @@ Changes to Model state re-enter through the applicable state-domain admission an
 
 ## Non-leakage
 
-A realization MAY erase a bridge physically when it preserves the same semantics, but it MUST NOT expose an otherwise-forbidden borrow, address, mutation, observation, ordering, or authority merely because two strata share one physical representation.
+A realization MAY erase a bridge physically when it preserves the same semantics, but it MUST NOT expose an otherwise-forbidden borrow, address, mutation, observation, ordering, identity, or authority merely because two strata share one physical representation.
