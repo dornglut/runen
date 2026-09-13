@@ -46,7 +46,7 @@ Owns executable verification-only conformance relations for the currently repres
 
 It is not Runen source syntax, compiler Exec IR, a production runtime or backend, and it owns no normative language semantics. Its finite identities, regions, values, and structured-order tokens exist only to make accepted Exec contracts executable in conformance tests.
 
-The package is currently dependency-free and independent of both `runen-core-ir` and `runen-reference`. It MUST NOT depend on compiler target IR, runtime scheduling or platform services, production backends, or repository tooling.
+The package has no production dependency on another Runen package and remains independent of `runen-reference`. It consumes `runen-core-ir` only as a test/dev dependency for the accepted P0-F composition in which Core-owned `StorageRegion` overlap facts feed the generic Exec ordinary-access conflict relation. That proving dependency does not make Core storage an Exec resource, make Exec own Core region identity or overlap, or create a production Core→Exec package coupling. The package MUST NOT depend on compiler target IR, runtime scheduling or platform services, production backends, or repository tooling.
 
 Future cross-stratum verification may compose independent proving packages only when accepted semantic evidence requires that dependency; package co-location does not itself justify coupling them.
 
@@ -99,10 +99,11 @@ runen-syntax
                         ▼
                 runen-reference
 
-runen-exec-oracle ──[test-only P0-F evidence]──▶ runen-numeric-oracle
+runen-core-ir ──────[test-only P0-F region-overlap evidence]──────▶ runen-exec-oracle
+runen-exec-oracle ──[test-only P0-F reduction evidence]──────────▶ runen-numeric-oracle
 runen-model-oracle
 
 repository tooling is orthogonal
 ```
 
-`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` remains a consumer only of validated Core programs. `runen-exec-oracle`, `runen-numeric-oracle`, and `runen-model-oracle` remain verification-only packages outside the source/HIR and Core/reference/lowering chains. The numeric oracle's accepted test-only consumption of Exec reduction evidence composes independently owned proving relations without creating a production dependency or merging their semantic ownership; other proving-package composition still requires an accepted semantic or assurance consumer.
+`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` remains a consumer only of validated Core programs. `runen-exec-oracle`, `runen-numeric-oracle`, and `runen-model-oracle` remain verification-only packages outside the source/HIR and Core/reference/lowering production chains. The Exec oracle's accepted test-only consumption of Core structural-region overlap evidence composes the Core-owned overlap relation with the Exec-owned ordinary-access conflict relation without creating production coupling or transferring semantic ownership. The numeric oracle's accepted test-only consumption of Exec reduction evidence likewise composes independently owned proving relations; other proving-package composition still requires an accepted semantic or assurance consumer.
