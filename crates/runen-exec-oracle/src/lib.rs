@@ -17,7 +17,7 @@ mod reduction;
 mod structured;
 mod task;
 
-pub use access::{Access, AccessKind};
+pub use access::{Access, AccessKind, ordinary_accesses_conflict};
 pub use allocation::{AllocationError, AllocationFixture, AllocationId};
 pub use atomic::{
     AtomicExchange, AtomicExchangeError, AtomicExchangeFixture, AtomicExchangeId,

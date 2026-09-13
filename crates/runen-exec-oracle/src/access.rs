@@ -7,6 +7,22 @@ pub enum AccessKind {
     StateChange,
 }
 
+/// Evaluate the accepted ordinary non-atomic Exec conflict relation from a
+/// canonical-owner overlap fact.
+///
+/// `regions_overlap` must be supplied by the semantic owner of the accessed
+/// storage or resource. This function does not define region identity or
+/// overlap, and `false` does not establish that every other applicable semantic
+/// contract permits the accesses.
+#[must_use]
+pub fn ordinary_accesses_conflict(
+    left: AccessKind,
+    right: AccessKind,
+    regions_overlap: bool,
+) -> bool {
+    regions_overlap && (left == AccessKind::StateChange || right == AccessKind::StateChange)
+}
+
 /// Verification-only access to one logical Buffer region.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Access {
@@ -36,8 +52,7 @@ impl Access {
     /// not establish that every other applicable semantic contract permits them.
     #[must_use]
     pub fn conflicts_with(&self, other: &Self) -> bool {
-        self.region.overlaps(&other.region)
-            && (self.kind == AccessKind::StateChange || other.kind == AccessKind::StateChange)
+        ordinary_accesses_conflict(self.kind, other.kind, self.region.overlaps(&other.region))
     }
 
     /// Evaluates only the accepted mixed ordinary/non-atomic ↔ atomic-exchange
