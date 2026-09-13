@@ -68,12 +68,12 @@ jobs:
           git add -A
           git diff --cached --check
 
-          if git diff --cached --name-only | grep -E '^\.github/(tmp-705-|workflows/tmp-705-)' ; then
-            echo 'temporary #705 harness leaked into candidate' >&2
+          tree="$(git write-tree)"
+          if git ls-tree -r --name-only "$tree" | grep -E '^\.github/(tmp-705-|workflows/tmp-705-)' ; then
+            echo 'temporary #705 harness leaked into candidate tree' >&2
             exit 1
           fi
 
-          tree="$(git write-tree)"
           export GIT_AUTHOR_NAME='github-actions[bot]'
           export GIT_AUTHOR_EMAIL='41898282+github-actions[bot]@users.noreply.github.com'
           export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
