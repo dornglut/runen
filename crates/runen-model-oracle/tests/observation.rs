@@ -12,20 +12,13 @@ fn bags_equivalent(left: &BagValue, right: &BagValue) -> bool {
 }
 
 fn row_type() -> RecordType {
-    RecordType::new([
-        (ENABLED, LogicalType::Bool),
-        (CLASS, LogicalType::U32),
-    ])
-    .unwrap()
+    RecordType::new([(ENABLED, LogicalType::Bool), (CLASS, LogicalType::U32)]).unwrap()
 }
 
 fn row(record_type: &RecordType, enabled: bool, class: u32) -> Value {
     Value::record(
         record_type.clone(),
-        [
-            (ENABLED, Value::bool(enabled)),
-            (CLASS, Value::u32(class)),
-        ],
+        [(ENABLED, Value::bool(enabled)), (CLASS, Value::u32(class))],
     )
     .unwrap()
 }
@@ -33,10 +26,7 @@ fn row(record_type: &RecordType, enabled: bool, class: u32) -> Value {
 fn row_reversed(record_type: &RecordType, enabled: bool, class: u32) -> Value {
     Value::record(
         record_type.clone(),
-        [
-            (CLASS, Value::u32(class)),
-            (ENABLED, Value::bool(enabled)),
-        ],
+        [(CLASS, Value::u32(class)), (ENABLED, Value::bool(enabled))],
     )
     .unwrap()
 }
@@ -101,10 +91,7 @@ fn earlier_observation_keeps_its_logical_root_when_later_observation_differs() {
     let domain = ObservedBagDomain::new(
         StateDomainId::new(30),
         LogicalType::Bool,
-        [
-            (earlier, earlier_root.clone()),
-            (later, later_root.clone()),
-        ],
+        [(earlier, earlier_root.clone()), (later, later_root.clone())],
     )
     .unwrap();
 
@@ -197,10 +184,7 @@ fn observation_construction_order_does_not_define_observation_order() {
     let forward = ObservedBagDomain::new(
         StateDomainId::new(60),
         LogicalType::Bool,
-        [
-            (first, first_root.clone()),
-            (second, second_root.clone()),
-        ],
+        [(first, first_root.clone()), (second, second_root.clone())],
     )
     .unwrap();
     let reverse = ObservedBagDomain::new(
