@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
+use num_bigint::BigUint;
+
 /// Verification-only logical record-field identity token.
 ///
 /// The numeric token is implementation machinery for conformance fixtures. It
@@ -95,6 +97,7 @@ pub enum FixtureError {
         significand: u64,
         exponent: i32,
     },
+    ZeroMultiplicity,
     MultiplicityOverflow,
 }
 
@@ -140,6 +143,7 @@ pub enum LogicalType {
     F16,
     F32,
     F64,
+    Cardinality,
     Optional(Box<LogicalType>),
     Record(RecordType),
     Relation(Box<LogicalType>),
@@ -280,6 +284,7 @@ enum ValueKind {
     U32(u32),
     U64(u64),
     Float(FloatValue),
+    Cardinality(BigUint),
     Absent,
     Present(Box<Value>),
     Record(BTreeMap<u32, Value>),
@@ -360,6 +365,20 @@ impl Value {
         Self {
             ty: value.format.logical_type(),
             kind: ValueKind::Float(value),
+        }
+    }
+
+    /// Construct a verification-only Cardinality witness from a bounded Rust
+    /// carrier. The `u128` input is only fixture machinery and is not a Model
+    /// Cardinality maximum.
+    pub fn cardinality_from_u128(value: u128) -> Self {
+        Self::cardinality_from_biguint(BigUint::from(value))
+    }
+
+    pub(crate) fn cardinality_from_biguint(value: BigUint) -> Self {
+        Self {
+            ty: LogicalType::Cardinality,
+            kind: ValueKind::Cardinality(value),
         }
     }
 
@@ -449,6 +468,7 @@ impl Value {
             ValueKind::U32(value) => EquivalenceKey::U32(*value),
             ValueKind::U64(value) => EquivalenceKey::U64(*value),
             ValueKind::Float(value) => EquivalenceKey::Float(value.equivalence_key()),
+            ValueKind::Cardinality(value) => EquivalenceKey::Cardinality(value.clone()),
             ValueKind::Absent => EquivalenceKey::Absent,
             ValueKind::Present(value) => EquivalenceKey::Present(Box::new(value.equivalence_key())),
             ValueKind::Record(fields) => EquivalenceKey::Record(
@@ -566,6 +586,37 @@ impl BagValue {
         })
     }
 
+    /// Construct a finite verification Bag from explicit class-occurrence
+    /// multiplicities without allocating one Rust value per occurrence.
+    ///
+    /// The `u64` multiplicity carrier is verification machinery, not a Model
+    /// multiplicity or Cardinality bound. Model-equivalent supplied values are
+    /// merged with checked fixture arithmetic.
+    pub fn from_multiplicities<I>(
+        element_type: LogicalType,
+        values: I,
+    ) -> Result<Self, FixtureError>
+    where
+        I: IntoIterator<Item = (Value, u64)>,
+    {
+        let mut classes = BTreeMap::new();
+        for (value, multiplicity) in values {
+            ensure_type(&element_type, &value.ty)?;
+            if multiplicity == 0 {
+                return Err(FixtureError::ZeroMultiplicity);
+            }
+            let key = value.equivalence_key();
+            let count = classes.entry(key).or_insert(0_u64);
+            *count = count
+                .checked_add(multiplicity)
+                .ok_or(FixtureError::MultiplicityOverflow)?;
+        }
+        Ok(Self {
+            element_type,
+            classes,
+        })
+    }
+
     pub fn element_type(&self) -> &LogicalType {
         &self.element_type
     }
@@ -578,8 +629,14 @@ impl BagValue {
         self.classes.is_empty()
     }
 
-    pub fn total_multiplicity(&self) -> u64 {
-        self.classes.values().copied().sum()
+    /// Return the total occurrence count only when it fits the bounded `u64`
+    /// fixture carrier. This is not the semantic `bag_cardinality` operation.
+    pub fn total_multiplicity(&self) -> Result<u64, FixtureError> {
+        self.classes.values().try_fold(0_u64, |total, multiplicity| {
+            total
+                .checked_add(*multiplicity)
+                .ok_or(FixtureError::MultiplicityOverflow)
+        })
     }
 
     pub fn multiplicity_of(&self, value: &Value) -> u64 {
@@ -655,6 +712,7 @@ enum EquivalenceKey {
     U32(u32),
     U64(u64),
     Float(FloatEquivalenceKey),
+    Cardinality(BigUint),
     Absent,
     Present(Box<EquivalenceKey>),
     Record(BTreeMap<u32, EquivalenceKey>),
@@ -675,6 +733,16 @@ enum FloatEquivalenceKey {
         exponent: i32,
     },
     NaN,
+}
+
+pub(crate) fn exact_bag_cardinality(bag: &BagValue) -> Value {
+    let total = bag
+        .classes
+        .values()
+        .fold(BigUint::from(0_u8), |total, multiplicity| {
+            total + BigUint::from(*multiplicity)
+        });
+    Value::cardinality_from_biguint(total)
 }
 
 pub(crate) fn relation_from_support(bag: &BagValue) -> RelationValue {
