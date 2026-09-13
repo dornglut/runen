@@ -40,10 +40,33 @@ fn root_fixture() -> (ReductionFixture, [ReductionContribution; 3]) {
 
 fn represented_values() -> [BinaryValueFixture; 3] {
     [
-        finite(Sign::Negative, 8, 1),  // -16
-        finite(Sign::Negative, 8, 1),  // -16 from a distinct occurrence
+        finite(Sign::Negative, 8, 1),   // -16
+        finite(Sign::Negative, 8, 1),   // -16 from a distinct occurrence
         finite(Sign::Negative, 11, -1), // -5.5
     ]
+}
+
+fn admitted_values(
+    reduction: &ReductionFixture,
+    submitted: &[(ReductionContribution, BinaryValueFixture)],
+    incorporated: &[ReductionContribution],
+) -> Option<Vec<BinaryValueFixture>> {
+    let produced = submitted
+        .iter()
+        .map(|(contribution, _)| *contribution)
+        .collect::<Vec<_>>();
+    if !reduction.has_exact_contribution_coverage(&produced, incorporated) {
+        return None;
+    }
+
+    incorporated
+        .iter()
+        .map(|actual| {
+            submitted
+                .iter()
+                .find_map(|(expected, value)| (*expected == *actual).then_some(*value))
+        })
+        .collect()
 }
 
 fn sum_leaf(format: BinaryFormat, value: BinaryValueFixture) -> SumReductionResult {
@@ -55,17 +78,25 @@ fn exact_sum_uses_exact_exec_occurrences_without_value_deduplication() {
     let format = tiny_format();
     let (reduction, produced) = root_fixture();
     let values = represented_values();
+    let submitted = [
+        (produced[0], values[0]),
+        (produced[1], values[1]),
+        (produced[2], values[2]),
+    ];
 
     assert_ne!(produced[0], produced[1]);
     assert_eq!(values[0], values[1]);
 
+    let produced_values =
+        admitted_values(&reduction, &submitted, &produced).expect("produced coverage is exact");
     let incorporated = [produced[2], produced[0], produced[1]];
-    assert!(reduction.has_exact_contribution_coverage(&produced, &incorporated));
+    let incorporated_values = admitted_values(&reduction, &submitted, &incorporated)
+        .expect("reordered occurrence coverage is exact");
 
-    let exact = reduce_sum(format, &values).expect("covered contributions are valid numeric inputs");
-    let reordered = [values[2], values[0], values[1]];
+    let exact =
+        reduce_sum(format, &produced_values).expect("covered contributions are valid numeric inputs");
     assert_eq!(
-        reduce_sum(format, &reordered).expect("same covered inputs in another order"),
+        reduce_sum(format, &incorporated_values).expect("same covered inputs in another order"),
         exact
     );
 
@@ -77,27 +108,27 @@ fn exact_sum_uses_exact_exec_occurrences_without_value_deduplication() {
     );
 
     let omitted = [produced[0], produced[1]];
-    assert!(!reduction.has_exact_contribution_coverage(&produced, &omitted));
+    assert!(admitted_values(&reduction, &submitted, &omitted).is_none());
 
     let duplicated = [produced[0], produced[0], produced[2]];
-    assert!(!reduction.has_exact_contribution_coverage(&produced, &duplicated));
+    assert!(admitted_values(&reduction, &submitted, &duplicated).is_none());
 
     let invented = reduction
         .contribution(iteration(1), 99)
         .expect("participant may create another distinct occurrence");
     let with_invented = [produced[0], produced[1], invented];
-    assert!(!reduction.has_exact_contribution_coverage(&produced, &with_invented));
+    assert!(admitted_values(&reduction, &submitted, &with_invented).is_none());
 
     let substituted_producer = reduction
         .contribution(iteration(2), 11)
         .expect("second participant can use the same fixture token");
     let with_substituted_producer = [substituted_producer, produced[1], produced[2]];
     assert!(
-        !reduction.has_exact_contribution_coverage(&produced, &with_substituted_producer)
+        admitted_values(&reduction, &submitted, &with_substituted_producer).is_none()
     );
 
-    // The rejected occurrence collections above are deliberately not passed to
-    // the numeric oracle. Exec occurrence coverage is the admission boundary for
+    // Rejected occurrence collections never reach the numeric oracle through
+    // `admitted_values`. Exec occurrence coverage is the admission boundary for
     // treating a numeric result as evidence about this reduction occurrence.
 }
 
@@ -106,25 +137,46 @@ fn fast_tree_candidates_vary_over_the_same_exactly_covered_exec_occurrences() {
     let format = tiny_format();
     let (reduction, produced) = root_fixture();
     let values = represented_values();
+    let submitted = [
+        (produced[0], values[0]),
+        (produced[1], values[1]),
+        (produced[2], values[2]),
+    ];
 
     let first_leaf_assignment = [produced[0], produced[1], produced[2]];
     let second_leaf_assignment = [produced[0], produced[2], produced[1]];
-    assert!(reduction.has_exact_contribution_coverage(&produced, &first_leaf_assignment));
-    assert!(reduction.has_exact_contribution_coverage(&produced, &second_leaf_assignment));
-
-    let a = sum_leaf(format, values[0]);
-    let b = sum_leaf(format, values[1]);
-    let c = sum_leaf(format, values[2]);
+    let first_values = admitted_values(&reduction, &submitted, &first_leaf_assignment)
+        .expect("first leaf assignment covers the exact Exec occurrences");
+    let second_values = admitted_values(&reduction, &submitted, &second_leaf_assignment)
+        .expect("second leaf assignment covers the exact Exec occurrences");
 
     // Same full binary-tree shape, ((leaf0 + leaf1) + leaf2), with only the
     // exactly covered Exec contribution-to-leaf assignment permuted.
-    let first_pair = add_standard_tree_node(format, a, b).expect("accepted tree node");
-    let first_candidate =
-        add_standard_tree_node(format, first_pair, c).expect("accepted tree candidate");
+    let first_pair = add_standard_tree_node(
+        format,
+        sum_leaf(format, first_values[0]),
+        sum_leaf(format, first_values[1]),
+    )
+    .expect("accepted tree node");
+    let first_candidate = add_standard_tree_node(
+        format,
+        first_pair,
+        sum_leaf(format, first_values[2]),
+    )
+    .expect("accepted tree candidate");
 
-    let second_pair = add_standard_tree_node(format, a, c).expect("accepted tree node");
-    let second_candidate =
-        add_standard_tree_node(format, second_pair, b).expect("accepted tree candidate");
+    let second_pair = add_standard_tree_node(
+        format,
+        sum_leaf(format, second_values[0]),
+        sum_leaf(format, second_values[1]),
+    )
+    .expect("accepted tree node");
+    let second_candidate = add_standard_tree_node(
+        format,
+        second_pair,
+        sum_leaf(format, second_values[2]),
+    )
+    .expect("accepted tree candidate");
 
     assert_eq!(
         first_candidate,
