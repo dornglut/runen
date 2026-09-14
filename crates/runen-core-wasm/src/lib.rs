@@ -7,6 +7,8 @@
 mod coverage;
 mod encoding;
 mod external;
+#[cfg(test)]
+mod floating_tests;
 mod layout;
 mod scalar;
 
@@ -514,6 +516,7 @@ mod tests {
         );
         let encoded = encoding::encode(&program).expect("supported persistent fixture must encode");
         let module = &encoded.bytes[8..];
+
         let non_custom_sections: Vec<_> = section_ids(module)
             .into_iter()
             .filter(|id| *id != 0)
