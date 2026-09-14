@@ -98,12 +98,17 @@ fn passive_local_types_report_every_excluded_type_family() {
         UnsupportedTypeCategory::SafeReference,
     );
 
-    let mut callable = TypeTable::new();
-    let callable_ty = callable.push(TypeDef::callable(
-        "Callable",
-        CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
+    let mut higher_order = TypeTable::new();
+    let i64_ty = higher_order.push(TypeDef::scalar("I64", ScalarType::I64));
+    let inner = higher_order.push(TypeDef::callable(
+        "Inner",
+        CallableInterface::new(vec![i64_ty], Some(i64_ty), SafeReferenceResultContract::None),
     ));
-    assert_local_type_category(callable, callable_ty, UnsupportedTypeCategory::Callable);
+    let outer = higher_order.push(TypeDef::callable(
+        "Outer",
+        CallableInterface::new(vec![inner], Some(i64_ty), SafeReferenceResultContract::None),
+    ));
+    assert_local_type_category(higher_order, outer, UnsupportedTypeCategory::Callable);
 
     let mut tracked = TypeTable::new();
     let tracked_ty = tracked.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
@@ -440,40 +445,6 @@ fn representative_excluded_operand_families_have_stable_categories() {
     assert_eq!(
         coverage_error(&persistent_program).kind,
         CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::PersistentSharedRoot)
-    );
-
-    let mut callable_types = TypeTable::new();
-    let callable_ty = callable_types.push(TypeDef::callable(
-        "Callable",
-        CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
-    ));
-    let callable_program = validated(
-        callable_types,
-        Vec::new(),
-        vec![
-            function(
-                "entry",
-                Vec::new(),
-                None,
-                Body {
-                    locals: vec![LocalDecl::new("callee", callable_ty, false)],
-                    loans: Vec::new(),
-                    entry: BasicBlockId(0),
-                    blocks: vec![BasicBlock::new(
-                        vec![Statement::Init {
-                            dst: Place::local(LocalId(0)),
-                            src: Operand::FunctionValue(FunctionId(1)),
-                        }],
-                        Terminator::Return(None),
-                    )],
-                },
-            ),
-            function("target", Vec::new(), None, empty_body(Vec::new())),
-        ],
-    );
-    assert_eq!(
-        coverage_error(&callable_program).kind,
-        CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::FunctionValue)
     );
 
     let mut raw_types = TypeTable::new();
