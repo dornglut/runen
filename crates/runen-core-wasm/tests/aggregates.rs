@@ -226,6 +226,44 @@ fn whole_aggregate_copy_then_move_transport_matches_reference() {
 }
 
 #[test]
+fn projected_init_builds_aggregate_in_place() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let pair_ty = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", i64_ty), Field::new("right", i64_ty)],
+    ));
+    let pair = Place::local(LocalId(0));
+    let expected = Value::Struct(vec![Value::I64(20), Value::I64(22)]);
+    let program = validated(
+        types,
+        vec![function(
+            "entry",
+            Vec::new(),
+            Some(pair_ty),
+            vec![LocalDecl::new("pair", pair_ty, false)],
+            vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: pair.clone().field(0),
+                        src: Operand::Constant(Value::I64(20)),
+                    },
+                    Statement::Init {
+                        dst: pair.clone().field(1),
+                        src: Operand::Constant(Value::I64(22)),
+                    },
+                ],
+                Terminator::Return(Some(Operand::Move(pair.into()))),
+            )],
+        )],
+    );
+    assert_eq!(
+        assert_differential(program, FunctionId(0)),
+        ExecutionOutcome::Returned(Some(expected))
+    );
+}
+
+#[test]
 fn projected_assign_read_and_drop_preserve_structural_state() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
