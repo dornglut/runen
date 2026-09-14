@@ -1,6 +1,6 @@
 use runen_core_ir::{ScalarType, TypeId, TypeKind, TypeTable, Value};
 
-use crate::{BackendProtocolError, RealizationError};
+use crate::{invalid_backend_result, RealizationError};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ScalarKind {
@@ -51,9 +51,7 @@ impl ScalarKind {
             Self::Bool => match residue {
                 0 => Ok(Value::Bool(false)),
                 1 => Ok(Value::Bool(true)),
-                _ => Err(RealizationError::BackendProtocol(
-                    BackendProtocolError::InvalidBooleanPayload(payload),
-                )),
+                _ => Err(invalid_backend_result()),
             },
             Self::I8 => narrow_signed::<i8>(residue, 8).map(Value::I8),
             Self::I16 => narrow_signed::<i16>(residue, 16).map(Value::I16),
@@ -102,7 +100,7 @@ fn decode_unsigned(residue: u64, width: u32) -> Result<u64, RealizationError> {
     if residue & !mask(width) == 0 {
         Ok(residue)
     } else {
-        Err(non_canonical(residue, width))
+        Err(invalid_backend_result())
     }
 }
 
@@ -125,7 +123,7 @@ where
     T: TryFrom<i64>,
 {
     let value = decode_signed(residue, width)?;
-    T::try_from(value).map_err(|_| non_canonical(residue, width))
+    T::try_from(value).map_err(|_| invalid_backend_result())
 }
 
 fn narrow_unsigned<T>(residue: u64, width: u32) -> Result<T, RealizationError>
@@ -133,12 +131,22 @@ where
     T: TryFrom<u64>,
 {
     let value = decode_unsigned(residue, width)?;
-    T::try_from(value).map_err(|_| non_canonical(residue, width))
+    T::try_from(value).map_err(|_| invalid_backend_result())
 }
 
-fn non_canonical(payload: u64, width: u32) -> RealizationError {
-    RealizationError::BackendProtocol(BackendProtocolError::NonCanonicalIntegerPayload {
-        payload,
-        width,
-    })
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn invalid_private_carriers_remain_realization_failures() {
+        assert!(matches!(
+            ScalarKind::Bool.decode(2),
+            Err(RealizationError::BackendInvariant(_))
+        ));
+        assert!(matches!(
+            ScalarKind::U8.decode(256),
+            Err(RealizationError::BackendInvariant(_))
+        ));
+    }
 }
