@@ -283,17 +283,17 @@ fn require_supported_callable_type(
             });
         }
     }
-    if let Some(result_ty) = interface.result {
-        if let Some((unsupported_ty, category)) = first_unsupported_type(types, result_ty) {
-            return Err(CoverageError {
-                location: location.clone(),
-                kind: CoverageErrorKind::UnsupportedCallableResultType {
-                    callable: ty,
-                    ty: unsupported_ty,
-                    category,
-                },
-            });
-        }
+    if let Some(result_ty) = interface.result
+        && let Some((unsupported_ty, category)) = first_unsupported_type(types, result_ty)
+    {
+        return Err(CoverageError {
+            location: location.clone(),
+            kind: CoverageErrorKind::UnsupportedCallableResultType {
+                callable: ty,
+                ty: unsupported_ty,
+                category,
+            },
+        });
     }
     Ok(())
 }
