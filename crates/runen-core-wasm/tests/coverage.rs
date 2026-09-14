@@ -5,7 +5,9 @@ use runen_core_ir::{
     ReferencePermission, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
     TypeTable, Value, validate_program,
 };
-use runen_core_wasm::{ExecutionOutcome, RealizationError, RealizedProgram};
+use runen_core_wasm::{
+    ExecutionOutcome, ExternalProviderAdmissionError, RealizationError, RealizedProgram,
+};
 
 fn function(
     name: &str,
@@ -263,7 +265,7 @@ fn rejects_tracked_fixture_and_interior_mutability() {
 }
 
 #[test]
-fn rejects_program_wide_external_and_loan_facilities() {
+fn supported_external_requires_provider_but_loan_facilities_remain_coverage_rejected() {
     let external_interface =
         CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None);
     let external_program = validate_program(runen_core_ir::Program {
@@ -294,7 +296,12 @@ fn rejects_program_wide_external_and_loan_facilities() {
         )],
     })
     .expect("external-call fixture must be valid Core");
-    assert_coverage_rejected(external_program);
+    assert_eq!(
+        RealizedProgram::new(&external_program).err(),
+        Some(RealizationError::ProviderAdmission(
+            ExternalProviderAdmissionError::MissingProvider(ExternalCallableId(0))
+        ))
+    );
 
     let mut loan_types = TypeTable::new();
     let loan_ty = loan_types.push(TypeDef::scalar("I64", ScalarType::I64));
