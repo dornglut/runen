@@ -29,11 +29,7 @@ fn callable_local_program(types: TypeTable, callable: TypeId) -> runen_core_ir::
     .expect("callable-interface fixture must remain valid Core")
 }
 
-fn assert_callable_local_rejected(
-    types: TypeTable,
-    callable: TypeId,
-    kind: CoverageErrorKind,
-) {
+fn assert_callable_local_rejected(types: TypeTable, callable: TypeId, kind: CoverageErrorKind) {
     let program = callable_local_program(types, callable);
     let error = match RealizedProgram::new(&program) {
         Err(RealizationError::Coverage(error)) => error,
@@ -82,7 +78,11 @@ fn nested_floating_callable_result_reports_exact_interface_role_and_leaf_type() 
     ));
     let callable = types.push(TypeDef::callable(
         "FloatProducer",
-        CallableInterface::new(Vec::new(), Some(wrapper_ty), SafeReferenceResultContract::None),
+        CallableInterface::new(
+            Vec::new(),
+            Some(wrapper_ty),
+            SafeReferenceResultContract::None,
+        ),
     ));
     assert_callable_local_rejected(
         types,
