@@ -6,13 +6,14 @@
 
 mod coverage;
 mod encoding;
+mod layout;
 mod scalar;
 
 use std::error::Error;
 use std::fmt;
 
-use runen_core_ir::{Fault, FunctionId, ValidatedProgram, Value};
-use wasmtime::{Engine, Instance, Module, Store};
+use runen_core_ir::{Fault, FunctionId, TypeTable, ValidatedProgram, Value};
+use wasmtime::{Engine, Instance, Module, Store, Val};
 
 pub use coverage::{
     CoverageError, CoverageErrorKind, CoverageLocation, UnsupportedOperandKind,
@@ -95,6 +96,7 @@ pub struct RealizedProgram {
     module: Module,
     faults: Vec<Fault>,
     entries: Vec<EntryInfo>,
+    types: TypeTable,
 }
 
 impl RealizedProgram {
@@ -115,6 +117,7 @@ impl RealizedProgram {
             module,
             faults,
             entries,
+            types: program.as_program().types.clone(),
         })
     }
 
@@ -136,28 +139,53 @@ impl RealizedProgram {
             }
         })?;
         let function = instance
-            .get_typed_func::<(), (i32, i64)>(&mut store, &entry_export_name(entry))
-            .map_err(|error| RealizationError::Backend {
+            .get_func(&mut store, &entry_export_name(entry))
+            .ok_or_else(|| RealizationError::Backend {
                 phase: BackendPhase::LookupEntry,
+                message: "entry export is missing".into(),
+            })?;
+        let payload_count = entry_info.result_carrier_count.max(1);
+        let mut results = Vec::with_capacity(payload_count + 1);
+        results.push(Val::I32(0));
+        results.extend(std::iter::repeat_n(Val::I64(0), payload_count));
+        function
+            .call(&mut store, &[], &mut results)
+            .map_err(|error| RealizationError::Backend {
+                phase: BackendPhase::Execute,
                 message: error.to_string(),
             })?;
-        let (status, payload) =
-            function
-                .call(&mut store, ())
-                .map_err(|error| RealizationError::Backend {
-                    phase: BackendPhase::Execute,
-                    message: error.to_string(),
-                })?;
+
+        let status = match results.first() {
+            Some(Val::I32(status)) => *status,
+            _ => return Err(invalid_backend_result()),
+        };
+        let payloads = results[1..]
+            .iter()
+            .map(|value| match value {
+                Val::I64(value) => Ok(*value),
+                _ => Err(invalid_backend_result()),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         match status {
             STATUS_RETURNED => {
                 let result = entry_info
                     .result
-                    .map(|kind| kind.decode(payload))
+                    .map(|ty| {
+                        layout::decode_value(
+                            &self.types,
+                            ty,
+                            &payloads[..entry_info.result_carrier_count],
+                        )
+                    })
                     .transpose()?;
                 Ok(ExecutionOutcome::Returned(result))
             }
             STATUS_FAULTED => {
+                let payload = payloads
+                    .first()
+                    .copied()
+                    .ok_or_else(invalid_backend_result)?;
                 let index = usize::try_from(payload).map_err(|_| invalid_backend_result())?;
                 let fault = self
                     .faults
@@ -179,9 +207,9 @@ pub(crate) fn invalid_backend_result() -> RealizationError {
 mod tests {
     use super::*;
     use runen_core_ir::{
-        BasicBlock, BasicBlockId, Body, CallableInterface, Function, LocalDecl, LocalId, Operand,
-        PersistentDecl, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
-        Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
+        BasicBlock, BasicBlockId, Body, CallableInterface, Field, Function, LocalDecl, LocalId,
+        Operand, PersistentDecl, Place, Program, SafeReferenceResultContract, ScalarType,
+        Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
     };
 
     fn empty_entry_program(types: TypeTable, persistent: Vec<PersistentDecl>) -> ValidatedProgram {
@@ -205,11 +233,61 @@ mod tests {
         .expect("module-shape fixture must be valid Core")
     }
 
+    fn aggregate_program() -> ValidatedProgram {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let u8_ty = types.push(TypeDef::scalar("U8", ScalarType::U8));
+        let pair_ty = types.push(TypeDef::structure(
+            "Pair",
+            vec![Field::new("left", i64_ty), Field::new("right", u8_ty)],
+        ));
+        validate_program(Program {
+            types,
+            persistent: Vec::new(),
+            external_callables: Vec::new(),
+            functions: vec![Function {
+                name: "entry".into(),
+                parameters: Vec::new(),
+                result: Some(pair_ty),
+                safe_reference_result_contract: SafeReferenceResultContract::None,
+                body: Body {
+                    locals: Vec::new(),
+                    loans: Vec::new(),
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock::new(
+                        Vec::new(),
+                        Terminator::Return(Some(Operand::Constant(Value::Struct(vec![
+                            Value::I64(42),
+                            Value::U8(7),
+                        ])))),
+                    )],
+                },
+            }],
+        })
+        .expect("aggregate module-shape fixture must be valid Core")
+    }
+
     fn callable_program(
         persistent: Vec<PersistentDecl>,
         types: TypeTable,
         callable: TypeId,
+        aggregate: Option<(TypeId, Value)>,
     ) -> ValidatedProgram {
+        let mut locals = vec![LocalDecl::new("callee", callable, false)];
+        let mut statements = vec![Statement::Init {
+            dst: Place::local(LocalId(0)),
+            src: Operand::FunctionValue(FunctionId(1)),
+        }];
+        let result = aggregate.as_ref().map(|(ty, _)| *ty);
+        let returned = aggregate.map(|(ty, value)| {
+            locals.push(LocalDecl::new("aggregate", ty, false));
+            statements.push(Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::Constant(value),
+            });
+            Operand::Move(Place::local(LocalId(1)).into())
+        });
+
         validate_program(Program {
             types,
             persistent,
@@ -218,18 +296,15 @@ mod tests {
                 Function {
                     name: "entry".into(),
                     parameters: Vec::new(),
-                    result: None,
+                    result,
                     safe_reference_result_contract: SafeReferenceResultContract::None,
                     body: Body {
-                        locals: vec![LocalDecl::new("callee", callable, false)],
+                        locals,
                         loans: Vec::new(),
                         entry: BasicBlockId(0),
                         blocks: vec![
                             BasicBlock::new(
-                                vec![Statement::Init {
-                                    dst: Place::local(LocalId(0)),
-                                    src: Operand::FunctionValue(FunctionId(1)),
-                                }],
+                                statements,
                                 Terminator::IndirectCall {
                                     callable,
                                     callee: Operand::Move(Place::local(LocalId(0)).into()),
@@ -238,7 +313,7 @@ mod tests {
                                     target: BasicBlockId(1),
                                 },
                             ),
-                            BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                            BasicBlock::new(Vec::new(), Terminator::Return(returned)),
                         ],
                     },
                 },
@@ -276,6 +351,23 @@ mod tests {
             non_custom_sections,
             vec![1, 3, 7, 10],
             "persistent-free callable-free modules retain the reviewed section shape"
+        );
+    }
+
+    #[test]
+    fn aggregate_modules_add_no_storage_or_import_sections() {
+        let encoded = encoding::encode(&aggregate_program())
+            .expect("supported aggregate fixture must encode");
+        let module = &encoded.bytes[8..];
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 7, 10],
+            "structural carriers must not add imports, tables, memory, globals, elements, or data"
+        );
+        assert_eq!(
+            export_kinds(section_payload(module, 7)),
+            vec![0],
+            "aggregate realization exports only the existing entry function"
         );
     }
 
@@ -335,7 +427,7 @@ mod tests {
             "Thunk",
             CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
         ));
-        let program = callable_program(Vec::new(), types, callable);
+        let program = callable_program(Vec::new(), types, callable, None);
         let encoded = encoding::encode(&program).expect("supported callable fixture must encode");
         let module = &encoded.bytes[8..];
 
@@ -354,9 +446,14 @@ mod tests {
     }
 
     #[test]
-    fn callable_and_persistent_private_sections_compose_without_new_exports() {
+    fn aggregate_callable_and_persistent_private_sections_compose_without_new_exports() {
         let mut types = TypeTable::new();
         let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let u8_ty = types.push(TypeDef::scalar("U8", ScalarType::U8));
+        let pair_ty = types.push(TypeDef::structure(
+            "Pair",
+            vec![Field::new("left", i64_ty), Field::new("right", u8_ty)],
+        ));
         let callable = types.push(TypeDef::callable(
             "Thunk",
             CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
@@ -365,19 +462,24 @@ mod tests {
             vec![PersistentDecl::new(i64_ty, Value::I64(7))],
             types,
             callable,
+            Some((pair_ty, Value::Struct(vec![Value::I64(42), Value::U8(7)]))),
         );
-        let encoded =
-            encoding::encode(&program).expect("supported callable/persistent fixture must encode");
+        let encoded = encoding::encode(&program)
+            .expect("supported aggregate/callable/persistent fixture must encode");
         let module = &encoded.bytes[8..];
 
-        assert_eq!(section_ids(module), vec![1, 3, 4, 6, 7, 9, 10]);
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 4, 6, 7, 9, 10],
+            "aggregate composition must add no storage sections beyond existing private carriers"
+        );
         assert_private_two_function_table(section_payload(module, 4));
         assert_two_function_element_population(section_payload(module, 9));
         assert!(
             export_kinds(section_payload(module, 7))
                 .into_iter()
                 .all(|kind| kind == 0),
-            "neither callable tables nor persistent globals may be exported"
+            "aggregate values must not expose callable tables or persistent globals"
         );
     }
 

@@ -12,6 +12,9 @@ use wasm_encoder::{
 };
 
 use crate::RealizationError;
+use crate::layout::{
+    constant_carriers, projected_span, result_carrier_count, storage_carrier_count,
+};
 use crate::scalar::{ScalarKind, constant_residue, mask};
 
 pub(crate) struct EncodedProgram {
@@ -23,7 +26,8 @@ pub(crate) struct EncodedProgram {
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct EntryInfo {
     pub(crate) parameter_count: usize,
-    pub(crate) result: Option<ScalarKind>,
+    pub(crate) result: Option<TypeId>,
+    pub(crate) result_carrier_count: usize,
 }
 
 pub(crate) fn entry_export_name(function: FunctionId) -> String {
@@ -43,8 +47,18 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
 
     for (index, function) in program.functions.iter().enumerate() {
         let function_id = checked_function_id(index)?;
-        let params = vec![ValType::I64; function.parameters.len()];
-        types.ty().function(params, [ValType::I32, ValType::I64]);
+        let parameter_carriers = function_parameter_carrier_count(&program.types, function)?;
+        let semantic_result_carriers = function
+            .result
+            .map(|ty| result_carrier_count(&program.types, ty))
+            .transpose()?
+            .unwrap_or(0);
+        let payload_carriers = semantic_result_carriers.max(1);
+        let params = vec![ValType::I64; parameter_carriers];
+        let mut results = Vec::with_capacity(payload_carriers + 1);
+        results.push(ValType::I32);
+        results.extend(std::iter::repeat_n(ValType::I64, payload_carriers));
+        types.ty().function(params, results);
         functions.function(function_id.0);
         if function.parameters.is_empty() {
             exports.export(
@@ -55,10 +69,8 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
         }
         entries.push(EntryInfo {
             parameter_count: function.parameters.len(),
-            result: function
-                .result
-                .map(|ty| supported_kind(&program.types, ty))
-                .transpose()?,
+            result: function.result,
+            result_carrier_count: semantic_result_carriers,
         });
     }
 
@@ -129,6 +141,25 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
     })
 }
 
+fn function_parameter_carrier_count(
+    types: &TypeTable,
+    function: &Function,
+) -> Result<usize, RealizationError> {
+    function
+        .parameters
+        .iter()
+        .try_fold(0_usize, |count, local| {
+            let ty = function
+                .body
+                .local(*local)
+                .ok_or_else(|| invariant("validated parameter local is missing"))?
+                .ty;
+            count
+                .checked_add(storage_carrier_count(types, ty)?)
+                .ok_or_else(|| invariant("Wasm parameter carrier count overflow"))
+        })
+}
+
 fn encode_callable_types(
     types: &mut TypeSection,
     program: &runen_core_ir::Program,
@@ -172,12 +203,8 @@ fn encode_function(
     callable_type_indices: &BTreeMap<TypeId, u32>,
     faults: &mut Vec<Fault>,
 ) -> Result<WasmFunction, RealizationError> {
-    let layout = FunctionLayout::new(function)?;
-    let i64_local_count = layout
-        .non_parameter_count
-        .checked_add(1)
-        .ok_or_else(|| invariant("Wasm local count overflow"))?;
-    let i64_local_count = u32::try_from(i64_local_count)
+    let layout = FunctionLayout::new(types, function)?;
+    let i64_local_count = u32::try_from(layout.non_parameter_i64_count)
         .map_err(|_| invariant("Wasm i64 local count exceeds u32::MAX"))?;
     let mut encoded = WasmFunction::new([(i64_local_count, ValType::I64), (2, ValType::I32)]);
 
@@ -191,6 +218,12 @@ fn encode_function(
         layout: &layout,
         callable_type_indices,
         faults,
+        result_payload_count: function
+            .result
+            .map(|ty| result_carrier_count(types, ty))
+            .transpose()?
+            .unwrap_or(0)
+            .max(1),
     };
 
     for (block_index, block) in function.body.blocks.iter().enumerate() {
@@ -216,75 +249,101 @@ fn encode_function(
     Ok(encoded)
 }
 
+#[derive(Clone, Copy, Debug)]
+struct LocalLayout {
+    start: u32,
+    len: usize,
+}
+
 struct FunctionLayout {
-    locals: Vec<u32>,
-    non_parameter_count: usize,
-    payload: u32,
+    locals: Vec<LocalLayout>,
+    non_parameter_i64_count: usize,
+    scratch_start: u32,
+    scratch_len: usize,
     pc: u32,
     status: u32,
 }
 
 impl FunctionLayout {
-    fn new(function: &Function) -> Result<Self, RealizationError> {
-        let parameter_count = function.parameters.len();
+    fn new(types: &TypeTable, function: &Function) -> Result<Self, RealizationError> {
         let mut locals = vec![None; function.body.locals.len()];
-        for (slot, local) in function.parameters.iter().copied().enumerate() {
+        let mut next = 0_u32;
+
+        for local in function.parameters.iter().copied() {
             let local_index = local.0 as usize;
+            let declaration = function
+                .body
+                .local(local)
+                .ok_or_else(|| invariant("validated parameter local is missing"))?;
+            let len = storage_carrier_count(types, declaration.ty)?;
             let target = locals
                 .get_mut(local_index)
-                .ok_or_else(|| invariant("validated parameter local is missing"))?;
+                .ok_or_else(|| invariant("validated parameter local is outside the body"))?;
             if target.is_some() {
                 return Err(invariant("validated function repeats a parameter local"));
             }
-            *target = Some(
-                u32::try_from(slot)
-                    .map_err(|_| invariant("Wasm parameter index exceeds u32::MAX"))?,
-            );
+            *target = Some(LocalLayout { start: next, len });
+            next = add_carriers(next, len, "Wasm parameter local index overflow")?;
         }
 
-        let mut next = u32::try_from(parameter_count)
-            .map_err(|_| invariant("Wasm parameter count exceeds u32::MAX"))?;
-        let mut non_parameter_count = 0_usize;
-        for local in &mut locals {
-            if local.is_none() {
-                *local = Some(next);
-                next = next
-                    .checked_add(1)
-                    .ok_or_else(|| invariant("Wasm local index overflow"))?;
-                non_parameter_count = non_parameter_count
-                    .checked_add(1)
-                    .ok_or_else(|| invariant("Wasm local count overflow"))?;
+        let parameter_carrier_count = next as usize;
+        let mut maximum_local_len = 0_usize;
+        for (index, local) in function.body.locals.iter().enumerate() {
+            let len = storage_carrier_count(types, local.ty)?;
+            maximum_local_len = maximum_local_len.max(len);
+            if locals[index].is_none() {
+                locals[index] = Some(LocalLayout { start: next, len });
+                next = add_carriers(next, len, "Wasm local index overflow")?;
             }
         }
 
-        let payload = next;
-        next = next
-            .checked_add(1)
-            .ok_or_else(|| invariant("Wasm payload local index overflow"))?;
+        let scratch_len = maximum_local_len.max(1);
+        let scratch_start = next;
+        next = add_carriers(next, scratch_len, "Wasm scratch local index overflow")?;
+        let total_i64_slots = next as usize;
+        let non_parameter_i64_count = total_i64_slots
+            .checked_sub(parameter_carrier_count)
+            .ok_or_else(|| invariant("Wasm local carrier accounting underflow"))?;
         let pc = next;
-        next = next
+        let status = pc
             .checked_add(1)
-            .ok_or_else(|| invariant("Wasm pc local index overflow"))?;
-        let status = next;
+            .ok_or_else(|| invariant("Wasm status local index overflow"))?;
 
         Ok(Self {
             locals: locals
                 .into_iter()
                 .map(|local| local.ok_or_else(|| invariant("Wasm local mapping is incomplete")))
                 .collect::<Result<Vec<_>, _>>()?,
-            non_parameter_count,
-            payload,
+            non_parameter_i64_count,
+            scratch_start,
+            scratch_len,
             pc,
             status,
         })
     }
 
-    fn local(&self, local: LocalId) -> Result<u32, RealizationError> {
+    fn local(&self, local: LocalId) -> Result<LocalLayout, RealizationError> {
         self.locals
             .get(local.0 as usize)
             .copied()
             .ok_or_else(|| invariant("validated local identity is outside the function body"))
     }
+
+    fn scratch(&self, index: usize) -> Result<u32, RealizationError> {
+        if index >= self.scratch_len {
+            return Err(invariant("private scratch carrier index is out of bounds"));
+        }
+        add_carriers(
+            self.scratch_start,
+            index,
+            "private scratch carrier index overflow",
+        )
+    }
+}
+
+fn add_carriers(start: u32, count: usize, message: &str) -> Result<u32, RealizationError> {
+    let count = u32::try_from(count).map_err(|_| invariant(message))?;
+    start.checked_add(count).ok_or_else(|| invariant(message))
 }
 
 struct FunctionEncoder<'a> {
@@ -293,6 +352,7 @@ struct FunctionEncoder<'a> {
     layout: &'a FunctionLayout,
     callable_type_indices: &'a BTreeMap<TypeId, u32>,
     faults: &'a mut Vec<Fault>,
+    result_payload_count: usize,
 }
 
 impl FunctionEncoder<'_> {
@@ -321,11 +381,11 @@ impl FunctionEncoder<'_> {
             Statement::IntegerEq {
                 dst, left, right, ..
             } => {
-                self.emit_operand(encoded, left)?;
-                self.emit_operand(encoded, right)?;
+                self.emit_scalar_operand(encoded, left)?;
+                self.emit_scalar_operand(encoded, right)?;
                 encoded.instruction(&Instruction::I64Eq);
                 encoded.instruction(&Instruction::I64ExtendI32U);
-                self.emit_local_set(encoded, dst.local)
+                self.emit_scalar_place_set(encoded, dst)
             }
             Statement::IntegerLt {
                 dst,
@@ -334,11 +394,11 @@ impl FunctionEncoder<'_> {
                 right,
             } => {
                 let kind = supported_kind(self.types, *operand_type)?;
-                self.emit_operand(encoded, left)?;
+                self.emit_scalar_operand(encoded, left)?;
                 if kind.is_signed() {
                     emit_sign_extension(encoded, kind.width());
                 }
-                self.emit_operand(encoded, right)?;
+                self.emit_scalar_operand(encoded, right)?;
                 if kind.is_signed() {
                     emit_sign_extension(encoded, kind.width());
                     encoded.instruction(&Instruction::I64LtS);
@@ -346,19 +406,24 @@ impl FunctionEncoder<'_> {
                     encoded.instruction(&Instruction::I64LtU);
                 }
                 encoded.instruction(&Instruction::I64ExtendI32U);
-                self.emit_local_set(encoded, dst.local)
+                self.emit_scalar_place_set(encoded, dst)
             }
             Statement::Read { src } => {
-                let local = direct_access_local(src)?;
-                encoded.instruction(&Instruction::LocalGet(self.layout.local(local)?));
-                encoded.instruction(&Instruction::Drop);
+                let place = direct_access_place(src)?;
+                let range = self.place_layout(place)?;
+                for index in 0..range.len {
+                    encoded.instruction(&Instruction::LocalGet(add_carriers(
+                        range.start,
+                        index,
+                        "projected read carrier index overflow",
+                    )?));
+                    encoded.instruction(&Instruction::Drop);
+                }
                 Ok(())
             }
             Statement::Assign { dst, src } => {
-                let local = direct_access_local(dst)?;
-                self.emit_operand(encoded, src)?;
-                encoded.instruction(&Instruction::LocalSet(self.layout.local(local)?));
-                Ok(())
+                let place = direct_access_place(dst)?;
+                self.emit_store(encoded, place, src)
             }
             Statement::Drop { .. } => Ok(()),
             Statement::FloatAdd { .. }
@@ -394,7 +459,7 @@ impl FunctionEncoder<'_> {
                 true_target,
                 false_target,
             } => {
-                self.emit_operand(encoded, condition)?;
+                self.emit_scalar_operand(encoded, condition)?;
                 encoded.instruction(&Instruction::I64Eqz);
                 encoded.instruction(&Instruction::If(BlockType::Empty));
                 emit_i32_const(encoded, false_target.0);
@@ -416,7 +481,8 @@ impl FunctionEncoder<'_> {
                     self.emit_operand(encoded, argument)?;
                 }
                 encoded.instruction(&Instruction::Call(function.0));
-                self.emit_call_completion(encoded, destination.as_ref(), *target)
+                let payload_count = self.call_payload_count(destination.as_ref())?;
+                self.emit_call_completion(encoded, destination.as_ref(), *target, payload_count)
             }
             Terminator::IndirectCall {
                 callable,
@@ -425,12 +491,12 @@ impl FunctionEncoder<'_> {
                 destination,
                 target,
             } => {
-                self.emit_operand(encoded, callee)?;
-                encoded.instruction(&Instruction::LocalSet(self.layout.payload));
+                self.emit_scalar_operand(encoded, callee)?;
+                encoded.instruction(&Instruction::LocalSet(self.layout.scratch(0)?));
                 for argument in arguments {
-                    self.emit_operand(encoded, argument)?;
+                    self.emit_scalar_operand(encoded, argument)?;
                 }
-                encoded.instruction(&Instruction::LocalGet(self.layout.payload));
+                encoded.instruction(&Instruction::LocalGet(self.layout.scratch(0)?));
                 encoded.instruction(&Instruction::I32WrapI64);
                 let type_index = self
                     .callable_type_indices
@@ -441,16 +507,21 @@ impl FunctionEncoder<'_> {
                     type_index,
                     table_index: 0,
                 });
-                self.emit_call_completion(encoded, destination.as_ref(), *target)
+                self.emit_call_completion(encoded, destination.as_ref(), *target, 1)
             }
             Terminator::Return(result) => {
-                if let Some(result) = result {
-                    self.emit_operand(encoded, result)?;
-                    encoded.instruction(&Instruction::LocalSet(self.layout.payload));
-                    encoded.instruction(&Instruction::I32Const(0));
-                    encoded.instruction(&Instruction::LocalGet(self.layout.payload));
+                encoded.instruction(&Instruction::I32Const(0));
+                let count = if let Some(result) = result {
+                    self.emit_operand(encoded, result)?
                 } else {
-                    encoded.instruction(&Instruction::I32Const(0));
+                    0
+                };
+                if count > self.result_payload_count {
+                    return Err(invariant(
+                        "validated return produced more carriers than the function result",
+                    ));
+                }
+                for _ in count..self.result_payload_count {
                     encoded.instruction(&Instruction::I64Const(0));
                 }
                 encoded.instruction(&Instruction::Return);
@@ -463,6 +534,9 @@ impl FunctionEncoder<'_> {
                 self.faults.push(fault.clone());
                 encoded.instruction(&Instruction::I32Const(1));
                 encoded.instruction(&Instruction::I64Const(payload));
+                for _ in 1..self.result_payload_count {
+                    encoded.instruction(&Instruction::I64Const(0));
+                }
                 encoded.instruction(&Instruction::Return);
                 Ok(())
             }
@@ -472,25 +546,48 @@ impl FunctionEncoder<'_> {
         }
     }
 
+    fn call_payload_count(&self, destination: Option<&Place>) -> Result<usize, RealizationError> {
+        Ok(match destination {
+            Some(destination) => self.place_layout(destination)?.len.max(1),
+            None => 1,
+        })
+    }
+
     fn emit_call_completion(
         &self,
         encoded: &mut WasmFunction,
         destination: Option<&Place>,
         target: BasicBlockId,
+        payload_count: usize,
     ) -> Result<(), RealizationError> {
-        encoded.instruction(&Instruction::LocalSet(self.layout.payload));
+        if payload_count > self.layout.scratch_len {
+            return Err(invariant(
+                "call result exceeds private scratch carrier capacity",
+            ));
+        }
+        for index in (0..payload_count).rev() {
+            encoded.instruction(&Instruction::LocalSet(self.layout.scratch(index)?));
+        }
         encoded.instruction(&Instruction::LocalSet(self.layout.status));
         encoded.instruction(&Instruction::LocalGet(self.layout.status));
         encoded.instruction(&Instruction::If(BlockType::Empty));
         encoded.instruction(&Instruction::LocalGet(self.layout.status));
-        encoded.instruction(&Instruction::LocalGet(self.layout.payload));
+        encoded.instruction(&Instruction::LocalGet(self.layout.scratch(0)?));
+        for _ in 1..self.result_payload_count {
+            encoded.instruction(&Instruction::I64Const(0));
+        }
         encoded.instruction(&Instruction::Return);
         encoded.instruction(&Instruction::End);
         if let Some(destination) = destination {
-            encoded.instruction(&Instruction::LocalGet(self.layout.payload));
-            encoded.instruction(&Instruction::LocalSet(
-                self.layout.local(destination.local)?,
-            ));
+            let range = self.place_layout(destination)?;
+            for index in 0..range.len {
+                encoded.instruction(&Instruction::LocalGet(self.layout.scratch(index)?));
+                encoded.instruction(&Instruction::LocalSet(add_carriers(
+                    range.start,
+                    index,
+                    "call destination carrier index overflow",
+                )?));
+            }
         }
         self.emit_dispatch(encoded, target);
         Ok(())
@@ -504,12 +601,12 @@ impl FunctionEncoder<'_> {
         right: &Operand,
         operation: Instruction<'static>,
     ) -> Result<(), RealizationError> {
-        self.emit_operand(encoded, left)?;
-        self.emit_operand(encoded, right)?;
+        self.emit_scalar_operand(encoded, left)?;
+        self.emit_scalar_operand(encoded, right)?;
         encoded.instruction(&operation);
-        let kind = self.local_kind(dst.local)?;
+        let kind = self.place_kind(dst)?;
         emit_canonicalization(encoded, kind.width());
-        self.emit_local_set(encoded, dst.local)
+        self.emit_scalar_place_set(encoded, dst)
     }
 
     fn emit_store(
@@ -518,35 +615,64 @@ impl FunctionEncoder<'_> {
         dst: &Place,
         src: &Operand,
     ) -> Result<(), RealizationError> {
-        self.emit_operand(encoded, src)?;
-        self.emit_local_set(encoded, dst.local)
+        let destination = self.place_layout(dst)?;
+        let emitted = self.emit_operand(encoded, src)?;
+        if emitted != destination.len {
+            return Err(invariant(
+                "validated structural store has mismatched carrier counts",
+            ));
+        }
+        if emitted > self.layout.scratch_len {
+            return Err(invariant(
+                "structural store exceeds private scratch carrier capacity",
+            ));
+        }
+        for index in (0..emitted).rev() {
+            encoded.instruction(&Instruction::LocalSet(self.layout.scratch(index)?));
+        }
+        for index in 0..emitted {
+            encoded.instruction(&Instruction::LocalGet(self.layout.scratch(index)?));
+            encoded.instruction(&Instruction::LocalSet(add_carriers(
+                destination.start,
+                index,
+                "structural destination carrier index overflow",
+            )?));
+        }
+        Ok(())
     }
 
     fn emit_operand(
         &self,
         encoded: &mut WasmFunction,
         operand: &Operand,
-    ) -> Result<(), RealizationError> {
+    ) -> Result<usize, RealizationError> {
         match operand {
             Operand::Constant(value) => {
-                let residue = constant_residue(value).ok_or_else(|| {
-                    invariant("coverage admission allowed an unsupported Core constant")
-                })?;
-                emit_i64_const(encoded, residue);
-                Ok(())
+                let carriers = constant_carriers(value)?;
+                for carrier in &carriers {
+                    encoded.instruction(&Instruction::I64Const(*carrier));
+                }
+                Ok(carriers.len())
             }
             Operand::Move(access) | Operand::Copy(access) => {
-                let local = direct_access_local(access)?;
-                encoded.instruction(&Instruction::LocalGet(self.layout.local(local)?));
-                Ok(())
+                let place = direct_access_place(access)?;
+                let range = self.place_layout(place)?;
+                for index in 0..range.len {
+                    encoded.instruction(&Instruction::LocalGet(add_carriers(
+                        range.start,
+                        index,
+                        "projected operand carrier index overflow",
+                    )?));
+                }
+                Ok(range.len)
             }
             Operand::PersistentRead(persistent) => {
                 encoded.instruction(&Instruction::GlobalGet(persistent.0));
-                Ok(())
+                Ok(1)
             }
             Operand::FunctionValue(function) => {
                 encoded.instruction(&Instruction::I64Const(i64::from(function.0)));
-                Ok(())
+                Ok(1)
             }
             Operand::PersistentSharedRoot(_)
             | Operand::RawMove(_)
@@ -560,13 +686,72 @@ impl FunctionEncoder<'_> {
         }
     }
 
-    fn emit_local_set(
+    fn emit_scalar_operand(
         &self,
         encoded: &mut WasmFunction,
-        local: LocalId,
+        operand: &Operand,
     ) -> Result<(), RealizationError> {
-        encoded.instruction(&Instruction::LocalSet(self.layout.local(local)?));
+        if self.emit_operand(encoded, operand)? != 1 {
+            return Err(invariant(
+                "validated scalar operation produced a non-scalar carrier count",
+            ));
+        }
         Ok(())
+    }
+
+    fn emit_scalar_place_set(
+        &self,
+        encoded: &mut WasmFunction,
+        place: &Place,
+    ) -> Result<(), RealizationError> {
+        let range = self.place_layout(place)?;
+        if range.len != 1 {
+            return Err(invariant(
+                "validated scalar destination has a non-scalar carrier count",
+            ));
+        }
+        encoded.instruction(&Instruction::LocalSet(range.start));
+        Ok(())
+    }
+
+    fn place_layout(&self, place: &Place) -> Result<LocalLayout, RealizationError> {
+        let root = self
+            .function
+            .body
+            .local(place.local)
+            .ok_or_else(|| invariant("validated local is missing"))?
+            .ty;
+        let local = self.layout.local(place.local)?;
+        let span = projected_span(self.types, root, &place.projections)?;
+        let start = add_carriers(
+            local.start,
+            span.offset,
+            "projected local carrier index overflow",
+        )?;
+        if span
+            .offset
+            .checked_add(span.len)
+            .is_none_or(|end| end > local.len)
+        {
+            return Err(invariant(
+                "projected carrier span exceeds validated local storage",
+            ));
+        }
+        Ok(LocalLayout {
+            start,
+            len: span.len,
+        })
+    }
+
+    fn place_kind(&self, place: &Place) -> Result<ScalarKind, RealizationError> {
+        let root = self
+            .function
+            .body
+            .local(place.local)
+            .ok_or_else(|| invariant("validated local is missing"))?
+            .ty;
+        let span = projected_span(self.types, root, &place.projections)?;
+        supported_kind(self.types, span.ty)
     }
 
     fn emit_dispatch(&self, encoded: &mut WasmFunction, target: BasicBlockId) {
@@ -574,22 +759,12 @@ impl FunctionEncoder<'_> {
         encoded.instruction(&Instruction::LocalSet(self.layout.pc));
         encoded.instruction(&Instruction::Br(1));
     }
-
-    fn local_kind(&self, local: LocalId) -> Result<ScalarKind, RealizationError> {
-        let ty = self
-            .function
-            .body
-            .local(local)
-            .ok_or_else(|| invariant("validated local is missing"))?
-            .ty;
-        supported_kind(self.types, ty)
-    }
 }
 
 fn supported_kind(types: &TypeTable, ty: TypeId) -> Result<ScalarKind, RealizationError> {
     ScalarKind::from_type(types, ty).ok_or_else(|| {
         invariant(format!(
-            "coverage admission allowed unsupported Core type {:?}",
+            "coverage admission allowed unsupported Core scalar type {:?}",
             ty
         ))
     })
@@ -603,11 +778,11 @@ fn persistent_global_type() -> GlobalType {
     }
 }
 
-fn direct_access_local(access: &PlaceAccess) -> Result<LocalId, RealizationError> {
+fn direct_access_place(access: &PlaceAccess) -> Result<&Place, RealizationError> {
     match access {
-        PlaceAccess::Direct(place) if place.projections.is_empty() => Ok(place.local),
-        PlaceAccess::Direct(_) | PlaceAccess::Loan { .. } => Err(invariant(
-            "coverage admission allowed a non-root or loan-relative access",
+        PlaceAccess::Direct(place) => Ok(place),
+        PlaceAccess::Loan { .. } => Err(invariant(
+            "coverage admission allowed a loan-relative access",
         )),
     }
 }

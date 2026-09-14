@@ -503,12 +503,16 @@ fn higher_order_indirect_call_rejects_at_the_consuming_terminator() {
 }
 
 #[test]
-fn projected_access_is_reported_before_structural_parameter_type() {
+fn projected_access_does_not_hide_unsupported_nested_parameter_type() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let pair_ty = types.push(TypeDef::structure(
         "Pair",
-        vec![runen_core_ir::Field::new("value", i64_ty)],
+        vec![
+            runen_core_ir::Field::new("supported", i64_ty),
+            runen_core_ir::Field::new("unsupported", f32_ty),
+        ],
     ));
     let program = validated(
         types,
@@ -535,12 +539,14 @@ fn projected_access_is_reported_before_structural_parameter_type() {
     assert_eq!(
         coverage_error(&program),
         CoverageError {
-            location: CoverageLocation::Statement {
+            location: CoverageLocation::Parameter {
                 function: FunctionId(0),
-                block: BasicBlockId(0),
-                statement: 0,
+                local: LocalId(0),
             },
-            kind: CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::ProjectedAccess),
+            kind: CoverageErrorKind::UnsupportedType {
+                ty: f32_ty,
+                category: UnsupportedTypeCategory::Floating,
+            },
         }
     );
 }
