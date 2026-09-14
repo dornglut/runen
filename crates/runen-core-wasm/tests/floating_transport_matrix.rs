@@ -65,13 +65,11 @@ fn represented_cases() -> Vec<(ScalarType, Value, ExternalScalarValue)> {
                 significand: 1_u64 << 23,
                 exponent: -126,
             }),
-            ExternalScalarValue::F32(FloatingScalarValue::Represented(
-                BinaryFloatValue::Normal {
-                    sign: BinaryFloatSign::Positive,
-                    significand: 1_u64 << 23,
-                    exponent: -126,
-                },
-            )),
+            ExternalScalarValue::F32(FloatingScalarValue::Represented(BinaryFloatValue::Normal {
+                sign: BinaryFloatSign::Positive,
+                significand: 1_u64 << 23,
+                exponent: -126,
+            })),
         ),
         (
             ScalarType::F64,
@@ -156,11 +154,9 @@ fn represented_provider_results_round_trip_all_three_formats_through_local_opera
                         transform_expected
                     },
                 ),
-                ExternalProviderBinding::no_result(
-                    ExternalCallableId(1),
-                    sink,
-                    move |arguments| assert_eq!(arguments, &[sink_expected]),
-                ),
+                ExternalProviderBinding::no_result(ExternalCallableId(1), sink, move |arguments| {
+                    assert_eq!(arguments, &[sink_expected])
+                }),
             ],
         )
         .expect("represented provider result matrix must realize");
