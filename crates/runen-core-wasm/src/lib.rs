@@ -18,7 +18,7 @@ pub use coverage::{
     CoverageError, CoverageErrorKind, CoverageLocation, UnsupportedOperandKind,
     UnsupportedStatementKind, UnsupportedTerminatorKind, UnsupportedTypeCategory,
 };
-use encoding::{entry_export_name, EncodedProgram, EntryInfo};
+use encoding::{EncodedProgram, EntryInfo, entry_export_name};
 
 const STATUS_RETURNED: i32 = 0;
 const STATUS_FAULTED: i32 = 1;
