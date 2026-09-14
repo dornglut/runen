@@ -224,7 +224,11 @@ fn assert_single_private_function_import(bytes: &[u8]) {
     assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "exactly one import");
     let _module = read_name(bytes, &mut cursor);
     let _field = read_name(bytes, &mut cursor);
-    assert_eq!(bytes.get(cursor), Some(&0x00), "provider import is a function");
+    assert_eq!(
+        bytes.get(cursor),
+        Some(&0x00),
+        "provider import is a function"
+    );
     cursor += 1;
     let _type_index = read_u32_leb(bytes, &mut cursor);
     assert_eq!(cursor, bytes.len(), "import section is consumed exactly");
@@ -244,15 +248,27 @@ fn assert_private_two_function_table(bytes: &[u8]) {
 fn assert_single_private_immutable_i64_global(bytes: &[u8]) {
     let mut cursor = 0_usize;
     assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "one persistent global");
-    assert_eq!(bytes.get(cursor), Some(&0x7e), "floating carrier global is i64");
+    assert_eq!(
+        bytes.get(cursor),
+        Some(&0x7e),
+        "floating carrier global is i64"
+    );
     cursor += 1;
-    assert_eq!(bytes.get(cursor), Some(&0x00), "persistent global is immutable");
+    assert_eq!(
+        bytes.get(cursor),
+        Some(&0x00),
+        "persistent global is immutable"
+    );
 }
 
 fn assert_two_function_element_population(bytes: &[u8], expected: [usize; 2]) {
     let mut cursor = 0_usize;
     assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "one element segment");
-    assert_eq!(read_u32_leb(bytes, &mut cursor), 0, "active table-zero segment");
+    assert_eq!(
+        read_u32_leb(bytes, &mut cursor),
+        0,
+        "active table-zero segment"
+    );
     assert_eq!(bytes.get(cursor), Some(&0x41), "offset uses i32.const");
     cursor += 1;
     assert_eq!(bytes.get(cursor), Some(&0x00), "offset is zero");
