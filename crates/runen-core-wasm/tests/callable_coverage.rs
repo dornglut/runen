@@ -4,12 +4,12 @@ use runen_core_ir::{
     TypeId, TypeTable, validate_program,
 };
 use runen_core_wasm::{
-    CoverageError, CoverageErrorKind, CoverageLocation, RealizationError, RealizedProgram,
-    UnsupportedTypeCategory,
+    CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError,
+    RealizedProgram, UnsupportedTypeCategory,
 };
 
-fn assert_callable_local_rejected(types: TypeTable, callable: TypeId) {
-    let program = validate_program(runen_core_ir::Program {
+fn callable_local_program(types: TypeTable, callable: TypeId) -> runen_core_ir::ValidatedProgram {
+    validate_program(runen_core_ir::Program {
         types,
         persistent: Vec::new(),
         external_callables: Vec::new(),
@@ -26,8 +26,11 @@ fn assert_callable_local_rejected(types: TypeTable, callable: TypeId) {
             },
         }],
     })
-    .expect("excluded callable-interface fixture must remain valid Core");
+    .expect("callable-interface fixture must remain valid Core")
+}
 
+fn assert_callable_local_rejected(types: TypeTable, callable: TypeId) {
+    let program = callable_local_program(types, callable);
     let error = match RealizedProgram::new(&program) {
         Err(RealizationError::Coverage(error)) => error,
         Err(other) => panic!("expected coverage rejection, got realization error: {other:?}"),
@@ -49,7 +52,7 @@ fn assert_callable_local_rejected(types: TypeTable, callable: TypeId) {
 }
 
 #[test]
-fn floating_callable_interface_is_outside_first_order_realization_slice() {
+fn floating_callable_interface_remains_outside_realization_slice() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let callable = types.push(TypeDef::callable(
@@ -60,22 +63,32 @@ fn floating_callable_interface_is_outside_first_order_realization_slice() {
 }
 
 #[test]
-fn aggregate_callable_interface_is_outside_first_order_realization_slice() {
+fn reference_free_aggregate_callable_interface_is_admitted() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let pair_ty = types.push(TypeDef::structure(
-        "Pair",
-        vec![Field::new("value", i64_ty)],
+    let empty_ty = types.push(TypeDef::structure("Empty", Vec::new()));
+    let nested_ty = types.push(TypeDef::structure(
+        "Nested",
+        vec![Field::new("empty", empty_ty), Field::new("value", i64_ty)],
     ));
     let callable = types.push(TypeDef::callable(
         "AggregateConsumer",
-        CallableInterface::new(vec![pair_ty], None, SafeReferenceResultContract::None),
+        CallableInterface::new(
+            vec![nested_ty],
+            Some(nested_ty),
+            SafeReferenceResultContract::None,
+        ),
     ));
-    assert_callable_local_rejected(types, callable);
+    let program = callable_local_program(types, callable);
+    let outcome = RealizedProgram::new(&program)
+        .expect("reference-free structural callable interface must realize")
+        .execute(FunctionId(0))
+        .expect("admitted callable-interface fixture must execute");
+    assert_eq!(outcome, ExecutionOutcome::Returned(None));
 }
 
 #[test]
-fn safe_reference_callable_interface_is_outside_first_order_realization_slice() {
+fn safe_reference_callable_interface_remains_outside_realization_slice() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let reference_ty = types.push(TypeDef::reference(
@@ -91,7 +104,7 @@ fn safe_reference_callable_interface_is_outside_first_order_realization_slice() 
 }
 
 #[test]
-fn tracked_fixture_callable_interface_is_outside_first_order_realization_slice() {
+fn tracked_fixture_callable_interface_remains_outside_realization_slice() {
     let mut types = TypeTable::new();
     let tracked_ty = types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     let callable = types.push(TypeDef::callable(
@@ -102,7 +115,7 @@ fn tracked_fixture_callable_interface_is_outside_first_order_realization_slice()
 }
 
 #[test]
-fn nested_callable_interface_is_outside_first_order_realization_slice() {
+fn nested_callable_interface_remains_outside_realization_slice() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = types.push(TypeDef::callable(
