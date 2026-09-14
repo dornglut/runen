@@ -462,10 +462,7 @@ mod tests {
             vec![PersistentDecl::new(i64_ty, Value::I64(7))],
             types,
             callable,
-            Some((
-                pair_ty,
-                Value::Struct(vec![Value::I64(42), Value::U8(7)]),
-            )),
+            Some((pair_ty, Value::Struct(vec![Value::I64(42), Value::U8(7)]))),
         );
         let encoded = encoding::encode(&program)
             .expect("supported aggregate/callable/persistent fixture must encode");
