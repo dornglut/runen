@@ -1,6 +1,6 @@
 use runen_core_ir::{ScalarType, TypeId, TypeKind, TypeTable, Value};
 
-use crate::{invalid_backend_result, RealizationError};
+use crate::{RealizationError, invalid_backend_result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ScalarKind {
