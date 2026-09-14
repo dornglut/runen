@@ -201,14 +201,11 @@ fn callable_carrier_counts(
             "coverage admission allowed a non-callable indirect-call type",
         ));
     };
-    let parameter_carriers = interface
-        .parameters
-        .iter()
-        .try_fold(0_usize, |count, ty| {
-            count
-                .checked_add(result_carrier_count(types, *ty)?)
-                .ok_or_else(|| invariant("Wasm callable parameter carrier count overflow"))
-        })?;
+    let parameter_carriers = interface.parameters.iter().try_fold(0_usize, |count, ty| {
+        count
+            .checked_add(result_carrier_count(types, *ty)?)
+            .ok_or_else(|| invariant("Wasm callable parameter carrier count overflow"))
+    })?;
     let result_carriers = interface
         .result
         .map(|ty| result_carrier_count(types, ty))
