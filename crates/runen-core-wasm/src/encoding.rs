@@ -6,9 +6,9 @@ use runen_core_ir::{
     Statement, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram,
 };
 use wasm_encoder::{
-    BlockType, CodeSection, ConstExpr, ElementSection, Elements, ExportKind, ExportSection,
-    Function as WasmFunction, FunctionSection, GlobalSection, GlobalType, Instruction, Module,
-    RefType, TableSection, TableType, TypeSection, ValType,
+    BlockType, CodeSection, ConstExpr, ElementSection, Elements, EntityType, ExportKind,
+    ExportSection, Function as WasmFunction, FunctionSection, GlobalSection, GlobalType,
+    ImportSection, Instruction, Module, RefType, TableSection, TableType, TypeSection, ValType,
 };
 
 use crate::RealizationError;
@@ -36,8 +36,11 @@ pub(crate) fn entry_export_name(function: FunctionId) -> String {
 
 pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, RealizationError> {
     let program = program.as_program();
+    let external_count = u32::try_from(program.external_callables.len())
+        .map_err(|_| invariant("Core external callable count exceeds u32::MAX"))?;
     let mut module = Module::new();
     let mut types = TypeSection::new();
+    let mut imports = ImportSection::new();
     let mut functions = FunctionSection::new();
     let mut tables = TableSection::new();
     let mut globals = GlobalSection::new();
@@ -64,7 +67,7 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
             exports.export(
                 &entry_export_name(function_id),
                 ExportKind::Func,
-                function_id.0,
+                defined_function_index(external_count, function_id)?,
             );
         }
         entries.push(EntryInfo {
@@ -72,6 +75,15 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
             result: function.result,
             result_carrier_count: semantic_result_carriers,
         });
+    }
+
+    let external_type_indices = encode_external_types(&mut types, program)?;
+    for (index, type_index) in external_type_indices.iter().copied().enumerate() {
+        imports.import(
+            "__runen_external",
+            &format!("external_{index}"),
+            EntityType::Function(type_index),
+        );
     }
 
     let callable_type_indices = encode_callable_types(&mut types, program)?;
@@ -87,7 +99,8 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
         });
         let function_indices = (0..program.functions.len())
             .map(|index| {
-                u32::try_from(index).map_err(|_| invariant("Core function index exceeds u32::MAX"))
+                let function = checked_function_id(index)?;
+                defined_function_index(external_count, function)
             })
             .collect::<Result<Vec<_>, _>>()?;
         elements.active(
@@ -109,6 +122,9 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
     }
 
     module.section(&types);
+    if !external_type_indices.is_empty() {
+        module.section(&imports);
+    }
     module.section(&functions);
     if !callable_type_indices.is_empty() {
         module.section(&tables);
@@ -128,6 +144,7 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
             &program.types,
             function,
             &callable_type_indices,
+            external_count,
             &mut faults,
         )?;
         code.function(&encoded);
@@ -158,6 +175,29 @@ fn function_parameter_carrier_count(
                 .checked_add(storage_carrier_count(types, ty)?)
                 .ok_or_else(|| invariant("Wasm parameter carrier count overflow"))
         })
+}
+
+fn encode_external_types(
+    types: &mut TypeSection,
+    program: &runen_core_ir::Program,
+) -> Result<Vec<u32>, RealizationError> {
+    program
+        .external_callables
+        .iter()
+        .map(|external| {
+            for ty in external.interface.parameters.iter().copied() {
+                let _ = supported_kind(&program.types, ty)?;
+            }
+            if let Some(ty) = external.interface.result {
+                let _ = supported_kind(&program.types, ty)?;
+            }
+            let type_index = types.len();
+            let params = vec![ValType::I64; external.interface.parameters.len()];
+            let results = external.interface.result.into_iter().map(|_| ValType::I64);
+            types.ty().function(params, results);
+            Ok(type_index)
+        })
+        .collect()
 }
 
 fn encode_callable_types(
@@ -218,6 +258,7 @@ fn encode_function(
     types: &TypeTable,
     function: &Function,
     callable_type_indices: &BTreeMap<TypeId, u32>,
+    defined_function_offset: u32,
     faults: &mut Vec<Fault>,
 ) -> Result<WasmFunction, RealizationError> {
     let layout = FunctionLayout::new(types, function)?;
@@ -234,6 +275,7 @@ fn encode_function(
         function,
         layout: &layout,
         callable_type_indices,
+        defined_function_offset,
         faults,
         result_payload_count: function
             .result
@@ -368,6 +410,7 @@ struct FunctionEncoder<'a> {
     function: &'a Function,
     layout: &'a FunctionLayout,
     callable_type_indices: &'a BTreeMap<TypeId, u32>,
+    defined_function_offset: u32,
     faults: &'a mut Vec<Fault>,
     result_payload_count: usize,
 }
@@ -497,9 +540,28 @@ impl FunctionEncoder<'_> {
                 for argument in arguments {
                     self.emit_operand(encoded, argument)?;
                 }
-                encoded.instruction(&Instruction::Call(function.0));
+                encoded.instruction(&Instruction::Call(defined_function_index(
+                    self.defined_function_offset,
+                    *function,
+                )?));
                 let payload_count = self.call_payload_count(destination.as_ref())?;
                 self.emit_call_completion(encoded, destination.as_ref(), *target, payload_count)
+            }
+            Terminator::ExternalCall {
+                external,
+                arguments,
+                destination,
+                target,
+            } => {
+                for argument in arguments {
+                    self.emit_scalar_operand(encoded, argument)?;
+                }
+                encoded.instruction(&Instruction::Call(external.0));
+                if let Some(destination) = destination {
+                    self.emit_scalar_place_set(encoded, destination)?;
+                }
+                self.emit_dispatch(encoded, *target);
+                Ok(())
             }
             Terminator::IndirectCall {
                 callable,
@@ -558,9 +620,6 @@ impl FunctionEncoder<'_> {
                 encoded.instruction(&Instruction::Return);
                 Ok(())
             }
-            Terminator::ExternalCall { .. } => Err(invariant(
-                "coverage admission allowed an unsupported Core terminator",
-            )),
         }
     }
 
@@ -788,6 +847,15 @@ fn supported_kind(types: &TypeTable, ty: TypeId) -> Result<ScalarKind, Realizati
     })
 }
 
+fn defined_function_index(
+    defined_function_offset: u32,
+    function: FunctionId,
+) -> Result<u32, RealizationError> {
+    defined_function_offset
+        .checked_add(function.0)
+        .ok_or_else(|| invariant("Wasm defined function index overflow"))
+}
+
 fn persistent_global_type() -> GlobalType {
     GlobalType {
         val_type: ValType::I64,
@@ -863,6 +931,12 @@ mod tests {
         let mut types = TypeTable::new();
         let ty = types.push(TypeDef::scalar("I32", ScalarType::I32));
         assert_eq!(supported_kind(&types, ty), Ok(ScalarKind::I32));
+    }
+
+    #[test]
+    fn imported_functions_shift_only_defined_wasm_function_indices() {
+        assert_eq!(defined_function_index(3, FunctionId(0)), Ok(3));
+        assert_eq!(defined_function_index(3, FunctionId(7)), Ok(10));
     }
 
     #[test]
