@@ -38,7 +38,6 @@ pub enum UnsupportedTypeCategory {
     SafeReference,
     Callable,
     TrackedFixture,
-    StructuralAggregate,
     InteriorMutable,
     Unknown,
 }
@@ -47,7 +46,6 @@ pub enum UnsupportedTypeCategory {
 pub enum UnsupportedOperandKind {
     FloatingConstant,
     TrackedFixtureConstant,
-    StructuralConstant,
     PersistentSharedRoot,
     RawMove,
     AddressOf,
@@ -56,7 +54,6 @@ pub enum UnsupportedOperandKind {
     ReferenceMove,
     ReferenceCopy,
     LoanAccess,
-    ProjectedAccess,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
