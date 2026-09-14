@@ -165,10 +165,7 @@ impl RealizedProgram {
             matches!(
                 self.types.get(ty).map(|definition| &definition.kind),
                 Some(TypeKind::Scalar(
-                    ScalarType::Callable(_)
-                        | ScalarType::F16
-                        | ScalarType::F32
-                        | ScalarType::F64
+                    ScalarType::Callable(_) | ScalarType::F16 | ScalarType::F32 | ScalarType::F64
                 ))
             )
         }) {
@@ -517,7 +514,6 @@ mod tests {
         );
         let encoded = encoding::encode(&program).expect("supported persistent fixture must encode");
         let module = &encoded.bytes[8..];
-
         let non_custom_sections: Vec<_> = section_ids(module)
             .into_iter()
             .filter(|id| *id != 0)
