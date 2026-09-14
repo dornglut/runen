@@ -389,7 +389,7 @@ fn active_external_call_has_a_terminator_diagnostic() {
 }
 
 #[test]
-fn higher_order_indirect_call_rejects_at_the_consuming_terminator() {
+fn higher_order_indirect_call_is_admitted_at_the_consuming_terminator() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = types.push(TypeDef::callable(
@@ -481,21 +481,11 @@ fn higher_order_indirect_call_rejects_at_the_consuming_terminator() {
         ],
     );
 
-    assert_eq!(
-        coverage_error(&program),
-        CoverageError {
-            location: CoverageLocation::Terminator {
-                function: FunctionId(0),
-                block: BasicBlockId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedCallableParameterType {
-                callable: outer,
-                parameter: 0,
-                ty: inner,
-                category: UnsupportedTypeCategory::Callable,
-            },
-        }
-    );
+    let outcome = RealizedProgram::new(&program)
+        .expect("higher-order indirect call must be admitted")
+        .execute(FunctionId(0))
+        .expect("higher-order indirect call fixture must execute");
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(42))));
 }
 
 #[test]

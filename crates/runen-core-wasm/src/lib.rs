@@ -646,6 +646,122 @@ mod tests {
     }
 
     #[test]
+    fn higher_order_callable_modules_reuse_private_table_and_element_sections() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let inner = types.push(TypeDef::callable(
+            "Inner",
+            CallableInterface::new(
+                vec![i64_ty],
+                Some(i64_ty),
+                SafeReferenceResultContract::None,
+            ),
+        ));
+        let outer = types.push(TypeDef::callable(
+            "Outer",
+            CallableInterface::new(vec![inner], Some(i64_ty), SafeReferenceResultContract::None),
+        ));
+        let program = validate_program(Program {
+            types,
+            persistent: Vec::new(),
+            external_callables: Vec::new(),
+            functions: vec![
+                Function {
+                    name: "entry".into(),
+                    parameters: Vec::new(),
+                    result: Some(i64_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![
+                            LocalDecl::new("callee", outer, false),
+                            LocalDecl::new("argument", inner, false),
+                            LocalDecl::new("result", i64_ty, false),
+                        ],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![
+                            BasicBlock::new(
+                                vec![
+                                    Statement::Init {
+                                        dst: Place::local(LocalId(0)),
+                                        src: Operand::FunctionValue(FunctionId(1)),
+                                    },
+                                    Statement::Init {
+                                        dst: Place::local(LocalId(1)),
+                                        src: Operand::FunctionValue(FunctionId(2)),
+                                    },
+                                ],
+                                Terminator::IndirectCall {
+                                    callable: outer,
+                                    callee: Operand::Move(Place::local(LocalId(0)).into()),
+                                    arguments: vec![Operand::Move(Place::local(LocalId(1)).into())],
+                                    destination: Some(Place::local(LocalId(2))),
+                                    target: BasicBlockId(1),
+                                },
+                            ),
+                            BasicBlock::new(
+                                Vec::new(),
+                                Terminator::Return(Some(Operand::Move(
+                                    Place::local(LocalId(2)).into(),
+                                ))),
+                            ),
+                        ],
+                    },
+                },
+                Function {
+                    name: "outer_target".into(),
+                    parameters: vec![LocalId(0)],
+                    result: Some(i64_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("argument", inner, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(
+                            Vec::new(),
+                            Terminator::Return(Some(Operand::Constant(Value::I64(42)))),
+                        )],
+                    },
+                },
+                Function {
+                    name: "inner_target".into(),
+                    parameters: vec![LocalId(0)],
+                    result: Some(i64_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("value", i64_ty, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(
+                            Vec::new(),
+                            Terminator::Return(Some(Operand::Move(
+                                Place::local(LocalId(0)).into(),
+                            ))),
+                        )],
+                    },
+                },
+            ],
+        })
+        .expect("higher-order callable module-shape fixture must be valid Core");
+        coverage::validate(&program)
+            .expect("higher-order callable module-shape fixture must be in realization coverage");
+        let encoded = encoding::encode(&program)
+            .expect("supported higher-order callable fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 4, 7, 9, 10],
+            "higher-order indirect dispatch must reuse only the existing private callable table and elements"
+        );
+        assert_eq!(
+            export_kinds(section_payload(module, 7)),
+            vec![0],
+            "only the zero-parameter entry function is exported; higher-order callable transport adds no export kind"
+        );
+    }
+
+    #[test]
     fn aggregate_callable_and_persistent_private_sections_compose_without_new_exports() {
         let mut types = TypeTable::new();
         let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));

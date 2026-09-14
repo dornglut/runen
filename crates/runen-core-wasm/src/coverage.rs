@@ -245,6 +245,15 @@ fn require_supported_callable_type(
     ty: TypeId,
     location: &CoverageLocation,
 ) -> Result<(), CoverageError> {
+    require_supported_callable_type_with_visited(types, ty, location, &mut Vec::new())
+}
+
+fn require_supported_callable_type_with_visited(
+    types: &TypeTable,
+    ty: TypeId,
+    location: &CoverageLocation,
+    visited: &mut Vec<TypeId>,
+) -> Result<(), CoverageError> {
     let Some(definition) = types.get(ty) else {
         return unsupported_type(types, ty, location.clone());
     };
@@ -266,6 +275,10 @@ fn require_supported_callable_type(
             },
         });
     };
+    if visited.contains(&ty) {
+        return Ok(());
+    }
+    visited.push(ty);
     if !matches!(
         interface.safe_reference_result_contract,
         SafeReferenceResultContract::None
@@ -276,31 +289,79 @@ fn require_supported_callable_type(
         });
     }
     for (parameter, parameter_ty) in interface.parameters.iter().copied().enumerate() {
-        if let Some((unsupported_ty, category)) = first_unsupported_type(types, parameter_ty) {
-            return Err(CoverageError {
-                location: location.clone(),
-                kind: CoverageErrorKind::UnsupportedCallableParameterType {
-                    callable: ty,
-                    parameter,
-                    ty: unsupported_ty,
-                    category,
-                },
-            });
-        }
+        require_supported_callable_parameter_type(
+            types,
+            ty,
+            parameter,
+            parameter_ty,
+            location,
+            visited,
+        )?;
     }
-    if let Some(result_ty) = interface.result
-        && let Some((unsupported_ty, category)) = first_unsupported_type(types, result_ty)
-    {
-        return Err(CoverageError {
-            location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedCallableResultType {
-                callable: ty,
-                ty: unsupported_ty,
-                category,
-            },
-        });
+    if let Some(result_ty) = interface.result {
+        require_supported_callable_result_component(types, ty, result_ty, location, visited)?;
     }
     Ok(())
+}
+
+fn require_supported_callable_parameter_type(
+    types: &TypeTable,
+    callable: TypeId,
+    parameter: usize,
+    ty: TypeId,
+    location: &CoverageLocation,
+    visited: &mut Vec<TypeId>,
+) -> Result<(), CoverageError> {
+    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
+        return Ok(());
+    }
+    if matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(ScalarType::Callable(_)))
+    ) {
+        return require_supported_callable_type_with_visited(types, ty, location, visited);
+    }
+    let Some((unsupported_ty, category)) = first_unsupported_type(types, ty) else {
+        return Ok(());
+    };
+    Err(CoverageError {
+        location: location.clone(),
+        kind: CoverageErrorKind::UnsupportedCallableParameterType {
+            callable,
+            parameter,
+            ty: unsupported_ty,
+            category,
+        },
+    })
+}
+
+fn require_supported_callable_result_component(
+    types: &TypeTable,
+    callable: TypeId,
+    ty: TypeId,
+    location: &CoverageLocation,
+    visited: &mut Vec<TypeId>,
+) -> Result<(), CoverageError> {
+    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
+        return Ok(());
+    }
+    if matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(ScalarType::Callable(_)))
+    ) {
+        return require_supported_callable_type_with_visited(types, ty, location, visited);
+    }
+    let Some((unsupported_ty, category)) = first_unsupported_type(types, ty) else {
+        return Ok(());
+    };
+    Err(CoverageError {
+        location: location.clone(),
+        kind: CoverageErrorKind::UnsupportedCallableResultType {
+            callable,
+            ty: unsupported_ty,
+            category,
+        },
+    })
 }
 
 fn is_supported_scalar_type(types: &TypeTable, ty: TypeId) -> bool {

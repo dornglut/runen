@@ -98,46 +98,6 @@ fn passive_local_types_report_every_excluded_type_family() {
         UnsupportedTypeCategory::SafeReference,
     );
 
-    let mut higher_order = TypeTable::new();
-    let i64_ty = higher_order.push(TypeDef::scalar("I64", ScalarType::I64));
-    let inner = higher_order.push(TypeDef::callable(
-        "Inner",
-        CallableInterface::new(
-            vec![i64_ty],
-            Some(i64_ty),
-            SafeReferenceResultContract::None,
-        ),
-    ));
-    let outer = higher_order.push(TypeDef::callable(
-        "Outer",
-        CallableInterface::new(vec![inner], Some(i64_ty), SafeReferenceResultContract::None),
-    ));
-    let higher_order_program = validated(
-        higher_order,
-        Vec::new(),
-        vec![function(
-            "entry",
-            Vec::new(),
-            None,
-            empty_body(vec![LocalDecl::new("value", outer, false)]),
-        )],
-    );
-    assert_eq!(
-        coverage_error(&higher_order_program),
-        CoverageError {
-            location: CoverageLocation::Local {
-                function: FunctionId(0),
-                local: LocalId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedCallableParameterType {
-                callable: outer,
-                parameter: 0,
-                ty: inner,
-                category: UnsupportedTypeCategory::Callable,
-            },
-        }
-    );
-
     let mut tracked = TypeTable::new();
     let tracked_ty = tracked.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     assert_local_type_category(tracked, tracked_ty, UnsupportedTypeCategory::TrackedFixture);
@@ -150,6 +110,35 @@ fn passive_local_types_report_every_excluded_type_family() {
         interior_ty,
         UnsupportedTypeCategory::InteriorMutable,
     );
+}
+
+#[test]
+fn passive_higher_order_callable_local_is_admitted_recursively() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let inner = types.push(TypeDef::callable(
+        "Inner",
+        CallableInterface::new(
+            vec![i64_ty],
+            Some(i64_ty),
+            SafeReferenceResultContract::None,
+        ),
+    ));
+    let outer = types.push(TypeDef::callable(
+        "Outer",
+        CallableInterface::new(vec![inner], Some(i64_ty), SafeReferenceResultContract::None),
+    ));
+    let program = validated(
+        types,
+        Vec::new(),
+        vec![function(
+            "entry",
+            Vec::new(),
+            None,
+            empty_body(vec![LocalDecl::new("value", outer, false)]),
+        )],
+    );
+    RealizedProgram::new(&program).expect("higher-order callable local must realize recursively");
 }
 
 #[test]

@@ -3,10 +3,7 @@ use runen_core_ir::{
     LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType,
     Statement, Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
-use runen_core_wasm::{
-    CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError, RealizedProgram,
-    UnsupportedTypeCategory,
-};
+use runen_core_wasm::{ExecutionOutcome, RealizationError, RealizedProgram};
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
 
 fn function(
@@ -495,7 +492,7 @@ fn faulting_callable_result_callee_propagates_before_normal_continuation() {
 }
 
 #[test]
-fn higher_order_callable_function_result_still_rejects_with_structured_result_diagnostic() {
+fn higher_order_callable_function_result_is_admitted_but_entry_identity_stays_private() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = callable_type(&mut types, "Inner", Vec::new(), Some(i64_ty));
@@ -533,23 +530,10 @@ fn higher_order_callable_function_result_still_rejects_with_structured_result_di
     );
     let program = validated(types, vec![producer, outer_target, inner_target]);
 
-    let error = match RealizedProgram::new(&program) {
-        Err(RealizationError::Coverage(error)) => error,
-        Err(other) => panic!("expected coverage rejection, got realization error: {other:?}"),
-        Ok(_) => panic!("higher-order callable result must remain outside realization coverage"),
-    };
+    let realized = RealizedProgram::new(&program)
+        .expect("higher-order callable function result must realize for internal transport");
     assert_eq!(
-        error.location,
-        CoverageLocation::Result {
-            function: FunctionId(0),
-        }
-    );
-    assert_eq!(
-        error.kind,
-        CoverageErrorKind::UnsupportedCallableResultType {
-            callable: outer,
-            ty: inner,
-            category: UnsupportedTypeCategory::Callable,
-        }
+        realized.execute(FunctionId(0)),
+        Err(RealizationError::EntryResultUnsupported(FunctionId(0)))
     );
 }
