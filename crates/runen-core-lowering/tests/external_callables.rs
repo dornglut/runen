@@ -1,5 +1,6 @@
 use runen_core_ir::{
-    ExternalCallableId, FunctionId, ScalarType, Terminator, TypeKind, ValidatedProgram,
+    BinaryFloatSign, BinaryFloatValue, ExternalCallableId, FunctionId, ScalarType, Terminator,
+    TypeKind, ValidatedProgram,
 };
 use runen_core_lowering::lower;
 use runen_core_wasm::{
@@ -138,6 +139,11 @@ fn lowered_floating_external_chain_agrees_between_core_wasm_and_reference() {
         .map(|declaration| declaration.interface.clone())
         .collect::<Vec<_>>();
     assert_eq!(interfaces.len(), 2);
+    let expected_source_value = BinaryFloatValue::Normal {
+        sign: BinaryFloatSign::Positive,
+        significand: 1_u64 << 23,
+        exponent: 0,
+    };
 
     let realized = RealizedProgram::new_with_external_providers(
         &lowered,
@@ -145,12 +151,13 @@ fn lowered_floating_external_chain_agrees_between_core_wasm_and_reference() {
             WasmExternalProviderBinding::scalar_result(
                 ExternalCallableId(0),
                 interfaces[0].clone(),
-                |arguments| {
-                    let [WasmExternalScalarValue::F32(FloatingScalarValue::Represented(_))] =
-                        arguments
-                    else {
-                        panic!("source floating literal must reach the transform provider as F32");
-                    };
+                move |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[WasmExternalScalarValue::F32(FloatingScalarValue::Represented(
+                            expected_source_value,
+                        ))]
+                    );
                     WasmExternalScalarValue::F32(FloatingScalarValue::NaNClass)
                 },
             ),
@@ -180,12 +187,13 @@ fn lowered_floating_external_chain_agrees_between_core_wasm_and_reference() {
             ExternalProviderBinding::scalar_result(
                 ExternalCallableId(0),
                 interfaces[0].clone(),
-                |arguments| {
-                    let [ExternalScalarValue::F32(ObservedBinaryFloatValue::Represented(_))] =
-                        arguments
-                    else {
-                        panic!("reference provider must observe the same F32 source value");
-                    };
+                move |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[ExternalScalarValue::F32(ObservedBinaryFloatValue::Represented(
+                            expected_source_value,
+                        ))]
+                    );
                     ExternalScalarValue::F32(ObservedBinaryFloatValue::NaNClass)
                 },
             ),
