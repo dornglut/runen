@@ -451,7 +451,8 @@ mod tests {
             ],
         })
         .expect("callable-result module-shape fixture must be valid Core");
-        coverage::validate(&program).expect("callable-result fixture must be in realization coverage");
+        coverage::validate(&program)
+            .expect("callable-result fixture must be in realization coverage");
         let encoded = encoding::encode(&program).expect("callable-result fixture must encode");
         let module = &encoded.bytes[8..];
 
