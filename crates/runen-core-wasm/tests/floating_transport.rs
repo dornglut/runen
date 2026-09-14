@@ -415,7 +415,7 @@ fn floating_persistent_and_local_operations_reuse_the_same_private_carrier() {
             None,
             vec![
                 LocalDecl::new("first", f64_ty, false),
-                LocalDecl::new("second", f64_ty, false),
+                LocalDecl::new("second", f64_ty, true),
             ],
             vec![
                 BasicBlock::new(
