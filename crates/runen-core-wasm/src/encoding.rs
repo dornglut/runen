@@ -173,19 +173,26 @@ fn encode_callable_types(
             if callable_type_indices.contains_key(&callable) {
                 continue;
             }
-            let parameter_count = callable_parameter_count(&program.types, callable)?;
+            let (parameter_carriers, semantic_result_carriers) =
+                callable_carrier_counts(&program.types, callable)?;
+            let payload_carriers = semantic_result_carriers.max(1);
+            let mut results = Vec::with_capacity(payload_carriers + 1);
+            results.push(ValType::I32);
+            results.extend(std::iter::repeat_n(ValType::I64, payload_carriers));
             let type_index = types.len();
-            types.ty().function(
-                vec![ValType::I64; parameter_count],
-                [ValType::I32, ValType::I64],
-            );
+            types
+                .ty()
+                .function(vec![ValType::I64; parameter_carriers], results);
             callable_type_indices.insert(callable, type_index);
         }
     }
     Ok(callable_type_indices)
 }
 
-fn callable_parameter_count(types: &TypeTable, ty: TypeId) -> Result<usize, RealizationError> {
+fn callable_carrier_counts(
+    types: &TypeTable,
+    ty: TypeId,
+) -> Result<(usize, usize), RealizationError> {
     let definition = types
         .get(ty)
         .ok_or_else(|| invariant("validated callable type is missing"))?;
@@ -194,7 +201,20 @@ fn callable_parameter_count(types: &TypeTable, ty: TypeId) -> Result<usize, Real
             "coverage admission allowed a non-callable indirect-call type",
         ));
     };
-    Ok(interface.parameters.len())
+    let parameter_carriers = interface
+        .parameters
+        .iter()
+        .try_fold(0_usize, |count, ty| {
+            count
+                .checked_add(result_carrier_count(types, *ty)?)
+                .ok_or_else(|| invariant("Wasm callable parameter carrier count overflow"))
+        })?;
+    let result_carriers = interface
+        .result
+        .map(|ty| result_carrier_count(types, ty))
+        .transpose()?
+        .unwrap_or(0);
+    Ok((parameter_carriers, result_carriers))
 }
 
 fn encode_function(
@@ -494,7 +514,7 @@ impl FunctionEncoder<'_> {
                 self.emit_scalar_operand(encoded, callee)?;
                 encoded.instruction(&Instruction::LocalSet(self.layout.scratch(0)?));
                 for argument in arguments {
-                    self.emit_scalar_operand(encoded, argument)?;
+                    self.emit_operand(encoded, argument)?;
                 }
                 encoded.instruction(&Instruction::LocalGet(self.layout.scratch(0)?));
                 encoded.instruction(&Instruction::I32WrapI64);
@@ -507,7 +527,8 @@ impl FunctionEncoder<'_> {
                     type_index,
                     table_index: 0,
                 });
-                self.emit_call_completion(encoded, destination.as_ref(), *target, 1)
+                let payload_count = self.call_payload_count(destination.as_ref())?;
+                self.emit_call_completion(encoded, destination.as_ref(), *target, payload_count)
             }
             Terminator::Return(result) => {
                 encoded.instruction(&Instruction::I32Const(0));
