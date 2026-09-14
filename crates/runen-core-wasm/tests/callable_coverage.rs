@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Field, Function, FunctionId, LocalDecl,
-    LocalId, ReferencePermission, SafeReferenceResultContract, ScalarType, Terminator, TypeDef,
-    TypeId, TypeTable, validate_program,
+    LocalId, MirValidationErrorKind, ReferencePermission, SafeReferenceResultContract, ScalarType,
+    Terminator, TypeDef, TypeId, TypeTable, validate_program,
 };
 use runen_core_wasm::{
     CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError,
@@ -99,6 +99,59 @@ fn safe_reference_callable_interface_remains_outside_realization_slice() {
     let callable = types.push(TypeDef::callable(
         "ReferenceConsumer",
         CallableInterface::new(vec![reference_ty], None, SafeReferenceResultContract::None),
+    ));
+    assert_callable_local_rejected(types, callable);
+}
+
+#[test]
+fn raw_pointer_callable_interface_is_rejected_by_core_before_realization() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let raw_ty = types.push(TypeDef::raw_pointer("RawI64", i64_ty));
+    let wrapper_ty = types.push(TypeDef::structure(
+        "RawWrapper",
+        vec![Field::new("pointer", raw_ty)],
+    ));
+    let callable = types.push(TypeDef::callable(
+        "RawConsumer",
+        CallableInterface::new(vec![wrapper_ty], None, SafeReferenceResultContract::None),
+    ));
+    let error = validate_program(runen_core_ir::Program {
+        types,
+        persistent: Vec::new(),
+        external_callables: Vec::new(),
+        functions: vec![Function {
+            name: "entry".into(),
+            parameters: Vec::new(),
+            result: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
+            body: Body {
+                locals: vec![LocalDecl::new("callee", callable, false)],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+            },
+        }],
+    })
+    .expect_err("raw-bearing callable interface must fail canonical Core validation");
+    assert_eq!(
+        error.kind,
+        MirValidationErrorKind::ParameterTransferUnsafe(wrapper_ty)
+    );
+}
+
+#[test]
+fn interior_mutable_structural_callable_interface_remains_outside_realization_slice() {
+    let mut types = TypeTable::new();
+    let interior_ty = types
+        .push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
+    let wrapper_ty = types.push(TypeDef::structure(
+        "InteriorWrapper",
+        vec![Field::new("value", interior_ty)],
+    ));
+    let callable = types.push(TypeDef::callable(
+        "InteriorConsumer",
+        CallableInterface::new(vec![wrapper_ty], None, SafeReferenceResultContract::None),
     ));
     assert_callable_local_rejected(types, callable);
 }
