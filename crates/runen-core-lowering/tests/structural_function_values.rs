@@ -75,8 +75,11 @@ fn record_parameter_and_result_function_value_lowers_and_executes() {
         })
         .expect("record-bearing source function value must lower to Core IndirectCall");
     assert!(destination.is_some());
-    let TypeKind::Scalar(ScalarType::Callable(interface)) =
-        &program.types.get(callable).expect("callable type exists").kind
+    let TypeKind::Scalar(ScalarType::Callable(interface)) = &program
+        .types
+        .get(callable)
+        .expect("callable type exists")
+        .kind
     else {
         panic!("indirect call must use a Core callable type");
     };
