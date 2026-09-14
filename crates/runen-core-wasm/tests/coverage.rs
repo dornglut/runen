@@ -5,7 +5,7 @@ use runen_core_ir::{
     ReferencePermission, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
     TypeTable, Value, validate_program,
 };
-use runen_core_wasm::{RealizationError, RealizedProgram};
+use runen_core_wasm::{ExecutionOutcome, RealizationError, RealizedProgram};
 
 fn function(
     name: &str,
@@ -177,7 +177,7 @@ fn rejects_raw_pointer_types_and_operations() {
 }
 
 #[test]
-fn rejects_callable_values_and_indirect_calls() {
+fn admits_first_order_callable_values_and_indirect_calls() {
     let mut types = TypeTable::new();
     let interface = CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None);
     let callable_ty = types.push(TypeDef::callable("Callable", interface));
@@ -218,7 +218,14 @@ fn rejects_callable_values_and_indirect_calls() {
             blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
         },
     );
-    assert_coverage_rejected(validate(types, vec![entry, target]));
+    let validated = validate(types, vec![entry, target]);
+    assert_eq!(
+        RealizedProgram::new(&validated)
+            .expect("first-order callable fixture must realize")
+            .execute(FunctionId(0))
+            .expect("first-order callable fixture must execute"),
+        ExecutionOutcome::Returned(None)
+    );
 }
 
 #[test]
