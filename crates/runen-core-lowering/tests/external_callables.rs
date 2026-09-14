@@ -154,9 +154,9 @@ fn lowered_floating_external_chain_agrees_between_core_wasm_and_reference() {
                 move |arguments| {
                     assert_eq!(
                         arguments,
-                        &[WasmExternalScalarValue::F32(FloatingScalarValue::Represented(
-                            expected_source_value,
-                        ))]
+                        &[WasmExternalScalarValue::F32(
+                            FloatingScalarValue::Represented(expected_source_value,)
+                        )]
                     );
                     WasmExternalScalarValue::F32(FloatingScalarValue::NaNClass)
                 },
@@ -190,9 +190,9 @@ fn lowered_floating_external_chain_agrees_between_core_wasm_and_reference() {
                 move |arguments| {
                     assert_eq!(
                         arguments,
-                        &[ExternalScalarValue::F32(ObservedBinaryFloatValue::Represented(
-                            expected_source_value,
-                        ))]
+                        &[ExternalScalarValue::F32(
+                            ObservedBinaryFloatValue::Represented(expected_source_value,)
+                        )]
                     );
                     ExternalScalarValue::F32(ObservedBinaryFloatValue::NaNClass)
                 },
