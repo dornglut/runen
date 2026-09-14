@@ -6,11 +6,15 @@ on:
       - main
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   format:
-    name: Capture rustfmt output
+    name: Apply exact rustfmt output
+    if: >-
+      github.event.pull_request.number == 795 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'issue-794-core-wasm-realization'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -19,17 +23,20 @@ jobs:
         shell: bash
         env:
           PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PULL_REQUEST_HEAD_REF: ${{ github.event.pull_request.head.ref }}
         run: |
           set -euo pipefail
           test -n "${PULL_REQUEST_HEAD_SHA}"
+          test "${PULL_REQUEST_HEAD_REF}" = "issue-794-core-wasm-realization"
           echo "expected_revision=${PULL_REQUEST_HEAD_SHA}" >> "${GITHUB_OUTPUT}"
+          echo "head_ref=${PULL_REQUEST_HEAD_REF}" >> "${GITHUB_OUTPUT}"
 
-      - name: Check out exact revision
+      - name: Check out exact revision with bounded push credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           clean: true
           fetch-depth: 1
-          persist-credentials: false
+          persist-credentials: true
           ref: ${{ steps.revision.outputs.expected_revision }}
 
       - name: Prove checked-out revision
@@ -48,12 +55,19 @@ jobs:
         shell: bash
         run: cargo +stable fmt --all
 
-      - name: Capture formatted Core Wasm sources
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: core-wasm-rustfmt-output
-          path: |
-            crates/runen-core-wasm/src/*.rs
-            crates/runen-core-wasm/tests/*.rs
-          if-no-files-found: error
-          retention-days: 1
+      - name: Commit only formatted Core Wasm Rust sources
+        shell: bash
+        env:
+          HEAD_REF: ${{ steps.revision.outputs.head_ref }}
+        run: |
+          set -euo pipefail
+          git diff --check
+          git add crates/runen-core-wasm/src crates/runen-core-wasm/tests
+          if git diff --cached --quiet; then
+            echo "Core Wasm Rust sources are already rustfmt-clean."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "style: apply stable rustfmt to Core Wasm"
+          git push origin "HEAD:${HEAD_REF}"

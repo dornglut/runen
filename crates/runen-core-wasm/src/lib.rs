@@ -61,19 +61,36 @@ pub enum RealizationError {
 impl fmt::Display for RealizationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Coverage(error) => write!(formatter, "unsupported Core realization coverage: {error:?}"),
-            Self::InvalidEntry(function) => write!(formatter, "invalid Core entry function: {function:?}"),
+            Self::Coverage(error) => write!(
+                formatter,
+                "unsupported Core realization coverage: {error:?}"
+            ),
+            Self::InvalidEntry(function) => {
+                write!(formatter, "invalid Core entry function: {function:?}")
+            }
             Self::EntryHasParameters(function) => {
-                write!(formatter, "Core entry function has parameters: {function:?}")
+                write!(
+                    formatter,
+                    "Core entry function has parameters: {function:?}"
+                )
             }
             Self::Backend { phase, message } => {
-                write!(formatter, "Wasmtime backend failure during {phase:?}: {message}")
+                write!(
+                    formatter,
+                    "Wasmtime backend failure during {phase:?}: {message}"
+                )
             }
             Self::BackendProtocol(error) => {
-                write!(formatter, "invalid private backend protocol result: {error:?}")
+                write!(
+                    formatter,
+                    "invalid private backend protocol result: {error:?}"
+                )
             }
             Self::BackendInvariant(message) => {
-                write!(formatter, "Core Wasm realization invariant failed: {message}")
+                write!(
+                    formatter,
+                    "Core Wasm realization invariant failed: {message}"
+                )
             }
         }
     }
@@ -138,12 +155,13 @@ impl RealizedProgram {
                 phase: BackendPhase::LookupEntry,
                 message: error.to_string(),
             })?;
-        let (status, payload) = function.call(&mut store, ()).map_err(|error| {
-            RealizationError::Backend {
-                phase: BackendPhase::Execute,
-                message: error.to_string(),
-            }
-        })?;
+        let (status, payload) =
+            function
+                .call(&mut store, ())
+                .map_err(|error| RealizationError::Backend {
+                    phase: BackendPhase::Execute,
+                    message: error.to_string(),
+                })?;
 
         match status {
             STATUS_RETURNED => {
@@ -170,10 +188,5 @@ impl RealizedProgram {
                 BackendProtocolError::InvalidStatus(other),
             )),
         }
-    }
-
-    #[cfg(test)]
-    fn module(&self) -> &Module {
-        &self.module
     }
 }

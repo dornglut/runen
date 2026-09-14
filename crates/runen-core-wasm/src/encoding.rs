@@ -1,14 +1,14 @@
 use runen_core_ir::{
-    BasicBlockId, Body, Fault, Function, FunctionId, LocalId, Operand, Place, PlaceAccess, ScalarType,
-    Statement, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
+    BasicBlockId, Fault, Function, FunctionId, LocalId, Operand, Place, PlaceAccess, Statement,
+    Terminator, TypeId, TypeTable, ValidatedProgram,
 };
 use wasm_encoder::{
     BlockType, CodeSection, ExportKind, ExportSection, Function as WasmFunction, FunctionSection,
     Instruction, Module, TypeSection, ValType,
 };
 
-use crate::scalar::{ScalarKind, constant_residue, mask};
 use crate::RealizationError;
+use crate::scalar::{ScalarKind, constant_residue, mask};
 
 pub(crate) struct EncodedProgram {
     pub(crate) bytes: Vec<u8>,
@@ -37,9 +37,7 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
     for (index, function) in program.functions.iter().enumerate() {
         let function_id = checked_function_id(index)?;
         let params = vec![ValType::I64; function.parameters.len()];
-        types
-            .ty()
-            .function(params, [ValType::I32, ValType::I64]);
+        types.ty().function(params, [ValType::I32, ValType::I64]);
         functions.function(function_id.0);
         if function.parameters.is_empty() {
             exports.export(
@@ -63,14 +61,8 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
 
     let mut faults = Vec::new();
     let mut code = CodeSection::new();
-    for (index, function) in program.functions.iter().enumerate() {
-        let function_id = checked_function_id(index)?;
-        let encoded = encode_function(
-            &program.types,
-            function_id,
-            function,
-            &mut faults,
-        )?;
+    for function in &program.functions {
+        let encoded = encode_function(&program.types, function, &mut faults)?;
         code.function(&encoded);
     }
     module.section(&code);
@@ -84,7 +76,6 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
 
 fn encode_function(
     types: &TypeTable,
-    function_id: FunctionId,
     function: &Function,
     faults: &mut Vec<Fault>,
 ) -> Result<WasmFunction, RealizationError> {
@@ -103,7 +94,6 @@ fn encode_function(
 
     let mut context = FunctionEncoder {
         types,
-        function_id,
         function,
         layout: &layout,
         faults,
@@ -205,7 +195,6 @@ impl FunctionLayout {
 
 struct FunctionEncoder<'a> {
     types: &'a TypeTable,
-    function_id: FunctionId,
     function: &'a Function,
     layout: &'a FunctionLayout,
     faults: &'a mut Vec<Fault>,
@@ -504,7 +493,9 @@ fn emit_i64_const(encoded: &mut WasmFunction, residue: u64) {
 }
 
 fn emit_i32_const(encoded: &mut WasmFunction, bits: u32) {
-    encoded.instruction(&Instruction::I32Const(i32::from_ne_bytes(bits.to_ne_bytes())));
+    encoded.instruction(&Instruction::I32Const(i32::from_ne_bytes(
+        bits.to_ne_bytes(),
+    )));
 }
 
 fn checked_function_id(index: usize) -> Result<FunctionId, RealizationError> {
@@ -520,39 +511,19 @@ fn invariant(message: impl Into<String>) -> RealizationError {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn signed_residue_constant_preserves_full_i64_bits() {
-        let mut function = WasmFunction::new([]);
-        emit_i64_const(&mut function, u64::MAX);
-    }
+    use runen_core_ir::{ScalarType, TypeDef};
 
     #[test]
     fn scalar_kind_lookup_rejects_non_scalar_types() {
         let mut types = TypeTable::new();
-        let structure = types.push(runen_core_ir::TypeDef::structure("S", Vec::new()));
+        let structure = types.push(TypeDef::structure("S", Vec::new()));
         assert!(ScalarKind::from_type(&types, structure).is_none());
     }
 
     #[test]
     fn supported_kind_accepts_integer_scalar() {
         let mut types = TypeTable::new();
-        let ty = types.push(runen_core_ir::TypeDef::scalar("I32", ScalarType::I32));
+        let ty = types.push(TypeDef::scalar("I32", ScalarType::I32));
         assert_eq!(supported_kind(&types, ty), Ok(ScalarKind::I32));
-    }
-
-    #[test]
-    fn value_import_is_used_for_constant_boundary() {
-        assert_eq!(constant_residue(&Value::Bool(true)), Some(1));
-    }
-
-    #[test]
-    fn body_import_documents_function_layout_input() {
-        let _: Option<&Body> = None;
-    }
-
-    #[test]
-    fn type_kind_import_documents_coverage_assumption() {
-        let _: Option<&TypeKind> = None;
     }
 }
