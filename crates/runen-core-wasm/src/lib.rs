@@ -205,7 +205,11 @@ mod tests {
         .expect("module-shape fixture must be valid Core")
     }
 
-    fn callable_program(persistent: Vec<PersistentDecl>, types: TypeTable, callable: TypeId) -> ValidatedProgram {
+    fn callable_program(
+        persistent: Vec<PersistentDecl>,
+        types: TypeTable,
+        callable: TypeId,
+    ) -> ValidatedProgram {
         validate_program(Program {
             types,
             persistent,
@@ -362,8 +366,8 @@ mod tests {
             types,
             callable,
         );
-        let encoded = encoding::encode(&program)
-            .expect("supported callable/persistent fixture must encode");
+        let encoded =
+            encoding::encode(&program).expect("supported callable/persistent fixture must encode");
         let module = &encoded.bytes[8..];
 
         assert_eq!(section_ids(module), vec![1, 3, 4, 6, 7, 9, 10]);
@@ -389,13 +393,21 @@ mod tests {
         );
         assert_eq!(read_u32_leb(bytes, &mut cursor), 2, "table minimum");
         assert_eq!(read_u32_leb(bytes, &mut cursor), 2, "table maximum");
-        assert_eq!(cursor, bytes.len(), "table section must be consumed exactly");
+        assert_eq!(
+            cursor,
+            bytes.len(),
+            "table section must be consumed exactly"
+        );
     }
 
     fn assert_two_function_element_population(bytes: &[u8]) {
         let mut cursor = 0_usize;
         assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "one element segment");
-        assert_eq!(read_u32_leb(bytes, &mut cursor), 0, "active table-zero segment");
+        assert_eq!(
+            read_u32_leb(bytes, &mut cursor),
+            0,
+            "active table-zero segment"
+        );
         assert_eq!(bytes.get(cursor), Some(&0x41), "offset uses i32.const");
         cursor += 1;
         assert_eq!(bytes.get(cursor), Some(&0x00), "offset is zero");
