@@ -271,7 +271,23 @@ mod tests {
         persistent: Vec<PersistentDecl>,
         types: TypeTable,
         callable: TypeId,
+        aggregate: Option<(TypeId, Value)>,
     ) -> ValidatedProgram {
+        let mut locals = vec![LocalDecl::new("callee", callable, false)];
+        let mut statements = vec![Statement::Init {
+            dst: Place::local(LocalId(0)),
+            src: Operand::FunctionValue(FunctionId(1)),
+        }];
+        let result = aggregate.as_ref().map(|(ty, _)| *ty);
+        let returned = aggregate.map(|(ty, value)| {
+            locals.push(LocalDecl::new("aggregate", ty, false));
+            statements.push(Statement::Init {
+                dst: Place::local(LocalId(1)),
+                src: Operand::Constant(value),
+            });
+            Operand::Move(Place::local(LocalId(1)).into())
+        });
+
         validate_program(Program {
             types,
             persistent,
@@ -280,18 +296,15 @@ mod tests {
                 Function {
                     name: "entry".into(),
                     parameters: Vec::new(),
-                    result: None,
+                    result,
                     safe_reference_result_contract: SafeReferenceResultContract::None,
                     body: Body {
-                        locals: vec![LocalDecl::new("callee", callable, false)],
+                        locals,
                         loans: Vec::new(),
                         entry: BasicBlockId(0),
                         blocks: vec![
                             BasicBlock::new(
-                                vec![Statement::Init {
-                                    dst: Place::local(LocalId(0)),
-                                    src: Operand::FunctionValue(FunctionId(1)),
-                                }],
+                                statements,
                                 Terminator::IndirectCall {
                                     callable,
                                     callee: Operand::Move(Place::local(LocalId(0)).into()),
@@ -300,7 +313,7 @@ mod tests {
                                     target: BasicBlockId(1),
                                 },
                             ),
-                            BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                            BasicBlock::new(Vec::new(), Terminator::Return(returned)),
                         ],
                     },
                 },
@@ -414,7 +427,7 @@ mod tests {
             "Thunk",
             CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
         ));
-        let program = callable_program(Vec::new(), types, callable);
+        let program = callable_program(Vec::new(), types, callable, None);
         let encoded = encoding::encode(&program).expect("supported callable fixture must encode");
         let module = &encoded.bytes[8..];
 
@@ -433,9 +446,14 @@ mod tests {
     }
 
     #[test]
-    fn callable_and_persistent_private_sections_compose_without_new_exports() {
+    fn aggregate_callable_and_persistent_private_sections_compose_without_new_exports() {
         let mut types = TypeTable::new();
         let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let u8_ty = types.push(TypeDef::scalar("U8", ScalarType::U8));
+        let pair_ty = types.push(TypeDef::structure(
+            "Pair",
+            vec![Field::new("left", i64_ty), Field::new("right", u8_ty)],
+        ));
         let callable = types.push(TypeDef::callable(
             "Thunk",
             CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
@@ -444,19 +462,27 @@ mod tests {
             vec![PersistentDecl::new(i64_ty, Value::I64(7))],
             types,
             callable,
+            Some((
+                pair_ty,
+                Value::Struct(vec![Value::I64(42), Value::U8(7)]),
+            )),
         );
-        let encoded =
-            encoding::encode(&program).expect("supported callable/persistent fixture must encode");
+        let encoded = encoding::encode(&program)
+            .expect("supported aggregate/callable/persistent fixture must encode");
         let module = &encoded.bytes[8..];
 
-        assert_eq!(section_ids(module), vec![1, 3, 4, 6, 7, 9, 10]);
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 4, 6, 7, 9, 10],
+            "aggregate composition must add no storage sections beyond existing private carriers"
+        );
         assert_private_two_function_table(section_payload(module, 4));
         assert_two_function_element_population(section_payload(module, 9));
         assert!(
             export_kinds(section_payload(module, 7))
                 .into_iter()
                 .all(|kind| kind == 0),
-            "neither callable tables nor persistent globals may be exported"
+            "aggregate values must not expose callable tables or persistent globals"
         );
     }
 
