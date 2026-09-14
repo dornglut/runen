@@ -173,7 +173,8 @@ fn direct_floating_local_parameter_and_result_roles_are_admitted() {
             ),
         )],
     );
-    RealizedProgram::new(&result_program).expect("direct floating result must be admitted internally");
+    RealizedProgram::new(&result_program)
+        .expect("direct floating result must be admitted internally");
 }
 
 #[test]
