@@ -207,9 +207,9 @@ pub(crate) fn invalid_backend_result() -> RealizationError {
 mod tests {
     use super::*;
     use runen_core_ir::{
-        BasicBlock, BasicBlockId, Body, CallableInterface, Function, LocalDecl, LocalId, Operand,
-        PersistentDecl, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
-        Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
+        BasicBlock, BasicBlockId, Body, CallableInterface, Field, Function, LocalDecl, LocalId,
+        Operand, PersistentDecl, Place, Program, SafeReferenceResultContract, ScalarType,
+        Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
     };
 
     fn empty_entry_program(types: TypeTable, persistent: Vec<PersistentDecl>) -> ValidatedProgram {
@@ -231,6 +231,40 @@ mod tests {
             }],
         })
         .expect("module-shape fixture must be valid Core")
+    }
+
+    fn aggregate_program() -> ValidatedProgram {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let u8_ty = types.push(TypeDef::scalar("U8", ScalarType::U8));
+        let pair_ty = types.push(TypeDef::structure(
+            "Pair",
+            vec![Field::new("left", i64_ty), Field::new("right", u8_ty)],
+        ));
+        validate_program(Program {
+            types,
+            persistent: Vec::new(),
+            external_callables: Vec::new(),
+            functions: vec![Function {
+                name: "entry".into(),
+                parameters: Vec::new(),
+                result: Some(pair_ty),
+                safe_reference_result_contract: SafeReferenceResultContract::None,
+                body: Body {
+                    locals: Vec::new(),
+                    loans: Vec::new(),
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock::new(
+                        Vec::new(),
+                        Terminator::Return(Some(Operand::Constant(Value::Struct(vec![
+                            Value::I64(42),
+                            Value::U8(7),
+                        ])))),
+                    )],
+                },
+            }],
+        })
+        .expect("aggregate module-shape fixture must be valid Core")
     }
 
     fn callable_program(
@@ -304,6 +338,23 @@ mod tests {
             non_custom_sections,
             vec![1, 3, 7, 10],
             "persistent-free callable-free modules retain the reviewed section shape"
+        );
+    }
+
+    #[test]
+    fn aggregate_modules_add_no_storage_or_import_sections() {
+        let encoded =
+            encoding::encode(&aggregate_program()).expect("supported aggregate fixture must encode");
+        let module = &encoded.bytes[8..];
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 7, 10],
+            "structural carriers must not add imports, tables, memory, globals, elements, or data"
+        );
+        assert_eq!(
+            export_kinds(section_payload(module, 7)),
+            vec![0],
+            "aggregate realization exports only the existing entry function"
         );
     }
 
