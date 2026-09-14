@@ -6,6 +6,7 @@
 
 mod coverage;
 mod encoding;
+mod external;
 mod layout;
 mod scalar;
 
@@ -20,6 +21,10 @@ pub use coverage::{
     UnsupportedStatementKind, UnsupportedTerminatorKind, UnsupportedTypeCategory,
 };
 use encoding::{EncodedProgram, EntryInfo, entry_export_name};
+pub use external::{
+    ExternalProviderAdmissionError, ExternalProviderBinding, ExternalProviderFailure,
+    ExternalScalarValue,
+};
 
 const STATUS_RETURNED: i32 = 0;
 const STATUS_FAULTED: i32 = 1;
@@ -42,6 +47,7 @@ pub enum BackendPhase {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RealizationError {
     Coverage(CoverageError),
+    ProviderAdmission(ExternalProviderAdmissionError),
     InvalidEntry(FunctionId),
     EntryHasParameters(FunctionId),
     EntryResultUnsupported(FunctionId),
@@ -59,6 +65,7 @@ impl fmt::Display for RealizationError {
                 formatter,
                 "unsupported Core realization coverage: {error:?}"
             ),
+            Self::ProviderAdmission(error) => write!(formatter, "{error}"),
             Self::InvalidEntry(function) => {
                 write!(formatter, "invalid Core entry function: {function:?}")
             }
@@ -98,17 +105,32 @@ impl From<CoverageError> for RealizationError {
     }
 }
 
+impl From<ExternalProviderAdmissionError> for RealizationError {
+    fn from(error: ExternalProviderAdmissionError) -> Self {
+        Self::ProviderAdmission(error)
+    }
+}
+
 pub struct RealizedProgram {
     engine: Engine,
     module: Module,
     faults: Vec<Fault>,
     entries: Vec<EntryInfo>,
     types: TypeTable,
+    external_providers: Vec<ExternalProviderBinding>,
 }
 
 impl RealizedProgram {
     pub fn new(program: &ValidatedProgram) -> Result<Self, RealizationError> {
+        Self::new_with_external_providers(program, Vec::new())
+    }
+
+    pub fn new_with_external_providers(
+        program: &ValidatedProgram,
+        providers: Vec<ExternalProviderBinding>,
+    ) -> Result<Self, RealizationError> {
         coverage::validate(program)?;
+        let external_providers = external::admit(program, providers)?;
         let EncodedProgram {
             bytes,
             faults,
@@ -125,6 +147,7 @@ impl RealizedProgram {
             faults,
             entries,
             types: program.as_program().types.clone(),
+            external_providers,
         })
     }
 
@@ -147,7 +170,13 @@ impl RealizedProgram {
         }
 
         let mut store = Store::new(&self.engine, ());
-        let instance = Instance::new(&mut store, &self.module, &[]).map_err(|error| {
+        let imports = external::instantiate_imports(
+            &self.engine,
+            &mut store,
+            &self.types,
+            &self.external_providers,
+        )?;
+        let instance = Instance::new(&mut store, &self.module, &imports).map_err(|error| {
             RealizationError::Backend {
                 phase: BackendPhase::Instantiate,
                 message: error.to_string(),
