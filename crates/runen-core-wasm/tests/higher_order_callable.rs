@@ -99,12 +99,7 @@ fn higher_order_parameter_preserves_distinct_function_identity_and_copy_transpor
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let unary = callable_type(&mut types, "Unary", vec![i64_ty], Some(i64_ty));
-    let higher = callable_type(
-        &mut types,
-        "Higher",
-        vec![unary, i64_ty],
-        Some(i64_ty),
-    );
+    let higher = callable_type(&mut types, "Higher", vec![unary, i64_ty], Some(i64_ty));
 
     let make_entry = |name: &str, target: FunctionId| {
         function(
@@ -377,7 +372,10 @@ fn multiple_callable_signature_levels_remain_scalar_carriers() {
             Terminator::Return(Some(Operand::Constant(Value::I64(73)))),
         )],
     );
-    let program = validated(types, vec![entry, invoke_factory, factory_target, unary_target]);
+    let program = validated(
+        types,
+        vec![entry, invoke_factory, factory_target, unary_target],
+    );
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
@@ -444,11 +442,7 @@ fn cyclic_callable_signature_graph_executes_without_recursive_layout() {
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let a = types.push(TypeDef::callable(
         "A",
-        CallableInterface::new(
-            vec![TypeId(2)],
-            None,
-            SafeReferenceResultContract::None,
-        ),
+        CallableInterface::new(vec![TypeId(2)], None, SafeReferenceResultContract::None),
     ));
     let b = types.push(TypeDef::callable(
         "B",
@@ -461,7 +455,10 @@ fn cyclic_callable_signature_graph_executes_without_recursive_layout() {
         "entry",
         Vec::new(),
         Some(i64_ty),
-        vec![LocalDecl::new("a", a, false), LocalDecl::new("b", b, false)],
+        vec![
+            LocalDecl::new("a", a, false),
+            LocalDecl::new("b", b, false),
+        ],
         vec![
             BasicBlock::new(
                 vec![
