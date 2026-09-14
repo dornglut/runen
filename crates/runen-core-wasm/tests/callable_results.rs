@@ -533,17 +533,23 @@ fn higher_order_callable_function_result_still_rejects_with_structured_result_di
     );
     let program = validated(types, vec![producer, outer_target, inner_target]);
 
+    let error = match RealizedProgram::new(&program) {
+        Err(RealizationError::Coverage(error)) => error,
+        Err(other) => panic!("expected coverage rejection, got realization error: {other:?}"),
+        Ok(_) => panic!("higher-order callable result must remain outside realization coverage"),
+    };
     assert_eq!(
-        RealizedProgram::new(&program),
-        Err(RealizationError::Coverage(runen_core_wasm::CoverageError {
-            location: CoverageLocation::Result {
-                function: FunctionId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedCallableResultType {
-                callable: outer,
-                ty: inner,
-                category: UnsupportedTypeCategory::Callable,
-            },
-        }))
+        error.location,
+        CoverageLocation::Result {
+            function: FunctionId(0),
+        }
+    );
+    assert_eq!(
+        error.kind,
+        CoverageErrorKind::UnsupportedCallableResultType {
+            callable: outer,
+            ty: inner,
+            category: UnsupportedTypeCategory::Callable,
+        }
     );
 }
