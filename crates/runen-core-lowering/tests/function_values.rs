@@ -217,7 +217,6 @@ fn indirect_callee_snapshot_precedes_nested_arguments_and_arguments_remain_left_
             _ => None,
         })
         .expect("callee binding is copied into an operation-owned temporary before arguments");
-
     let Terminator::Call {
         function: first,
         target: after_first,
@@ -394,4 +393,46 @@ fn mutual_indirect_call_graph_lowers_without_dynamic_target_set_discovery() {
         2,
         "no target-set specialization is introduced"
     );
+}
+
+#[test]
+fn higher_order_function_value_argument_lowers_and_executes_through_nested_callable_types() {
+    let source = "fn left(value: I64) -> I64 { return value + 1; } \
+         fn right(value: I64) -> I64 { return value + 2; } \
+         fn apply(f: fn(I64) -> I64, value: I64) -> I64 { return f(value); } \
+         fn entry() -> I64 { \
+             let higher: fn(fn(I64) -> I64, I64) -> I64 = apply; \
+             let selected: fn(I64) -> I64 = right; \
+             return higher(selected, 40); \
+         }";
+    let lowered = lower_source(source);
+    let program = lowered.as_program();
+    let callables = callable_types(program);
+    assert_eq!(callables.len(), 2);
+
+    let (higher_ty, higher_interface) = callables
+        .iter()
+        .find(|(_, interface)| interface.parameters.len() == 2)
+        .expect("higher-order callable type must lower");
+    let unary_ty = higher_interface.parameters[0];
+    assert!(callables.iter().any(|(ty, _)| *ty == unary_ty));
+    assert_ne!(*higher_ty, unary_ty);
+
+    let entry = function(program, "entry");
+    assert!(entry.body.blocks.iter().any(|block| matches!(
+        block.terminator,
+        Terminator::IndirectCall { callable, .. } if callable == *higher_ty
+    )));
+    let apply = function(program, "apply");
+    assert!(apply.body.blocks.iter().any(|block| matches!(
+        block.terminator,
+        Terminator::IndirectCall { callable, .. } if callable == unary_ty
+    )));
+
+    let report = Machine::new(lowered, function_id(program, "entry"))
+        .expect("higher-order source entry has no parameters")
+        .execute()
+        .expect("lowered higher-order execution is defined");
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::I64(42)));
 }
