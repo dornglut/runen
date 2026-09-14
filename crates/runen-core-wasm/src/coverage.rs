@@ -1,5 +1,5 @@
 use runen_core_ir::{
-    BasicBlockId, Function, FunctionId, LocalId, Operand, Place, PlaceAccess,
+    BasicBlockId, Function, FunctionId, LocalId, Operand, PersistentId, Place, PlaceAccess,
     SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable,
     ValidatedProgram, Value,
 };
@@ -7,6 +7,7 @@ use runen_core_ir::{
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoverageLocation {
     Program,
+    Persistent(PersistentId),
     Function(FunctionId),
     Result {
         function: FunctionId,
@@ -47,7 +48,6 @@ pub enum UnsupportedOperandKind {
     FloatingConstant,
     TrackedFixtureConstant,
     StructuralConstant,
-    PersistentRead,
     PersistentSharedRoot,
     FunctionValue,
     RawMove,
@@ -78,7 +78,6 @@ pub enum UnsupportedTerminatorKind {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoverageErrorKind {
     ProgramTooLarge,
-    PersistentStorage,
     ExternalCallables,
     LoanDeclarations,
     UnsupportedType {
@@ -108,9 +107,15 @@ pub(crate) fn validate(program: &ValidatedProgram) -> Result<(), CoverageError> 
         validate_function(&program.types, function_id, function)?;
     }
 
-    if !program.persistent.is_empty() {
-        return Err(program_error(CoverageErrorKind::PersistentStorage));
+    for (persistent_index, persistent) in program.persistent.iter().enumerate() {
+        let persistent_id = checked_persistent_id(persistent_index)?;
+        require_supported_type(
+            &program.types,
+            persistent.ty,
+            CoverageLocation::Persistent(persistent_id),
+        )?;
     }
+
     if !program.external_callables.is_empty() {
         return Err(program_error(CoverageErrorKind::ExternalCallables));
     }
@@ -369,9 +374,7 @@ fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<()
             unsupported_operand(location, UnsupportedOperandKind::StructuralConstant)
         }
         Operand::Move(access) | Operand::Copy(access) => validate_access(access, location),
-        Operand::PersistentRead(_) => {
-            unsupported_operand(location, UnsupportedOperandKind::PersistentRead)
-        }
+        Operand::PersistentRead(_) => Ok(()),
         Operand::PersistentSharedRoot(_) => {
             unsupported_operand(location, UnsupportedOperandKind::PersistentSharedRoot)
         }
@@ -425,6 +428,12 @@ fn unsupported_operand(
 fn checked_function_id(index: usize) -> Result<FunctionId, CoverageError> {
     u32::try_from(index)
         .map(FunctionId)
+        .map_err(|_| program_error(CoverageErrorKind::ProgramTooLarge))
+}
+
+fn checked_persistent_id(index: usize) -> Result<PersistentId, CoverageError> {
+    u32::try_from(index)
+        .map(PersistentId)
         .map_err(|_| program_error(CoverageErrorKind::ProgramTooLarge))
 }
 
