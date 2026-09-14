@@ -922,7 +922,11 @@ mod tests {
             "external_0",
             "provider import field is deterministic and private"
         );
-        assert_eq!(bytes.get(cursor), Some(&0x00), "provider import is a function");
+        assert_eq!(
+            bytes.get(cursor),
+            Some(&0x00),
+            "provider import is a function"
+        );
         cursor += 1;
         let _type_index = read_u32_leb(bytes, &mut cursor);
         assert_eq!(
