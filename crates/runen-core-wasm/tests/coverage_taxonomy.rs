@@ -112,7 +112,31 @@ fn passive_local_types_report_every_excluded_type_family() {
         "Outer",
         CallableInterface::new(vec![inner], Some(i64_ty), SafeReferenceResultContract::None),
     ));
-    assert_local_type_category(higher_order, outer, UnsupportedTypeCategory::Callable);
+    let higher_order_program = validated(
+        higher_order,
+        Vec::new(),
+        vec![function(
+            "entry",
+            Vec::new(),
+            None,
+            empty_body(vec![LocalDecl::new("value", outer, false)]),
+        )],
+    );
+    assert_eq!(
+        coverage_error(&higher_order_program),
+        CoverageError {
+            location: CoverageLocation::Local {
+                function: FunctionId(0),
+                local: LocalId(0),
+            },
+            kind: CoverageErrorKind::UnsupportedCallableParameterType {
+                callable: outer,
+                parameter: 0,
+                ty: inner,
+                category: UnsupportedTypeCategory::Callable,
+            },
+        }
+    );
 
     let mut tracked = TypeTable::new();
     let tracked_ty = tracked.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
