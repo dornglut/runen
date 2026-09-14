@@ -139,7 +139,10 @@ fn nested_aggregate_reports_the_exact_unsupported_leaf() {
     ));
     let outer_ty = types.push(TypeDef::structure(
         "Outer",
-        vec![Field::new("supported", i64_ty), Field::new("nested", inner_ty)],
+        vec![
+            Field::new("supported", i64_ty),
+            Field::new("nested", inner_ty),
+        ],
     ));
     let program = validated(
         types,
