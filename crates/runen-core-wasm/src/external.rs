@@ -116,9 +116,7 @@ impl fmt::Display for ExternalProviderAdmissionError {
 
 impl Error for ExternalProviderAdmissionError {}
 
-type Provider = dyn Fn(
-        &[ExternalScalarValue],
-    ) -> Result<Option<ExternalScalarValue>, ExternalProviderFailure>
+type Provider = dyn Fn(&[ExternalScalarValue]) -> Result<Option<ExternalScalarValue>, ExternalProviderFailure>
     + Send
     + Sync
     + 'static;
@@ -157,7 +155,9 @@ impl ExternalProviderBinding {
         interface: CallableInterface,
         provider: impl Fn(&[ExternalScalarValue]) -> ExternalScalarValue + Send + Sync + 'static,
     ) -> Self {
-        Self::try_scalar_result(external, interface, move |arguments| Ok(provider(arguments)))
+        Self::try_scalar_result(external, interface, move |arguments| {
+            Ok(provider(arguments))
+        })
     }
 
     pub fn try_no_result(
@@ -216,10 +216,14 @@ pub(crate) fn admit(
     for binding in bindings {
         let index = binding.external.0 as usize;
         let Some(declaration) = program.external_callables.get(index) else {
-            return Err(ExternalProviderAdmissionError::UnknownProvider(binding.external));
+            return Err(ExternalProviderAdmissionError::UnknownProvider(
+                binding.external,
+            ));
         };
         if admitted[index].is_some() {
-            return Err(ExternalProviderAdmissionError::DuplicateProvider(binding.external));
+            return Err(ExternalProviderAdmissionError::DuplicateProvider(
+                binding.external,
+            ));
         }
         if binding.interface != declaration.interface {
             return Err(ExternalProviderAdmissionError::InterfaceMismatch {
@@ -352,16 +356,10 @@ pub(crate) fn instantiate_imports(
                                     "private provider import had the wrong result count",
                                 ));
                             }
-                            let Some(Val::I64(result)) = results.first_mut() else {
-                                return Err(host_error(
-                                    external,
-                                    "private result-bearing provider import had invalid result storage",
-                                ));
-                            };
                             let residue = constant_residue(&value.into_core_value()).ok_or_else(|| {
                                 host_error(external, "provider result had no scalar carrier")
                             })?;
-                            *result = i64::from_ne_bytes(residue.to_ne_bytes());
+                            results[0] = Val::I64(i64::from_ne_bytes(residue.to_ne_bytes()));
                         }
                     }
                     Ok(())
