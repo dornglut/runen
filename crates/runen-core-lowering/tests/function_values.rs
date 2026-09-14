@@ -428,8 +428,9 @@ fn higher_order_function_value_argument_lowers_and_executes_through_nested_calla
         block.terminator,
         Terminator::IndirectCall { callable, .. } if callable == unary_ty
     )));
+    let entry_id = function_id(program, "entry");
 
-    let report = Machine::new(lowered, function_id(program, "entry"))
+    let report = Machine::new(lowered, entry_id)
         .expect("higher-order source entry has no parameters")
         .execute()
         .expect("lowered higher-order execution is defined");
