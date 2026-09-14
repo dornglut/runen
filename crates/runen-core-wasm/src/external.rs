@@ -299,7 +299,8 @@ pub(crate) fn instantiate_imports(
                         ));
                     }
                     let mut arguments = Vec::with_capacity(parameter_kinds.len());
-                    for (parameter, kind) in parameters.iter().zip(parameter_kinds.iter().copied()) {
+                    for (parameter, kind) in parameters.iter().zip(parameter_kinds.iter().copied())
+                    {
                         let Val::I64(payload) = parameter else {
                             return Err(host_error(
                                 external,
@@ -309,11 +310,9 @@ pub(crate) fn instantiate_imports(
                         let value = kind.decode(*payload).map_err(|_| {
                             host_error(external, "private provider argument carrier was invalid")
                         })?;
-                        arguments.push(
-                            ExternalScalarValue::from_core_value(value).ok_or_else(|| {
-                                host_error(external, "private provider argument was not scalar")
-                            })?,
-                        );
+                        arguments.push(ExternalScalarValue::from_core_value(value).ok_or_else(
+                            || host_error(external, "private provider argument was not scalar"),
+                        )?);
                     }
 
                     let returned = provider(&arguments).map_err(|error| {
@@ -356,9 +355,10 @@ pub(crate) fn instantiate_imports(
                                     "private provider import had the wrong result count",
                                 ));
                             }
-                            let residue = constant_residue(&value.into_core_value()).ok_or_else(|| {
-                                host_error(external, "provider result had no scalar carrier")
-                            })?;
+                            let residue =
+                                constant_residue(&value.into_core_value()).ok_or_else(|| {
+                                    host_error(external, "provider result had no scalar carrier")
+                                })?;
                             results[0] = Val::I64(i64::from_ne_bytes(residue.to_ne_bytes()));
                         }
                     }
