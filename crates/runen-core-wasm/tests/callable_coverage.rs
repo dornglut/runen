@@ -49,23 +49,19 @@ fn assert_callable_local_rejected(types: TypeTable, callable: TypeId, kind: Cove
 }
 
 #[test]
-fn floating_callable_parameter_reports_exact_interface_role_and_type() {
+fn floating_callable_parameter_is_admitted_as_a_direct_scalar_component() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let callable = types.push(TypeDef::callable(
         "FloatConsumer",
         CallableInterface::new(vec![f32_ty], None, SafeReferenceResultContract::None),
     ));
-    assert_callable_local_rejected(
-        types,
-        callable,
-        CoverageErrorKind::UnsupportedCallableParameterType {
-            callable,
-            parameter: 0,
-            ty: f32_ty,
-            category: UnsupportedTypeCategory::Floating,
-        },
-    );
+    let program = callable_local_program(types, callable);
+    let outcome = RealizedProgram::new(&program)
+        .expect("direct floating callable parameter must realize")
+        .execute(FunctionId(0))
+        .expect("passive callable fixture must execute");
+    assert_eq!(outcome, ExecutionOutcome::Returned(None));
 }
 
 #[test]
