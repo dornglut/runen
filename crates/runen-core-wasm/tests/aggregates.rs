@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Fault, Field, Function, FunctionId, LocalDecl, LocalId, Operand,
-    Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId,
-    TypeTable, ValidatedProgram, Value, validate_program,
+    BasicBlock, BasicBlockId, Body, Fault, Field, Function, FunctionId, LocalDecl, LocalId,
+    Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator,
+    TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
@@ -159,10 +159,7 @@ fn projected_move_copy_and_integer_operation_match_reference() {
                 vec![
                     Statement::Init {
                         dst: pair.clone(),
-                        src: Operand::Constant(Value::Struct(vec![
-                            Value::I64(20),
-                            Value::I64(22),
-                        ])),
+                        src: Operand::Constant(Value::Struct(vec![Value::I64(20), Value::I64(22)])),
                     },
                     Statement::IntegerAdd {
                         dst: result.clone(),
@@ -248,10 +245,7 @@ fn projected_assign_read_and_drop_preserve_structural_state() {
                 vec![
                     Statement::Init {
                         dst: pair.clone(),
-                        src: Operand::Constant(Value::Struct(vec![
-                            Value::I64(1),
-                            Value::I64(99),
-                        ])),
+                        src: Operand::Constant(Value::Struct(vec![Value::I64(1), Value::I64(99)])),
                     },
                     Statement::Assign {
                         dst: pair.clone().field(0).into(),
@@ -271,6 +265,44 @@ fn projected_assign_read_and_drop_preserve_structural_state() {
     assert_eq!(
         assert_differential(program, FunctionId(0)),
         ExecutionOutcome::Returned(Some(Value::I64(42)))
+    );
+}
+
+#[test]
+fn exact_root_overlapping_assignment_snapshots_before_replacement() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let pair_ty = types.push(TypeDef::structure(
+        "Pair",
+        vec![Field::new("left", i64_ty), Field::new("right", i64_ty)],
+    ));
+    let pair = Place::local(LocalId(0));
+    let value = Value::Struct(vec![Value::I64(20), Value::I64(22)]);
+    let program = validated(
+        types,
+        vec![function(
+            "entry",
+            Vec::new(),
+            Some(pair_ty),
+            vec![LocalDecl::new("pair", pair_ty, true)],
+            vec![BasicBlock::new(
+                vec![
+                    Statement::Init {
+                        dst: pair.clone(),
+                        src: Operand::Constant(value.clone()),
+                    },
+                    Statement::Assign {
+                        dst: pair.clone().into(),
+                        src: Operand::Copy(pair.clone().into()),
+                    },
+                ],
+                Terminator::Return(Some(Operand::Move(pair.into()))),
+            )],
+        )],
+    );
+    assert_eq!(
+        assert_differential(program, FunctionId(0)),
+        ExecutionOutcome::Returned(Some(value))
     );
 }
 
@@ -320,9 +352,94 @@ fn direct_aggregate_parameter_and_result_match_reference() {
     let program = validated(types, vec![entry, identity]);
     assert_eq!(
         assert_differential(program, FunctionId(0)),
+        ExecutionOutcome::Returned(Some(Value::Struct(vec![Value::I64(20), Value::I64(22),])))
+    );
+}
+
+#[test]
+fn finite_direct_recursion_with_aggregate_parameter_and_result_matches_reference() {
+    let mut types = TypeTable::new();
+    let bool_ty = types.push(TypeDef::scalar("Bool", ScalarType::Bool));
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let state_ty = types.push(TypeDef::structure(
+        "State",
+        vec![Field::new("again", bool_ty), Field::new("value", i64_ty)],
+    ));
+
+    let entry_result = Place::local(LocalId(0));
+    let entry = function(
+        "entry",
+        Vec::new(),
+        Some(state_ty),
+        vec![LocalDecl::new("result", state_ty, false)],
+        vec![
+            BasicBlock::new(
+                Vec::new(),
+                Terminator::Call {
+                    function: FunctionId(1),
+                    arguments: vec![Operand::Constant(Value::Struct(vec![
+                        Value::Bool(true),
+                        Value::I64(0),
+                    ]))],
+                    destination: Some(entry_result.clone()),
+                    target: BasicBlockId(1),
+                },
+            ),
+            BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Move(entry_result.into()))),
+            ),
+        ],
+    );
+
+    let state = Place::local(LocalId(0));
+    let recursive_result = Place::local(LocalId(1));
+    let recurse = function(
+        "recurse",
+        vec![LocalId(0)],
+        Some(state_ty),
+        vec![
+            LocalDecl::new("state", state_ty, false),
+            LocalDecl::new("recursive_result", state_ty, false),
+        ],
+        vec![
+            BasicBlock::new(
+                Vec::new(),
+                Terminator::Branch {
+                    condition: Operand::Copy(state.clone().field(0).into()),
+                    true_target: BasicBlockId(1),
+                    false_target: BasicBlockId(2),
+                },
+            ),
+            BasicBlock::new(
+                Vec::new(),
+                Terminator::Call {
+                    function: FunctionId(1),
+                    arguments: vec![Operand::Constant(Value::Struct(vec![
+                        Value::Bool(false),
+                        Value::I64(42),
+                    ]))],
+                    destination: Some(recursive_result.clone()),
+                    target: BasicBlockId(3),
+                },
+            ),
+            BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Move(state.into()))),
+            ),
+            BasicBlock::new(
+                Vec::new(),
+                Terminator::Return(Some(Operand::Move(recursive_result.into()))),
+            ),
+        ],
+    );
+
+    let program = validated(types, vec![entry, recurse]);
+    assert_eq!(
+        assert_differential(program, FunctionId(0)),
         ExecutionOutcome::Returned(Some(Value::Struct(vec![
-            Value::I64(20),
-            Value::I64(22),
+            Value::Bool(false),
+            Value::I64(42),
         ])))
     );
 }
@@ -380,7 +497,10 @@ fn closure_environment_shape_uses_generic_structural_direct_call_transport() {
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let environment_ty = types.push(TypeDef::structure(
         "$closure-env-0",
-        vec![Field::new("$capture0", i64_ty), Field::new("$capture1", i64_ty)],
+        vec![
+            Field::new("$capture0", i64_ty),
+            Field::new("$capture1", i64_ty),
+        ],
     ));
     let result = Place::local(LocalId(0));
     let entry = function(
