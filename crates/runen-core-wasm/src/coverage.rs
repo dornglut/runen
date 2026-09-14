@@ -66,15 +66,9 @@ pub enum UnsupportedStatementKind {
     InteriorMutation,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum UnsupportedTerminatorKind {
-    ExternalCall,
-}
-
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoverageErrorKind {
     ProgramTooLarge,
-    ExternalCallables,
     LoanDeclarations,
     UnsupportedType {
         ty: TypeId,
@@ -105,7 +99,6 @@ pub enum CoverageErrorKind {
     UnsupportedSafeReferenceResultContract,
     UnsupportedOperand(UnsupportedOperandKind),
     UnsupportedStatement(UnsupportedStatementKind),
-    UnsupportedTerminator(UnsupportedTerminatorKind),
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -147,8 +140,8 @@ fn validate_external_callable(
     let location = CoverageLocation::ExternalCallable(external);
     for (parameter, ty) in interface.parameters.iter().copied().enumerate() {
         if !is_supported_scalar_type(types, ty) {
-            let (unsupported_ty, category) = first_unsupported_type(types, ty)
-                .unwrap_or((ty, UnsupportedTypeCategory::Unknown));
+            let (unsupported_ty, category) =
+                first_unsupported_type(types, ty).unwrap_or((ty, UnsupportedTypeCategory::Unknown));
             return Err(CoverageError {
                 location,
                 kind: CoverageErrorKind::UnsupportedExternalParameterType {
