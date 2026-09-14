@@ -356,9 +356,7 @@ fn first_unsupported_type(
         TypeKind::Scalar(ScalarType::Reference { .. }) => {
             Some((ty, UnsupportedTypeCategory::SafeReference))
         }
-        TypeKind::Scalar(ScalarType::Callable(_)) => {
-            Some((ty, UnsupportedTypeCategory::Callable))
-        }
+        TypeKind::Scalar(ScalarType::Callable(_)) => Some((ty, UnsupportedTypeCategory::Callable)),
         TypeKind::Scalar(ScalarType::TrackedFixture) => {
             Some((ty, UnsupportedTypeCategory::TrackedFixture))
         }
