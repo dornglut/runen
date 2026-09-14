@@ -695,3 +695,202 @@ fn function_error(function: FunctionId, kind: CoverageErrorKind) -> CoverageErro
         kind,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::encoding;
+    use runen_core_ir::{
+        BasicBlock, Body, CallableInterface, Function, LocalDecl, Operand, Program, Statement,
+        TypeDef, validate_program,
+    };
+
+    #[test]
+    fn higher_order_callable_dispatch_reuses_existing_private_wasm_surface() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let inner = types.push(TypeDef::callable(
+            "Inner",
+            CallableInterface::new(
+                vec![i64_ty],
+                Some(i64_ty),
+                SafeReferenceResultContract::None,
+            ),
+        ));
+        let outer = types.push(TypeDef::callable(
+            "Outer",
+            CallableInterface::new(vec![inner], Some(i64_ty), SafeReferenceResultContract::None),
+        ));
+        let program = validate_program(Program {
+            types,
+            persistent: Vec::new(),
+            external_callables: Vec::new(),
+            functions: vec![
+                Function {
+                    name: "entry".into(),
+                    parameters: Vec::new(),
+                    result: Some(i64_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![
+                            LocalDecl::new("callee", outer, false),
+                            LocalDecl::new("argument", inner, false),
+                            LocalDecl::new("result", i64_ty, false),
+                        ],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![
+                            BasicBlock::new(
+                                vec![
+                                    Statement::Init {
+                                        dst: Place::local(LocalId(0)),
+                                        src: Operand::FunctionValue(FunctionId(1)),
+                                    },
+                                    Statement::Init {
+                                        dst: Place::local(LocalId(1)),
+                                        src: Operand::FunctionValue(FunctionId(2)),
+                                    },
+                                ],
+                                Terminator::IndirectCall {
+                                    callable: outer,
+                                    callee: Operand::Move(Place::local(LocalId(0)).into()),
+                                    arguments: vec![Operand::Move(Place::local(LocalId(1)).into())],
+                                    destination: Some(Place::local(LocalId(2))),
+                                    target: BasicBlockId(1),
+                                },
+                            ),
+                            BasicBlock::new(
+                                Vec::new(),
+                                Terminator::Return(Some(Operand::Move(
+                                    Place::local(LocalId(2)).into(),
+                                ))),
+                            ),
+                        ],
+                    },
+                },
+                Function {
+                    name: "outer_target".into(),
+                    parameters: vec![LocalId(0)],
+                    result: Some(i64_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("argument", inner, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(
+                            Vec::new(),
+                            Terminator::Return(Some(Operand::Constant(Value::I64(42)))),
+                        )],
+                    },
+                },
+                Function {
+                    name: "inner_target".into(),
+                    parameters: vec![LocalId(0)],
+                    result: Some(i64_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("value", i64_ty, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(
+                            Vec::new(),
+                            Terminator::Return(Some(Operand::Move(
+                                Place::local(LocalId(0)).into(),
+                            ))),
+                        )],
+                    },
+                },
+            ],
+        })
+        .expect("higher-order module-shape fixture must be valid Core");
+
+        validate(&program).expect("higher-order module-shape fixture must be in coverage");
+        let encoded = encoding::encode(&program).expect("higher-order fixture must encode");
+        let module = &encoded.bytes[8..];
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 4, 7, 9, 10],
+            "higher-order dispatch must add no Wasm surface beyond the existing private table and element sections"
+        );
+        assert_eq!(
+            export_kinds(section_payload(module, 7)),
+            vec![0],
+            "higher-order callable transport must add no non-function export kind"
+        );
+    }
+
+    fn section_ids(bytes: &[u8]) -> Vec<u8> {
+        let mut cursor = 0_usize;
+        let mut ids = Vec::new();
+        while cursor < bytes.len() {
+            let section_id = bytes[cursor];
+            cursor += 1;
+            let payload_len = read_u32_leb(bytes, &mut cursor);
+            let end = cursor
+                .checked_add(payload_len)
+                .expect("section payload length must fit usize");
+            assert!(end <= bytes.len(), "section payload must fit module bytes");
+            ids.push(section_id);
+            cursor = end;
+        }
+        ids
+    }
+
+    fn section_payload(bytes: &[u8], wanted: u8) -> &[u8] {
+        let mut cursor = 0_usize;
+        while cursor < bytes.len() {
+            let section_id = bytes[cursor];
+            cursor += 1;
+            let payload_len = read_u32_leb(bytes, &mut cursor);
+            let start = cursor;
+            let end = start
+                .checked_add(payload_len)
+                .expect("section payload length must fit usize");
+            assert!(end <= bytes.len(), "section payload must fit module bytes");
+            if section_id == wanted {
+                return &bytes[start..end];
+            }
+            cursor = end;
+        }
+        panic!("missing expected Wasm section {wanted}");
+    }
+
+    fn export_kinds(bytes: &[u8]) -> Vec<u8> {
+        let mut cursor = 0_usize;
+        let count = read_u32_leb(bytes, &mut cursor);
+        let mut kinds = Vec::with_capacity(count);
+        for _ in 0..count {
+            let name_len = read_u32_leb(bytes, &mut cursor);
+            cursor = cursor
+                .checked_add(name_len)
+                .expect("export name length must fit usize");
+            assert!(cursor < bytes.len(), "export kind must be present");
+            kinds.push(bytes[cursor]);
+            cursor += 1;
+            let _index = read_u32_leb(bytes, &mut cursor);
+        }
+        assert_eq!(
+            cursor,
+            bytes.len(),
+            "export section must be consumed exactly"
+        );
+        kinds
+    }
+
+    fn read_u32_leb(bytes: &[u8], cursor: &mut usize) -> usize {
+        let mut result = 0_usize;
+        let mut shift = 0_u32;
+        loop {
+            let byte = *bytes
+                .get(*cursor)
+                .expect("section size LEB must be present in generated module");
+            *cursor += 1;
+            result |= usize::from(byte & 0x7f) << shift;
+            if byte & 0x80 == 0 {
+                return result;
+            }
+            shift += 7;
+            assert!(shift < 35, "section size LEB must fit u32");
+        }
+    }
+}
