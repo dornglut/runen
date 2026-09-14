@@ -153,11 +153,7 @@ fn provider_admission_requires_exactly_one_matching_binding_for_every_declaratio
         RealizedProgram::new_with_external_providers(
             &program,
             vec![
-                ExternalProviderBinding::no_result(
-                    ExternalCallableId(0),
-                    first.clone(),
-                    |_| {},
-                ),
+                ExternalProviderBinding::no_result(ExternalCallableId(0), first.clone(), |_| {},),
                 ExternalProviderBinding::scalar_result(
                     ExternalCallableId(1),
                     second.clone(),
