@@ -3,8 +3,8 @@ use runen_core_ir::{
     Terminator, TypeId, TypeTable, ValidatedProgram,
 };
 use wasm_encoder::{
-    BlockType, CodeSection, ExportKind, ExportSection, Function as WasmFunction, FunctionSection,
-    Instruction, Module, TypeSection, ValType,
+    BlockType, CodeSection, ConstExpr, ExportKind, ExportSection, Function as WasmFunction,
+    FunctionSection, GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType,
 };
 
 use crate::RealizationError;
@@ -31,6 +31,7 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
     let mut module = Module::new();
     let mut types = TypeSection::new();
     let mut functions = FunctionSection::new();
+    let mut globals = GlobalSection::new();
     let mut exports = ExportSection::new();
     let mut entries = Vec::with_capacity(program.functions.len());
 
@@ -55,8 +56,22 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
         });
     }
 
+    for persistent in &program.persistent {
+        let _kind = supported_kind(&program.types, persistent.ty)?;
+        let residue = constant_residue(&persistent.initial).ok_or_else(|| {
+            invariant("coverage admission allowed an unsupported persistent initializer")
+        })?;
+        globals.global(
+            persistent_global_type(),
+            &ConstExpr::i64_const(residue_as_i64(residue)),
+        );
+    }
+
     module.section(&types);
     module.section(&functions);
+    if !program.persistent.is_empty() {
+        module.section(&globals);
+    }
     module.section(&exports);
 
     let mut faults = Vec::new();
@@ -411,8 +426,11 @@ impl FunctionEncoder<'_> {
                 encoded.instruction(&Instruction::LocalGet(self.layout.local(local)?));
                 Ok(())
             }
-            Operand::PersistentRead(_)
-            | Operand::PersistentSharedRoot(_)
+            Operand::PersistentRead(persistent) => {
+                encoded.instruction(&Instruction::GlobalGet(persistent.0));
+                Ok(())
+            }
+            Operand::PersistentSharedRoot(_)
             | Operand::FunctionValue(_)
             | Operand::RawMove(_)
             | Operand::AddressOf(_)
@@ -460,6 +478,14 @@ fn supported_kind(types: &TypeTable, ty: TypeId) -> Result<ScalarKind, Realizati
     })
 }
 
+fn persistent_global_type() -> GlobalType {
+    GlobalType {
+        val_type: ValType::I64,
+        mutable: false,
+        shared: false,
+    }
+}
+
 fn direct_access_local(access: &PlaceAccess) -> Result<LocalId, RealizationError> {
     match access {
         PlaceAccess::Direct(place) if place.projections.is_empty() => Ok(place.local),
@@ -486,10 +512,12 @@ fn emit_sign_extension(encoded: &mut WasmFunction, width: u32) {
     }
 }
 
+fn residue_as_i64(residue: u64) -> i64 {
+    i64::from_ne_bytes(residue.to_ne_bytes())
+}
+
 fn emit_i64_const(encoded: &mut WasmFunction, residue: u64) {
-    encoded.instruction(&Instruction::I64Const(i64::from_ne_bytes(
-        residue.to_ne_bytes(),
-    )));
+    encoded.instruction(&Instruction::I64Const(residue_as_i64(residue)));
 }
 
 fn emit_i32_const(encoded: &mut WasmFunction, bits: u32) {
@@ -525,5 +553,13 @@ mod tests {
         let mut types = TypeTable::new();
         let ty = types.push(TypeDef::scalar("I32", ScalarType::I32));
         assert_eq!(supported_kind(&types, ty), Ok(ScalarKind::I32));
+    }
+
+    #[test]
+    fn persistent_global_carrier_is_private_immutable_i64_storage() {
+        let global = persistent_global_type();
+        assert_eq!(global.val_type, ValType::I64);
+        assert!(!global.mutable);
+        assert!(!global.shared);
     }
 }
