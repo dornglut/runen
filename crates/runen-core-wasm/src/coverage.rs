@@ -217,10 +217,15 @@ fn require_supported_result_type(
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
     if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
-        Ok(())
-    } else {
-        unsupported_type(types, ty, location)
+        return Ok(());
     }
+    if matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(ScalarType::Callable(_)))
+    ) {
+        return require_supported_callable_type(types, ty, &location);
+    }
+    unsupported_type(types, ty, location)
 }
 
 fn require_supported_scalar_type(

@@ -211,7 +211,7 @@ fn passive_unsupported_type_roles_have_precise_locations() {
 }
 
 #[test]
-fn callable_result_has_a_precise_result_location() {
+fn supported_callable_result_is_admitted_but_not_publicly_observable() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let callable = types.push(TypeDef::callable(
@@ -254,17 +254,11 @@ fn callable_result_has_a_precise_result_location() {
         ],
     );
 
+    let realized = RealizedProgram::new(&program)
+        .expect("supported callable function result must be admitted for internal transport");
     assert_eq!(
-        coverage_error(&program),
-        CoverageError {
-            location: CoverageLocation::Result {
-                function: FunctionId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: callable,
-                category: UnsupportedTypeCategory::Callable,
-            },
-        }
+        realized.execute(FunctionId(0)),
+        Err(RealizationError::EntryResultUnsupported(FunctionId(0)))
     );
 }
 

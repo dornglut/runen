@@ -21,7 +21,10 @@ pub(crate) fn result_carrier_count(
     types: &TypeTable,
     ty: TypeId,
 ) -> Result<usize, RealizationError> {
-    carrier_count(types, ty, false)
+    // Coverage remains the admission authority for each result context. Ordinary
+    // function results may now be a supported callable root, while callable-valued
+    // interface components still reject before encoding.
+    carrier_count(types, ty, true)
 }
 
 fn carrier_count(

@@ -12,7 +12,7 @@ mod scalar;
 use std::error::Error;
 use std::fmt;
 
-use runen_core_ir::{Fault, FunctionId, TypeTable, ValidatedProgram, Value};
+use runen_core_ir::{Fault, FunctionId, ScalarType, TypeKind, TypeTable, ValidatedProgram, Value};
 use wasmtime::{Engine, Instance, Module, Store, Val};
 
 pub use coverage::{
@@ -44,6 +44,7 @@ pub enum RealizationError {
     Coverage(CoverageError),
     InvalidEntry(FunctionId),
     EntryHasParameters(FunctionId),
+    EntryResultUnsupported(FunctionId),
     Backend {
         phase: BackendPhase,
         message: String,
@@ -65,6 +66,12 @@ impl fmt::Display for RealizationError {
                 write!(
                     formatter,
                     "Core entry function has parameters: {function:?}"
+                )
+            }
+            Self::EntryResultUnsupported(function) => {
+                write!(
+                    formatter,
+                    "Core entry function result is not observable through this realization API: {function:?}"
                 )
             }
             Self::Backend { phase, message } => {
@@ -129,6 +136,14 @@ impl RealizedProgram {
             .ok_or(RealizationError::InvalidEntry(entry))?;
         if entry_info.parameter_count != 0 {
             return Err(RealizationError::EntryHasParameters(entry));
+        }
+        if entry_info.result.is_some_and(|ty| {
+            matches!(
+                self.types.get(ty).map(|definition| &definition.kind),
+                Some(TypeKind::Scalar(ScalarType::Callable(_)))
+            )
+        }) {
+            return Err(RealizationError::EntryResultUnsupported(entry));
         }
 
         let mut store = Store::new(&self.engine, ());
@@ -368,6 +383,89 @@ mod tests {
             export_kinds(section_payload(module, 7)),
             vec![0],
             "aggregate realization exports only the existing entry function"
+        );
+    }
+
+    #[test]
+    fn callable_result_transport_adds_no_section_or_export_kind() {
+        let mut types = TypeTable::new();
+        let callable = types.push(TypeDef::callable(
+            "Thunk",
+            CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
+        ));
+        let program = validate_program(Program {
+            types,
+            persistent: Vec::new(),
+            external_callables: Vec::new(),
+            functions: vec![
+                Function {
+                    name: "entry".into(),
+                    parameters: Vec::new(),
+                    result: None,
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("returned", callable, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![
+                            BasicBlock::new(
+                                Vec::new(),
+                                Terminator::Call {
+                                    function: FunctionId(1),
+                                    arguments: Vec::new(),
+                                    destination: Some(Place::local(LocalId(0))),
+                                    target: BasicBlockId(1),
+                                },
+                            ),
+                            BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                        ],
+                    },
+                },
+                Function {
+                    name: "producer".into(),
+                    parameters: Vec::new(),
+                    result: Some(callable),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: Vec::new(),
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(
+                            Vec::new(),
+                            Terminator::Return(Some(Operand::FunctionValue(FunctionId(2)))),
+                        )],
+                    },
+                },
+                Function {
+                    name: "target".into(),
+                    parameters: Vec::new(),
+                    result: None,
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: Vec::new(),
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+                    },
+                },
+            ],
+        })
+        .expect("callable-result module-shape fixture must be valid Core");
+        coverage::validate(&program)
+            .expect("callable-result fixture must be in realization coverage");
+        let encoded = encoding::encode(&program).expect("callable-result fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 7, 10],
+            "direct callable-result transport must add no table, import, memory, global, element, or data section"
+        );
+        assert!(
+            export_kinds(section_payload(module, 7))
+                .into_iter()
+                .all(|kind| kind == 0),
+            "callable-result transport must not add a non-function export kind"
         );
     }
 
