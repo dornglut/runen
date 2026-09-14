@@ -6,13 +6,14 @@
 
 mod coverage;
 mod encoding;
+mod layout;
 mod scalar;
 
 use std::error::Error;
 use std::fmt;
 
-use runen_core_ir::{Fault, FunctionId, ValidatedProgram, Value};
-use wasmtime::{Engine, Instance, Module, Store};
+use runen_core_ir::{Fault, FunctionId, TypeTable, ValidatedProgram, Value};
+use wasmtime::{Engine, Instance, Module, Store, Val};
 
 pub use coverage::{
     CoverageError, CoverageErrorKind, CoverageLocation, UnsupportedOperandKind,
@@ -95,6 +96,7 @@ pub struct RealizedProgram {
     module: Module,
     faults: Vec<Fault>,
     entries: Vec<EntryInfo>,
+    types: TypeTable,
 }
 
 impl RealizedProgram {
@@ -115,6 +117,7 @@ impl RealizedProgram {
             module,
             faults,
             entries,
+            types: program.as_program().types.clone(),
         })
     }
 
@@ -136,28 +139,53 @@ impl RealizedProgram {
             }
         })?;
         let function = instance
-            .get_typed_func::<(), (i32, i64)>(&mut store, &entry_export_name(entry))
-            .map_err(|error| RealizationError::Backend {
+            .get_func(&mut store, &entry_export_name(entry))
+            .ok_or_else(|| RealizationError::Backend {
                 phase: BackendPhase::LookupEntry,
+                message: "entry export is missing".into(),
+            })?;
+        let payload_count = entry_info.result_carrier_count.max(1);
+        let mut results = Vec::with_capacity(payload_count + 1);
+        results.push(Val::I32(0));
+        results.extend(std::iter::repeat_n(Val::I64(0), payload_count));
+        function
+            .call(&mut store, &[], &mut results)
+            .map_err(|error| RealizationError::Backend {
+                phase: BackendPhase::Execute,
                 message: error.to_string(),
             })?;
-        let (status, payload) =
-            function
-                .call(&mut store, ())
-                .map_err(|error| RealizationError::Backend {
-                    phase: BackendPhase::Execute,
-                    message: error.to_string(),
-                })?;
+
+        let status = match results.first() {
+            Some(Val::I32(status)) => *status,
+            _ => return Err(invalid_backend_result()),
+        };
+        let payloads = results[1..]
+            .iter()
+            .map(|value| match value {
+                Val::I64(value) => Ok(*value),
+                _ => Err(invalid_backend_result()),
+            })
+            .collect::<Result<Vec<_>, _>>()?;
 
         match status {
             STATUS_RETURNED => {
                 let result = entry_info
                     .result
-                    .map(|kind| kind.decode(payload))
+                    .map(|ty| {
+                        layout::decode_value(
+                            &self.types,
+                            ty,
+                            &payloads[..entry_info.result_carrier_count],
+                        )
+                    })
                     .transpose()?;
                 Ok(ExecutionOutcome::Returned(result))
             }
             STATUS_FAULTED => {
+                let payload = payloads
+                    .first()
+                    .copied()
+                    .ok_or_else(invalid_backend_result)?;
                 let index = usize::try_from(payload).map_err(|_| invalid_backend_result())?;
                 let fault = self
                     .faults
