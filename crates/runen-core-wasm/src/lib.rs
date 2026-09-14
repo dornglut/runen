@@ -174,3 +174,83 @@ impl RealizedProgram {
 pub(crate) fn invalid_backend_result() -> RealizationError {
     RealizationError::BackendInvariant(INVALID_BACKEND_RESULT.into())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use runen_core_ir::{
+        BasicBlock, BasicBlockId, Body, Function, Program, SafeReferenceResultContract, Terminator,
+        TypeTable, validate_program,
+    };
+
+    #[test]
+    fn generated_modules_are_core_wasm_with_only_reviewed_sections() {
+        let program = validate_program(Program {
+            types: TypeTable::new(),
+            persistent: Vec::new(),
+            external_callables: Vec::new(),
+            functions: vec![Function {
+                name: "entry".into(),
+                parameters: Vec::new(),
+                result: None,
+                safe_reference_result_contract: SafeReferenceResultContract::None,
+                body: Body {
+                    locals: Vec::new(),
+                    loans: Vec::new(),
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+                },
+            }],
+        })
+        .expect("module-shape fixture must be valid Core");
+        let encoded = encoding::encode(&program).expect("supported fixture must encode");
+
+        assert!(
+            encoded.bytes.starts_with(b"\0asm\x01\0\0\0"),
+            "generated artifact must use the core WebAssembly v1 header"
+        );
+        let non_custom_sections: Vec<_> = section_ids(&encoded.bytes[8..])
+            .into_iter()
+            .filter(|id| *id != 0)
+            .collect();
+        assert_eq!(
+            non_custom_sections,
+            vec![1, 3, 7, 10],
+            "generated modules may contain only type, function, export, and code sections"
+        );
+    }
+
+    fn section_ids(bytes: &[u8]) -> Vec<u8> {
+        let mut cursor = 0_usize;
+        let mut ids = Vec::new();
+        while cursor < bytes.len() {
+            let section_id = bytes[cursor];
+            cursor += 1;
+            let payload_len = read_u32_leb(bytes, &mut cursor);
+            let end = cursor
+                .checked_add(payload_len)
+                .expect("section payload length must fit usize");
+            assert!(end <= bytes.len(), "section payload must fit module bytes");
+            ids.push(section_id);
+            cursor = end;
+        }
+        ids
+    }
+
+    fn read_u32_leb(bytes: &[u8], cursor: &mut usize) -> usize {
+        let mut result = 0_usize;
+        let mut shift = 0_u32;
+        loop {
+            let byte = *bytes
+                .get(*cursor)
+                .expect("section size LEB must be present in generated module");
+            *cursor += 1;
+            result |= usize::from(byte & 0x7f) << shift;
+            if byte & 0x80 == 0 {
+                return result;
+            }
+            shift += 7;
+            assert!(shift < 35, "section size LEB must fit u32");
+        }
+    }
+}
