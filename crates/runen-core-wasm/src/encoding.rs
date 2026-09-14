@@ -1,10 +1,14 @@
+use std::borrow::Cow;
+use std::collections::BTreeMap;
+
 use runen_core_ir::{
-    BasicBlockId, Fault, Function, FunctionId, LocalId, Operand, Place, PlaceAccess, Statement,
-    Terminator, TypeId, TypeTable, ValidatedProgram,
+    BasicBlockId, Fault, Function, FunctionId, LocalId, Operand, Place, PlaceAccess, ScalarType,
+    Statement, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram,
 };
 use wasm_encoder::{
-    BlockType, CodeSection, ConstExpr, ExportKind, ExportSection, Function as WasmFunction,
-    FunctionSection, GlobalSection, GlobalType, Instruction, Module, TypeSection, ValType,
+    BlockType, CodeSection, ConstExpr, ElementSection, Elements, ExportKind, ExportSection,
+    Function as WasmFunction, FunctionSection, GlobalSection, GlobalType, Instruction, Module,
+    RefType, TableSection, TableType, TypeSection, ValType,
 };
 
 use crate::RealizationError;
@@ -31,8 +35,10 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
     let mut module = Module::new();
     let mut types = TypeSection::new();
     let mut functions = FunctionSection::new();
+    let mut tables = TableSection::new();
     let mut globals = GlobalSection::new();
     let mut exports = ExportSection::new();
+    let mut elements = ElementSection::new();
     let mut entries = Vec::with_capacity(program.functions.len());
 
     for (index, function) in program.functions.iter().enumerate() {
@@ -56,6 +62,29 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
         });
     }
 
+    let callable_type_indices = encode_callable_types(&mut types, program)?;
+    if !callable_type_indices.is_empty() {
+        let function_count = u64::try_from(program.functions.len())
+            .map_err(|_| invariant("Core function count exceeds u64::MAX"))?;
+        tables.table(TableType {
+            element_type: RefType::FUNCREF,
+            table64: false,
+            minimum: function_count,
+            maximum: Some(function_count),
+            shared: false,
+        });
+        let function_indices = (0..program.functions.len())
+            .map(|index| {
+                u32::try_from(index).map_err(|_| invariant("Core function index exceeds u32::MAX"))
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        elements.active(
+            None,
+            &ConstExpr::i32_const(0),
+            Elements::Functions(Cow::Owned(function_indices)),
+        );
+    }
+
     for persistent in &program.persistent {
         let _kind = supported_kind(&program.types, persistent.ty)?;
         let residue = constant_residue(&persistent.initial).ok_or_else(|| {
@@ -69,15 +98,26 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
 
     module.section(&types);
     module.section(&functions);
+    if !callable_type_indices.is_empty() {
+        module.section(&tables);
+    }
     if !program.persistent.is_empty() {
         module.section(&globals);
     }
     module.section(&exports);
+    if !callable_type_indices.is_empty() {
+        module.section(&elements);
+    }
 
     let mut faults = Vec::new();
     let mut code = CodeSection::new();
     for function in &program.functions {
-        let encoded = encode_function(&program.types, function, &mut faults)?;
+        let encoded = encode_function(
+            &program.types,
+            function,
+            &callable_type_indices,
+            &mut faults,
+        )?;
         code.function(&encoded);
     }
     module.section(&code);
@@ -89,9 +129,47 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
     })
 }
 
+fn encode_callable_types(
+    types: &mut TypeSection,
+    program: &runen_core_ir::Program,
+) -> Result<BTreeMap<TypeId, u32>, RealizationError> {
+    let mut callable_type_indices = BTreeMap::new();
+    for function in &program.functions {
+        for block in &function.body.blocks {
+            let Terminator::IndirectCall { callable, .. } = block.terminator else {
+                continue;
+            };
+            if callable_type_indices.contains_key(&callable) {
+                continue;
+            }
+            let parameter_count = callable_parameter_count(&program.types, callable)?;
+            let type_index = types.len();
+            types.ty().function(
+                vec![ValType::I64; parameter_count],
+                [ValType::I32, ValType::I64],
+            );
+            callable_type_indices.insert(callable, type_index);
+        }
+    }
+    Ok(callable_type_indices)
+}
+
+fn callable_parameter_count(types: &TypeTable, ty: TypeId) -> Result<usize, RealizationError> {
+    let definition = types
+        .get(ty)
+        .ok_or_else(|| invariant("validated callable type is missing"))?;
+    let TypeKind::Scalar(ScalarType::Callable(interface)) = &definition.kind else {
+        return Err(invariant(
+            "coverage admission allowed a non-callable indirect-call type",
+        ));
+    };
+    Ok(interface.parameters.len())
+}
+
 fn encode_function(
     types: &TypeTable,
     function: &Function,
+    callable_type_indices: &BTreeMap<TypeId, u32>,
     faults: &mut Vec<Fault>,
 ) -> Result<WasmFunction, RealizationError> {
     let layout = FunctionLayout::new(function)?;
@@ -111,6 +189,7 @@ fn encode_function(
         types,
         function,
         layout: &layout,
+        callable_type_indices,
         faults,
     };
 
@@ -212,6 +291,7 @@ struct FunctionEncoder<'a> {
     types: &'a TypeTable,
     function: &'a Function,
     layout: &'a FunctionLayout,
+    callable_type_indices: &'a BTreeMap<TypeId, u32>,
     faults: &'a mut Vec<Fault>,
 }
 
@@ -336,22 +416,32 @@ impl FunctionEncoder<'_> {
                     self.emit_operand(encoded, argument)?;
                 }
                 encoded.instruction(&Instruction::Call(function.0));
+                self.emit_call_completion(encoded, destination.as_ref(), *target)
+            }
+            Terminator::IndirectCall {
+                callable,
+                callee,
+                arguments,
+                destination,
+                target,
+            } => {
+                self.emit_operand(encoded, callee)?;
                 encoded.instruction(&Instruction::LocalSet(self.layout.payload));
-                encoded.instruction(&Instruction::LocalSet(self.layout.status));
-                encoded.instruction(&Instruction::LocalGet(self.layout.status));
-                encoded.instruction(&Instruction::If(BlockType::Empty));
-                encoded.instruction(&Instruction::LocalGet(self.layout.status));
-                encoded.instruction(&Instruction::LocalGet(self.layout.payload));
-                encoded.instruction(&Instruction::Return);
-                encoded.instruction(&Instruction::End);
-                if let Some(destination) = destination {
-                    encoded.instruction(&Instruction::LocalGet(self.layout.payload));
-                    encoded.instruction(&Instruction::LocalSet(
-                        self.layout.local(destination.local)?,
-                    ));
+                for argument in arguments {
+                    self.emit_operand(encoded, argument)?;
                 }
-                self.emit_dispatch(encoded, *target);
-                Ok(())
+                encoded.instruction(&Instruction::LocalGet(self.layout.payload));
+                encoded.instruction(&Instruction::I32WrapI64);
+                let type_index = self
+                    .callable_type_indices
+                    .get(callable)
+                    .copied()
+                    .ok_or_else(|| invariant("missing Wasm type for admitted indirect call"))?;
+                encoded.instruction(&Instruction::CallIndirect {
+                    type_index,
+                    table_index: 0,
+                });
+                self.emit_call_completion(encoded, destination.as_ref(), *target)
             }
             Terminator::Return(result) => {
                 if let Some(result) = result {
@@ -376,10 +466,34 @@ impl FunctionEncoder<'_> {
                 encoded.instruction(&Instruction::Return);
                 Ok(())
             }
-            Terminator::ExternalCall { .. } | Terminator::IndirectCall { .. } => Err(invariant(
+            Terminator::ExternalCall { .. } => Err(invariant(
                 "coverage admission allowed an unsupported Core terminator",
             )),
         }
+    }
+
+    fn emit_call_completion(
+        &self,
+        encoded: &mut WasmFunction,
+        destination: Option<&Place>,
+        target: BasicBlockId,
+    ) -> Result<(), RealizationError> {
+        encoded.instruction(&Instruction::LocalSet(self.layout.payload));
+        encoded.instruction(&Instruction::LocalSet(self.layout.status));
+        encoded.instruction(&Instruction::LocalGet(self.layout.status));
+        encoded.instruction(&Instruction::If(BlockType::Empty));
+        encoded.instruction(&Instruction::LocalGet(self.layout.status));
+        encoded.instruction(&Instruction::LocalGet(self.layout.payload));
+        encoded.instruction(&Instruction::Return);
+        encoded.instruction(&Instruction::End);
+        if let Some(destination) = destination {
+            encoded.instruction(&Instruction::LocalGet(self.layout.payload));
+            encoded.instruction(&Instruction::LocalSet(
+                self.layout.local(destination.local)?,
+            ));
+        }
+        self.emit_dispatch(encoded, target);
+        Ok(())
     }
 
     fn emit_binary_integer(
@@ -430,8 +544,11 @@ impl FunctionEncoder<'_> {
                 encoded.instruction(&Instruction::GlobalGet(persistent.0));
                 Ok(())
             }
+            Operand::FunctionValue(function) => {
+                encoded.instruction(&Instruction::I64Const(i64::from(function.0)));
+                Ok(())
+            }
             Operand::PersistentSharedRoot(_)
-            | Operand::FunctionValue(_)
             | Operand::RawMove(_)
             | Operand::AddressOf(_)
             | Operand::ReferenceRoot { .. }

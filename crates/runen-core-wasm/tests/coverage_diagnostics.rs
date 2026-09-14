@@ -211,6 +211,64 @@ fn passive_unsupported_type_roles_have_precise_locations() {
 }
 
 #[test]
+fn callable_result_has_a_precise_result_location() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let callable = types.push(TypeDef::callable(
+        "Thunk",
+        CallableInterface::new(Vec::new(), Some(i64_ty), SafeReferenceResultContract::None),
+    ));
+    let program = validated(
+        types,
+        Vec::new(),
+        Vec::new(),
+        vec![
+            function(
+                "producer",
+                Vec::new(),
+                Some(callable),
+                SafeReferenceResultContract::None,
+                body(
+                    Vec::new(),
+                    Vec::new(),
+                    vec![BasicBlock::new(
+                        Vec::new(),
+                        Terminator::Return(Some(Operand::FunctionValue(FunctionId(1)))),
+                    )],
+                ),
+            ),
+            function(
+                "target",
+                Vec::new(),
+                Some(i64_ty),
+                SafeReferenceResultContract::None,
+                body(
+                    Vec::new(),
+                    Vec::new(),
+                    vec![BasicBlock::new(
+                        Vec::new(),
+                        Terminator::Return(Some(Operand::Constant(Value::I64(1)))),
+                    )],
+                ),
+            ),
+        ],
+    );
+
+    assert_eq!(
+        coverage_error(&program),
+        CoverageError {
+            location: CoverageLocation::Result {
+                function: FunctionId(0),
+            },
+            kind: CoverageErrorKind::UnsupportedType {
+                ty: callable,
+                category: UnsupportedTypeCategory::Callable,
+            },
+        }
+    );
+}
+
+#[test]
 fn unsupported_persistent_type_has_a_persistent_location() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
@@ -294,7 +352,7 @@ fn persistent_shared_root_is_rejected_at_its_consuming_statement() {
 }
 
 #[test]
-fn active_external_and_indirect_calls_have_terminator_diagnostics() {
+fn active_external_call_has_a_terminator_diagnostic() {
     let external_interface =
         CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None);
     let external_program = validated(
@@ -334,48 +392,112 @@ fn active_external_and_indirect_calls_have_terminator_diagnostics() {
             kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::ExternalCall,),
         }
     );
+}
 
-    let mut indirect_types = TypeTable::new();
-    let callable = indirect_types.push(TypeDef::callable(
-        "Callable",
-        CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
-    ));
-    let indirect_program = validated(
-        indirect_types,
-        Vec::new(),
-        Vec::new(),
-        vec![function(
-            "indirect",
-            vec![LocalId(0)],
-            None,
+#[test]
+fn higher_order_indirect_call_rejects_at_the_consuming_terminator() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let inner = types.push(TypeDef::callable(
+        "Inner",
+        CallableInterface::new(
+            vec![i64_ty],
+            Some(i64_ty),
             SafeReferenceResultContract::None,
-            body(
-                vec![LocalDecl::new("callee", callable, false)],
+        ),
+    ));
+    let outer = types.push(TypeDef::callable(
+        "Outer",
+        CallableInterface::new(vec![inner], Some(i64_ty), SafeReferenceResultContract::None),
+    ));
+    let program = validated(
+        types,
+        Vec::new(),
+        Vec::new(),
+        vec![
+            function(
+                "entry",
                 Vec::new(),
-                vec![
-                    BasicBlock::new(
-                        Vec::new(),
-                        Terminator::IndirectCall {
-                            callable,
-                            callee: Operand::Move(Place::local(LocalId(0)).into()),
-                            arguments: Vec::new(),
-                            destination: None,
-                            target: BasicBlockId(1),
-                        },
-                    ),
-                    BasicBlock::new(Vec::new(), Terminator::Return(None)),
-                ],
+                Some(i64_ty),
+                SafeReferenceResultContract::None,
+                body(
+                    vec![
+                        LocalDecl::new("callee", outer, false),
+                        LocalDecl::new("argument", inner, false),
+                        LocalDecl::new("result", i64_ty, false),
+                    ],
+                    Vec::new(),
+                    vec![
+                        BasicBlock::new(
+                            vec![
+                                Statement::Init {
+                                    dst: Place::local(LocalId(0)),
+                                    src: Operand::FunctionValue(FunctionId(1)),
+                                },
+                                Statement::Init {
+                                    dst: Place::local(LocalId(1)),
+                                    src: Operand::FunctionValue(FunctionId(2)),
+                                },
+                            ],
+                            Terminator::IndirectCall {
+                                callable: outer,
+                                callee: Operand::Move(Place::local(LocalId(0)).into()),
+                                arguments: vec![Operand::Move(Place::local(LocalId(1)).into())],
+                                destination: Some(Place::local(LocalId(2))),
+                                target: BasicBlockId(1),
+                            },
+                        ),
+                        BasicBlock::new(
+                            Vec::new(),
+                            Terminator::Return(Some(Operand::Move(
+                                Place::local(LocalId(2)).into(),
+                            ))),
+                        ),
+                    ],
+                ),
             ),
-        )],
+            function(
+                "outer_target",
+                vec![LocalId(0)],
+                Some(i64_ty),
+                SafeReferenceResultContract::None,
+                body(
+                    vec![LocalDecl::new("argument", inner, false)],
+                    Vec::new(),
+                    vec![BasicBlock::new(
+                        Vec::new(),
+                        Terminator::Return(Some(Operand::Constant(Value::I64(42)))),
+                    )],
+                ),
+            ),
+            function(
+                "inner_target",
+                vec![LocalId(0)],
+                Some(i64_ty),
+                SafeReferenceResultContract::None,
+                body(
+                    vec![LocalDecl::new("argument", i64_ty, false)],
+                    Vec::new(),
+                    vec![BasicBlock::new(
+                        Vec::new(),
+                        Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
+                    )],
+                ),
+            ),
+        ],
     );
+
     assert_eq!(
-        coverage_error(&indirect_program),
+        coverage_error(&program),
         CoverageError {
             location: CoverageLocation::Terminator {
                 function: FunctionId(0),
                 block: BasicBlockId(0),
             },
-            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::IndirectCall,),
+            kind: CoverageErrorKind::UnsupportedType {
+                ty: outer,
+                category: UnsupportedTypeCategory::Callable,
+            },
         }
     );
 }
