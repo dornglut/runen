@@ -179,9 +179,9 @@ pub(crate) fn invalid_backend_result() -> RealizationError {
 mod tests {
     use super::*;
     use runen_core_ir::{
-        BasicBlock, BasicBlockId, Body, Function, PersistentDecl, Program,
-        SafeReferenceResultContract, ScalarType, Terminator, TypeDef, TypeTable, Value,
-        validate_program,
+        BasicBlock, BasicBlockId, Body, CallableInterface, Function, LocalDecl, LocalId, Operand,
+        PersistentDecl, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
+        Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
     };
 
     fn empty_entry_program(types: TypeTable, persistent: Vec<PersistentDecl>) -> ValidatedProgram {
@@ -205,6 +205,56 @@ mod tests {
         .expect("module-shape fixture must be valid Core")
     }
 
+    fn callable_program(persistent: Vec<PersistentDecl>, types: TypeTable, callable: TypeId) -> ValidatedProgram {
+        validate_program(Program {
+            types,
+            persistent,
+            external_callables: Vec::new(),
+            functions: vec![
+                Function {
+                    name: "entry".into(),
+                    parameters: Vec::new(),
+                    result: None,
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("callee", callable, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![
+                            BasicBlock::new(
+                                vec![Statement::Init {
+                                    dst: Place::local(LocalId(0)),
+                                    src: Operand::FunctionValue(FunctionId(1)),
+                                }],
+                                Terminator::IndirectCall {
+                                    callable,
+                                    callee: Operand::Move(Place::local(LocalId(0)).into()),
+                                    arguments: Vec::new(),
+                                    destination: None,
+                                    target: BasicBlockId(1),
+                                },
+                            ),
+                            BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                        ],
+                    },
+                },
+                Function {
+                    name: "target".into(),
+                    parameters: Vec::new(),
+                    result: None,
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: Vec::new(),
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+                    },
+                },
+            ],
+        })
+        .expect("callable module-shape fixture must be valid Core")
+    }
+
     #[test]
     fn generated_modules_without_persistents_keep_the_original_reviewed_shape() {
         let program = empty_entry_program(TypeTable::new(), Vec::new());
@@ -221,7 +271,7 @@ mod tests {
         assert_eq!(
             non_custom_sections,
             vec![1, 3, 7, 10],
-            "persistent-free modules may contain only type, function, export, and code sections"
+            "persistent-free callable-free modules retain the reviewed section shape"
         );
     }
 
@@ -271,6 +321,94 @@ mod tests {
             export_kinds(section_payload(module, 7)),
             vec![0],
             "only the entry function may be exported; persistent globals stay private"
+        );
+    }
+
+    #[test]
+    fn callable_modules_add_only_private_table_and_element_sections() {
+        let mut types = TypeTable::new();
+        let callable = types.push(TypeDef::callable(
+            "Thunk",
+            CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
+        ));
+        let program = callable_program(Vec::new(), types, callable);
+        let encoded = encoding::encode(&program).expect("supported callable fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 4, 7, 9, 10],
+            "callable dispatch may add only table and element sections"
+        );
+        assert_private_two_function_table(section_payload(module, 4));
+        assert_two_function_element_population(section_payload(module, 9));
+        assert_eq!(
+            export_kinds(section_payload(module, 7)),
+            vec![0, 0],
+            "existing zero-parameter function exports remain function-only; the table stays private"
+        );
+    }
+
+    #[test]
+    fn callable_and_persistent_private_sections_compose_without_new_exports() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let callable = types.push(TypeDef::callable(
+            "Thunk",
+            CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
+        ));
+        let program = callable_program(
+            vec![PersistentDecl::new(i64_ty, Value::I64(7))],
+            types,
+            callable,
+        );
+        let encoded = encoding::encode(&program)
+            .expect("supported callable/persistent fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(section_ids(module), vec![1, 3, 4, 6, 7, 9, 10]);
+        assert_private_two_function_table(section_payload(module, 4));
+        assert_two_function_element_population(section_payload(module, 9));
+        assert!(
+            export_kinds(section_payload(module, 7))
+                .into_iter()
+                .all(|kind| kind == 0),
+            "neither callable tables nor persistent globals may be exported"
+        );
+    }
+
+    fn assert_private_two_function_table(bytes: &[u8]) {
+        let mut cursor = 0_usize;
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "exactly one table");
+        assert_eq!(bytes.get(cursor), Some(&0x70), "table must be funcref");
+        cursor += 1;
+        assert_eq!(
+            read_u32_leb(bytes, &mut cursor),
+            1,
+            "table limits must include an exact maximum"
+        );
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 2, "table minimum");
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 2, "table maximum");
+        assert_eq!(cursor, bytes.len(), "table section must be consumed exactly");
+    }
+
+    fn assert_two_function_element_population(bytes: &[u8]) {
+        let mut cursor = 0_usize;
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "one element segment");
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 0, "active table-zero segment");
+        assert_eq!(bytes.get(cursor), Some(&0x41), "offset uses i32.const");
+        cursor += 1;
+        assert_eq!(bytes.get(cursor), Some(&0x00), "offset is zero");
+        cursor += 1;
+        assert_eq!(bytes.get(cursor), Some(&0x0b), "offset expression ends");
+        cursor += 1;
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 2, "two function elements");
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 0);
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 1);
+        assert_eq!(
+            cursor,
+            bytes.len(),
+            "element section must be consumed exactly"
         );
     }
 
