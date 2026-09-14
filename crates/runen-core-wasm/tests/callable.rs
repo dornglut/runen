@@ -243,12 +243,7 @@ fn callable_parameter_composes_direct_and_indirect_calls() {
 fn indirect_call_with_multiple_arguments_matches_reference() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let callable = callable_type(
-        &mut types,
-        "Binary",
-        vec![i64_ty, i64_ty],
-        Some(i64_ty),
-    );
+    let callable = callable_type(&mut types, "Binary", vec![i64_ty, i64_ty], Some(i64_ty));
     let entry = function(
         "entry",
         Vec::new(),
