@@ -495,9 +495,7 @@ mod tests {
                                 Terminator::IndirectCall {
                                     callable,
                                     callee: Operand::Move(Place::local(LocalId(0)).into()),
-                                    arguments: vec![Operand::Move(
-                                        Place::local(LocalId(1)).into(),
-                                    )],
+                                    arguments: vec![Operand::Move(Place::local(LocalId(1)).into())],
                                     destination: Some(Place::local(LocalId(2))),
                                     target: BasicBlockId(1),
                                 },
@@ -531,8 +529,8 @@ mod tests {
             ],
         })
         .expect("structural callable module-shape fixture must be valid Core");
-        let encoded = encoding::encode(&program)
-            .expect("supported structural callable fixture must encode");
+        let encoded =
+            encoding::encode(&program).expect("supported structural callable fixture must encode");
         let module = &encoded.bytes[8..];
 
         assert_eq!(
