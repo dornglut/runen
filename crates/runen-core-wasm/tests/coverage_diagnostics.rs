@@ -283,9 +283,7 @@ fn active_external_and_indirect_calls_have_terminator_diagnostics() {
                 function: FunctionId(0),
                 block: BasicBlockId(0),
             },
-            kind: CoverageErrorKind::UnsupportedTerminator(
-                UnsupportedTerminatorKind::ExternalCall,
-            ),
+            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::ExternalCall,),
         }
     );
 
@@ -329,9 +327,7 @@ fn active_external_and_indirect_calls_have_terminator_diagnostics() {
                 function: FunctionId(0),
                 block: BasicBlockId(0),
             },
-            kind: CoverageErrorKind::UnsupportedTerminator(
-                UnsupportedTerminatorKind::IndirectCall,
-            ),
+            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::IndirectCall,),
         }
     );
 }
