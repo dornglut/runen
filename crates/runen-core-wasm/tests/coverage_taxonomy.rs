@@ -102,7 +102,11 @@ fn passive_local_types_report_every_excluded_type_family() {
     let i64_ty = higher_order.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = higher_order.push(TypeDef::callable(
         "Inner",
-        CallableInterface::new(vec![i64_ty], Some(i64_ty), SafeReferenceResultContract::None),
+        CallableInterface::new(
+            vec![i64_ty],
+            Some(i64_ty),
+            SafeReferenceResultContract::None,
+        ),
     ));
     let outer = higher_order.push(TypeDef::callable(
         "Outer",
