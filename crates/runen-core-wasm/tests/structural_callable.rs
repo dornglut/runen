@@ -253,7 +253,7 @@ fn nested_aggregate_and_empty_results_match_reference() {
         Vec::new(),
         vec![BasicBlock::new(
             Vec::new(),
-            Terminator::Return(Some(Operand::Constant(Value::Struct(Vec::new()))),
+            Terminator::Return(Some(Operand::Constant(Value::Struct(Vec::new())))),
         )],
     );
     let program = validated(
