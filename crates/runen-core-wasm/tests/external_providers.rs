@@ -2,9 +2,9 @@ use std::sync::{Arc, Mutex};
 
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl, ExternalCallableId,
-    Function, FunctionId, LocalDecl, LocalId, Operand, PersistentDecl, PersistentId, Place, Program,
-    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable,
-    ValidatedProgram, Value, validate_program,
+    Function, FunctionId, LocalDecl, LocalId, Operand, PersistentDecl, PersistentId, Place,
+    Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId,
+    TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{
     BackendPhase, CoverageErrorKind, CoverageLocation, ExecutionOutcome,
@@ -113,16 +113,8 @@ fn provider_admission_requires_exactly_one_matching_binding_for_every_declaratio
         RealizedProgram::new_with_external_providers(
             &program,
             vec![
-                ExternalProviderBinding::no_result(
-                    ExternalCallableId(0),
-                    first.clone(),
-                    |_| {},
-                ),
-                ExternalProviderBinding::no_result(
-                    ExternalCallableId(0),
-                    first.clone(),
-                    |_| {},
-                ),
+                ExternalProviderBinding::no_result(ExternalCallableId(0), first.clone(), |_| {},),
+                ExternalProviderBinding::no_result(ExternalCallableId(0), first.clone(), |_| {},),
                 ExternalProviderBinding::scalar_result(
                     ExternalCallableId(1),
                     second.clone(),
@@ -140,11 +132,7 @@ fn provider_admission_requires_exactly_one_matching_binding_for_every_declaratio
         RealizedProgram::new_with_external_providers(
             &program,
             vec![
-                ExternalProviderBinding::no_result(
-                    ExternalCallableId(0),
-                    wrong.clone(),
-                    |_| {},
-                ),
+                ExternalProviderBinding::no_result(ExternalCallableId(0), wrong.clone(), |_| {},),
                 ExternalProviderBinding::scalar_result(
                     ExternalCallableId(1),
                     second.clone(),
@@ -268,7 +256,9 @@ fn no_result_and_scalar_result_providers_preserve_order_and_match_reference() {
     )
     .expect("matching provider environment must realize");
     assert_eq!(
-        realized.execute(FunctionId(0)).expect("provider calls return normally"),
+        realized
+            .execute(FunctionId(0))
+            .expect("provider calls return normally"),
         ExecutionOutcome::Returned(Some(Value::I64(8)))
     );
     assert_eq!(
@@ -466,14 +456,10 @@ fn equal_interfaces_keep_external_declaration_identity_distinct() {
                     ExternalScalarValue::I64(11)
                 },
             ),
-            ExternalProviderBinding::scalar_result(
-                ExternalCallableId(1),
-                same,
-                move |_| {
-                    *second_seen.lock().unwrap() += 1;
-                    ExternalScalarValue::I64(22)
-                },
-            ),
+            ExternalProviderBinding::scalar_result(ExternalCallableId(1), same, move |_| {
+                *second_seen.lock().unwrap() += 1;
+                ExternalScalarValue::I64(22)
+            }),
         ],
     )
     .expect("distinct provider identities must admit");
