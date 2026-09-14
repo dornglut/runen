@@ -92,6 +92,23 @@ jobs:
         with:
           workspaces: . -> target
 
+      - name: Prove reviewed dependency feature graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          feature_graph="$(cargo +stable tree -p runen-core-wasm -e features --locked --prefix none)"
+          printf '%s\n' "${feature_graph}"
+          grep -F 'wasmtime feature "runtime"' <<<"${feature_graph}" >/dev/null
+          grep -F 'wasmtime feature "cranelift"' <<<"${feature_graph}" >/dev/null
+          if grep -E 'wasmtime feature "component-model(-async)?"' <<<"${feature_graph}" >/dev/null; then
+            echo "top-level Wasmtime component-model feature is not authorized" >&2
+            exit 1
+          fi
+          if grep -E '(wasmtime-wasi|wasi-common) v[0-9]' <<<"${feature_graph}" >/dev/null; then
+            echo "WASI dependencies are not authorized" >&2
+            exit 1
+          fi
+
       - name: Test bounded Core Wasm realization
         shell: bash
         run: cargo +stable test -p runen-core-wasm --all-targets --locked
