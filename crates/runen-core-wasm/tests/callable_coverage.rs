@@ -249,7 +249,7 @@ fn tracked_fixture_callable_parameter_reports_exact_interface_role_and_type() {
 }
 
 #[test]
-fn nested_callable_parameter_reports_exact_interface_role_and_type() {
+fn nested_callable_parameter_is_admitted_recursively() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = types.push(TypeDef::callable(
@@ -264,16 +264,12 @@ fn nested_callable_parameter_reports_exact_interface_role_and_type() {
         "Outer",
         CallableInterface::new(vec![inner], None, SafeReferenceResultContract::None),
     ));
-    assert_callable_local_rejected(
-        types,
-        outer,
-        CoverageErrorKind::UnsupportedCallableParameterType {
-            callable: outer,
-            parameter: 0,
-            ty: inner,
-            category: UnsupportedTypeCategory::Callable,
-        },
-    );
+    let program = callable_local_program(types, outer);
+    let outcome = RealizedProgram::new(&program)
+        .expect("nested callable parameter must realize recursively")
+        .execute(FunctionId(0))
+        .expect("nested callable local fixture must execute");
+    assert_eq!(outcome, ExecutionOutcome::Returned(None));
 }
 
 #[test]
