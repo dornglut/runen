@@ -27,7 +27,7 @@ impl ScalarKind {
             TypeKind::Scalar(ScalarType::U16) => Some(Self::U16),
             TypeKind::Scalar(ScalarType::U32) => Some(Self::U32),
             TypeKind::Scalar(ScalarType::U64) => Some(Self::U64),
-            TypeKind::Scalar(_)|TypeKind::Struct(_) => None,
+            TypeKind::Scalar(_) | TypeKind::Struct(_) => None,
         }
     }
 
@@ -55,13 +55,13 @@ impl ScalarKind {
                     BackendProtocolError::InvalidBooleanPayload(payload),
                 )),
             },
-            Self::I8 => decode_signed(residue, 8).map(|value| Value::I8(value as i8)),
-            Self::I16 => decode_signed(residue, 16).map(|value| Value::I16(value as i16)),
-            Self::I32 => decode_signed(residue, 32).map(|value| Value::I32(value as i32)),
+            Self::I8 => narrow_signed::<i8>(residue, 8).map(Value::I8),
+            Self::I16 => narrow_signed::<i16>(residue, 16).map(Value::I16),
+            Self::I32 => narrow_signed::<i32>(residue, 32).map(Value::I32),
             Self::I64 => decode_signed(residue, 64).map(Value::I64),
-            Self::U8 => decode_unsigned(residue, 8).map(|value| Value::U8(value as u8)),
-            Self::U16 => decode_unsigned(residue, 16).map(|value| Value::U16(value as u16)),
-            Self::U32 => decode_unsigned(residue, 32).map(|value| Value::U32(value as u32)),
+            Self::U8 => narrow_unsigned::<u8>(residue, 8).map(Value::U8),
+            Self::U16 => narrow_unsigned::<u16>(residue, 16).map(Value::U16),
+            Self::U32 => narrow_unsigned::<u32>(residue, 32).map(Value::U32),
             Self::U64 => Ok(Value::U64(residue)),
         }
     }
@@ -70,10 +70,10 @@ impl ScalarKind {
 pub(crate) fn constant_residue(value: &Value) -> Option<u64> {
     match value {
         Value::Bool(value) => Some(u64::from(*value)),
-        Value::I8(value) => Some(signed_residue(i128::from(*value), 8)),
-        Value::I16(value) => Some(signed_residue(i128::from(*value), 16)),
-        Value::I32(value) => Some(signed_residue(i128::from(*value), 32)),
-        Value::I64(value) => Some(signed_residue(i128::from(*value), 64)),
+        Value::I8(value) => Some(signed_bits(i64::from(*value), 8)),
+        Value::I16(value) => Some(signed_bits(i64::from(*value), 16)),
+        Value::I32(value) => Some(signed_bits(i64::from(*value), 32)),
+        Value::I64(value) => Some(u64::from_ne_bytes(value.to_ne_bytes())),
         Value::U8(value) => Some(u64::from(*value)),
         Value::U16(value) => Some(u64::from(*value)),
         Value::U32(value) => Some(u64::from(*value)),
@@ -94,41 +94,51 @@ pub(crate) const fn mask(width: u32) -> u64 {
     }
 }
 
-fn signed_residue(value: i128, width: u32) -> u64 {
-    let modulus = 1_u128 << width;
-    let residue = if value >= 0 {
-        value as u128
-    } else {
-        modulus - value.unsigned_abs()
-    };
-    u64::try_from(residue).expect("fixed-width signed residue fits u64")
+fn signed_bits(value: i64, width: u32) -> u64 {
+    u64::from_ne_bytes(value.to_ne_bytes()) & mask(width)
 }
 
 fn decode_unsigned(residue: u64, width: u32) -> Result<u64, RealizationError> {
     if residue & !mask(width) == 0 {
         Ok(residue)
     } else {
-        Err(RealizationError::BackendProtocol(
-            BackendProtocolError::NonCanonicalIntegerPayload { payload: residue, width },
-        ))
+        Err(non_canonical(residue, width))
     }
 }
 
 fn decode_signed(residue: u64, width: u32) -> Result<i64, RealizationError> {
     let residue = decode_unsigned(residue, width)?;
-    let signed_boundary = 1_u128 << (width - 1);
-    let modulus = 1_u128 << width;
-    let residue = u128::from(residue);
-    let value = if residue < signed_boundary {
-        i128::try_from(residue).expect("u64 residue fits i128")
+    if width == 64 {
+        return Ok(i64::from_ne_bytes(residue.to_ne_bytes()));
+    }
+    let sign_bit = 1_u64 << (width - 1);
+    let extended = if residue & sign_bit == 0 {
+        residue
     } else {
-        i128::try_from(residue).expect("u64 residue fits i128")
-            - i128::try_from(modulus).expect("2^64 fits i128")
+        residue | !mask(width)
     };
-    i64::try_from(value).map_err(|_| {
-        RealizationError::BackendProtocol(BackendProtocolError::NonCanonicalIntegerPayload {
-            payload: u64::try_from(residue).expect("residue remains u64-sized"),
-            width,
-        })
+    Ok(i64::from_ne_bytes(extended.to_ne_bytes()))
+}
+
+fn narrow_signed<T>(residue: u64, width: u32) -> Result<T, RealizationError>
+where
+    T: TryFrom<i64>,
+{
+    let value = decode_signed(residue, width)?;
+    T::try_from(value).map_err(|_| non_canonical(residue, width))
+}
+
+fn narrow_unsigned<T>(residue: u64, width: u32) -> Result<T, RealizationError>
+where
+    T: TryFrom<u64>,
+{
+    let value = decode_unsigned(residue, width)?;
+    T::try_from(value).map_err(|_| non_canonical(residue, width))
+}
+
+fn non_canonical(payload: u64, width: u32) -> RealizationError {
+    RealizationError::BackendProtocol(BackendProtocolError::NonCanonicalIntegerPayload {
+        payload,
+        width,
     })
 }
