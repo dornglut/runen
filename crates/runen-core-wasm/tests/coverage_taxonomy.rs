@@ -118,18 +118,6 @@ fn passive_local_types_report_every_excluded_type_family() {
     let tracked_ty = tracked.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     assert_local_type_category(tracked, tracked_ty, UnsupportedTypeCategory::TrackedFixture);
 
-    let mut structural = TypeTable::new();
-    let field_ty = structural.push(TypeDef::scalar("I64", ScalarType::I64));
-    let structural_ty = structural.push(TypeDef::structure(
-        "Pair",
-        vec![Field::new("value", field_ty)],
-    ));
-    assert_local_type_category(
-        structural,
-        structural_ty,
-        UnsupportedTypeCategory::StructuralAggregate,
-    );
-
     let mut interior = TypeTable::new();
     let interior_ty =
         interior.push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
@@ -137,6 +125,44 @@ fn passive_local_types_report_every_excluded_type_family() {
         interior,
         interior_ty,
         UnsupportedTypeCategory::InteriorMutable,
+    );
+}
+
+#[test]
+fn nested_aggregate_reports_the_exact_unsupported_leaf() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
+    let inner_ty = types.push(TypeDef::structure(
+        "Inner",
+        vec![Field::new("unsupported", f32_ty)],
+    ));
+    let outer_ty = types.push(TypeDef::structure(
+        "Outer",
+        vec![Field::new("supported", i64_ty), Field::new("nested", inner_ty)],
+    ));
+    let program = validated(
+        types,
+        Vec::new(),
+        vec![function(
+            "entry",
+            Vec::new(),
+            None,
+            empty_body(vec![LocalDecl::new("value", outer_ty, false)]),
+        )],
+    );
+    assert_eq!(
+        coverage_error(&program),
+        CoverageError {
+            location: CoverageLocation::Local {
+                function: FunctionId(0),
+                local: LocalId(0),
+            },
+            kind: CoverageErrorKind::UnsupportedType {
+                ty: f32_ty,
+                category: UnsupportedTypeCategory::Floating,
+            },
+        }
     );
 }
 
@@ -384,38 +410,6 @@ fn representative_excluded_operand_families_have_stable_categories() {
     assert_eq!(
         coverage_error(&tracked_program).kind,
         CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::TrackedFixtureConstant)
-    );
-
-    let mut structural_types = TypeTable::new();
-    let field_ty = structural_types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let pair_ty = structural_types.push(TypeDef::structure(
-        "Pair",
-        vec![Field::new("value", field_ty)],
-    ));
-    let structural_program = validated(
-        structural_types,
-        Vec::new(),
-        vec![function(
-            "structural_constant",
-            Vec::new(),
-            None,
-            Body {
-                locals: vec![LocalDecl::new("value", pair_ty, false)],
-                loans: Vec::new(),
-                entry: BasicBlockId(0),
-                blocks: vec![BasicBlock::new(
-                    vec![Statement::Init {
-                        dst: Place::local(LocalId(0)),
-                        src: Operand::Constant(Value::Struct(vec![Value::I64(1)])),
-                    }],
-                    Terminator::Return(None),
-                )],
-            },
-        )],
-    );
-    assert_eq!(
-        coverage_error(&structural_program).kind,
-        CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::StructuralConstant)
     );
 
     let mut persistent_types = TypeTable::new();
