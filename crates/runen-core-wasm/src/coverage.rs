@@ -1,12 +1,24 @@
 use runen_core_ir::{
-    BasicBlockId, Function, FunctionId, Operand, Place, PlaceAccess, SafeReferenceResultContract,
-    ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
+    BasicBlockId, Function, FunctionId, LocalId, Operand, Place, PlaceAccess,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable,
+    ValidatedProgram, Value,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoverageLocation {
     Program,
     Function(FunctionId),
+    Result {
+        function: FunctionId,
+    },
+    Parameter {
+        function: FunctionId,
+        local: LocalId,
+    },
+    Local {
+        function: FunctionId,
+        local: LocalId,
+    },
     Statement {
         function: FunctionId,
         block: BasicBlockId,
@@ -87,6 +99,15 @@ pub struct CoverageError {
 
 pub(crate) fn validate(program: &ValidatedProgram) -> Result<(), CoverageError> {
     let program = program.as_program();
+
+    // Diagnose represented function behavior before passive whole-program declarations. This
+    // preserves whole-program conservative rejection while making actively consumed unsupported
+    // operands/statements/terminators observable at their precise Core location.
+    for (function_index, function) in program.functions.iter().enumerate() {
+        let function_id = checked_function_id(function_index)?;
+        validate_function(&program.types, function_id, function)?;
+    }
+
     if !program.persistent.is_empty() {
         return Err(program_error(CoverageErrorKind::PersistentStorage));
     }
@@ -94,10 +115,6 @@ pub(crate) fn validate(program: &ValidatedProgram) -> Result<(), CoverageError> 
         return Err(program_error(CoverageErrorKind::ExternalCallables));
     }
 
-    for (function_index, function) in program.functions.iter().enumerate() {
-        let function_id = checked_function_id(function_index)?;
-        validate_function(&program.types, function_id, function)?;
-    }
     Ok(())
 }
 
@@ -116,21 +133,8 @@ fn validate_function(
         ));
     }
 
-    if let Some(result) = function.result {
-        require_supported_type(types, result, CoverageLocation::Function(function_id))?;
-    }
-
-    if !function.body.loans.is_empty() {
-        return Err(function_error(
-            function_id,
-            CoverageErrorKind::LoanDeclarations,
-        ));
-    }
-
-    for local in &function.body.locals {
-        require_supported_type(types, local.ty, CoverageLocation::Function(function_id))?;
-    }
-
+    // Behavior is inspected before passive declarations/types so the diagnostic identifies the
+    // unsupported operation actually consumed by the function whenever one exists.
     for (block_index, block) in function.body.blocks.iter().enumerate() {
         let block_id = checked_block_id(block_index)?;
         for (statement_index, statement) in block.statements.iter().enumerate() {
@@ -146,6 +150,39 @@ fn validate_function(
             block: block_id,
         };
         validate_terminator(&block.terminator, &location)?;
+    }
+
+    if !function.body.loans.is_empty() {
+        return Err(function_error(
+            function_id,
+            CoverageErrorKind::LoanDeclarations,
+        ));
+    }
+
+    if let Some(result) = function.result {
+        require_supported_type(
+            types,
+            result,
+            CoverageLocation::Result {
+                function: function_id,
+            },
+        )?;
+    }
+
+    for (local_index, local) in function.body.locals.iter().enumerate() {
+        let local_id = checked_local_id(local_index)?;
+        let location = if function.parameters.contains(&local_id) {
+            CoverageLocation::Parameter {
+                function: function_id,
+                local: local_id,
+            }
+        } else {
+            CoverageLocation::Local {
+                function: function_id,
+                local: local_id,
+            }
+        };
+        require_supported_type(types, local.ty, location)?;
     }
 
     Ok(())
@@ -394,6 +431,12 @@ fn checked_function_id(index: usize) -> Result<FunctionId, CoverageError> {
 fn checked_block_id(index: usize) -> Result<BasicBlockId, CoverageError> {
     u32::try_from(index)
         .map(BasicBlockId)
+        .map_err(|_| program_error(CoverageErrorKind::ProgramTooLarge))
+}
+
+fn checked_local_id(index: usize) -> Result<LocalId, CoverageError> {
+    u32::try_from(index)
+        .map(LocalId)
         .map_err(|_| program_error(CoverageErrorKind::ProgramTooLarge))
 }
 
