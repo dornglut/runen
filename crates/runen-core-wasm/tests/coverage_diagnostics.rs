@@ -1,8 +1,9 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl, ExternalCallableId,
-    Function, FunctionId, LoanDecl, LocalDecl, LocalId, Operand, PersistentDecl, PersistentId,
-    Place, Program, ReferencePermission, SafeReferenceResultContract, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
+    BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, CallableInterface,
+    ExternalCallableDecl, ExternalCallableId, Function, FunctionId, LoanDecl, LocalDecl, LocalId,
+    Operand, PersistentDecl, PersistentId, Place, Program, ReferencePermission,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable,
+    Value, validate_program,
 };
 use runen_core_wasm::{
     CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError,
@@ -210,9 +211,50 @@ fn passive_unsupported_type_roles_have_precise_locations() {
 }
 
 #[test]
-fn active_persistent_use_is_diagnosed_before_passive_program_storage() {
+fn unsupported_persistent_type_has_a_persistent_location() {
+    let mut types = TypeTable::new();
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
+    let program = validated(
+        types,
+        vec![PersistentDecl::new(
+            f32_ty,
+            Value::F32(BinaryFloatValue::Zero(BinaryFloatSign::Positive)),
+        )],
+        Vec::new(),
+        vec![function(
+            "entry",
+            Vec::new(),
+            None,
+            SafeReferenceResultContract::None,
+            body(
+                Vec::new(),
+                Vec::new(),
+                vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+            ),
+        )],
+    );
+
+    assert_eq!(
+        coverage_error(&program),
+        CoverageError {
+            location: CoverageLocation::Persistent(PersistentId(0)),
+            kind: CoverageErrorKind::UnsupportedType {
+                ty: f32_ty,
+                category: UnsupportedTypeCategory::Floating,
+            },
+        }
+    );
+}
+
+#[test]
+fn persistent_shared_root_is_rejected_at_its_consuming_statement() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let shared_i64 = types.push(TypeDef::reference(
+        "SharedI64",
+        i64_ty,
+        ReferencePermission::Shared,
+    ));
     let program = validated(
         types,
         vec![PersistentDecl::new(i64_ty, Value::I64(7))],
@@ -220,14 +262,17 @@ fn active_persistent_use_is_diagnosed_before_passive_program_storage() {
         vec![function(
             "entry",
             Vec::new(),
-            Some(i64_ty),
+            None,
             SafeReferenceResultContract::None,
             body(
-                Vec::new(),
+                vec![LocalDecl::new("reference", shared_i64, false)],
                 Vec::new(),
                 vec![BasicBlock::new(
-                    Vec::new(),
-                    Terminator::Return(Some(Operand::PersistentRead(PersistentId(0)))),
+                    vec![Statement::Init {
+                        dst: Place::local(LocalId(0)),
+                        src: Operand::PersistentSharedRoot(PersistentId(0)),
+                    }],
+                    Terminator::Return(None),
                 )],
             ),
         )],
@@ -236,11 +281,14 @@ fn active_persistent_use_is_diagnosed_before_passive_program_storage() {
     assert_eq!(
         coverage_error(&program),
         CoverageError {
-            location: CoverageLocation::Terminator {
+            location: CoverageLocation::Statement {
                 function: FunctionId(0),
                 block: BasicBlockId(0),
+                statement: 0,
             },
-            kind: CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::PersistentRead),
+            kind: CoverageErrorKind::UnsupportedOperand(
+                UnsupportedOperandKind::PersistentSharedRoot,
+            ),
         }
     );
 }
@@ -376,33 +424,7 @@ fn projected_access_is_reported_before_structural_parameter_type() {
 }
 
 #[test]
-fn passive_program_facilities_keep_program_or_function_categories() {
-    let mut persistent_types = TypeTable::new();
-    let i64_ty = persistent_types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let persistent_program = validated(
-        persistent_types,
-        vec![PersistentDecl::new(i64_ty, Value::I64(1))],
-        Vec::new(),
-        vec![function(
-            "entry",
-            Vec::new(),
-            None,
-            SafeReferenceResultContract::None,
-            body(
-                Vec::new(),
-                Vec::new(),
-                vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
-            ),
-        )],
-    );
-    assert_eq!(
-        coverage_error(&persistent_program),
-        CoverageError {
-            location: CoverageLocation::Program,
-            kind: CoverageErrorKind::PersistentStorage,
-        }
-    );
-
+fn passive_external_and_loan_facilities_keep_program_or_function_categories() {
     let external_program = validated(
         TypeTable::new(),
         Vec::new(),
