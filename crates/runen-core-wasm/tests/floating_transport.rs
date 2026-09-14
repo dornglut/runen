@@ -293,7 +293,9 @@ fn direct_function_float_parameter_and_result_transport_remain_internal() {
             move |arguments| {
                 assert_eq!(
                     arguments,
-                    &[ExternalScalarValue::F32(FloatingScalarValue::Represented(value))]
+                    &[ExternalScalarValue::F32(FloatingScalarValue::Represented(
+                        value
+                    ))]
                 );
                 ExternalScalarValue::Bool(true)
             },
@@ -384,7 +386,9 @@ fn indirect_call_transports_direct_float_components_without_changing_callable_id
             move |arguments| {
                 assert_eq!(
                     arguments,
-                    &[ExternalScalarValue::F32(FloatingScalarValue::Represented(value))]
+                    &[ExternalScalarValue::F32(FloatingScalarValue::Represented(
+                        value
+                    ))]
                 );
                 ExternalScalarValue::Bool(true)
             },
@@ -556,9 +560,7 @@ fn floating_provider_contract_violations_are_backend_execution_failures() {
         vec![ExternalProviderBinding::scalar_result(
             ExternalCallableId(0),
             external,
-            move |_| {
-                ExternalScalarValue::F16(FloatingScalarValue::Represented(f32_only))
-            },
+            move |_| ExternalScalarValue::F16(FloatingScalarValue::Represented(f32_only)),
         )],
     )
     .expect("provider interface admission does not pre-execute the provider");
