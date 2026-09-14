@@ -791,6 +791,50 @@ mod tests {
     }
 
     #[test]
+    fn external_only_modules_add_only_private_import_machinery() {
+        let external = ExternalCallableDecl::new(CallableInterface::new(
+            Vec::new(),
+            None,
+            SafeReferenceResultContract::None,
+        ));
+        let program = validate_program(Program {
+            types: TypeTable::new(),
+            persistent: Vec::new(),
+            external_callables: vec![external],
+            functions: vec![Function {
+                name: "entry".into(),
+                parameters: Vec::new(),
+                result: None,
+                safe_reference_result_contract: SafeReferenceResultContract::None,
+                body: Body {
+                    locals: Vec::new(),
+                    loans: Vec::new(),
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+                },
+            }],
+        })
+        .expect("external-only module-shape fixture must be valid Core");
+        coverage::validate(&program)
+            .expect("external-only module-shape fixture must be in realization coverage");
+        let encoded = encoding::encode(&program)
+            .expect("supported external-only module-shape fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(
+            section_ids(module),
+            vec![1, 2, 3, 7, 10],
+            "external-only modules add only the private function-import section"
+        );
+        assert_single_external_function_import(section_payload(module, 2));
+        assert_eq!(
+            export_entries(section_payload(module, 7)),
+            vec![(0, 1)],
+            "the provider import stays private and only the shifted Runen entry is exported"
+        );
+    }
+
+    #[test]
     fn external_imports_shift_only_physical_function_indices_and_stay_private() {
         let mut types = TypeTable::new();
         let callable = types.push(TypeDef::callable(
