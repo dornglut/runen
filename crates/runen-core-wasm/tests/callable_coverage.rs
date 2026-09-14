@@ -29,7 +29,11 @@ fn callable_local_program(types: TypeTable, callable: TypeId) -> runen_core_ir::
     .expect("callable-interface fixture must remain valid Core")
 }
 
-fn assert_callable_local_rejected(types: TypeTable, callable: TypeId) {
+fn assert_callable_local_rejected(
+    types: TypeTable,
+    callable: TypeId,
+    kind: CoverageErrorKind,
+) {
     let program = callable_local_program(types, callable);
     let error = match RealizedProgram::new(&program) {
         Err(RealizationError::Coverage(error)) => error,
@@ -43,27 +47,56 @@ fn assert_callable_local_rejected(types: TypeTable, callable: TypeId) {
                 function: FunctionId(0),
                 local: LocalId(0),
             },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: callable,
-                category: UnsupportedTypeCategory::Callable,
-            },
+            kind,
         }
     );
 }
 
 #[test]
-fn floating_callable_interface_remains_outside_realization_slice() {
+fn floating_callable_parameter_reports_exact_interface_role_and_type() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let callable = types.push(TypeDef::callable(
         "FloatConsumer",
         CallableInterface::new(vec![f32_ty], None, SafeReferenceResultContract::None),
     ));
-    assert_callable_local_rejected(types, callable);
+    assert_callable_local_rejected(
+        types,
+        callable,
+        CoverageErrorKind::UnsupportedCallableParameterType {
+            callable,
+            parameter: 0,
+            ty: f32_ty,
+            category: UnsupportedTypeCategory::Floating,
+        },
+    );
 }
 
 #[test]
-fn reference_free_aggregate_callable_interface_is_admitted() {
+fn nested_floating_callable_result_reports_exact_interface_role_and_leaf_type() {
+    let mut types = TypeTable::new();
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
+    let wrapper_ty = types.push(TypeDef::structure(
+        "FloatWrapper",
+        vec![Field::new("value", f32_ty)],
+    ));
+    let callable = types.push(TypeDef::callable(
+        "FloatProducer",
+        CallableInterface::new(Vec::new(), Some(wrapper_ty), SafeReferenceResultContract::None),
+    ));
+    assert_callable_local_rejected(
+        types,
+        callable,
+        CoverageErrorKind::UnsupportedCallableResultType {
+            callable,
+            ty: f32_ty,
+            category: UnsupportedTypeCategory::Floating,
+        },
+    );
+}
+
+#[test]
+fn reference_free_aggregate_callable_interface_is_admitted_for_locals_and_parameters() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let empty_ty = types.push(TypeDef::structure("Empty", Vec::new()));
@@ -79,16 +112,37 @@ fn reference_free_aggregate_callable_interface_is_admitted() {
             SafeReferenceResultContract::None,
         ),
     ));
-    let program = callable_local_program(types, callable);
-    let outcome = RealizedProgram::new(&program)
-        .expect("reference-free structural callable interface must realize")
+    let local_program = callable_local_program(types.clone(), callable);
+    let outcome = RealizedProgram::new(&local_program)
+        .expect("reference-free structural callable local must realize")
         .execute(FunctionId(0))
-        .expect("admitted callable-interface fixture must execute");
+        .expect("admitted callable-interface local fixture must execute");
     assert_eq!(outcome, ExecutionOutcome::Returned(None));
+
+    let parameter_program = validate_program(runen_core_ir::Program {
+        types,
+        persistent: Vec::new(),
+        external_callables: Vec::new(),
+        functions: vec![Function {
+            name: "accept".into(),
+            parameters: vec![LocalId(0)],
+            result: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
+            body: Body {
+                locals: vec![LocalDecl::new("callee", callable, false)],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+            },
+        }],
+    })
+    .expect("reference-free structural callable parameter must remain valid Core");
+    RealizedProgram::new(&parameter_program)
+        .expect("reference-free structural callable parameter must realize");
 }
 
 #[test]
-fn safe_reference_callable_interface_remains_outside_realization_slice() {
+fn safe_reference_callable_parameter_reports_exact_interface_role_and_type() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let reference_ty = types.push(TypeDef::reference(
@@ -100,7 +154,16 @@ fn safe_reference_callable_interface_remains_outside_realization_slice() {
         "ReferenceConsumer",
         CallableInterface::new(vec![reference_ty], None, SafeReferenceResultContract::None),
     ));
-    assert_callable_local_rejected(types, callable);
+    assert_callable_local_rejected(
+        types,
+        callable,
+        CoverageErrorKind::UnsupportedCallableParameterType {
+            callable,
+            parameter: 0,
+            ty: reference_ty,
+            category: UnsupportedTypeCategory::SafeReference,
+        },
+    );
 }
 
 #[test]
@@ -141,7 +204,7 @@ fn raw_pointer_callable_interface_is_rejected_by_core_before_realization() {
 }
 
 #[test]
-fn interior_mutable_structural_callable_interface_remains_outside_realization_slice() {
+fn interior_mutable_callable_parameter_reports_exact_nested_leaf() {
     let mut types = TypeTable::new();
     let interior_ty =
         types.push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
@@ -153,22 +216,40 @@ fn interior_mutable_structural_callable_interface_remains_outside_realization_sl
         "InteriorConsumer",
         CallableInterface::new(vec![wrapper_ty], None, SafeReferenceResultContract::None),
     ));
-    assert_callable_local_rejected(types, callable);
+    assert_callable_local_rejected(
+        types,
+        callable,
+        CoverageErrorKind::UnsupportedCallableParameterType {
+            callable,
+            parameter: 0,
+            ty: interior_ty,
+            category: UnsupportedTypeCategory::InteriorMutable,
+        },
+    );
 }
 
 #[test]
-fn tracked_fixture_callable_interface_remains_outside_realization_slice() {
+fn tracked_fixture_callable_parameter_reports_exact_interface_role_and_type() {
     let mut types = TypeTable::new();
     let tracked_ty = types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     let callable = types.push(TypeDef::callable(
         "TrackedConsumer",
         CallableInterface::new(vec![tracked_ty], None, SafeReferenceResultContract::None),
     ));
-    assert_callable_local_rejected(types, callable);
+    assert_callable_local_rejected(
+        types,
+        callable,
+        CoverageErrorKind::UnsupportedCallableParameterType {
+            callable,
+            parameter: 0,
+            ty: tracked_ty,
+            category: UnsupportedTypeCategory::TrackedFixture,
+        },
+    );
 }
 
 #[test]
-fn nested_callable_interface_remains_outside_realization_slice() {
+fn nested_callable_parameter_reports_exact_interface_role_and_type() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = types.push(TypeDef::callable(
@@ -183,5 +264,38 @@ fn nested_callable_interface_remains_outside_realization_slice() {
         "Outer",
         CallableInterface::new(vec![inner], None, SafeReferenceResultContract::None),
     ));
-    assert_callable_local_rejected(types, outer);
+    assert_callable_local_rejected(
+        types,
+        outer,
+        CoverageErrorKind::UnsupportedCallableParameterType {
+            callable: outer,
+            parameter: 0,
+            ty: inner,
+            category: UnsupportedTypeCategory::Callable,
+        },
+    );
+}
+
+#[test]
+fn callable_safe_reference_result_contract_remains_outside_realization_slice() {
+    let mut types = TypeTable::new();
+    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let reference_ty = types.push(TypeDef::reference(
+        "SharedI64",
+        i64_ty,
+        ReferencePermission::Shared,
+    ));
+    let callable = types.push(TypeDef::callable(
+        "ReferenceIdentity",
+        CallableInterface::new(
+            vec![reference_ty],
+            Some(reference_ty),
+            SafeReferenceResultContract::SharedIdentity { origin: 0 },
+        ),
+    ));
+    assert_callable_local_rejected(
+        types,
+        callable,
+        CoverageErrorKind::UnsupportedSafeReferenceResultContract,
+    );
 }
