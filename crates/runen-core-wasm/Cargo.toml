@@ -1,0 +1,17 @@
+[package]
+name = "runen-core-wasm"
+version = "0.0.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+runen-core-ir = { path = "../runen-core-ir" }
+wasm-encoder = { version = "=0.259.0", default-features = false, features = ["std"] }
+wasmtime = { version = "=48.0.2", default-features = false, features = ["runtime", "cranelift"] }
+
+[dev-dependencies]
+runen-reference = { path = "../runen-reference" }
+
+[lints]
+workspace = true

@@ -1,0 +1,114 @@
+name: Core Wasm Platforms
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/runen-core-ir/**
+      - crates/runen-core-wasm/**
+      - .github/workflows/core-wasm-platforms.yml
+  push:
+    branches:
+      - main
+    paths:
+      - Cargo.toml
+      - Cargo.lock
+      - rust-toolchain.toml
+      - crates/runen-core-ir/**
+      - crates/runen-core-wasm/**
+      - .github/workflows/core-wasm-platforms.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Core Wasm / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Resolve expected caller revision
+        id: revision
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          PULL_REQUEST_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          case "${EVENT_NAME}" in
+            pull_request) expected_revision="${PULL_REQUEST_HEAD_SHA}" ;;
+            push|workflow_dispatch) expected_revision="${EVENT_SHA}" ;;
+            *)
+              echo "Unsupported caller event: ${EVENT_NAME}" >&2
+              exit 1
+              ;;
+          esac
+          if [[ -z "${expected_revision}" ]]; then
+            echo "Expected revision is empty for event: ${EVENT_NAME}" >&2
+            exit 1
+          fi
+          echo "expected_revision=${expected_revision}" >> "${GITHUB_OUTPUT}"
+
+      - name: Check out exact revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+          ref: ${{ steps.revision.outputs.expected_revision }}
+
+      - name: Prove checked-out revision
+        shell: bash
+        env:
+          EXPECTED_REVISION: ${{ steps.revision.outputs.expected_revision }}
+        run: |
+          set -euo pipefail
+          actual_revision="$(git rev-parse HEAD)"
+          test "${actual_revision}" = "${EXPECTED_REVISION}"
+          echo "Expected revision: ${EXPECTED_REVISION}"
+          echo "Actual revision:   ${actual_revision}"
+
+      - name: Install maintained Rust toolchain
+        shell: bash
+        run: rustup toolchain install stable --profile minimal
+
+      - name: Cache Cargo data
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: . -> target
+
+      - name: Prove reviewed dependency feature graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          feature_graph="$(cargo +stable tree -p runen-core-wasm -e features --locked --prefix none)"
+          printf '%s\n' "${feature_graph}"
+          grep -F 'wasmtime feature "runtime"' <<<"${feature_graph}" >/dev/null
+          grep -F 'wasmtime feature "cranelift"' <<<"${feature_graph}" >/dev/null
+          if grep -E 'wasmtime feature "component-model(-async)?"' <<<"${feature_graph}" >/dev/null; then
+            echo "top-level Wasmtime component-model feature is not authorized" >&2
+            exit 1
+          fi
+          if grep -E '(wasmtime-wasi|wasi-common) v[0-9]' <<<"${feature_graph}" >/dev/null; then
+            echo "WASI dependencies are not authorized" >&2
+            exit 1
+          fi
+
+      - name: Test bounded Core Wasm realization
+        shell: bash
+        run: cargo +stable test -p runen-core-wasm --all-targets --locked
