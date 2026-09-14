@@ -94,13 +94,4 @@ jobs:
 
       - name: Test bounded Core Wasm realization
         shell: bash
-        run: cargo +stable test -p runen-core-wasm --all-targets
-
-      - name: Capture bootstrap lockfile
-        if: always() && matrix.os == 'ubuntu-latest'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: core-wasm-bootstrap-lockfile
-          path: Cargo.lock
-          if-no-files-found: error
-          retention-days: 1
+        run: cargo +stable test -p runen-core-wasm --all-targets --locked
