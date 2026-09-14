@@ -179,15 +179,15 @@ pub(crate) fn invalid_backend_result() -> RealizationError {
 mod tests {
     use super::*;
     use runen_core_ir::{
-        BasicBlock, BasicBlockId, Body, Function, Program, SafeReferenceResultContract, Terminator,
-        TypeTable, validate_program,
+        BasicBlock, BasicBlockId, Body, Function, PersistentDecl, Program,
+        SafeReferenceResultContract, ScalarType, Terminator, TypeDef, TypeTable, Value,
+        validate_program,
     };
 
-    #[test]
-    fn generated_modules_are_core_wasm_with_only_reviewed_sections() {
-        let program = validate_program(Program {
-            types: TypeTable::new(),
-            persistent: Vec::new(),
+    fn empty_entry_program(types: TypeTable, persistent: Vec<PersistentDecl>) -> ValidatedProgram {
+        validate_program(Program {
+            types,
+            persistent,
             external_callables: Vec::new(),
             functions: vec![Function {
                 name: "entry".into(),
@@ -202,7 +202,12 @@ mod tests {
                 },
             }],
         })
-        .expect("module-shape fixture must be valid Core");
+        .expect("module-shape fixture must be valid Core")
+    }
+
+    #[test]
+    fn generated_modules_without_persistents_keep_the_original_reviewed_shape() {
+        let program = empty_entry_program(TypeTable::new(), Vec::new());
         let encoded = encoding::encode(&program).expect("supported fixture must encode");
 
         assert!(
@@ -216,7 +221,52 @@ mod tests {
         assert_eq!(
             non_custom_sections,
             vec![1, 3, 7, 10],
-            "generated modules may contain only type, function, export, and code sections"
+            "persistent-free modules may contain only type, function, export, and code sections"
+        );
+    }
+
+    #[test]
+    fn persistent_modules_add_only_private_immutable_i64_globals() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let program = empty_entry_program(
+            types,
+            vec![
+                PersistentDecl::new(i64_ty, Value::I64(7)),
+                PersistentDecl::new(i64_ty, Value::I64(7)),
+            ],
+        );
+        let encoded = encoding::encode(&program).expect("supported persistent fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        let non_custom_sections: Vec<_> = section_ids(module)
+            .into_iter()
+            .filter(|id| *id != 0)
+            .collect();
+        assert_eq!(
+            non_custom_sections,
+            vec![1, 3, 6, 7, 10],
+            "persistents may add only the core Wasm global section"
+        );
+
+        let globals = section_payload(module, 6);
+        let mut global_cursor = 0_usize;
+        assert_eq!(
+            read_u32_leb(globals, &mut global_cursor),
+            2,
+            "equal-valued Core declarations must remain two private globals"
+        );
+        assert_eq!(globals.get(global_cursor), Some(&0x7e), "global must be i64");
+        assert_eq!(
+            globals.get(global_cursor + 1),
+            Some(&0x00),
+            "global must be immutable"
+        );
+
+        assert_eq!(
+            export_kinds(section_payload(module, 7)),
+            vec![0],
+            "only the entry function may be exported; persistent globals stay private"
         );
     }
 
@@ -235,6 +285,43 @@ mod tests {
             cursor = end;
         }
         ids
+    }
+
+    fn section_payload(bytes: &[u8], wanted: u8) -> &[u8] {
+        let mut cursor = 0_usize;
+        while cursor < bytes.len() {
+            let section_id = bytes[cursor];
+            cursor += 1;
+            let payload_len = read_u32_leb(bytes, &mut cursor);
+            let start = cursor;
+            let end = start
+                .checked_add(payload_len)
+                .expect("section payload length must fit usize");
+            assert!(end <= bytes.len(), "section payload must fit module bytes");
+            if section_id == wanted {
+                return &bytes[start..end];
+            }
+            cursor = end;
+        }
+        panic!("missing expected Wasm section {wanted}");
+    }
+
+    fn export_kinds(bytes: &[u8]) -> Vec<u8> {
+        let mut cursor = 0_usize;
+        let count = read_u32_leb(bytes, &mut cursor);
+        let mut kinds = Vec::with_capacity(count);
+        for _ in 0..count {
+            let name_len = read_u32_leb(bytes, &mut cursor);
+            cursor = cursor
+                .checked_add(name_len)
+                .expect("export name length must fit usize");
+            assert!(cursor < bytes.len(), "export kind must be present");
+            kinds.push(bytes[cursor]);
+            cursor += 1;
+            let _index = read_u32_leb(bytes, &mut cursor);
+        }
+        assert_eq!(cursor, bytes.len(), "export section must be consumed exactly");
+        kinds
     }
 
     fn read_u32_leb(bytes: &[u8], cursor: &mut usize) -> usize {
