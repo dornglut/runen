@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlockId, Function, FunctionId, LocalId, Operand, PersistentId, Place, PlaceAccess,
-    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable,
-    ValidatedProgram, Value,
+    BasicBlockId, CallableInterface, Function, FunctionId, LocalId, Operand, PersistentId, Place,
+    PlaceAccess, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind,
+    TypeTable, ValidatedProgram, Value,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -49,7 +49,6 @@ pub enum UnsupportedOperandKind {
     TrackedFixtureConstant,
     StructuralConstant,
     PersistentSharedRoot,
-    FunctionValue,
     RawMove,
     AddressOf,
     ReferenceRoot,
@@ -72,7 +71,6 @@ pub enum UnsupportedStatementKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnsupportedTerminatorKind {
     ExternalCall,
-    IndirectCall,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -99,9 +97,6 @@ pub struct CoverageError {
 pub(crate) fn validate(program: &ValidatedProgram) -> Result<(), CoverageError> {
     let program = program.as_program();
 
-    // Diagnose represented function behavior before passive whole-program declarations. This
-    // preserves whole-program conservative rejection while making actively consumed unsupported
-    // operands/statements/terminators observable at their precise Core location.
     for (function_index, function) in program.functions.iter().enumerate() {
         let function_id = checked_function_id(function_index)?;
         validate_function(&program.types, function_id, function)?;
@@ -109,7 +104,7 @@ pub(crate) fn validate(program: &ValidatedProgram) -> Result<(), CoverageError> 
 
     for (persistent_index, persistent) in program.persistent.iter().enumerate() {
         let persistent_id = checked_persistent_id(persistent_index)?;
-        require_supported_type(
+        require_supported_scalar_type(
             &program.types,
             persistent.ty,
             CoverageLocation::Persistent(persistent_id),
@@ -138,8 +133,6 @@ fn validate_function(
         ));
     }
 
-    // Behavior is inspected before passive declarations/types so the diagnostic identifies the
-    // unsupported operation actually consumed by the function whenever one exists.
     for (block_index, block) in function.body.blocks.iter().enumerate() {
         let block_id = checked_block_id(block_index)?;
         for (statement_index, statement) in block.statements.iter().enumerate() {
@@ -154,7 +147,7 @@ fn validate_function(
             function: function_id,
             block: block_id,
         };
-        validate_terminator(&block.terminator, &location)?;
+        validate_terminator(types, &block.terminator, &location)?;
     }
 
     if !function.body.loans.is_empty() {
@@ -165,7 +158,7 @@ fn validate_function(
     }
 
     if let Some(result) = function.result {
-        require_supported_type(
+        require_supported_scalar_type(
             types,
             result,
             CoverageLocation::Result {
@@ -187,13 +180,105 @@ fn validate_function(
                 local: local_id,
             }
         };
-        require_supported_type(types, local.ty, location)?;
+        require_supported_storage_type(types, local.ty, location)?;
     }
 
     Ok(())
 }
 
-fn require_supported_type(
+fn require_supported_storage_type(
+    types: &TypeTable,
+    ty: TypeId,
+    location: CoverageLocation,
+) -> Result<(), CoverageError> {
+    if is_supported_scalar_type(types, ty) || is_supported_callable_type(types, ty) {
+        Ok(())
+    } else {
+        unsupported_type(types, ty, location)
+    }
+}
+
+fn require_supported_scalar_type(
+    types: &TypeTable,
+    ty: TypeId,
+    location: CoverageLocation,
+) -> Result<(), CoverageError> {
+    if is_supported_scalar_type(types, ty) {
+        Ok(())
+    } else {
+        unsupported_type(types, ty, location)
+    }
+}
+
+fn require_supported_callable_type(
+    types: &TypeTable,
+    ty: TypeId,
+    location: &CoverageLocation,
+) -> Result<(), CoverageError> {
+    if is_supported_callable_type(types, ty) {
+        Ok(())
+    } else {
+        Err(CoverageError {
+            location: location.clone(),
+            kind: CoverageErrorKind::UnsupportedType {
+                ty,
+                category: UnsupportedTypeCategory::Callable,
+            },
+        })
+    }
+}
+
+fn is_supported_scalar_type(types: &TypeTable, ty: TypeId) -> bool {
+    let Some(definition) = types.get(ty) else {
+        return false;
+    };
+    if definition.interior_mutable {
+        return false;
+    }
+    matches!(
+        definition.kind,
+        TypeKind::Scalar(
+            ScalarType::Bool
+                | ScalarType::I8
+                | ScalarType::I16
+                | ScalarType::I32
+                | ScalarType::I64
+                | ScalarType::U8
+                | ScalarType::U16
+                | ScalarType::U32
+                | ScalarType::U64
+        )
+    )
+}
+
+fn is_supported_callable_type(types: &TypeTable, ty: TypeId) -> bool {
+    let Some(definition) = types.get(ty) else {
+        return false;
+    };
+    if definition.interior_mutable {
+        return false;
+    }
+    let TypeKind::Scalar(ScalarType::Callable(interface)) = &definition.kind else {
+        return false;
+    };
+    callable_interface_is_supported(types, interface)
+}
+
+fn callable_interface_is_supported(types: &TypeTable, interface: &CallableInterface) -> bool {
+    matches!(
+        interface.safe_reference_result_contract,
+        SafeReferenceResultContract::None
+    ) && interface
+        .parameters
+        .iter()
+        .copied()
+        .all(|ty| is_supported_scalar_type(types, ty))
+        && interface
+            .result
+            .is_none_or(|ty| is_supported_scalar_type(types, ty))
+}
+
+fn unsupported_type(
     types: &TypeTable,
     ty: TypeId,
     location: CoverageLocation,
@@ -207,35 +292,32 @@ fn require_supported_type(
             },
         });
     };
-    if definition.interior_mutable {
-        return Err(CoverageError {
-            location,
-            kind: CoverageErrorKind::UnsupportedType {
-                ty,
-                category: UnsupportedTypeCategory::InteriorMutable,
-            },
-        });
-    }
-    let category = match &definition.kind {
-        TypeKind::Scalar(
-            ScalarType::Bool
-            | ScalarType::I8
-            | ScalarType::I16
-            | ScalarType::I32
-            | ScalarType::I64
-            | ScalarType::U8
-            | ScalarType::U16
-            | ScalarType::U32
-            | ScalarType::U64,
-        ) => return Ok(()),
-        TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64) => {
-            UnsupportedTypeCategory::Floating
+    let category = if definition.interior_mutable {
+        UnsupportedTypeCategory::InteriorMutable
+    } else {
+        match &definition.kind {
+            TypeKind::Scalar(
+                ScalarType::Bool
+                | ScalarType::I8
+                | ScalarType::I16
+                | ScalarType::I32
+                | ScalarType::I64
+                | ScalarType::U8
+                | ScalarType::U16
+                | ScalarType::U32
+                | ScalarType::U64,
+            ) => return Ok(()),
+            TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64) => {
+                UnsupportedTypeCategory::Floating
+            }
+            TypeKind::Scalar(ScalarType::RawPointer(_)) => UnsupportedTypeCategory::RawPointer,
+            TypeKind::Scalar(ScalarType::Reference { .. }) => {
+                UnsupportedTypeCategory::SafeReference
+            }
+            TypeKind::Scalar(ScalarType::Callable(_)) => UnsupportedTypeCategory::Callable,
+            TypeKind::Scalar(ScalarType::TrackedFixture) => UnsupportedTypeCategory::TrackedFixture,
+            TypeKind::Struct(_) => UnsupportedTypeCategory::StructuralAggregate,
         }
-        TypeKind::Scalar(ScalarType::RawPointer(_)) => UnsupportedTypeCategory::RawPointer,
-        TypeKind::Scalar(ScalarType::Reference { .. }) => UnsupportedTypeCategory::SafeReference,
-        TypeKind::Scalar(ScalarType::Callable(_)) => UnsupportedTypeCategory::Callable,
-        TypeKind::Scalar(ScalarType::TrackedFixture) => UnsupportedTypeCategory::TrackedFixture,
-        TypeKind::Struct(_) => UnsupportedTypeCategory::StructuralAggregate,
     };
     Err(CoverageError {
         location,
@@ -315,6 +397,7 @@ fn validate_statement(
 }
 
 fn validate_terminator(
+    types: &TypeTable,
     terminator: &Terminator,
     location: &CoverageLocation,
 ) -> Result<(), CoverageError> {
@@ -344,10 +427,23 @@ fn validate_terminator(
             location: location.clone(),
             kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::ExternalCall),
         }),
-        Terminator::IndirectCall { .. } => Err(CoverageError {
-            location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::IndirectCall),
-        }),
+        Terminator::IndirectCall {
+            callable,
+            callee,
+            arguments,
+            destination,
+            ..
+        } => {
+            require_supported_callable_type(types, *callable, location)?;
+            validate_operand(callee, location)?;
+            for argument in arguments {
+                validate_operand(argument, location)?;
+            }
+            if let Some(destination) = destination {
+                validate_place(destination, location)?;
+            }
+            Ok(())
+        }
     }
 }
 
@@ -374,12 +470,9 @@ fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<()
             unsupported_operand(location, UnsupportedOperandKind::StructuralConstant)
         }
         Operand::Move(access) | Operand::Copy(access) => validate_access(access, location),
-        Operand::PersistentRead(_) => Ok(()),
+        Operand::PersistentRead(_) | Operand::FunctionValue(_) => Ok(()),
         Operand::PersistentSharedRoot(_) => {
             unsupported_operand(location, UnsupportedOperandKind::PersistentSharedRoot)
-        }
-        Operand::FunctionValue(_) => {
-            unsupported_operand(location, UnsupportedOperandKind::FunctionValue)
         }
         Operand::RawMove(_) => unsupported_operand(location, UnsupportedOperandKind::RawMove),
         Operand::AddressOf(_) => unsupported_operand(location, UnsupportedOperandKind::AddressOf),
