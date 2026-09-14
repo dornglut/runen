@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Field, Function, FunctionId, LocalDecl,
-    ReferencePermission, SafeReferenceResultContract, ScalarType, Terminator, TypeDef, TypeId,
-    TypeTable, validate_program,
+    LocalId, ReferencePermission, SafeReferenceResultContract, ScalarType, Terminator, TypeDef,
+    TypeId, TypeTable, validate_program,
 };
 use runen_core_wasm::{
     CoverageError, CoverageErrorKind, CoverageLocation, RealizationError, RealizedProgram,
@@ -28,18 +28,23 @@ fn assert_callable_local_rejected(types: TypeTable, callable: TypeId) {
     })
     .expect("excluded callable-interface fixture must remain valid Core");
 
+    let error = match RealizedProgram::new(&program) {
+        Err(RealizationError::Coverage(error)) => error,
+        Err(other) => panic!("expected coverage rejection, got realization error: {other:?}"),
+        Ok(_) => panic!("excluded callable interface was admitted"),
+    };
     assert_eq!(
-        RealizedProgram::new(&program).expect_err("excluded callable interface must reject"),
-        RealizationError::Coverage(CoverageError {
+        error,
+        CoverageError {
             location: CoverageLocation::Local {
                 function: FunctionId(0),
-                local: runen_core_ir::LocalId(0),
+                local: LocalId(0),
             },
             kind: CoverageErrorKind::UnsupportedType {
                 ty: callable,
                 category: UnsupportedTypeCategory::Callable,
             },
-        })
+        }
     );
 }
 
@@ -103,7 +108,11 @@ fn nested_callable_interface_is_outside_first_order_realization_slice() {
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = types.push(TypeDef::callable(
         "Inner",
-        CallableInterface::new(vec![i64_ty], Some(i64_ty), SafeReferenceResultContract::None),
+        CallableInterface::new(
+            vec![i64_ty],
+            Some(i64_ty),
+            SafeReferenceResultContract::None,
+        ),
     ));
     let outer = types.push(TypeDef::callable(
         "Outer",
