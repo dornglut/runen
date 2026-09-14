@@ -28,7 +28,7 @@ Owns the implementation-only refinement from accepted `runen-hir` typed source s
 
 It consumes resolved source intent from `runen-hir` and the target proving representation and canonical validator from `runen-core-ir`. It does not own source or Core semantics, source validation, source entry-point selection, Core execution, Exec/Model lowering, realization, or backend behavior.
 
-Its production dependencies are `runen-hir` and `runen-core-ir`. It MUST NOT depend on `runen-reference`, runtime/platform services, a production backend, or filesystem/package discovery. Test-only construction of accepted HIR may use `runen-syntax` without making syntax a production lowering dependency.
+Its production dependencies are `runen-hir` and `runen-core-ir`. It MUST NOT depend on `runen-reference`, runtime/platform services, a production backend, or filesystem/package discovery in production. Test-only construction of accepted HIR may use `runen-syntax`; explicitly owned end-to-end assurance may also use `runen-reference` and `runen-core-wasm` as test/dev execution consumers. Those proving edges do not transfer Core execution or realization ownership into lowering and do not make either execution consumer part of the production lowering dependency chain.
 
 ### `crates/runen-core-ir`
 
@@ -112,6 +112,8 @@ runen-syntax
                     │       ▼
                     └──▶ runen-reference
 
+runen-core-lowering ──[test-only end-to-end evidence]──▶ runen-reference
+runen-core-lowering ──[test-only end-to-end evidence]──▶ runen-core-wasm
 runen-core-ir ──────[test-only P0-F region-overlap evidence]──────▶ runen-exec-oracle
 runen-exec-oracle ──[test-only P0-F reduction evidence]──────────▶ runen-numeric-oracle
 runen-model-oracle
@@ -119,4 +121,4 @@ runen-model-oracle
 repository tooling is orthogonal
 ```
 
-`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core consumer and depends on both `runen-hir` and `runen-core-ir`. `runen-reference` and `runen-core-wasm` are independent consumers of validated Core programs: the former is the executable reference semantics, while the latter is a bounded production physical realization with explicit coverage admission. `runen-core-wasm` may consume `runen-reference` only in tests for differential conformance, never as production implementation or fallback. `runen-exec-oracle`, `runen-numeric-oracle`, and `runen-model-oracle` remain verification-only packages outside the source/HIR and Core/reference/realization production chains. The Exec oracle's accepted test-only consumption of Core structural-region overlap evidence composes the Core-owned overlap relation with the Exec-owned ordinary-access conflict relation without creating production coupling or transferring semantic ownership. The numeric oracle's accepted test-only consumption of Exec reduction evidence likewise composes independently owned proving relations; other proving-package composition still requires an accepted semantic or assurance consumer.
+`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core production consumer and depends on both `runen-hir` and `runen-core-ir` in production. Its test/dev edges to `runen-reference` and `runen-core-wasm` exist only for explicitly owned end-to-end refinement and differential evidence; they do not create a production source-to-execution composition layer. `runen-reference` and `runen-core-wasm` are independent consumers of validated Core programs: the former is the executable reference semantics, while the latter is a bounded production physical realization with explicit coverage admission. `runen-core-wasm` may consume `runen-reference` only in tests for differential conformance, never as production implementation or fallback. `runen-exec-oracle`, `runen-numeric-oracle`, and `runen-model-oracle` remain verification-only packages outside the source/HIR and Core/reference/realization production chains. The Exec oracle's accepted test-only consumption of Core structural-region overlap evidence composes the Core-owned overlap relation with the Exec-owned ordinary-access conflict relation without creating production coupling or transferring semantic ownership. The numeric oracle's accepted test-only consumption of Exec reduction evidence likewise composes independently owned proving relations; other proving-package composition still requires an accepted semantic or assurance consumer.
