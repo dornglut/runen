@@ -6,6 +6,7 @@
 
 mod coverage;
 mod encoding;
+mod external;
 mod layout;
 mod scalar;
 
@@ -17,9 +18,13 @@ use wasmtime::{Engine, Instance, Module, Store, Val};
 
 pub use coverage::{
     CoverageError, CoverageErrorKind, CoverageLocation, UnsupportedOperandKind,
-    UnsupportedStatementKind, UnsupportedTerminatorKind, UnsupportedTypeCategory,
+    UnsupportedStatementKind, UnsupportedTypeCategory,
 };
 use encoding::{EncodedProgram, EntryInfo, entry_export_name};
+pub use external::{
+    ExternalProviderAdmissionError, ExternalProviderBinding, ExternalProviderFailure,
+    ExternalScalarValue,
+};
 
 const STATUS_RETURNED: i32 = 0;
 const STATUS_FAULTED: i32 = 1;
@@ -42,6 +47,7 @@ pub enum BackendPhase {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RealizationError {
     Coverage(CoverageError),
+    ProviderAdmission(ExternalProviderAdmissionError),
     InvalidEntry(FunctionId),
     EntryHasParameters(FunctionId),
     EntryResultUnsupported(FunctionId),
@@ -59,6 +65,7 @@ impl fmt::Display for RealizationError {
                 formatter,
                 "unsupported Core realization coverage: {error:?}"
             ),
+            Self::ProviderAdmission(error) => write!(formatter, "{error}"),
             Self::InvalidEntry(function) => {
                 write!(formatter, "invalid Core entry function: {function:?}")
             }
@@ -98,17 +105,32 @@ impl From<CoverageError> for RealizationError {
     }
 }
 
+impl From<ExternalProviderAdmissionError> for RealizationError {
+    fn from(error: ExternalProviderAdmissionError) -> Self {
+        Self::ProviderAdmission(error)
+    }
+}
+
 pub struct RealizedProgram {
     engine: Engine,
     module: Module,
     faults: Vec<Fault>,
     entries: Vec<EntryInfo>,
     types: TypeTable,
+    external_providers: Vec<ExternalProviderBinding>,
 }
 
 impl RealizedProgram {
     pub fn new(program: &ValidatedProgram) -> Result<Self, RealizationError> {
+        Self::new_with_external_providers(program, Vec::new())
+    }
+
+    pub fn new_with_external_providers(
+        program: &ValidatedProgram,
+        providers: Vec<ExternalProviderBinding>,
+    ) -> Result<Self, RealizationError> {
         coverage::validate(program)?;
+        let external_providers = external::admit(program, providers)?;
         let EncodedProgram {
             bytes,
             faults,
@@ -125,6 +147,7 @@ impl RealizedProgram {
             faults,
             entries,
             types: program.as_program().types.clone(),
+            external_providers,
         })
     }
 
@@ -147,7 +170,13 @@ impl RealizedProgram {
         }
 
         let mut store = Store::new(&self.engine, ());
-        let instance = Instance::new(&mut store, &self.module, &[]).map_err(|error| {
+        let imports = external::instantiate_imports(
+            &self.engine,
+            &mut store,
+            &self.types,
+            &self.external_providers,
+        )?;
+        let instance = Instance::new(&mut store, &self.module, &imports).map_err(|error| {
             RealizationError::Backend {
                 phase: BackendPhase::Instantiate,
                 message: error.to_string(),
@@ -222,9 +251,9 @@ pub(crate) fn invalid_backend_result() -> RealizationError {
 mod tests {
     use super::*;
     use runen_core_ir::{
-        BasicBlock, BasicBlockId, Body, CallableInterface, Field, Function, LocalDecl, LocalId,
-        Operand, PersistentDecl, Place, Program, SafeReferenceResultContract, ScalarType,
-        Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
+        BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl, Field, Function,
+        LocalDecl, LocalId, Operand, PersistentDecl, Place, Program, SafeReferenceResultContract,
+        ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
     };
 
     fn empty_entry_program(types: TypeTable, persistent: Vec<PersistentDecl>) -> ValidatedProgram {
@@ -535,7 +564,7 @@ mod tests {
             "callable dispatch may add only table and element sections"
         );
         assert_private_two_function_table(section_payload(module, 4));
-        assert_two_function_element_population(section_payload(module, 9));
+        assert_two_function_element_population(section_payload(module, 9), [0, 1]);
         assert_eq!(
             export_kinds(section_payload(module, 7)),
             vec![0, 0],
@@ -637,7 +666,7 @@ mod tests {
             "structural indirect dispatch must add no sections beyond the existing private callable table and elements"
         );
         assert_private_two_function_table(section_payload(module, 4));
-        assert_two_function_element_population(section_payload(module, 9));
+        assert_two_function_element_population(section_payload(module, 9), [0, 1]);
         assert_eq!(
             export_kinds(section_payload(module, 7)),
             vec![0],
@@ -762,6 +791,130 @@ mod tests {
     }
 
     #[test]
+    fn external_only_modules_add_only_private_import_machinery() {
+        let external = ExternalCallableDecl::new(CallableInterface::new(
+            Vec::new(),
+            None,
+            SafeReferenceResultContract::None,
+        ));
+        let program = validate_program(Program {
+            types: TypeTable::new(),
+            persistent: Vec::new(),
+            external_callables: vec![external],
+            functions: vec![Function {
+                name: "entry".into(),
+                parameters: Vec::new(),
+                result: None,
+                safe_reference_result_contract: SafeReferenceResultContract::None,
+                body: Body {
+                    locals: Vec::new(),
+                    loans: Vec::new(),
+                    entry: BasicBlockId(0),
+                    blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+                },
+            }],
+        })
+        .expect("external-only module-shape fixture must be valid Core");
+        coverage::validate(&program)
+            .expect("external-only module-shape fixture must be in realization coverage");
+        let encoded = encoding::encode(&program)
+            .expect("supported external-only module-shape fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(
+            section_ids(module),
+            vec![1, 2, 3, 7, 10],
+            "external-only modules add only the private function-import section"
+        );
+        assert_single_external_function_import(section_payload(module, 2));
+        assert_eq!(
+            export_entries(section_payload(module, 7)),
+            vec![(0, 1)],
+            "the provider import stays private and only the shifted Runen entry is exported"
+        );
+    }
+
+    #[test]
+    fn external_imports_shift_only_physical_function_indices_and_stay_private() {
+        let mut types = TypeTable::new();
+        let callable = types.push(TypeDef::callable(
+            "Thunk",
+            CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None),
+        ));
+        let external = ExternalCallableDecl::new(CallableInterface::new(
+            Vec::new(),
+            None,
+            SafeReferenceResultContract::None,
+        ));
+        let program = validate_program(Program {
+            types,
+            persistent: Vec::new(),
+            external_callables: vec![external],
+            functions: vec![
+                Function {
+                    name: "entry".into(),
+                    parameters: Vec::new(),
+                    result: None,
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("callee", callable, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![
+                            BasicBlock::new(
+                                vec![Statement::Init {
+                                    dst: Place::local(LocalId(0)),
+                                    src: Operand::FunctionValue(FunctionId(1)),
+                                }],
+                                Terminator::IndirectCall {
+                                    callable,
+                                    callee: Operand::Move(Place::local(LocalId(0)).into()),
+                                    arguments: Vec::new(),
+                                    destination: None,
+                                    target: BasicBlockId(1),
+                                },
+                            ),
+                            BasicBlock::new(Vec::new(), Terminator::Return(None)),
+                        ],
+                    },
+                },
+                Function {
+                    name: "target".into(),
+                    parameters: Vec::new(),
+                    result: None,
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: Vec::new(),
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+                    },
+                },
+            ],
+        })
+        .expect("external/callable module-shape fixture must be valid Core");
+        coverage::validate(&program)
+            .expect("external/callable module-shape fixture must be in realization coverage");
+        let encoded =
+            encoding::encode(&program).expect("supported external/callable fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(
+            section_ids(module),
+            vec![1, 2, 3, 4, 7, 9, 10],
+            "external providers add only the core Wasm import section beside the existing private callable table/elements"
+        );
+        assert_single_external_function_import(section_payload(module, 2));
+        assert_private_two_function_table(section_payload(module, 4));
+        assert_two_function_element_population(section_payload(module, 9), [1, 2]);
+        assert_eq!(
+            export_entries(section_payload(module, 7)),
+            vec![(0, 1), (0, 2)],
+            "only defined Runen functions are exported after the import offset; the provider import and callable table stay private"
+        );
+    }
+
+    #[test]
     fn aggregate_callable_and_persistent_private_sections_compose_without_new_exports() {
         let mut types = TypeTable::new();
         let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
@@ -790,12 +943,31 @@ mod tests {
             "aggregate composition must add no storage sections beyond existing private carriers"
         );
         assert_private_two_function_table(section_payload(module, 4));
-        assert_two_function_element_population(section_payload(module, 9));
+        assert_two_function_element_population(section_payload(module, 9), [0, 1]);
         assert!(
             export_kinds(section_payload(module, 7))
                 .into_iter()
                 .all(|kind| kind == 0),
             "aggregate values must not expose callable tables or persistent globals"
+        );
+    }
+
+    fn assert_single_external_function_import(bytes: &[u8]) {
+        let mut cursor = 0_usize;
+        assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "exactly one import");
+        let _module = read_name(bytes, &mut cursor);
+        let _field = read_name(bytes, &mut cursor);
+        assert_eq!(
+            bytes.get(cursor),
+            Some(&0x00),
+            "provider import is a function"
+        );
+        cursor += 1;
+        let _type_index = read_u32_leb(bytes, &mut cursor);
+        assert_eq!(
+            cursor,
+            bytes.len(),
+            "import section must be consumed exactly"
         );
     }
 
@@ -818,7 +990,7 @@ mod tests {
         );
     }
 
-    fn assert_two_function_element_population(bytes: &[u8]) {
+    fn assert_two_function_element_population(bytes: &[u8], expected: [usize; 2]) {
         let mut cursor = 0_usize;
         assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "one element segment");
         assert_eq!(
@@ -833,8 +1005,8 @@ mod tests {
         assert_eq!(bytes.get(cursor), Some(&0x0b), "offset expression ends");
         cursor += 1;
         assert_eq!(read_u32_leb(bytes, &mut cursor), 2, "two function elements");
-        assert_eq!(read_u32_leb(bytes, &mut cursor), 0);
-        assert_eq!(read_u32_leb(bytes, &mut cursor), 1);
+        assert_eq!(read_u32_leb(bytes, &mut cursor), expected[0]);
+        assert_eq!(read_u32_leb(bytes, &mut cursor), expected[1]);
         assert_eq!(
             cursor,
             bytes.len(),
@@ -879,25 +1051,44 @@ mod tests {
     }
 
     fn export_kinds(bytes: &[u8]) -> Vec<u8> {
+        export_entries(bytes)
+            .into_iter()
+            .map(|(kind, _)| kind)
+            .collect()
+    }
+
+    fn export_entries(bytes: &[u8]) -> Vec<(u8, usize)> {
         let mut cursor = 0_usize;
         let count = read_u32_leb(bytes, &mut cursor);
-        let mut kinds = Vec::with_capacity(count);
+        let mut entries = Vec::with_capacity(count);
         for _ in 0..count {
-            let name_len = read_u32_leb(bytes, &mut cursor);
-            cursor = cursor
-                .checked_add(name_len)
-                .expect("export name length must fit usize");
-            assert!(cursor < bytes.len(), "export kind must be present");
-            kinds.push(bytes[cursor]);
+            let _name = read_name(bytes, &mut cursor);
+            let kind = *bytes.get(cursor).expect("export kind must be present");
             cursor += 1;
-            let _index = read_u32_leb(bytes, &mut cursor);
+            let index = read_u32_leb(bytes, &mut cursor);
+            entries.push((kind, index));
         }
         assert_eq!(
             cursor,
             bytes.len(),
             "export section must be consumed exactly"
         );
-        kinds
+        entries
+    }
+
+    fn read_name<'a>(bytes: &'a [u8], cursor: &mut usize) -> &'a str {
+        let name_len = read_u32_leb(bytes, cursor);
+        let end = cursor
+            .checked_add(name_len)
+            .expect("Wasm name length must fit usize");
+        let name = std::str::from_utf8(
+            bytes
+                .get(*cursor..end)
+                .expect("Wasm name bytes must fit section"),
+        )
+        .expect("generated Wasm names are UTF-8");
+        *cursor = end;
+        name
     }
 
     fn read_u32_leb(bytes: &[u8], cursor: &mut usize) -> usize {

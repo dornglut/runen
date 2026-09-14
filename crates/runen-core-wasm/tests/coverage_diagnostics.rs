@@ -7,7 +7,7 @@ use runen_core_ir::{
 };
 use runen_core_wasm::{
     CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError,
-    RealizedProgram, UnsupportedOperandKind, UnsupportedTerminatorKind, UnsupportedTypeCategory,
+    RealizedProgram, UnsupportedOperandKind, UnsupportedTypeCategory,
 };
 
 fn body(locals: Vec<LocalDecl>, loans: Vec<LoanDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -346,44 +346,39 @@ fn persistent_shared_root_is_rejected_at_its_consuming_statement() {
 }
 
 #[test]
-fn active_external_call_has_a_terminator_diagnostic() {
-    let external_interface =
-        CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None);
+fn floating_external_interface_has_declaration_level_diagnostic() {
+    let mut types = TypeTable::new();
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let external_program = validated(
-        TypeTable::new(),
+        types,
         Vec::new(),
-        vec![ExternalCallableDecl::new(external_interface)],
+        vec![ExternalCallableDecl::new(CallableInterface::new(
+            vec![f32_ty],
+            Some(f32_ty),
+            SafeReferenceResultContract::None,
+        ))],
         vec![function(
-            "external",
+            "entry",
             Vec::new(),
             None,
             SafeReferenceResultContract::None,
             body(
                 Vec::new(),
                 Vec::new(),
-                vec![
-                    BasicBlock::new(
-                        Vec::new(),
-                        Terminator::ExternalCall {
-                            external: ExternalCallableId(0),
-                            arguments: Vec::new(),
-                            destination: None,
-                            target: BasicBlockId(1),
-                        },
-                    ),
-                    BasicBlock::new(Vec::new(), Terminator::Return(None)),
-                ],
+                vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
             ),
         )],
     );
     assert_eq!(
         coverage_error(&external_program),
         CoverageError {
-            location: CoverageLocation::Terminator {
-                function: FunctionId(0),
-                block: BasicBlockId(0),
+            location: CoverageLocation::ExternalCallable(ExternalCallableId(0)),
+            kind: CoverageErrorKind::UnsupportedExternalParameterType {
+                external: ExternalCallableId(0),
+                parameter: 0,
+                ty: f32_ty,
+                category: UnsupportedTypeCategory::Floating,
             },
-            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::ExternalCall,),
         }
     );
 }
@@ -538,35 +533,7 @@ fn projected_access_does_not_hide_unsupported_nested_parameter_type() {
 }
 
 #[test]
-fn passive_external_and_loan_facilities_keep_program_or_function_categories() {
-    let external_program = validated(
-        TypeTable::new(),
-        Vec::new(),
-        vec![ExternalCallableDecl::new(CallableInterface::new(
-            Vec::new(),
-            None,
-            SafeReferenceResultContract::None,
-        ))],
-        vec![function(
-            "entry",
-            Vec::new(),
-            None,
-            SafeReferenceResultContract::None,
-            body(
-                Vec::new(),
-                Vec::new(),
-                vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
-            ),
-        )],
-    );
-    assert_eq!(
-        coverage_error(&external_program),
-        CoverageError {
-            location: CoverageLocation::Program,
-            kind: CoverageErrorKind::ExternalCallables,
-        }
-    );
-
+fn passive_loan_facility_keeps_function_level_category() {
     let mut loan_types = TypeTable::new();
     let loan_ty = loan_types.push(TypeDef::scalar("I64", ScalarType::I64));
     let loan_program = validated(
