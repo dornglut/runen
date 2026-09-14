@@ -400,7 +400,11 @@ fn higher_order_indirect_call_rejects_at_the_consuming_terminator() {
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let inner = types.push(TypeDef::callable(
         "Inner",
-        CallableInterface::new(vec![i64_ty], Some(i64_ty), SafeReferenceResultContract::None),
+        CallableInterface::new(
+            vec![i64_ty],
+            Some(i64_ty),
+            SafeReferenceResultContract::None,
+        ),
     ));
     let outer = types.push(TypeDef::callable(
         "Outer",
@@ -445,7 +449,9 @@ fn higher_order_indirect_call_rejects_at_the_consuming_terminator() {
                         ),
                         BasicBlock::new(
                             Vec::new(),
-                            Terminator::Return(Some(Operand::Move(Place::local(LocalId(2)).into()))),
+                            Terminator::Return(Some(Operand::Move(
+                                Place::local(LocalId(2)).into(),
+                            ))),
                         ),
                     ],
                 ),
