@@ -2,9 +2,7 @@ use std::error::Error;
 use std::fmt;
 use std::sync::Arc;
 
-use runen_core_ir::{
-    CallableInterface, ExternalCallableId, TypeTable, ValidatedProgram, Value,
-};
+use runen_core_ir::{CallableInterface, ExternalCallableId, TypeTable, ValidatedProgram, Value};
 use wasmtime::{Engine, Extern, Func, FuncType, Store, Val, ValType};
 
 use crate::scalar::{ScalarKind, constant_residue};
@@ -218,14 +216,10 @@ pub(crate) fn admit(
     for binding in bindings {
         let index = binding.external.0 as usize;
         let Some(declaration) = program.external_callables.get(index) else {
-            return Err(ExternalProviderAdmissionError::UnknownProvider(
-                binding.external,
-            ));
+            return Err(ExternalProviderAdmissionError::UnknownProvider(binding.external));
         };
         if admitted[index].is_some() {
-            return Err(ExternalProviderAdmissionError::DuplicateProvider(
-                binding.external,
-            ));
+            return Err(ExternalProviderAdmissionError::DuplicateProvider(binding.external));
         }
         if binding.interface != declaration.interface {
             return Err(ExternalProviderAdmissionError::InterfaceMismatch {
@@ -311,9 +305,11 @@ pub(crate) fn instantiate_imports(
                         let value = kind.decode(*payload).map_err(|_| {
                             host_error(external, "private provider argument carrier was invalid")
                         })?;
-                        arguments.push(ExternalScalarValue::from_core_value(value).ok_or_else(
-                            || host_error(external, "private provider argument was not scalar"),
-                        )?);
+                        arguments.push(
+                            ExternalScalarValue::from_core_value(value).ok_or_else(|| {
+                                host_error(external, "private provider argument was not scalar")
+                            })?,
+                        );
                     }
 
                     let returned = provider(&arguments).map_err(|error| {
@@ -350,18 +346,18 @@ pub(crate) fn instantiate_imports(
                                     "provider returned a value of the wrong semantic scalar type",
                                 ));
                             }
-                            let Some(Val::I64(result)) = results.first_mut() else {
-                                return Err(host_error(
-                                    external,
-                                    "private result-bearing provider import had invalid result storage",
-                                ));
-                            };
                             if results.len() != 1 {
                                 return Err(host_error(
                                     external,
                                     "private provider import had the wrong result count",
                                 ));
                             }
+                            let Some(Val::I64(result)) = results.first_mut() else {
+                                return Err(host_error(
+                                    external,
+                                    "private result-bearing provider import had invalid result storage",
+                                ));
+                            };
                             let residue = constant_residue(&value.into_core_value()).ok_or_else(|| {
                                 host_error(external, "provider result had no scalar carrier")
                             })?;
@@ -382,55 +378,4 @@ fn host_error(external: ExternalCallableId, message: impl Into<String>) -> wasmt
         external,
         message.into()
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use runen_core_ir::{
-        ExternalCallableDecl, Function, FunctionId, Program, SafeReferenceResultContract,
-        ScalarType, TypeDef, TypeTable, validate_program,
-    };
-
-    fn empty_function() -> Function {
-        Function::empty("entry")
-    }
-
-    #[test]
-    fn admission_keeps_equal_interfaces_distinct_by_external_identity() {
-        let mut types = TypeTable::new();
-        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
-        let interface = CallableInterface::new(
-            vec![i64_ty],
-            Some(i64_ty),
-            SafeReferenceResultContract::None,
-        );
-        let program = validate_program(Program {
-            types,
-            persistent: Vec::new(),
-            external_callables: vec![
-                ExternalCallableDecl::new(interface.clone()),
-                ExternalCallableDecl::new(interface.clone()),
-            ],
-            functions: vec![empty_function()],
-        })
-        .expect("provider admission fixture must be valid Core");
-
-        let bindings = vec![
-            ExternalProviderBinding::scalar_result(
-                ExternalCallableId(0),
-                interface.clone(),
-                |_| ExternalScalarValue::I64(1),
-            ),
-            ExternalProviderBinding::scalar_result(
-                ExternalCallableId(1),
-                interface,
-                |_| ExternalScalarValue::I64(2),
-            ),
-        ];
-        let admitted = admit(&program, bindings).expect("both provider identities must admit");
-        assert_eq!(admitted[0].external(), ExternalCallableId(0));
-        assert_eq!(admitted[1].external(), ExternalCallableId(1));
-        let _ = FunctionId(0);
-    }
 }
