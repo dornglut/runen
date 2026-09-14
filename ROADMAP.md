@@ -4,7 +4,7 @@ This document owns project sequencing and specification-closure planning. It is 
 
 ## Current baseline
 
-The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety, P0-B Exec resources/concurrency, P0-C numeric, P0-D source-language, and P0-E Model foundations are closed; P0-F is the next sequencing frontier.
+The repository has an executable A0 Core value/place machine and a provisional decomposed language specification. The represented P0-A Core memory/safety, P0-B Exec resources/concurrency, P0-C numeric, P0-D source-language, P0-E Model, and P0-F cross-stratum proving foundations are closed. No post-P0 implementation, backend, runtime, or framework direction is selected by this roadmap state; select the next concrete delivery only through a fresh sequencing investigation against current accepted authority.
 
 ## P0-A — Value, memory, and safety
 
@@ -102,7 +102,13 @@ Query AST/IR, planner, storage/index/runtime/database architecture, incremental 
 
 **Depends on:** the relevant preceding closures.
 
-Exercise Core, Exec, Model, and their bridges together using memory litmus cases, Buffer mapping/coherence, CPU/GPU equivalence, structured parallel reductions, Model reference evaluation, incremental differential tests, bridge tests, commit/event cases, and lowering/refinement cases. Include the cross-stratum safety evidence required for consumer-driven memory, unsafe, validity, and address-stability rules introduced by earlier phases.
+Cross-stratum proving covers memory litmus cases, Buffer mapping/coherence, CPU/GPU equivalence, structured parallel reductions, Model reference evaluation, incremental differential tests, bridge tests, commit/event cases, lowering/refinement cases, and the cross-stratum safety evidence required when consumer-driven memory, unsafe, validity, or address-stability rules become represented.
+
+The represented cross-stratum foundation closes the P0-F obligations required by the current gate: accepted source-to-syntax-to-typed-HIR-to-validated-Core lowering plus reference execution/refinement evidence for represented source/Core behavior; Core-owned structural storage-region overlap composed with the generic Exec ordinary-access conflict relation; Exec reduction contribution-occurrence identity/coverage composed with numeric unordered floating-sum semantics; the represented Exec Buffer mapping/coherence, physical-accessibility, and abstract cross-realization preservation evidence already established by P0-B; and bounded from-scratch Model evaluation, observation, result-target, and exact source/result correspondence evidence already established by P0-E.
+
+This closure applies only to relations and consumers that the accepted repository currently represents and instantiates. It does not claim a concrete CPU/GPU or other backend pair, source/HIR lowering into Exec or Model, a production Core↔Exec resource/view transfer, Model↔Core/Exec reification, an incremental Model realization, a concrete state-domain commit/event runtime, a stable physical ABI/layout, raw-address observation, relocation/address-stability/pinning behavior, or another operation/bridge/realization whose producer and consumer do not yet exist. Abstract physical execution-agent/allocation witnesses are not hardware CPU/GPU evidence, and accepted Model oracle fixtures are not an incremental engine or cross-stratum bridge.
+
+Future consumers and realizations must add the strongest applicable integrated evidence when they make one of those obligations concrete. In particular, concrete backend differential evidence is required when several realizations implement one Runen semantic operation; incremental differential evidence is required only after a maintenance target defines the applicable source-observation identity, update admission, freshness, progress, failure/reconciliation, and target-update visibility; commit/event evidence requires the corresponding accepted state-domain admission/lifecycle contract; and representation validity, address stability, pinning, ABI/layout, and related Core safety rules remain consumer-triggered until a represented observer makes them semantically relevant. P0-F closure is not authority for behavior that a normative owner still marks open and does not permanently discharge proof obligations for future constructs.
 
 **Gate:** integrated proving does not require ordinary source to expose implementation machinery merely to preserve the intended semantics.
 
