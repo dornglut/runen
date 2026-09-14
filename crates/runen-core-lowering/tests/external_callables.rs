@@ -1,6 +1,11 @@
-use runen_core_ir::{ExternalCallableId, ScalarType, Terminator, TypeKind, ValidatedProgram};
+use runen_core_ir::{
+    ExternalCallableId, FunctionId, ScalarType, Terminator, TypeKind, ValidatedProgram,
+};
 use runen_core_lowering::lower;
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
+use runen_reference::{
+    ExternalProviderBinding, ExternalScalarValue, Machine, ObservedValue, TerminalStatus,
+};
 use runen_syntax::{Parse, parse_source};
 
 fn parse(source: &str) -> Parse {
@@ -55,6 +60,39 @@ fn external_declaration_lowers_once_without_becoming_a_core_function() {
         Some(TypeKind::Scalar(ScalarType::Bool))
     ));
     assert_eq!(external_calls(program), vec![ExternalCallableId(0)]);
+}
+
+#[test]
+fn lowered_external_scalar_call_executes_through_the_reference_provider_relation() {
+    let lowered = lower_source(
+        "external fn transform(I64, Bool) -> U64; \
+         fn caller() -> U64 { return transform(7, true); }",
+    );
+    let interface = lowered.as_program().external_callables[0].interface.clone();
+    let machine = Machine::new_with_external_providers(
+        lowered,
+        FunctionId(0),
+        vec![ExternalProviderBinding::scalar_result(
+            ExternalCallableId(0),
+            interface,
+            |arguments| {
+                assert_eq!(
+                    arguments,
+                    &[
+                        ExternalScalarValue::I64(7),
+                        ExternalScalarValue::Bool(true),
+                    ]
+                );
+                ExternalScalarValue::U64(42)
+            },
+        )],
+    )
+    .expect("lowered source external requirement must admit the matching provider");
+    let report = machine
+        .execute()
+        .expect("lowered source external call is defined through the provider");
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::U64(42)));
 }
 
 #[test]
