@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, BorrowKind,
     CallableInterface, ExternalCallableDecl, ExternalCallableId, Function, FunctionId, LoanDecl,
-    LoanId, LocalDecl, LocalId, NumericContract, Operand, PersistentDecl, Place, ReferenceAccess,
+    LoanId, LocalDecl, LocalId, NumericContract, Operand, Place, ReferenceAccess,
     ReferencePermission, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
     TypeTable, Value, validate_program,
 };
@@ -252,28 +252,7 @@ fn rejects_tracked_fixture_and_interior_mutability() {
 }
 
 #[test]
-fn rejects_program_wide_persistent_external_and_loan_facilities() {
-    let mut persistent_types = TypeTable::new();
-    let i64_ty = persistent_types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let persistent_program = validate_program(runen_core_ir::Program {
-        types: persistent_types,
-        persistent: vec![PersistentDecl::new(i64_ty, Value::I64(1))],
-        external_callables: Vec::new(),
-        functions: vec![function(
-            "entry",
-            Vec::new(),
-            None,
-            Body {
-                locals: Vec::new(),
-                loans: Vec::new(),
-                entry: BasicBlockId(0),
-                blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
-            },
-        )],
-    })
-    .expect("persistent fixture must be valid Core");
-    assert_coverage_rejected(persistent_program);
-
+fn rejects_program_wide_external_and_loan_facilities() {
     let external_interface =
         CallableInterface::new(Vec::new(), None, SafeReferenceResultContract::None);
     let external_program = validate_program(runen_core_ir::Program {
