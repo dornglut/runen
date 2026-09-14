@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId,
-    TypeTable, ValidatedProgram, Value, validate_program,
+    BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
+    Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
+    TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
@@ -233,7 +233,10 @@ fn integer_arithmetic_explicitly_preserves_modulo_residues() {
 
     for (scalar, left, right, operation, expected) in cases {
         assert_eq!(
-            assert_differential(binary_program(scalar, left, right, operation), FunctionId(0)),
+            assert_differential(
+                binary_program(scalar, left, right, operation),
+                FunctionId(0)
+            ),
             ExecutionOutcome::Returned(Some(expected))
         );
     }
@@ -281,7 +284,10 @@ fn integer_bitwise_equality_and_order_match_reference_semantics() {
 
     for (scalar, left, right, operation, expected) in cases {
         assert_eq!(
-            assert_differential(binary_program(scalar, left, right, operation), FunctionId(0)),
+            assert_differential(
+                binary_program(scalar, left, right, operation),
+                FunctionId(0)
+            ),
             ExecutionOutcome::Returned(Some(expected))
         );
     }

@@ -300,23 +300,16 @@ fn validate_terminator(
         }
         Terminator::ExternalCall { .. } => Err(CoverageError {
             location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedTerminator(
-                UnsupportedTerminatorKind::ExternalCall,
-            ),
+            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::ExternalCall),
         }),
         Terminator::IndirectCall { .. } => Err(CoverageError {
             location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedTerminator(
-                UnsupportedTerminatorKind::IndirectCall,
-            ),
+            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::IndirectCall),
         }),
     }
 }
 
-fn validate_operand(
-    operand: &Operand,
-    location: &CoverageLocation,
-) -> Result<(), CoverageError> {
+fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<(), CoverageError> {
     match operand {
         Operand::Constant(
             Value::Bool(_)
@@ -365,13 +358,12 @@ fn validate_operand(
     }
 }
 
-fn validate_access(
-    access: &PlaceAccess,
-    location: &CoverageLocation,
-) -> Result<(), CoverageError> {
+fn validate_access(access: &PlaceAccess, location: &CoverageLocation) -> Result<(), CoverageError> {
     match access {
         PlaceAccess::Direct(place) => validate_place(place, location),
-        PlaceAccess::Loan { .. } => unsupported_operand(location, UnsupportedOperandKind::LoanAccess),
+        PlaceAccess::Loan { .. } => {
+            unsupported_operand(location, UnsupportedOperandKind::LoanAccess)
+        }
     }
 }
 

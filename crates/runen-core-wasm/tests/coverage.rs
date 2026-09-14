@@ -237,9 +237,8 @@ fn rejects_tracked_fixture_and_interior_mutability() {
     ));
 
     let mut interior_types = TypeTable::new();
-    let interior = interior_types.push(
-        TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability(),
-    );
+    let interior = interior_types
+        .push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
     let interior_body = Body {
         locals: vec![LocalDecl::new("value", interior, false)],
         loans: Vec::new(),

@@ -81,7 +81,10 @@ fn faulting_result_calls_do_not_initialize_destinations_or_follow_normal_targets
         .expect("entry is zero-parameter")
         .execute()
         .expect("explicit Core fault is a defined execution outcome");
-    assert_eq!(reference.terminal, TerminalStatus::Faulted(fault.code.clone()));
+    assert_eq!(
+        reference.terminal,
+        TerminalStatus::Faulted(fault.code.clone())
+    );
     assert_eq!(reference.result, None);
 
     let realized = RealizedProgram::new(&validated)
