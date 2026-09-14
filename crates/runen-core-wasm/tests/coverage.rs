@@ -65,7 +65,7 @@ fn rejects_floating_types_and_operations() {
 }
 
 #[test]
-fn rejects_structural_types_and_projected_access() {
+fn admits_reference_free_structural_types_and_projected_access() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let record_ty = types.push(TypeDef::structure(
@@ -89,10 +89,14 @@ fn rejects_structural_types_and_projected_access() {
             Terminator::Return(None),
         )],
     };
-    assert_coverage_rejected(validate(
-        types,
-        vec![function("entry", Vec::new(), None, body)],
-    ));
+    let validated = validate(types, vec![function("entry", Vec::new(), None, body)]);
+    assert_eq!(
+        RealizedProgram::new(&validated)
+            .expect("reference-free structural fixture must realize")
+            .execute(FunctionId(0))
+            .expect("reference-free structural fixture must execute"),
+        ExecutionOutcome::Returned(None)
+    );
 }
 
 #[test]
