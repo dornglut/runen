@@ -78,10 +78,7 @@ fn lowered_external_scalar_call_executes_through_the_reference_provider_relation
             |arguments| {
                 assert_eq!(
                     arguments,
-                    &[
-                        ExternalScalarValue::I64(7),
-                        ExternalScalarValue::Bool(true),
-                    ]
+                    &[ExternalScalarValue::I64(7), ExternalScalarValue::Bool(true),]
                 );
                 ExternalScalarValue::U64(42)
             },
