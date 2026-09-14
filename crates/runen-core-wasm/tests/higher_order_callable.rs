@@ -455,10 +455,7 @@ fn cyclic_callable_signature_graph_executes_without_recursive_layout() {
         "entry",
         Vec::new(),
         Some(i64_ty),
-        vec![
-            LocalDecl::new("a", a, false),
-            LocalDecl::new("b", b, false),
-        ],
+        vec![LocalDecl::new("a", a, false), LocalDecl::new("b", b, false)],
         vec![
             BasicBlock::new(
                 vec![
@@ -568,9 +565,8 @@ fn nested_callable_reports_safe_reference_tracked_and_interior_mutable_component
             UnsupportedTypeCategory::TrackedFixture => {
                 types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture))
             }
-            UnsupportedTypeCategory::InteriorMutable => types.push(
-                TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability(),
-            ),
+            UnsupportedTypeCategory::InteriorMutable => types
+                .push(TypeDef::scalar("InteriorI64", ScalarType::I64).with_interior_mutability()),
             _ => unreachable!(),
         };
         let inner = callable_type(&mut types, "Inner", vec![unsupported], None);
