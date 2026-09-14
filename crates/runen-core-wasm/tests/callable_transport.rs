@@ -40,7 +40,7 @@ fn callable_copy_assignment_then_indirect_invocation_matches_reference() {
         Some(i64_ty),
         vec![
             LocalDecl::new("original", callable, false),
-            LocalDecl::new("selected", callable, false),
+            LocalDecl::new("selected", callable, true),
             LocalDecl::new("result", i64_ty, false),
         ],
         vec![
