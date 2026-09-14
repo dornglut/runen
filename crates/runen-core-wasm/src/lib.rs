@@ -343,8 +343,8 @@ mod tests {
 
     #[test]
     fn aggregate_modules_add_no_storage_or_import_sections() {
-        let encoded =
-            encoding::encode(&aggregate_program()).expect("supported aggregate fixture must encode");
+        let encoded = encoding::encode(&aggregate_program())
+            .expect("supported aggregate fixture must encode");
         let module = &encoded.bytes[8..];
         assert_eq!(
             section_ids(module),
