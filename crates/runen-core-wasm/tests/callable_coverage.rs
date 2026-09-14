@@ -91,13 +91,12 @@ fn safe_reference_callable_interface_is_outside_first_order_realization_slice() 
 }
 
 #[test]
-fn raw_pointer_callable_interface_is_outside_first_order_realization_slice() {
+fn tracked_fixture_callable_interface_is_outside_first_order_realization_slice() {
     let mut types = TypeTable::new();
-    let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let pointer_ty = types.push(TypeDef::raw_pointer("RawI64", i64_ty));
+    let tracked_ty = types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     let callable = types.push(TypeDef::callable(
-        "PointerConsumer",
-        CallableInterface::new(vec![pointer_ty], None, SafeReferenceResultContract::None),
+        "TrackedConsumer",
+        CallableInterface::new(vec![tracked_ty], None, SafeReferenceResultContract::None),
     ));
     assert_callable_local_rejected(types, callable);
 }
