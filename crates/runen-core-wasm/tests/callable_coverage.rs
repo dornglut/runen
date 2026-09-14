@@ -143,8 +143,8 @@ fn raw_pointer_callable_interface_is_rejected_by_core_before_realization() {
 #[test]
 fn interior_mutable_structural_callable_interface_remains_outside_realization_slice() {
     let mut types = TypeTable::new();
-    let interior_ty = types
-        .push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
+    let interior_ty =
+        types.push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
     let wrapper_ty = types.push(TypeDef::structure(
         "InteriorWrapper",
         vec![Field::new("value", interior_ty)],
