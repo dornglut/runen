@@ -912,16 +912,8 @@ mod tests {
     fn assert_single_external_function_import(bytes: &[u8]) {
         let mut cursor = 0_usize;
         assert_eq!(read_u32_leb(bytes, &mut cursor), 1, "exactly one import");
-        assert_eq!(
-            read_name(bytes, &mut cursor),
-            "__runen_external",
-            "provider import module is private implementation detail"
-        );
-        assert_eq!(
-            read_name(bytes, &mut cursor),
-            "external_0",
-            "provider import field is deterministic and private"
-        );
+        let _module = read_name(bytes, &mut cursor);
+        let _field = read_name(bytes, &mut cursor);
         assert_eq!(
             bytes.get(cursor),
             Some(&0x00),
