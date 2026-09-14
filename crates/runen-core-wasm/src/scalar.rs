@@ -152,9 +152,9 @@ impl ScalarKind {
 
         if exponent == format.exponent_mask() {
             if fraction == 0 {
-                return Ok(FloatingScalarValue::Represented(BinaryFloatValue::Infinity(
-                    sign,
-                )));
+                return Ok(FloatingScalarValue::Represented(
+                    BinaryFloatValue::Infinity(sign),
+                ));
             }
             if residue & !format.sign_mask() == format.canonical_nan_residue() {
                 return Ok(FloatingScalarValue::NaNClass);
@@ -163,7 +163,8 @@ impl ScalarKind {
         }
 
         let significand = (1_u64 << fraction_bits) | fraction;
-        let exponent = i16::try_from(exponent).map_err(|_| invalid_backend_result())? - format.bias();
+        let exponent =
+            i16::try_from(exponent).map_err(|_| invalid_backend_result())? - format.bias();
         Ok(FloatingScalarValue::Represented(BinaryFloatValue::Normal {
             sign,
             significand,
