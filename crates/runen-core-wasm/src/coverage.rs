@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlockId, CallableInterface, Function, FunctionId, LocalId, Operand, PersistentId, Place,
-    PlaceAccess, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind,
-    TypeTable, ValidatedProgram, Value,
+    BasicBlockId, Function, FunctionId, LocalId, Operand, PersistentId, Place, PlaceAccess,
+    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable,
+    ValidatedProgram, Value,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -76,6 +76,17 @@ pub enum CoverageErrorKind {
     ExternalCallables,
     LoanDeclarations,
     UnsupportedType {
+        ty: TypeId,
+        category: UnsupportedTypeCategory,
+    },
+    UnsupportedCallableParameterType {
+        callable: TypeId,
+        parameter: usize,
+        ty: TypeId,
+        category: UnsupportedTypeCategory,
+    },
+    UnsupportedCallableResultType {
+        callable: TypeId,
         ty: TypeId,
         category: UnsupportedTypeCategory,
     },
@@ -188,14 +199,16 @@ fn require_supported_storage_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_scalar_type(types, ty)
-        || is_supported_callable_type(types, ty)
-        || is_supported_aggregate_type(types, ty)
-    {
-        Ok(())
-    } else {
-        unsupported_type(types, ty, location)
+    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
+        return Ok(());
     }
+    if matches!(
+        types.get(ty).map(|definition| &definition.kind),
+        Some(TypeKind::Scalar(ScalarType::Callable(_)))
+    ) {
+        return require_supported_callable_type(types, ty, &location);
+    }
+    unsupported_type(types, ty, location)
 }
 
 fn require_supported_result_type(
@@ -227,17 +240,62 @@ fn require_supported_callable_type(
     ty: TypeId,
     location: &CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_callable_type(types, ty) {
-        Ok(())
-    } else {
-        Err(CoverageError {
+    let Some(definition) = types.get(ty) else {
+        return unsupported_type(types, ty, location.clone());
+    };
+    if definition.interior_mutable {
+        return Err(CoverageError {
+            location: location.clone(),
+            kind: CoverageErrorKind::UnsupportedType {
+                ty,
+                category: UnsupportedTypeCategory::InteriorMutable,
+            },
+        });
+    }
+    let TypeKind::Scalar(ScalarType::Callable(interface)) = &definition.kind else {
+        return Err(CoverageError {
             location: location.clone(),
             kind: CoverageErrorKind::UnsupportedType {
                 ty,
                 category: UnsupportedTypeCategory::Callable,
             },
-        })
+        });
+    };
+    if !matches!(
+        interface.safe_reference_result_contract,
+        SafeReferenceResultContract::None
+    ) {
+        return Err(CoverageError {
+            location: location.clone(),
+            kind: CoverageErrorKind::UnsupportedSafeReferenceResultContract,
+        });
     }
+    for (parameter, parameter_ty) in interface.parameters.iter().copied().enumerate() {
+        if let Some((unsupported_ty, category)) = first_unsupported_type(types, parameter_ty) {
+            return Err(CoverageError {
+                location: location.clone(),
+                kind: CoverageErrorKind::UnsupportedCallableParameterType {
+                    callable: ty,
+                    parameter,
+                    ty: unsupported_ty,
+                    category,
+                },
+            });
+        }
+    }
+    if let Some(result_ty) = interface.result {
+        if let Some((unsupported_ty, category)) = first_unsupported_type(types, result_ty) {
+            return Err(CoverageError {
+                location: location.clone(),
+                kind: CoverageErrorKind::UnsupportedCallableResultType {
+                    callable: ty,
+                    ty: unsupported_ty,
+                    category,
+                },
+            });
+        }
+    }
+    Ok(())
 }
 
 fn is_supported_scalar_type(types: &TypeTable, ty: TypeId) -> bool {
@@ -276,37 +334,6 @@ fn is_supported_aggregate_type(types: &TypeTable, ty: TypeId) -> bool {
     fields.iter().all(|field| {
         is_supported_scalar_type(types, field.ty) || is_supported_aggregate_type(types, field.ty)
     })
-}
-
-fn is_supported_callable_component_type(types: &TypeTable, ty: TypeId) -> bool {
-    is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty)
-}
-
-fn is_supported_callable_type(types: &TypeTable, ty: TypeId) -> bool {
-    let Some(definition) = types.get(ty) else {
-        return false;
-    };
-    if definition.interior_mutable {
-        return false;
-    }
-    let TypeKind::Scalar(ScalarType::Callable(interface)) = &definition.kind else {
-        return false;
-    };
-    callable_interface_is_supported(types, interface)
-}
-
-fn callable_interface_is_supported(types: &TypeTable, interface: &CallableInterface) -> bool {
-    matches!(
-        interface.safe_reference_result_contract,
-        SafeReferenceResultContract::None
-    ) && interface
-        .parameters
-        .iter()
-        .copied()
-        .all(|ty| is_supported_callable_component_type(types, ty))
-        && interface
-            .result
-            .is_none_or(|ty| is_supported_callable_component_type(types, ty))
 }
 
 fn unsupported_type(
