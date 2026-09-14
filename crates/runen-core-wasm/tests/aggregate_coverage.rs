@@ -13,10 +13,7 @@ fn assert_nested_leaf_rejected(
     leaf: TypeId,
     category: UnsupportedTypeCategory,
 ) {
-    let outer = types.push(TypeDef::structure(
-        "Outer",
-        vec![Field::new("leaf", leaf)],
-    ));
+    let outer = types.push(TypeDef::structure("Outer", vec![Field::new("leaf", leaf)]));
     let program = validate_program(Program {
         types,
         persistent: Vec::new(),
@@ -81,11 +78,7 @@ fn nested_excluded_leaf_families_reject_with_exact_type_categories() {
 
     let mut tracked = TypeTable::new();
     let tracked_ty = tracked.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
-    assert_nested_leaf_rejected(
-        tracked,
-        tracked_ty,
-        UnsupportedTypeCategory::TrackedFixture,
-    );
+    assert_nested_leaf_rejected(tracked, tracked_ty, UnsupportedTypeCategory::TrackedFixture);
 
     let mut interior = TypeTable::new();
     let interior_ty =
