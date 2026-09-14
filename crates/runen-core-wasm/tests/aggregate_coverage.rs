@@ -8,6 +8,13 @@ use runen_core_wasm::{
     UnsupportedTypeCategory,
 };
 
+fn realization_error(program: &runen_core_ir::ValidatedProgram) -> RealizationError {
+    match RealizedProgram::new(program) {
+        Err(error) => error,
+        Ok(_) => panic!("unsupported aggregate coverage fixture was admitted"),
+    }
+}
+
 fn assert_nested_leaf_rejected(
     mut types: TypeTable,
     leaf: TypeId,
@@ -34,7 +41,7 @@ fn assert_nested_leaf_rejected(
     .expect("nested unsupported coverage fixture must remain valid Core");
 
     assert_eq!(
-        RealizedProgram::new(&program).expect_err("unsupported nested leaf must reject"),
+        realization_error(&program),
         RealizationError::Coverage(CoverageError {
             location: CoverageLocation::Local {
                 function: FunctionId(0),
@@ -118,7 +125,7 @@ fn interior_mutable_aggregate_root_rejects_before_encoding() {
     .expect("interior-mutable aggregate fixture must remain valid Core");
 
     assert_eq!(
-        RealizedProgram::new(&program).expect_err("interior-mutable aggregate must reject"),
+        realization_error(&program),
         RealizationError::Coverage(CoverageError {
             location: CoverageLocation::Local {
                 function: FunctionId(0),
