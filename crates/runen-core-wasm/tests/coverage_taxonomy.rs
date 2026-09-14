@@ -107,11 +107,7 @@ fn passive_local_types_report_every_excluded_type_family() {
 
     let mut tracked = TypeTable::new();
     let tracked_ty = tracked.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
-    assert_local_type_category(
-        tracked,
-        tracked_ty,
-        UnsupportedTypeCategory::TrackedFixture,
-    );
+    assert_local_type_category(tracked, tracked_ty, UnsupportedTypeCategory::TrackedFixture);
 
     let mut structural = TypeTable::new();
     let field_ty = structural.push(TypeDef::scalar("I64", ScalarType::I64));
@@ -126,8 +122,8 @@ fn passive_local_types_report_every_excluded_type_family() {
     );
 
     let mut interior = TypeTable::new();
-    let interior_ty = interior
-        .push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
+    let interior_ty =
+        interior.push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
     assert_local_type_category(
         interior,
         interior_ty,
@@ -472,12 +468,7 @@ fn representative_excluded_operand_families_have_stable_categories() {
                     )],
                 },
             ),
-            function(
-                "target",
-                Vec::new(),
-                None,
-                empty_body(Vec::new()),
-            ),
+            function("target", Vec::new(), None, empty_body(Vec::new())),
         ],
     );
     assert_eq!(
