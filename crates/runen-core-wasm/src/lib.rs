@@ -18,10 +18,11 @@ pub use coverage::{
     CoverageError, CoverageErrorKind, CoverageLocation, UnsupportedOperandKind,
     UnsupportedStatementKind, UnsupportedTerminatorKind, UnsupportedTypeCategory,
 };
-use encoding::{EncodedProgram, EntryInfo, entry_export_name};
+use encoding::{entry_export_name, EncodedProgram, EntryInfo};
 
 const STATUS_RETURNED: i32 = 0;
 const STATUS_FAULTED: i32 = 1;
+const INVALID_BACKEND_RESULT: &str = "private backend produced an invalid result";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutionOutcome {
@@ -38,14 +39,6 @@ pub enum BackendPhase {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum BackendProtocolError {
-    InvalidStatus(i32),
-    InvalidFaultIndex(i64),
-    InvalidBooleanPayload(i64),
-    NonCanonicalIntegerPayload { payload: u64, width: u32 },
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum RealizationError {
     Coverage(CoverageError),
     InvalidEntry(FunctionId),
@@ -54,7 +47,6 @@ pub enum RealizationError {
         phase: BackendPhase,
         message: String,
     },
-    BackendProtocol(BackendProtocolError),
     BackendInvariant(String),
 }
 
@@ -78,12 +70,6 @@ impl fmt::Display for RealizationError {
                 write!(
                     formatter,
                     "Wasmtime backend failure during {phase:?}: {message}"
-                )
-            }
-            Self::BackendProtocol(error) => {
-                write!(
-                    formatter,
-                    "invalid private backend protocol result: {error:?}"
                 )
             }
             Self::BackendInvariant(message) => {
@@ -172,21 +158,19 @@ impl RealizedProgram {
                 Ok(ExecutionOutcome::Returned(result))
             }
             STATUS_FAULTED => {
-                let index = usize::try_from(payload).map_err(|_| {
-                    RealizationError::BackendProtocol(BackendProtocolError::InvalidFaultIndex(
-                        payload,
-                    ))
-                })?;
-                let fault = self.faults.get(index).cloned().ok_or_else(|| {
-                    RealizationError::BackendProtocol(BackendProtocolError::InvalidFaultIndex(
-                        payload,
-                    ))
-                })?;
+                let index = usize::try_from(payload).map_err(|_| invalid_backend_result())?;
+                let fault = self
+                    .faults
+                    .get(index)
+                    .cloned()
+                    .ok_or_else(invalid_backend_result)?;
                 Ok(ExecutionOutcome::Faulted(fault))
             }
-            other => Err(RealizationError::BackendProtocol(
-                BackendProtocolError::InvalidStatus(other),
-            )),
+            _ => Err(invalid_backend_result()),
         }
     }
+}
+
+pub(crate) fn invalid_backend_result() -> RealizationError {
+    RealizationError::BackendInvariant(INVALID_BACKEND_RESULT.into())
 }
