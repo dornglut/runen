@@ -156,7 +156,7 @@ impl ScalarKind {
                     BinaryFloatValue::Infinity(sign),
                 ));
             }
-            if residue & !format.sign_mask() == format.canonical_nan_residue() {
+            if residue == format.canonical_nan_residue() {
                 return Ok(FloatingScalarValue::NaNClass);
             }
             return Err(invalid_backend_result());
@@ -424,10 +424,15 @@ mod tests {
             let residue = kind
                 .floating_residue(FloatingScalarValue::NaNClass)
                 .expect("floating kind accepts NaN class");
+            let format = kind.float_format().expect("floating kind has a format");
             assert_eq!(
                 kind.decode_floating(payload(residue)),
                 Ok(FloatingScalarValue::NaNClass)
             );
+            assert!(matches!(
+                kind.decode_floating(payload(residue | format.sign_mask())),
+                Err(RealizationError::BackendInvariant(_))
+            ));
             assert!(matches!(
                 kind.decode_floating(payload(residue | 2)),
                 Err(RealizationError::BackendInvariant(_))
