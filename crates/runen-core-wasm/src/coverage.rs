@@ -158,7 +158,7 @@ fn validate_function(
     }
 
     if let Some(result) = function.result {
-        require_supported_scalar_type(
+        require_supported_result_type(
             types,
             result,
             CoverageLocation::Result {
@@ -191,7 +191,22 @@ fn require_supported_storage_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_scalar_type(types, ty) || is_supported_callable_type(types, ty) {
+    if is_supported_scalar_type(types, ty)
+        || is_supported_callable_type(types, ty)
+        || is_supported_aggregate_type(types, ty)
+    {
+        Ok(())
+    } else {
+        unsupported_type(types, ty, location)
+    }
+}
+
+fn require_supported_result_type(
+    types: &TypeTable,
+    ty: TypeId,
+    location: CoverageLocation,
+) -> Result<(), CoverageError> {
+    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
         Ok(())
     } else {
         unsupported_type(types, ty, location)
@@ -251,6 +266,21 @@ fn is_supported_scalar_type(types: &TypeTable, ty: TypeId) -> bool {
     )
 }
 
+fn is_supported_aggregate_type(types: &TypeTable, ty: TypeId) -> bool {
+    let Some(definition) = types.get(ty) else {
+        return false;
+    };
+    if definition.interior_mutable {
+        return false;
+    }
+    let TypeKind::Struct(fields) = &definition.kind else {
+        return false;
+    };
+    fields.iter().all(|field| {
+        is_supported_scalar_type(types, field.ty) || is_supported_aggregate_type(types, field.ty)
+    })
+}
+
 fn is_supported_callable_type(types: &TypeTable, ty: TypeId) -> bool {
     let Some(definition) = types.get(ty) else {
         return false;
@@ -283,46 +313,59 @@ fn unsupported_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    let Some(definition) = types.get(ty) else {
-        return Err(CoverageError {
-            location,
-            kind: CoverageErrorKind::UnsupportedType {
-                ty,
-                category: UnsupportedTypeCategory::Unknown,
-            },
-        });
-    };
-    let category = if definition.interior_mutable {
-        UnsupportedTypeCategory::InteriorMutable
-    } else {
-        match &definition.kind {
-            TypeKind::Scalar(
-                ScalarType::Bool
-                | ScalarType::I8
-                | ScalarType::I16
-                | ScalarType::I32
-                | ScalarType::I64
-                | ScalarType::U8
-                | ScalarType::U16
-                | ScalarType::U32
-                | ScalarType::U64,
-            ) => return Ok(()),
-            TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64) => {
-                UnsupportedTypeCategory::Floating
-            }
-            TypeKind::Scalar(ScalarType::RawPointer(_)) => UnsupportedTypeCategory::RawPointer,
-            TypeKind::Scalar(ScalarType::Reference { .. }) => {
-                UnsupportedTypeCategory::SafeReference
-            }
-            TypeKind::Scalar(ScalarType::Callable(_)) => UnsupportedTypeCategory::Callable,
-            TypeKind::Scalar(ScalarType::TrackedFixture) => UnsupportedTypeCategory::TrackedFixture,
-            TypeKind::Struct(_) => UnsupportedTypeCategory::StructuralAggregate,
-        }
+    let Some((unsupported_ty, category)) = first_unsupported_type(types, ty) else {
+        return Ok(());
     };
     Err(CoverageError {
         location,
-        kind: CoverageErrorKind::UnsupportedType { ty, category },
+        kind: CoverageErrorKind::UnsupportedType {
+            ty: unsupported_ty,
+            category,
+        },
     })
+}
+
+fn first_unsupported_type(
+    types: &TypeTable,
+    ty: TypeId,
+) -> Option<(TypeId, UnsupportedTypeCategory)> {
+    let Some(definition) = types.get(ty) else {
+        return Some((ty, UnsupportedTypeCategory::Unknown));
+    };
+    if definition.interior_mutable {
+        return Some((ty, UnsupportedTypeCategory::InteriorMutable));
+    }
+    match &definition.kind {
+        TypeKind::Scalar(
+            ScalarType::Bool
+            | ScalarType::I8
+            | ScalarType::I16
+            | ScalarType::I32
+            | ScalarType::I64
+            | ScalarType::U8
+            | ScalarType::U16
+            | ScalarType::U32
+            | ScalarType::U64,
+        ) => None,
+        TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64) => {
+            Some((ty, UnsupportedTypeCategory::Floating))
+        }
+        TypeKind::Scalar(ScalarType::RawPointer(_)) => {
+            Some((ty, UnsupportedTypeCategory::RawPointer))
+        }
+        TypeKind::Scalar(ScalarType::Reference { .. }) => {
+            Some((ty, UnsupportedTypeCategory::SafeReference))
+        }
+        TypeKind::Scalar(ScalarType::Callable(_)) => {
+            Some((ty, UnsupportedTypeCategory::Callable))
+        }
+        TypeKind::Scalar(ScalarType::TrackedFixture) => {
+            Some((ty, UnsupportedTypeCategory::TrackedFixture))
+        }
+        TypeKind::Struct(fields) => fields
+            .iter()
+            .find_map(|field| first_unsupported_type(types, field.ty)),
+    }
 }
 
 fn validate_statement(
@@ -449,26 +492,7 @@ fn validate_terminator(
 
 fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<(), CoverageError> {
     match operand {
-        Operand::Constant(
-            Value::Bool(_)
-            | Value::I8(_)
-            | Value::I16(_)
-            | Value::I32(_)
-            | Value::I64(_)
-            | Value::U8(_)
-            | Value::U16(_)
-            | Value::U32(_)
-            | Value::U64(_),
-        ) => Ok(()),
-        Operand::Constant(Value::F16(_) | Value::F32(_) | Value::F64(_)) => {
-            unsupported_operand(location, UnsupportedOperandKind::FloatingConstant)
-        }
-        Operand::Constant(Value::TrackedFixture(_)) => {
-            unsupported_operand(location, UnsupportedOperandKind::TrackedFixtureConstant)
-        }
-        Operand::Constant(Value::Struct(_)) => {
-            unsupported_operand(location, UnsupportedOperandKind::StructuralConstant)
-        }
+        Operand::Constant(value) => validate_constant(value, location),
         Operand::Move(access) | Operand::Copy(access) => validate_access(access, location),
         Operand::PersistentRead(_) | Operand::FunctionValue(_) => Ok(()),
         Operand::PersistentSharedRoot(_) => {
@@ -491,6 +515,32 @@ fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<()
     }
 }
 
+fn validate_constant(value: &Value, location: &CoverageLocation) -> Result<(), CoverageError> {
+    match value {
+        Value::Bool(_)
+        | Value::I8(_)
+        | Value::I16(_)
+        | Value::I32(_)
+        | Value::I64(_)
+        | Value::U8(_)
+        | Value::U16(_)
+        | Value::U32(_)
+        | Value::U64(_) => Ok(()),
+        Value::F16(_) | Value::F32(_) | Value::F64(_) => {
+            unsupported_operand(location, UnsupportedOperandKind::FloatingConstant)
+        }
+        Value::TrackedFixture(_) => {
+            unsupported_operand(location, UnsupportedOperandKind::TrackedFixtureConstant)
+        }
+        Value::Struct(fields) => {
+            for field in fields {
+                validate_constant(field, location)?;
+            }
+            Ok(())
+        }
+    }
+}
+
 fn validate_access(access: &PlaceAccess, location: &CoverageLocation) -> Result<(), CoverageError> {
     match access {
         PlaceAccess::Direct(place) => validate_place(place, location),
@@ -500,12 +550,10 @@ fn validate_access(access: &PlaceAccess, location: &CoverageLocation) -> Result<
     }
 }
 
-fn validate_place(place: &Place, location: &CoverageLocation) -> Result<(), CoverageError> {
-    if place.projections.is_empty() {
-        Ok(())
-    } else {
-        unsupported_operand(location, UnsupportedOperandKind::ProjectedAccess)
-    }
+fn validate_place(_place: &Place, _location: &CoverageLocation) -> Result<(), CoverageError> {
+    // Canonical Core validation owns projection legality and exact projected type.
+    // Realization coverage owns only whether the containing storage type is admitted.
+    Ok(())
 }
 
 fn unsupported_operand(
