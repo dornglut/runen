@@ -1,13 +1,14 @@
 use runen_core_ir::{
-    BasicBlockId, Function, FunctionId, LocalId, Operand, PersistentId, Place, PlaceAccess,
-    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind, TypeTable,
-    ValidatedProgram, Value,
+    BasicBlockId, ExternalCallableId, Function, FunctionId, LocalId, Operand, PersistentId, Place,
+    PlaceAccess, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind,
+    TypeTable, ValidatedProgram, Value,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum CoverageLocation {
     Program,
     Persistent(PersistentId),
+    ExternalCallable(ExternalCallableId),
     Function(FunctionId),
     Result {
         function: FunctionId,
@@ -79,6 +80,17 @@ pub enum CoverageErrorKind {
         ty: TypeId,
         category: UnsupportedTypeCategory,
     },
+    UnsupportedExternalParameterType {
+        external: ExternalCallableId,
+        parameter: usize,
+        ty: TypeId,
+        category: UnsupportedTypeCategory,
+    },
+    UnsupportedExternalResultType {
+        external: ExternalCallableId,
+        ty: TypeId,
+        category: UnsupportedTypeCategory,
+    },
     UnsupportedCallableParameterType {
         callable: TypeId,
         parameter: usize,
@@ -119,10 +131,49 @@ pub(crate) fn validate(program: &ValidatedProgram) -> Result<(), CoverageError> 
         )?;
     }
 
-    if !program.external_callables.is_empty() {
-        return Err(program_error(CoverageErrorKind::ExternalCallables));
+    for (external_index, external) in program.external_callables.iter().enumerate() {
+        let external_id = checked_external_callable_id(external_index)?;
+        validate_external_callable(&program.types, external_id, &external.interface)?;
     }
 
+    Ok(())
+}
+
+fn validate_external_callable(
+    types: &TypeTable,
+    external: ExternalCallableId,
+    interface: &runen_core_ir::CallableInterface,
+) -> Result<(), CoverageError> {
+    let location = CoverageLocation::ExternalCallable(external);
+    for (parameter, ty) in interface.parameters.iter().copied().enumerate() {
+        if !is_supported_scalar_type(types, ty) {
+            let (unsupported_ty, category) = first_unsupported_type(types, ty)
+                .unwrap_or((ty, UnsupportedTypeCategory::Unknown));
+            return Err(CoverageError {
+                location,
+                kind: CoverageErrorKind::UnsupportedExternalParameterType {
+                    external,
+                    parameter,
+                    ty: unsupported_ty,
+                    category,
+                },
+            });
+        }
+    }
+    if let Some(ty) = interface.result
+        && !is_supported_scalar_type(types, ty)
+    {
+        let (unsupported_ty, category) =
+            first_unsupported_type(types, ty).unwrap_or((ty, UnsupportedTypeCategory::Unknown));
+        return Err(CoverageError {
+            location,
+            kind: CoverageErrorKind::UnsupportedExternalResultType {
+                external,
+                ty: unsupported_ty,
+                category,
+            },
+        });
+    }
     Ok(())
 }
 
@@ -543,6 +594,11 @@ fn validate_terminator(
             arguments,
             destination,
             ..
+        }
+        | Terminator::ExternalCall {
+            arguments,
+            destination,
+            ..
         } => {
             for argument in arguments {
                 validate_operand(argument, location)?;
@@ -558,10 +614,6 @@ fn validate_terminator(
             }
             Ok(())
         }
-        Terminator::ExternalCall { .. } => Err(CoverageError {
-            location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedTerminator(UnsupportedTerminatorKind::ExternalCall),
-        }),
         Terminator::IndirectCall {
             callable,
             callee,
@@ -667,6 +719,12 @@ fn checked_function_id(index: usize) -> Result<FunctionId, CoverageError> {
 fn checked_persistent_id(index: usize) -> Result<PersistentId, CoverageError> {
     u32::try_from(index)
         .map(PersistentId)
+        .map_err(|_| program_error(CoverageErrorKind::ProgramTooLarge))
+}
+
+fn checked_external_callable_id(index: usize) -> Result<ExternalCallableId, CoverageError> {
+    u32::try_from(index)
+        .map(ExternalCallableId)
         .map_err(|_| program_error(CoverageErrorKind::ProgramTooLarge))
 }
 
