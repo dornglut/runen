@@ -256,7 +256,11 @@ mod tests {
             2,
             "equal-valued Core declarations must remain two private globals"
         );
-        assert_eq!(globals.get(global_cursor), Some(&0x7e), "global must be i64");
+        assert_eq!(
+            globals.get(global_cursor),
+            Some(&0x7e),
+            "global must be i64"
+        );
         assert_eq!(
             globals.get(global_cursor + 1),
             Some(&0x00),
@@ -320,7 +324,11 @@ mod tests {
             cursor += 1;
             let _index = read_u32_leb(bytes, &mut cursor);
         }
-        assert_eq!(cursor, bytes.len(), "export section must be consumed exactly");
+        assert_eq!(
+            cursor,
+            bytes.len(),
+            "export section must be consumed exactly"
+        );
         kinds
     }
 
