@@ -5,8 +5,8 @@ use std::sync::Arc;
 use runen_core_ir::{CallableInterface, ExternalCallableId, TypeTable, ValidatedProgram, Value};
 use wasmtime::{Engine, Extern, Func, FuncType, Store, Val, ValType};
 
+use crate::RealizationError;
 use crate::scalar::{ScalarKind, constant_residue};
-use crate::{RealizationError, invalid_backend_result};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExternalScalarValue {
