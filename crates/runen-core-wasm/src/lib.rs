@@ -251,10 +251,9 @@ pub(crate) fn invalid_backend_result() -> RealizationError {
 mod tests {
     use super::*;
     use runen_core_ir::{
-        BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl,
-        ExternalCallableId, Field, Function, LocalDecl, LocalId, Operand, PersistentDecl, Place,
-        Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId,
-        TypeTable, Value, validate_program,
+        BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl, Field, Function,
+        LocalDecl, LocalId, Operand, PersistentDecl, Place, Program, SafeReferenceResultContract,
+        ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
     };
 
     fn empty_entry_program(types: TypeTable, persistent: Vec<PersistentDecl>) -> ValidatedProgram {
