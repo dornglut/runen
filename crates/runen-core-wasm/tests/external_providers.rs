@@ -7,9 +7,8 @@ use runen_core_ir::{
     TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{
-    BackendPhase, CoverageErrorKind, CoverageLocation, ExecutionOutcome,
-    ExternalProviderAdmissionError, ExternalProviderBinding, ExternalProviderFailure,
-    ExternalScalarValue, RealizationError, RealizedProgram, UnsupportedTypeCategory,
+    BackendPhase, ExecutionOutcome, ExternalProviderAdmissionError, ExternalProviderBinding,
+    ExternalProviderFailure, ExternalScalarValue, RealizationError, RealizedProgram,
 };
 use runen_reference::{
     ExternalProviderBinding as ReferenceProviderBinding,
@@ -797,7 +796,7 @@ fn provider_failures_and_wrong_result_types_remain_realization_errors() {
 }
 
 #[test]
-fn floating_external_interface_remains_a_structured_realization_exclusion() {
+fn floating_external_interface_reaches_the_existing_hard_provider_requirement() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let external = interface(vec![f32_ty], Some(f32_ty));
@@ -805,14 +804,8 @@ fn floating_external_interface_remains_a_structured_realization_exclusion() {
 
     assert!(matches!(
         RealizedProgram::new(&program),
-        Err(RealizationError::Coverage(error))
-            if error.location == CoverageLocation::ExternalCallable(ExternalCallableId(0))
-                && error.kind
-                    == CoverageErrorKind::UnsupportedExternalParameterType {
-                        external: ExternalCallableId(0),
-                        parameter: 0,
-                        ty: f32_ty,
-                        category: UnsupportedTypeCategory::Floating,
-                    }
+        Err(RealizationError::ProviderAdmission(
+            ExternalProviderAdmissionError::MissingProvider(ExternalCallableId(0))
+        ))
     ));
 }
