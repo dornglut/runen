@@ -278,6 +278,10 @@ fn is_supported_aggregate_type(types: &TypeTable, ty: TypeId) -> bool {
     })
 }
 
+fn is_supported_callable_component_type(types: &TypeTable, ty: TypeId) -> bool {
+    is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty)
+}
+
 fn is_supported_callable_type(types: &TypeTable, ty: TypeId) -> bool {
     let Some(definition) = types.get(ty) else {
         return false;
@@ -299,10 +303,10 @@ fn callable_interface_is_supported(types: &TypeTable, interface: &CallableInterf
         .parameters
         .iter()
         .copied()
-        .all(|ty| is_supported_scalar_type(types, ty))
+        .all(|ty| is_supported_callable_component_type(types, ty))
         && interface
             .result
-            .is_none_or(|ty| is_supported_scalar_type(types, ty))
+            .is_none_or(|ty| is_supported_callable_component_type(types, ty))
 }
 
 fn unsupported_type(
