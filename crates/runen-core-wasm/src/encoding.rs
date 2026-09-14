@@ -145,16 +145,19 @@ fn function_parameter_carrier_count(
     types: &TypeTable,
     function: &Function,
 ) -> Result<usize, RealizationError> {
-    function.parameters.iter().try_fold(0_usize, |count, local| {
-        let ty = function
-            .body
-            .local(*local)
-            .ok_or_else(|| invariant("validated parameter local is missing"))?
-            .ty;
-        count
-            .checked_add(storage_carrier_count(types, ty)?)
-            .ok_or_else(|| invariant("Wasm parameter carrier count overflow"))
-    })
+    function
+        .parameters
+        .iter()
+        .try_fold(0_usize, |count, local| {
+            let ty = function
+                .body
+                .local(*local)
+                .ok_or_else(|| invariant("validated parameter local is missing"))?
+                .ty;
+            count
+                .checked_add(storage_carrier_count(types, ty)?)
+                .ok_or_else(|| invariant("Wasm parameter carrier count overflow"))
+        })
 }
 
 fn encode_callable_types(
