@@ -494,8 +494,10 @@ fn higher_order_indirect_call_rejects_at_the_consuming_terminator() {
                 function: FunctionId(0),
                 block: BasicBlockId(0),
             },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: outer,
+            kind: CoverageErrorKind::UnsupportedCallableParameterType {
+                callable: outer,
+                parameter: 0,
+                ty: inner,
                 category: UnsupportedTypeCategory::Callable,
             },
         }

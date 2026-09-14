@@ -446,6 +446,108 @@ mod tests {
     }
 
     #[test]
+    fn structural_callable_modules_reuse_private_table_and_element_sections() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let pair_ty = types.push(TypeDef::structure(
+            "Pair",
+            vec![Field::new("left", i64_ty), Field::new("right", i64_ty)],
+        ));
+        let callable = types.push(TypeDef::callable(
+            "PairIdentity",
+            CallableInterface::new(
+                vec![pair_ty],
+                Some(pair_ty),
+                SafeReferenceResultContract::None,
+            ),
+        ));
+        let pair = Value::Struct(vec![Value::I64(20), Value::I64(22)]);
+        let program = validate_program(Program {
+            types,
+            persistent: Vec::new(),
+            external_callables: Vec::new(),
+            functions: vec![
+                Function {
+                    name: "entry".into(),
+                    parameters: Vec::new(),
+                    result: Some(pair_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![
+                            LocalDecl::new("callee", callable, false),
+                            LocalDecl::new("argument", pair_ty, false),
+                            LocalDecl::new("result", pair_ty, false),
+                        ],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![
+                            BasicBlock::new(
+                                vec![
+                                    Statement::Init {
+                                        dst: Place::local(LocalId(0)),
+                                        src: Operand::FunctionValue(FunctionId(1)),
+                                    },
+                                    Statement::Init {
+                                        dst: Place::local(LocalId(1)),
+                                        src: Operand::Constant(pair),
+                                    },
+                                ],
+                                Terminator::IndirectCall {
+                                    callable,
+                                    callee: Operand::Move(Place::local(LocalId(0)).into()),
+                                    arguments: vec![Operand::Move(Place::local(LocalId(1)).into())],
+                                    destination: Some(Place::local(LocalId(2))),
+                                    target: BasicBlockId(1),
+                                },
+                            ),
+                            BasicBlock::new(
+                                Vec::new(),
+                                Terminator::Return(Some(Operand::Move(
+                                    Place::local(LocalId(2)).into(),
+                                ))),
+                            ),
+                        ],
+                    },
+                },
+                Function {
+                    name: "target".into(),
+                    parameters: vec![LocalId(0)],
+                    result: Some(pair_ty),
+                    safe_reference_result_contract: SafeReferenceResultContract::None,
+                    body: Body {
+                        locals: vec![LocalDecl::new("value", pair_ty, false)],
+                        loans: Vec::new(),
+                        entry: BasicBlockId(0),
+                        blocks: vec![BasicBlock::new(
+                            Vec::new(),
+                            Terminator::Return(Some(Operand::Move(
+                                Place::local(LocalId(0)).into(),
+                            ))),
+                        )],
+                    },
+                },
+            ],
+        })
+        .expect("structural callable module-shape fixture must be valid Core");
+        let encoded =
+            encoding::encode(&program).expect("supported structural callable fixture must encode");
+        let module = &encoded.bytes[8..];
+
+        assert_eq!(
+            section_ids(module),
+            vec![1, 3, 4, 7, 9, 10],
+            "structural indirect dispatch must add no sections beyond the existing private callable table and elements"
+        );
+        assert_private_two_function_table(section_payload(module, 4));
+        assert_two_function_element_population(section_payload(module, 9));
+        assert_eq!(
+            export_kinds(section_payload(module, 7)),
+            vec![0],
+            "only the zero-parameter entry function is exported; the structural target and table remain private"
+        );
+    }
+
+    #[test]
     fn aggregate_callable_and_persistent_private_sections_compose_without_new_exports() {
         let mut types = TypeTable::new();
         let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
