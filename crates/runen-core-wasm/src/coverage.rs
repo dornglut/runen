@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlockId, ExternalCallableId, Function, FunctionId, LocalId, Operand, PersistentId, Place,
-    PlaceAccess, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeId, TypeKind,
-    TypeTable, ValidatedProgram, Value,
+    PlaceAccess, ReferenceAccess, ReferencePermission, SafeReferenceResultContract, ScalarType,
+    Statement, Terminator, TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,24 +219,50 @@ fn validate_function(
 
     for (local_index, local) in function.body.locals.iter().enumerate() {
         let local_id = checked_local_id(local_index)?;
-        let location = if function.parameters.contains(&local_id) {
-            CoverageLocation::Parameter {
-                function: function_id,
-                local: local_id,
-            }
+        if function.parameters.contains(&local_id) {
+            require_supported_parameter_type(
+                types,
+                local.ty,
+                CoverageLocation::Parameter {
+                    function: function_id,
+                    local: local_id,
+                },
+            )?;
         } else {
-            CoverageLocation::Local {
-                function: function_id,
-                local: local_id,
-            }
-        };
-        require_supported_storage_type(types, local.ty, location)?;
+            require_supported_local_storage_type(
+                types,
+                local.ty,
+                CoverageLocation::Local {
+                    function: function_id,
+                    local: local_id,
+                },
+            )?;
+        }
     }
 
     Ok(())
 }
 
-fn require_supported_storage_type(
+fn require_supported_parameter_type(
+    types: &TypeTable,
+    ty: TypeId,
+    location: CoverageLocation,
+) -> Result<(), CoverageError> {
+    require_supported_non_reference_storage_type(types, ty, location)
+}
+
+fn require_supported_local_storage_type(
+    types: &TypeTable,
+    ty: TypeId,
+    location: CoverageLocation,
+) -> Result<(), CoverageError> {
+    if is_supported_local_reference_type(types, ty) {
+        return Ok(());
+    }
+    require_supported_non_reference_storage_type(types, ty, location)
+}
+
+fn require_supported_non_reference_storage_type(
     types: &TypeTable,
     ty: TypeId,
     location: CoverageLocation,
@@ -258,16 +284,7 @@ fn require_supported_result_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
-        return Ok(());
-    }
-    if matches!(
-        types.get(ty).map(|definition| &definition.kind),
-        Some(TypeKind::Scalar(ScalarType::Callable(_)))
-    ) {
-        return require_supported_callable_type(types, ty, &location);
-    }
-    unsupported_type(types, ty, location)
+    require_supported_non_reference_storage_type(types, ty, location)
 }
 
 fn require_supported_direct_scalar_type(
@@ -430,6 +447,33 @@ fn is_supported_direct_scalar_type(types: &TypeTable, ty: TypeId) -> bool {
                 | ScalarType::F64
         )
     )
+}
+
+fn is_supported_local_reference_type(types: &TypeTable, ty: TypeId) -> bool {
+    let Some(definition) = types.get(ty) else {
+        return false;
+    };
+    if definition.interior_mutable {
+        return false;
+    }
+    let TypeKind::Scalar(ScalarType::Reference {
+        referent,
+        permission,
+    }) = &definition.kind
+    else {
+        return false;
+    };
+    if !matches!(
+        permission,
+        ReferencePermission::Shared | ReferencePermission::ExclusiveReplace
+    ) {
+        return false;
+    }
+    is_supported_reference_referent_type(types, *referent)
+}
+
+fn is_supported_reference_referent_type(types: &TypeTable, ty: TypeId) -> bool {
+    is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty)
 }
 
 fn is_supported_aggregate_leaf_type(types: &TypeTable, ty: TypeId) -> bool {
@@ -629,12 +673,17 @@ fn validate_statement(
             location: location.clone(),
             kind: CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Borrowing),
         }),
-        Statement::ReferenceRead { .. }
-        | Statement::ReferenceAssign { .. }
-        | Statement::ReferenceInteriorAssign { .. }
-        | Statement::ReferenceDrop { .. } => Err(CoverageError {
+        Statement::ReferenceRead { src } => validate_reference_access(src, location),
+        Statement::ReferenceAssign { dst, src } => {
+            validate_reference_access(dst, location)?;
+            validate_operand(src, location)
+        }
+        Statement::ReferenceDrop { place } => validate_reference_access(place, location),
+        Statement::ReferenceInteriorAssign { .. } => Err(CoverageError {
             location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Reference),
+            kind: CoverageErrorKind::UnsupportedStatement(
+                UnsupportedStatementKind::InteriorMutation,
+            ),
         }),
         Statement::RawRead { .. } | Statement::RawAssign { .. } => Err(CoverageError {
             location: location.clone(),
@@ -711,18 +760,10 @@ fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<()
         }
         Operand::RawMove(_) => unsupported_operand(location, UnsupportedOperandKind::RawMove),
         Operand::AddressOf(_) => unsupported_operand(location, UnsupportedOperandKind::AddressOf),
-        Operand::ReferenceRoot { .. } => {
-            unsupported_operand(location, UnsupportedOperandKind::ReferenceRoot)
-        }
-        Operand::ReferenceReborrow { .. } => {
-            unsupported_operand(location, UnsupportedOperandKind::ReferenceReborrow)
-        }
-        Operand::ReferenceMove(_) => {
-            unsupported_operand(location, UnsupportedOperandKind::ReferenceMove)
-        }
-        Operand::ReferenceCopy(_) => {
-            unsupported_operand(location, UnsupportedOperandKind::ReferenceCopy)
-        }
+        Operand::ReferenceRoot { place, .. } => validate_place(place, location),
+        Operand::ReferenceReborrow { src, .. }
+        | Operand::ReferenceMove(src)
+        | Operand::ReferenceCopy(src) => validate_reference_access(src, location),
     }
 }
 
@@ -750,6 +791,13 @@ fn validate_constant(value: &Value, location: &CoverageLocation) -> Result<(), C
             Ok(())
         }
     }
+}
+
+fn validate_reference_access(
+    access: &ReferenceAccess,
+    location: &CoverageLocation,
+) -> Result<(), CoverageError> {
+    validate_access(&access.reference, location)
 }
 
 fn validate_access(access: &PlaceAccess, location: &CoverageLocation) -> Result<(), CoverageError> {
