@@ -183,7 +183,7 @@ fn admits_activation_local_safe_reference_types_and_operations() {
 }
 
 #[test]
-fn rejects_raw_pointer_types_and_operations() {
+fn admits_bounded_activation_local_raw_pointer_read() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let pointer_ty = types.push(TypeDef::raw_pointer("RawI64", i64_ty));
@@ -213,10 +213,14 @@ fn rejects_raw_pointer_types_and_operations() {
             Terminator::Return(None),
         )],
     };
-    assert_coverage_rejected(validate(
-        types,
-        vec![function("entry", Vec::new(), None, body)],
-    ));
+    let validated = validate(types, vec![function("entry", Vec::new(), None, body)]);
+    assert_eq!(
+        RealizedProgram::new(&validated)
+            .expect("bounded activation-local raw pointer fixture must realize")
+            .execute(FunctionId(0))
+            .expect("bounded activation-local raw pointer fixture must execute"),
+        ExecutionOutcome::Returned(None)
+    );
 }
 
 #[test]
