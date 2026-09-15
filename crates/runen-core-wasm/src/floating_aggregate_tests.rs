@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, FunctionId,
-    LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType,
-    Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
+    LocalDecl, LocalId, NumericContract, Operand, Place, Program, SafeReferenceResultContract,
+    ScalarType, Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 
 use crate::{coverage, encoding};
@@ -104,6 +104,98 @@ fn floating_aggregate_transport_reuses_existing_private_module_shape() {
         export_kinds(section_payload(module, 7)),
         vec![0],
         "floating aggregate transport must add no public export kind"
+    );
+}
+
+#[test]
+fn projected_floating_arithmetic_adds_no_private_or_public_module_surface() {
+    let mut types = TypeTable::new();
+    let f16_ty = types.push(TypeDef::scalar("F16", ScalarType::F16));
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
+    let f64_ty = types.push(TypeDef::scalar("F64", ScalarType::F64));
+    let inner_ty = types.push(TypeDef::structure(
+        "Inner",
+        vec![Field::new("half", f16_ty), Field::new("single", f32_ty)],
+    ));
+    let aggregate_ty = types.push(TypeDef::structure(
+        "Aggregate",
+        vec![
+            Field::new("inner", inner_ty),
+            Field::new("product", f64_ty),
+            Field::new("quotient", f64_ty),
+        ],
+    ));
+
+    let f16_zero = Value::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
+    let f32_zero = Value::F32(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
+    let f64_zero = Value::F64(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
+    let aggregate = Place::local(LocalId(0));
+
+    let program = validate_program(Program {
+        types,
+        persistent: Vec::new(),
+        external_callables: Vec::new(),
+        functions: vec![Function {
+            name: "entry".into(),
+            parameters: Vec::new(),
+            result: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
+            body: Body {
+                locals: vec![LocalDecl::new("aggregate", aggregate_ty, false)],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(
+                    vec![
+                        Statement::FloatAdd {
+                            dst: aggregate.clone().field(0).field(0),
+                            left: Operand::Constant(f16_zero.clone()),
+                            right: Operand::Constant(f16_zero),
+                            contract: NumericContract::Standard,
+                        },
+                        Statement::FloatSub {
+                            dst: aggregate.clone().field(0).field(1),
+                            left: Operand::Constant(f32_zero.clone()),
+                            right: Operand::Constant(f32_zero),
+                            contract: NumericContract::Reproducible,
+                        },
+                        Statement::FloatMul {
+                            dst: aggregate.clone().field(1),
+                            left: Operand::Constant(f64_zero.clone()),
+                            right: Operand::Constant(f64_zero.clone()),
+                            contract: NumericContract::Fast,
+                        },
+                        Statement::FloatDiv {
+                            dst: aggregate.clone().field(2),
+                            left: Operand::Constant(f64_zero.clone()),
+                            right: Operand::Constant(f64_zero),
+                            contract: NumericContract::Standard,
+                        },
+                        Statement::Drop {
+                            place: aggregate.into(),
+                        },
+                    ],
+                    Terminator::Return(None),
+                )],
+            },
+        }],
+    })
+    .expect("projected floating arithmetic module-shape fixture must be valid Core");
+
+    coverage::validate(&program)
+        .expect("projected floating arithmetic fixture must be in realization coverage");
+    let encoded =
+        encoding::encode(&program).expect("projected floating arithmetic fixture must encode");
+    let module = &encoded.bytes[8..];
+
+    assert_eq!(
+        section_ids(module),
+        vec![1, 3, 7, 10],
+        "projected floating arithmetic must not add imports, tables, memory, globals, elements, or data"
+    );
+    assert_eq!(
+        export_kinds(section_payload(module, 7)),
+        vec![0],
+        "projected floating arithmetic must retain the existing function-only entry export"
     );
 }
 
