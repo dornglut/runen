@@ -188,12 +188,24 @@ fn baseline_rounding_subnormal_overflow_and_signed_zero_results_are_exact() {
                 "half-ULP tie at one must round to the even significand"
             );
             assert_eq!(
-                observe(&scalar, Operation::Add, contract, negative_zero, negative_zero),
+                observe(
+                    &scalar,
+                    Operation::Add,
+                    contract,
+                    negative_zero,
+                    negative_zero,
+                ),
                 FloatingScalarValue::Represented(negative_zero),
                 "negative zero plus negative zero must stay negative zero"
             );
             assert_eq!(
-                observe(&scalar, Operation::Sub, contract, negative_zero, positive_zero),
+                observe(
+                    &scalar,
+                    Operation::Sub,
+                    contract,
+                    negative_zero,
+                    positive_zero,
+                ),
                 FloatingScalarValue::Represented(negative_zero),
                 "negative zero minus positive zero must be negative zero"
             );
@@ -282,9 +294,7 @@ fn all_four_f16_basic_operations_remain_structured_floating_rejections() {
                     block: BasicBlockId(0),
                     statement: 0,
                 },
-                kind: CoverageErrorKind::UnsupportedStatement(
-                    UnsupportedStatementKind::Floating,
-                ),
+                kind: CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Floating,),
             }))
         );
     }
