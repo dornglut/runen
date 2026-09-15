@@ -18,7 +18,9 @@ fn lower_source(source: &str) -> ValidatedProgram {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
         .expect("floating arithmetic source must produce accepted HIR");
-    lower(&hir).expect("accepted floating arithmetic HIR must lower to validated Core")
+    lower(&hir)
+        .expect("accepted floating arithmetic HIR must lower to validated Core")
+        .into_program()
 }
 
 fn normal(significand: u64, exponent: i16) -> BinaryFloatValue {
