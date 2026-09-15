@@ -14,7 +14,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
