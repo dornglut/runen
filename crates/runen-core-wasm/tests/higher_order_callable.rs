@@ -522,27 +522,24 @@ fn local_callable_coverage_error(types: TypeTable, callable: TypeId) -> Realizat
 }
 
 #[test]
-fn nested_callable_reports_actual_floating_component() {
+fn nested_callable_with_direct_floating_component_is_admitted() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let inner = callable_type(&mut types, "Inner", vec![f32_ty], None);
     let outer = callable_type(&mut types, "Outer", vec![inner], None);
-
-    assert_eq!(
-        local_callable_coverage_error(types, outer),
-        RealizationError::Coverage(runen_core_wasm::CoverageError {
-            location: CoverageLocation::Local {
-                function: FunctionId(0),
-                local: LocalId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedCallableParameterType {
-                callable: inner,
-                parameter: 0,
-                ty: f32_ty,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        })
+    let program = validated(
+        types,
+        vec![function(
+            "entry",
+            Vec::new(),
+            None,
+            vec![LocalDecl::new("callable", outer, false)],
+            vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+        )],
     );
+
+    RealizedProgram::new(&program)
+        .expect("nested callable with a direct floating component must be admitted");
 }
 
 #[test]

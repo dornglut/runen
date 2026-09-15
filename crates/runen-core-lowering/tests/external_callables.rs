@@ -1,14 +1,16 @@
 use runen_core_ir::{
-    ExternalCallableId, FunctionId, ScalarType, Terminator, TypeKind, ValidatedProgram,
+    BinaryFloatSign, BinaryFloatValue, ExternalCallableId, FunctionId, ScalarType, Terminator,
+    TypeKind, ValidatedProgram,
 };
 use runen_core_lowering::lower;
 use runen_core_wasm::{
     ExecutionOutcome, ExternalProviderBinding as WasmExternalProviderBinding,
-    ExternalScalarValue as WasmExternalScalarValue, RealizedProgram,
+    ExternalScalarValue as WasmExternalScalarValue, FloatingScalarValue, RealizedProgram,
 };
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
 use runen_reference::{
-    ExternalProviderBinding, ExternalScalarValue, Machine, ObservedValue, TerminalStatus,
+    ExternalProviderBinding, ExternalScalarValue, Machine, ObservedBinaryFloatValue, ObservedValue,
+    TerminalStatus,
 };
 use runen_syntax::{Parse, parse_source};
 
@@ -121,6 +123,98 @@ fn lowered_external_scalar_call_executes_differentially_through_both_engines() {
         .expect("lowered source external call is defined through the provider");
     assert_eq!(report.terminal, TerminalStatus::Returned);
     assert_eq!(report.result, Some(ObservedValue::U64(42)));
+}
+
+#[test]
+fn lowered_floating_external_chain_agrees_between_core_wasm_and_reference() {
+    let lowered = lower_source(
+        "external fn transform(F32) -> F32; \
+         external fn classify(F32) -> Bool; \
+         fn caller() -> Bool { return classify(transform(1.0)); }",
+    );
+    let interfaces = lowered
+        .as_program()
+        .external_callables
+        .iter()
+        .map(|declaration| declaration.interface.clone())
+        .collect::<Vec<_>>();
+    assert_eq!(interfaces.len(), 2);
+    let expected_source_value = BinaryFloatValue::Normal {
+        sign: BinaryFloatSign::Positive,
+        significand: 1_u64 << 23,
+        exponent: 0,
+    };
+
+    let realized = RealizedProgram::new_with_external_providers(
+        &lowered,
+        vec![
+            WasmExternalProviderBinding::scalar_result(
+                ExternalCallableId(0),
+                interfaces[0].clone(),
+                move |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[WasmExternalScalarValue::F32(
+                            FloatingScalarValue::Represented(expected_source_value,)
+                        )]
+                    );
+                    WasmExternalScalarValue::F32(FloatingScalarValue::NaNClass)
+                },
+            ),
+            WasmExternalProviderBinding::scalar_result(
+                ExternalCallableId(1),
+                interfaces[1].clone(),
+                |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[WasmExternalScalarValue::F32(FloatingScalarValue::NaNClass)]
+                    );
+                    WasmExternalScalarValue::Bool(true)
+                },
+            ),
+        ],
+    )
+    .expect("lowered floating external chain must realize");
+    assert_eq!(
+        realized.execute(FunctionId(0)).unwrap(),
+        ExecutionOutcome::Returned(Some(runen_core_ir::Value::Bool(true)))
+    );
+
+    let report = Machine::new_with_external_providers(
+        lowered,
+        FunctionId(0),
+        vec![
+            ExternalProviderBinding::scalar_result(
+                ExternalCallableId(0),
+                interfaces[0].clone(),
+                move |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[ExternalScalarValue::F32(
+                            ObservedBinaryFloatValue::Represented(expected_source_value,)
+                        )]
+                    );
+                    ExternalScalarValue::F32(ObservedBinaryFloatValue::NaNClass)
+                },
+            ),
+            ExternalProviderBinding::scalar_result(
+                ExternalCallableId(1),
+                interfaces[1].clone(),
+                |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[ExternalScalarValue::F32(ObservedBinaryFloatValue::NaNClass)]
+                    );
+                    ExternalScalarValue::Bool(true)
+                },
+            ),
+        ],
+    )
+    .expect("reference floating provider chain must admit")
+    .execute()
+    .expect("reference floating provider chain must execute");
+    assert_eq!(report.terminal, TerminalStatus::Returned);
+    assert_eq!(report.result, Some(ObservedValue::Bool(true)));
 }
 
 #[test]

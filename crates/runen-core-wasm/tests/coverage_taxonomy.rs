@@ -75,11 +75,37 @@ fn assert_local_type_category(types: TypeTable, ty: TypeId, category: Unsupporte
 }
 
 #[test]
-fn passive_local_types_report_every_excluded_type_family() {
-    let mut floating = TypeTable::new();
-    let floating_ty = floating.push(TypeDef::scalar("F32", ScalarType::F32));
-    assert_local_type_category(floating, floating_ty, UnsupportedTypeCategory::Floating);
+fn direct_floating_local_and_constant_transport_are_admitted() {
+    let mut types = TypeTable::new();
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
+    let program = validated(
+        types,
+        Vec::new(),
+        vec![function(
+            "entry",
+            Vec::new(),
+            None,
+            Body {
+                locals: vec![LocalDecl::new("value", f32_ty, false)],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(
+                    vec![Statement::Init {
+                        dst: Place::local(LocalId(0)),
+                        src: Operand::Constant(Value::F32(BinaryFloatValue::Zero(
+                            BinaryFloatSign::Negative,
+                        ))),
+                    }],
+                    Terminator::Return(None),
+                )],
+            },
+        )],
+    );
+    RealizedProgram::new(&program).expect("direct floating scalar transport must be admitted");
+}
 
+#[test]
+fn passive_local_types_report_every_remaining_excluded_type_family() {
     let mut raw = TypeTable::new();
     let raw_pointee = raw.push(TypeDef::scalar("I64", ScalarType::I64));
     let raw_ty = raw.push(TypeDef::raw_pointer("RawI64", raw_pointee));
@@ -142,7 +168,7 @@ fn passive_higher_order_callable_local_is_admitted_recursively() {
 }
 
 #[test]
-fn nested_aggregate_reports_the_exact_unsupported_leaf() {
+fn nested_aggregate_reports_the_exact_unsupported_floating_leaf() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
@@ -369,37 +395,7 @@ fn valid_core_can_reach_every_excluded_statement_family() {
 }
 
 #[test]
-fn representative_excluded_operand_families_have_stable_categories() {
-    let mut floating_types = TypeTable::new();
-    let f32_ty = floating_types.push(TypeDef::scalar("F32", ScalarType::F32));
-    let floating_program = validated(
-        floating_types,
-        Vec::new(),
-        vec![function(
-            "floating_constant",
-            Vec::new(),
-            None,
-            Body {
-                locals: vec![LocalDecl::new("value", f32_ty, false)],
-                loans: Vec::new(),
-                entry: BasicBlockId(0),
-                blocks: vec![BasicBlock::new(
-                    vec![Statement::Init {
-                        dst: Place::local(LocalId(0)),
-                        src: Operand::Constant(Value::F32(BinaryFloatValue::Zero(
-                            BinaryFloatSign::Positive,
-                        ))),
-                    }],
-                    Terminator::Return(None),
-                )],
-            },
-        )],
-    );
-    assert_eq!(
-        coverage_error(&floating_program).kind,
-        CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::FloatingConstant)
-    );
-
+fn representative_remaining_excluded_operand_families_have_stable_categories() {
     let mut tracked_types = TypeTable::new();
     let tracked_ty = tracked_types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     let tracked_program = validated(

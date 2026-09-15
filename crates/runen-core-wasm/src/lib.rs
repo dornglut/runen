@@ -7,6 +7,8 @@
 mod coverage;
 mod encoding;
 mod external;
+#[cfg(test)]
+mod floating_tests;
 mod layout;
 mod scalar;
 
@@ -25,6 +27,7 @@ pub use external::{
     ExternalProviderAdmissionError, ExternalProviderBinding, ExternalProviderFailure,
     ExternalScalarValue,
 };
+pub use scalar::FloatingScalarValue;
 
 const STATUS_RETURNED: i32 = 0;
 const STATUS_FAULTED: i32 = 1;
@@ -163,7 +166,9 @@ impl RealizedProgram {
         if entry_info.result.is_some_and(|ty| {
             matches!(
                 self.types.get(ty).map(|definition| &definition.kind),
-                Some(TypeKind::Scalar(ScalarType::Callable(_)))
+                Some(TypeKind::Scalar(
+                    ScalarType::Callable(_) | ScalarType::F16 | ScalarType::F32 | ScalarType::F64
+                ))
             )
         }) {
             return Err(RealizationError::EntryResultUnsupported(entry));

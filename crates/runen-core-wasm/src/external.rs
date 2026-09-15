@@ -6,7 +6,8 @@ use runen_core_ir::{CallableInterface, ExternalCallableId, TypeTable, ValidatedP
 use wasmtime::{Engine, Extern, Func, FuncType, Store, Val, ValType};
 
 use crate::RealizationError;
-use crate::scalar::{ScalarKind, constant_residue};
+use crate::invalid_backend_result;
+use crate::scalar::{FloatingScalarValue, ScalarKind, constant_residue};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ExternalScalarValue {
@@ -19,21 +20,31 @@ pub enum ExternalScalarValue {
     U16(u16),
     U32(u32),
     U64(u64),
+    F16(FloatingScalarValue),
+    F32(FloatingScalarValue),
+    F64(FloatingScalarValue),
 }
 
 impl ExternalScalarValue {
-    fn into_core_value(self) -> Value {
-        match self {
-            Self::Bool(value) => Value::Bool(value),
-            Self::I8(value) => Value::I8(value),
-            Self::I16(value) => Value::I16(value),
-            Self::I32(value) => Value::I32(value),
-            Self::I64(value) => Value::I64(value),
-            Self::U8(value) => Value::U8(value),
-            Self::U16(value) => Value::U16(value),
-            Self::U32(value) => Value::U32(value),
-            Self::U64(value) => Value::U64(value),
+    fn from_carrier(kind: ScalarKind, payload: i64) -> Result<Self, RealizationError> {
+        if kind.is_floating() {
+            let value = kind.decode_floating(payload)?;
+            return Ok(match kind {
+                ScalarKind::F16 => Self::F16(value),
+                ScalarKind::F32 => Self::F32(value),
+                ScalarKind::F64 => Self::F64(value),
+                ScalarKind::Bool
+                | ScalarKind::I8
+                | ScalarKind::I16
+                | ScalarKind::I32
+                | ScalarKind::I64
+                | ScalarKind::U8
+                | ScalarKind::U16
+                | ScalarKind::U32
+                | ScalarKind::U64 => return Err(invalid_backend_result()),
+            });
         }
+        Self::from_core_value(kind.decode(payload)?).ok_or_else(invalid_backend_result)
     }
 
     fn from_core_value(value: Value) -> Option<Self> {
@@ -56,18 +67,60 @@ impl ExternalScalarValue {
     }
 
     fn matches(self, kind: ScalarKind) -> bool {
-        matches!(
-            (self, kind),
+        match (self, kind) {
             (Self::Bool(_), ScalarKind::Bool)
-                | (Self::I8(_), ScalarKind::I8)
-                | (Self::I16(_), ScalarKind::I16)
-                | (Self::I32(_), ScalarKind::I32)
-                | (Self::I64(_), ScalarKind::I64)
-                | (Self::U8(_), ScalarKind::U8)
-                | (Self::U16(_), ScalarKind::U16)
-                | (Self::U32(_), ScalarKind::U32)
-                | (Self::U64(_), ScalarKind::U64)
-        )
+            | (Self::I8(_), ScalarKind::I8)
+            | (Self::I16(_), ScalarKind::I16)
+            | (Self::I32(_), ScalarKind::I32)
+            | (Self::I64(_), ScalarKind::I64)
+            | (Self::U8(_), ScalarKind::U8)
+            | (Self::U16(_), ScalarKind::U16)
+            | (Self::U32(_), ScalarKind::U32)
+            | (Self::U64(_), ScalarKind::U64) => true,
+            (Self::F16(value), ScalarKind::F16)
+            | (Self::F32(value), ScalarKind::F32)
+            | (Self::F64(value), ScalarKind::F64) => match value {
+                FloatingScalarValue::Represented(value) => kind.floating_value_matches(value),
+                FloatingScalarValue::NaNClass => true,
+            },
+            _ => false,
+        }
+    }
+
+    fn carrier_residue(self, kind: ScalarKind) -> Result<u64, RealizationError> {
+        match (self, kind) {
+            (Self::Bool(value), ScalarKind::Bool) => {
+                constant_residue(&Value::Bool(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::I8(value), ScalarKind::I8) => {
+                constant_residue(&Value::I8(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::I16(value), ScalarKind::I16) => {
+                constant_residue(&Value::I16(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::I32(value), ScalarKind::I32) => {
+                constant_residue(&Value::I32(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::I64(value), ScalarKind::I64) => {
+                constant_residue(&Value::I64(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::U8(value), ScalarKind::U8) => {
+                constant_residue(&Value::U8(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::U16(value), ScalarKind::U16) => {
+                constant_residue(&Value::U16(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::U32(value), ScalarKind::U32) => {
+                constant_residue(&Value::U32(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::U64(value), ScalarKind::U64) => {
+                constant_residue(&Value::U64(value)).ok_or_else(invalid_backend_result)
+            }
+            (Self::F16(value), ScalarKind::F16)
+            | (Self::F32(value), ScalarKind::F32)
+            | (Self::F64(value), ScalarKind::F64) => kind.floating_residue(value),
+            _ => Err(invalid_backend_result()),
+        }
     }
 }
 
@@ -307,12 +360,10 @@ pub(crate) fn instantiate_imports(
                                 "private provider import received a non-i64 carrier",
                             ));
                         };
-                        let value = kind.decode(*payload).map_err(|_| {
+                        let value = ExternalScalarValue::from_carrier(kind, *payload).map_err(|_| {
                             host_error(external, "private provider argument carrier was invalid")
                         })?;
-                        arguments.push(ExternalScalarValue::from_core_value(value).ok_or_else(
-                            || host_error(external, "private provider argument was not scalar"),
-                        )?);
+                        arguments.push(value);
                     }
 
                     let returned = provider(&arguments).map_err(|error| {
@@ -355,10 +406,12 @@ pub(crate) fn instantiate_imports(
                                     "private provider import had the wrong result count",
                                 ));
                             }
-                            let residue =
-                                constant_residue(&value.into_core_value()).ok_or_else(|| {
-                                    host_error(external, "provider result had no scalar carrier")
-                                })?;
+                            let residue = value.carrier_residue(kind).map_err(|_| {
+                                host_error(
+                                    external,
+                                    "provider result did not match the declared semantic scalar format",
+                                )
+                            })?;
                             results[0] = Val::I64(i64::from_ne_bytes(residue.to_ne_bytes()));
                         }
                     }

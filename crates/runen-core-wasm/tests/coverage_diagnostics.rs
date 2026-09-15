@@ -6,8 +6,9 @@ use runen_core_ir::{
     Value, validate_program,
 };
 use runen_core_wasm::{
-    CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError,
-    RealizedProgram, UnsupportedOperandKind, UnsupportedTypeCategory,
+    CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome,
+    ExternalProviderAdmissionError, RealizationError, RealizedProgram, UnsupportedOperandKind,
+    UnsupportedTypeCategory,
 };
 
 fn body(locals: Vec<LocalDecl>, loans: Vec<LoanDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -105,7 +106,7 @@ fn unused_unsupported_type_definitions_do_not_affect_realization_coverage() {
 }
 
 #[test]
-fn passive_unsupported_type_roles_have_precise_locations() {
+fn direct_floating_local_parameter_and_result_roles_are_admitted() {
     let mut local_types = TypeTable::new();
     let local_float = local_types.push(TypeDef::scalar("F32", ScalarType::F32));
     let local_program = validated(
@@ -124,19 +125,7 @@ fn passive_unsupported_type_roles_have_precise_locations() {
             ),
         )],
     );
-    assert_eq!(
-        coverage_error(&local_program),
-        CoverageError {
-            location: CoverageLocation::Local {
-                function: FunctionId(0),
-                local: LocalId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: local_float,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        }
-    );
+    RealizedProgram::new(&local_program).expect("direct floating local must be admitted");
 
     let mut parameter_types = TypeTable::new();
     let parameter_float = parameter_types.push(TypeDef::scalar("F32", ScalarType::F32));
@@ -161,19 +150,7 @@ fn passive_unsupported_type_roles_have_precise_locations() {
             ),
         )],
     );
-    assert_eq!(
-        coverage_error(&parameter_program),
-        CoverageError {
-            location: CoverageLocation::Parameter {
-                function: FunctionId(0),
-                local: LocalId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: parameter_float,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        }
-    );
+    RealizedProgram::new(&parameter_program).expect("direct floating parameter must be admitted");
 
     let mut result_types = TypeTable::new();
     let result_float = result_types.push(TypeDef::scalar("F32", ScalarType::F32));
@@ -196,18 +173,8 @@ fn passive_unsupported_type_roles_have_precise_locations() {
             ),
         )],
     );
-    assert_eq!(
-        coverage_error(&result_program),
-        CoverageError {
-            location: CoverageLocation::Result {
-                function: FunctionId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: result_float,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        }
-    );
+    RealizedProgram::new(&result_program)
+        .expect("direct floating result must be admitted internally");
 }
 
 #[test]
@@ -263,7 +230,7 @@ fn supported_callable_result_is_admitted_but_not_publicly_observable() {
 }
 
 #[test]
-fn unsupported_persistent_type_has_a_persistent_location() {
+fn direct_floating_persistent_is_admitted() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let program = validated(
@@ -287,14 +254,11 @@ fn unsupported_persistent_type_has_a_persistent_location() {
     );
 
     assert_eq!(
-        coverage_error(&program),
-        CoverageError {
-            location: CoverageLocation::Persistent(PersistentId(0)),
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: f32_ty,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        }
+        RealizedProgram::new(&program)
+            .expect("direct floating persistent must realize")
+            .execute(FunctionId(0))
+            .expect("floating persistent fixture must execute"),
+        ExecutionOutcome::Returned(None)
     );
 }
 
@@ -346,7 +310,7 @@ fn persistent_shared_root_is_rejected_at_its_consuming_statement() {
 }
 
 #[test]
-fn floating_external_interface_has_declaration_level_diagnostic() {
+fn floating_external_interface_reaches_provider_admission() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let external_program = validated(
@@ -370,16 +334,10 @@ fn floating_external_interface_has_declaration_level_diagnostic() {
         )],
     );
     assert_eq!(
-        coverage_error(&external_program),
-        CoverageError {
-            location: CoverageLocation::ExternalCallable(ExternalCallableId(0)),
-            kind: CoverageErrorKind::UnsupportedExternalParameterType {
-                external: ExternalCallableId(0),
-                parameter: 0,
-                ty: f32_ty,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        }
+        RealizedProgram::new(&external_program).err(),
+        Some(RealizationError::ProviderAdmission(
+            ExternalProviderAdmissionError::MissingProvider(ExternalCallableId(0))
+        ))
     );
 }
 

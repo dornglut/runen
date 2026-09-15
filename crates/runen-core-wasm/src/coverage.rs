@@ -45,7 +45,6 @@ pub enum UnsupportedTypeCategory {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnsupportedOperandKind {
-    FloatingConstant,
     TrackedFixtureConstant,
     PersistentSharedRoot,
     RawMove,
@@ -117,7 +116,7 @@ pub(crate) fn validate(program: &ValidatedProgram) -> Result<(), CoverageError> 
 
     for (persistent_index, persistent) in program.persistent.iter().enumerate() {
         let persistent_id = checked_persistent_id(persistent_index)?;
-        require_supported_scalar_type(
+        require_supported_direct_scalar_type(
             &program.types,
             persistent.ty,
             CoverageLocation::Persistent(persistent_id),
@@ -139,7 +138,7 @@ fn validate_external_callable(
 ) -> Result<(), CoverageError> {
     let location = CoverageLocation::ExternalCallable(external);
     for (parameter, ty) in interface.parameters.iter().copied().enumerate() {
-        if !is_supported_scalar_type(types, ty) {
+        if !is_supported_direct_scalar_type(types, ty) {
             let (unsupported_ty, category) =
                 first_unsupported_type(types, ty).unwrap_or((ty, UnsupportedTypeCategory::Unknown));
             return Err(CoverageError {
@@ -154,7 +153,7 @@ fn validate_external_callable(
         }
     }
     if let Some(ty) = interface.result
-        && !is_supported_scalar_type(types, ty)
+        && !is_supported_direct_scalar_type(types, ty)
     {
         let (unsupported_ty, category) =
             first_unsupported_type(types, ty).unwrap_or((ty, UnsupportedTypeCategory::Unknown));
@@ -243,7 +242,7 @@ fn require_supported_storage_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
+    if is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
         return Ok(());
     }
     if matches!(
@@ -260,7 +259,7 @@ fn require_supported_result_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
+    if is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
         return Ok(());
     }
     if matches!(
@@ -272,12 +271,12 @@ fn require_supported_result_type(
     unsupported_type(types, ty, location)
 }
 
-fn require_supported_scalar_type(
+fn require_supported_direct_scalar_type(
     types: &TypeTable,
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_scalar_type(types, ty) {
+    if is_supported_direct_scalar_type(types, ty) {
         Ok(())
     } else {
         unsupported_type(types, ty, location)
@@ -356,7 +355,7 @@ fn require_supported_callable_parameter_type(
     location: &CoverageLocation,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), CoverageError> {
-    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
+    if is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
         return Ok(());
     }
     if matches!(
@@ -386,7 +385,7 @@ fn require_supported_callable_result_component(
     location: &CoverageLocation,
     visited: &mut Vec<TypeId>,
 ) -> Result<(), CoverageError> {
-    if is_supported_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
+    if is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty) {
         return Ok(());
     }
     if matches!(
@@ -408,7 +407,33 @@ fn require_supported_callable_result_component(
     })
 }
 
-fn is_supported_scalar_type(types: &TypeTable, ty: TypeId) -> bool {
+fn is_supported_direct_scalar_type(types: &TypeTable, ty: TypeId) -> bool {
+    let Some(definition) = types.get(ty) else {
+        return false;
+    };
+    if definition.interior_mutable {
+        return false;
+    }
+    matches!(
+        definition.kind,
+        TypeKind::Scalar(
+            ScalarType::Bool
+                | ScalarType::I8
+                | ScalarType::I16
+                | ScalarType::I32
+                | ScalarType::I64
+                | ScalarType::U8
+                | ScalarType::U16
+                | ScalarType::U32
+                | ScalarType::U64
+                | ScalarType::F16
+                | ScalarType::F32
+                | ScalarType::F64
+        )
+    )
+}
+
+fn is_supported_aggregate_leaf_type(types: &TypeTable, ty: TypeId) -> bool {
     let Some(definition) = types.get(ty) else {
         return false;
     };
@@ -442,7 +467,8 @@ fn is_supported_aggregate_type(types: &TypeTable, ty: TypeId) -> bool {
         return false;
     };
     fields.iter().all(|field| {
-        is_supported_scalar_type(types, field.ty) || is_supported_aggregate_type(types, field.ty)
+        is_supported_aggregate_leaf_type(types, field.ty)
+            || is_supported_aggregate_type(types, field.ty)
     })
 }
 
@@ -483,6 +509,47 @@ fn first_unsupported_type(
             | ScalarType::U8
             | ScalarType::U16
             | ScalarType::U32
+            | ScalarType::U64
+            | ScalarType::F16
+            | ScalarType::F32
+            | ScalarType::F64,
+        ) => None,
+        TypeKind::Scalar(ScalarType::RawPointer(_)) => {
+            Some((ty, UnsupportedTypeCategory::RawPointer))
+        }
+        TypeKind::Scalar(ScalarType::Reference { .. }) => {
+            Some((ty, UnsupportedTypeCategory::SafeReference))
+        }
+        TypeKind::Scalar(ScalarType::Callable(_)) => Some((ty, UnsupportedTypeCategory::Callable)),
+        TypeKind::Scalar(ScalarType::TrackedFixture) => {
+            Some((ty, UnsupportedTypeCategory::TrackedFixture))
+        }
+        TypeKind::Struct(fields) => fields
+            .iter()
+            .find_map(|field| first_unsupported_aggregate_component(types, field.ty)),
+    }
+}
+
+fn first_unsupported_aggregate_component(
+    types: &TypeTable,
+    ty: TypeId,
+) -> Option<(TypeId, UnsupportedTypeCategory)> {
+    let Some(definition) = types.get(ty) else {
+        return Some((ty, UnsupportedTypeCategory::Unknown));
+    };
+    if definition.interior_mutable {
+        return Some((ty, UnsupportedTypeCategory::InteriorMutable));
+    }
+    match &definition.kind {
+        TypeKind::Scalar(
+            ScalarType::Bool
+            | ScalarType::I8
+            | ScalarType::I16
+            | ScalarType::I32
+            | ScalarType::I64
+            | ScalarType::U8
+            | ScalarType::U16
+            | ScalarType::U32
             | ScalarType::U64,
         ) => None,
         TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64) => {
@@ -500,7 +567,7 @@ fn first_unsupported_type(
         }
         TypeKind::Struct(fields) => fields
             .iter()
-            .find_map(|field| first_unsupported_type(types, field.ty)),
+            .find_map(|field| first_unsupported_aggregate_component(types, field.ty)),
     }
 }
 
@@ -662,10 +729,10 @@ fn validate_constant(value: &Value, location: &CoverageLocation) -> Result<(), C
         | Value::U8(_)
         | Value::U16(_)
         | Value::U32(_)
-        | Value::U64(_) => Ok(()),
-        Value::F16(_) | Value::F32(_) | Value::F64(_) => {
-            unsupported_operand(location, UnsupportedOperandKind::FloatingConstant)
-        }
+        | Value::U64(_)
+        | Value::F16(_)
+        | Value::F32(_)
+        | Value::F64(_) => Ok(()),
         Value::TrackedFixture(_) => {
             unsupported_operand(location, UnsupportedOperandKind::TrackedFixtureConstant)
         }
