@@ -1,0 +1,17 @@
+[package]
+name = "runen-core-wasm-driver"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+runen-core-lowering = { path = "../runen-core-lowering" }
+runen-core-wasm = { path = "../runen-core-wasm" }
+runen-hir = { path = "../runen-hir" }
+
+[dev-dependencies]
+runen-core-ir = { path = "../runen-core-ir" }
+runen-syntax = { path = "../runen-syntax" }
+
+[lints]
+workspace = true
