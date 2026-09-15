@@ -17,6 +17,9 @@ use crate::layout::{
 };
 use crate::scalar::{FloatingScalarValue, ScalarKind, constant_residue, mask};
 
+#[path = "f16_encoding.rs"]
+mod f16_encoding;
+
 pub(crate) struct EncodedProgram {
     pub(crate) bytes: Vec<u8>,
     pub(crate) faults: Vec<Fault>,
@@ -749,6 +752,21 @@ impl FunctionEncoder<'_> {
     ) -> Result<(), RealizationError> {
         let kind = self.place_kind(dst)?;
         match kind {
+            ScalarKind::F16 => {
+                let scratch = self.layout.scratch(0)?;
+                self.emit_scalar_operand(encoded, left)?;
+                f16_encoding::emit_widen_carrier_to_f64(encoded, scratch)?;
+                self.emit_scalar_operand(encoded, right)?;
+                f16_encoding::emit_widen_carrier_to_f64(encoded, scratch)?;
+                encoded.instruction(&f64_operation);
+                encoded.instruction(&Instruction::LocalSet(self.layout.f64_scratch));
+                f16_encoding::emit_narrow_f64_to_carrier(
+                    encoded,
+                    self.layout.f64_scratch,
+                    scratch,
+                )?;
+                self.emit_scalar_place_set(encoded, dst)
+            }
             ScalarKind::F32 => {
                 self.emit_scalar_operand(encoded, left)?;
                 encoded.instruction(&Instruction::I32WrapI64);
@@ -779,8 +797,7 @@ impl FunctionEncoder<'_> {
             | ScalarKind::U8
             | ScalarKind::U16
             | ScalarKind::U32
-            | ScalarKind::U64
-            | ScalarKind::F16 => Err(invariant(
+            | ScalarKind::U64 => Err(invariant(
                 "coverage admission allowed unsupported floating arithmetic type",
             )),
         }
