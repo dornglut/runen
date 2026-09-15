@@ -19,6 +19,8 @@ use crate::scalar::{FloatingScalarValue, ScalarKind, constant_residue, mask};
 
 #[path = "f16_encoding.rs"]
 mod f16_encoding;
+#[path = "reference_encoding.rs"]
+mod reference_encoding;
 
 pub(crate) struct EncodedProgram {
     pub(crate) bytes: Vec<u8>,
@@ -327,6 +329,8 @@ struct FunctionLayout {
     non_parameter_i64_count: usize,
     scratch_start: u32,
     scratch_len: usize,
+    reference_targets: Vec<reference_encoding::ReferenceTarget>,
+    reference_handle_scratch: Option<u32>,
     f32_scratch: u32,
     f64_scratch: u32,
     pc: u32,
@@ -370,6 +374,14 @@ impl FunctionLayout {
         let scratch_len = maximum_local_len.max(1);
         let scratch_start = next;
         next = add_carriers(next, scratch_len, "Wasm scratch local index overflow")?;
+        let reference_targets = reference_encoding::collect_reference_targets(types, function)?;
+        let reference_handle_scratch = if reference_targets.is_empty() {
+            None
+        } else {
+            let scratch = next;
+            next = add_carriers(next, 1, "Wasm reference handle scratch index overflow")?;
+            Some(scratch)
+        };
         let total_i64_slots = next as usize;
         let non_parameter_i64_count = total_i64_slots
             .checked_sub(parameter_carrier_count)
@@ -393,6 +405,8 @@ impl FunctionLayout {
             non_parameter_i64_count,
             scratch_start,
             scratch_len,
+            reference_targets,
+            reference_handle_scratch,
             f32_scratch,
             f64_scratch,
             pc,
@@ -416,6 +430,11 @@ impl FunctionLayout {
             index,
             "private scratch carrier index overflow",
         )
+    }
+
+    fn reference_handle_scratch(&self) -> Result<u32, RealizationError> {
+        self.reference_handle_scratch
+            .ok_or_else(|| invariant("reference encoding has no private handle scratch"))
     }
 }
 
@@ -545,15 +564,19 @@ impl FunctionEncoder<'_> {
                 self.emit_store(encoded, place, src)
             }
             Statement::Drop { .. } => Ok(()),
+            Statement::ReferenceRead { src } => self.emit_reference_read_or_drop(encoded, src),
+            Statement::ReferenceAssign { dst, src } => {
+                self.emit_reference_assign(encoded, dst, src)
+            }
+            Statement::ReferenceDrop { place } => {
+                self.emit_reference_read_or_drop(encoded, place)
+            }
             Statement::Borrow { .. }
             | Statement::EndBorrow { .. }
-            | Statement::ReferenceRead { .. }
             | Statement::RawRead { .. }
             | Statement::RawAssign { .. }
-            | Statement::ReferenceAssign { .. }
             | Statement::InteriorAssign { .. }
-            | Statement::ReferenceInteriorAssign { .. }
-            | Statement::ReferenceDrop { .. } => Err(invariant(
+            | Statement::ReferenceInteriorAssign { .. } => Err(invariant(
                 "coverage admission allowed an unsupported Core statement",
             )),
         }
@@ -910,15 +933,16 @@ impl FunctionEncoder<'_> {
                 encoded.instruction(&Instruction::I64Const(i64::from(function.0)));
                 Ok(1)
             }
-            Operand::PersistentSharedRoot(_)
-            | Operand::RawMove(_)
-            | Operand::AddressOf(_)
-            | Operand::ReferenceRoot { .. }
-            | Operand::ReferenceReborrow { .. }
-            | Operand::ReferenceMove(_)
-            | Operand::ReferenceCopy(_) => Err(invariant(
-                "coverage admission allowed an unsupported Core operand",
-            )),
+            Operand::ReferenceRoot { place, .. } => self.emit_reference_root(encoded, place),
+            Operand::ReferenceReborrow { src, .. } => {
+                self.emit_reference_reborrow(encoded, src)
+            }
+            Operand::ReferenceMove(src) | Operand::ReferenceCopy(src) => {
+                self.emit_reference_value(encoded, src)
+            }
+            Operand::PersistentSharedRoot(_) | Operand::RawMove(_) | Operand::AddressOf(_) => Err(
+                invariant("coverage admission allowed an unsupported Core operand"),
+            ),
         }
     }
 
