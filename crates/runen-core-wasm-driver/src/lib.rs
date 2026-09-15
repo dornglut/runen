@@ -11,8 +11,8 @@ use std::sync::Arc;
 
 use runen_core_ir as core;
 use runen_core_lowering as lowering;
-pub use runen_core_wasm::{ExternalProviderFailure, ExternalScalarValue};
 use runen_core_wasm::{self as wasm, ExecutionOutcome, RealizationError};
+pub use runen_core_wasm::{ExternalProviderFailure, ExternalScalarValue};
 use runen_hir as hir;
 
 /// Failure while constructing one Core-Wasm realization from an accepted typed
@@ -55,9 +55,7 @@ pub enum ExecutionError {
 
 type NoResultProvider =
     dyn Fn(&[ExternalScalarValue]) -> Result<(), ExternalProviderFailure> + Send + Sync + 'static;
-type ScalarResultProvider = dyn Fn(
-        &[ExternalScalarValue],
-    ) -> Result<ExternalScalarValue, ExternalProviderFailure>
+type ScalarResultProvider = dyn Fn(&[ExternalScalarValue]) -> Result<ExternalScalarValue, ExternalProviderFailure>
     + Send
     + Sync
     + 'static;
@@ -141,7 +139,10 @@ impl ExternalProviderBinding {
     }
 
     fn has_result(&self) -> bool {
-        matches!(&self.implementation, ProviderImplementation::ScalarResult(_))
+        matches!(
+            &self.implementation,
+            ProviderImplementation::ScalarResult(_)
+        )
     }
 }
 
@@ -240,18 +241,14 @@ impl RealizedCompilation {
                     )
                 }
             }
-            .map_err(|error| {
-                BuildError::Realization(RealizationError::ProviderAdmission(error))
-            })?;
+            .map_err(|error| BuildError::Realization(RealizationError::ProviderAdmission(error)))?;
             wasm_bindings.push(wasm_binding);
         }
         debug_assert!(providers.is_empty());
 
-        let realized = wasm::RealizedProgram::new_with_external_providers(
-            lowered.program(),
-            wasm_bindings,
-        )
-        .map_err(BuildError::Realization)?;
+        let realized =
+            wasm::RealizedProgram::new_with_external_providers(lowered.program(), wasm_bindings)
+                .map_err(BuildError::Realization)?;
         Ok(Self {
             ordinary_functions,
             realized,
