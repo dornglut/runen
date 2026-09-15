@@ -246,14 +246,19 @@ fn baseline_rounding_subnormal_overflow_and_signed_zero_results_are_exact() {
 }
 
 #[test]
-fn f16_underflow_and_overflow_rounding_boundaries_are_directly_exercised() {
+fn f16_underflow_normal_transition_and_overflow_boundaries_are_directly_exercised() {
     let scalar = ScalarType::F16;
     let min_subnormal = BinaryFloatValue::Subnormal {
         sign: BinaryFloatSign::Positive,
         significand: 1,
     };
+    let max_subnormal = BinaryFloatValue::Subnormal {
+        sign: BinaryFloatSign::Positive,
+        significand: 1023,
+    };
     let positive_zero = BinaryFloatValue::Zero(BinaryFloatSign::Positive);
     let min_normal = normal(BinaryFloatSign::Positive, 1_u64 << 10, -14);
+    let normal_boundary_numerator = normal(BinaryFloatSign::Positive, 2047, -14);
     let one = normal(BinaryFloatSign::Positive, 1_u64 << 10, 0);
     let below_two = normal(BinaryFloatSign::Positive, 2047, 0);
     let two = normal(BinaryFloatSign::Positive, 1_u64 << 10, 1);
@@ -294,6 +299,39 @@ fn f16_underflow_and_overflow_rounding_boundaries_are_directly_exercised() {
         ),
         FloatingScalarValue::Represented(positive_zero),
         "quotient immediately below the zero/min-subnormal midpoint rounds downward"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            normal_boundary_numerator,
+            two,
+        ),
+        FloatingScalarValue::Represented(min_normal),
+        "exact max-subnormal/min-normal midpoint ties to the even minimum-normal significand"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            normal_boundary_numerator,
+            below_two,
+        ),
+        FloatingScalarValue::Represented(min_normal),
+        "quotient above the subnormal/normal midpoint rounds to minimum normal"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            normal_boundary_numerator,
+            above_two,
+        ),
+        FloatingScalarValue::Represented(max_subnormal),
+        "quotient below the subnormal/normal midpoint rounds to maximum subnormal"
     );
     assert_eq!(
         observe(
