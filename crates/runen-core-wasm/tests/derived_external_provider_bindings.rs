@@ -8,17 +8,17 @@ use runen_core_wasm::{
     RealizedProgram,
 };
 
-fn validated_with_external(result: Option<runen_core_ir::TypeId>) -> runen_core_ir::ValidatedProgram {
+fn validated_with_external(has_result: bool) -> runen_core_ir::ValidatedProgram {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let external_result = result.map(|_| i64_ty);
+    let external_result = has_result.then_some(i64_ty);
     let external = ExternalCallableDecl::new(CallableInterface::new(
         Vec::new(),
         external_result,
         SafeReferenceResultContract::None,
     ));
 
-    let (locals, blocks, function_result) = if external_result.is_some() {
+    let (locals, blocks, function_result) = if has_result {
         (
             vec![LocalDecl::new("result", i64_ty, false)],
             vec![
@@ -79,8 +79,7 @@ fn validated_with_external(result: Option<runen_core_ir::TypeId>) -> runen_core_
 
 #[test]
 fn scalar_result_binding_derives_canonical_interface_from_program() {
-    let marker = runen_core_ir::TypeId(0);
-    let program = validated_with_external(Some(marker));
+    let program = validated_with_external(true);
     let binding = ExternalProviderBinding::scalar_result_for_program(
         &program,
         ExternalCallableId(0),
@@ -98,8 +97,7 @@ fn scalar_result_binding_derives_canonical_interface_from_program() {
 
 #[test]
 fn derived_binding_rejects_result_shape_mismatch() {
-    let marker = runen_core_ir::TypeId(0);
-    let result_program = validated_with_external(Some(marker));
+    let result_program = validated_with_external(true);
     assert!(matches!(
         ExternalProviderBinding::no_result_for_program(
             &result_program,
@@ -113,7 +111,7 @@ fn derived_binding_rejects_result_shape_mismatch() {
         })
     ));
 
-    let no_result_program = validated_with_external(None);
+    let no_result_program = validated_with_external(false);
     assert!(matches!(
         ExternalProviderBinding::scalar_result_for_program(
             &no_result_program,
@@ -130,7 +128,7 @@ fn derived_binding_rejects_result_shape_mismatch() {
 
 #[test]
 fn derived_binding_rejects_unknown_external_identity() {
-    let program = validated_with_external(None);
+    let program = validated_with_external(false);
     assert!(matches!(
         ExternalProviderBinding::no_result_for_program(
             &program,
