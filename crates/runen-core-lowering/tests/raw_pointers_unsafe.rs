@@ -26,7 +26,9 @@ fn hir(source: &str) -> TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted raw-pointer HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted raw-pointer HIR must lower to validated Core")
+        .into_program()
 }
 
 fn runen_parameters_mut(function: &mut runen_hir::Function) -> &mut [runen_hir::Parameter] {
@@ -433,30 +435,30 @@ fn lowering_rejects_malformed_raw_pointer_interfaces_instead_of_widening_source(
 
     let mut field = hir("record Holder { value: I64 } fn f(holder: Holder) {}");
     field.records[0].fields[0].ty = raw_i64;
-    assert_eq!(
+    assert!(matches!(
         lower(&field),
         Err(LoweringError::InvalidHirInvariant(
             "HIR record field contains a raw-pointer type"
         ))
-    );
+    ));
 
     let mut parameter = hir("fn f(x: I64) {}");
     runen_parameters_mut(&mut parameter.functions[0])[0].ty = raw_i64;
-    assert_eq!(
+    assert!(matches!(
         lower(&parameter),
         Err(LoweringError::InvalidHirInvariant(
             "HIR function parameter contains a raw-pointer type"
         ))
-    );
+    ));
 
     let mut result = hir("fn f() -> I64 { return 1; }");
     result.functions[0].result = Some(raw_i64);
-    assert_eq!(
+    assert!(matches!(
         lower(&result),
         Err(LoweringError::InvalidHirInvariant(
             "HIR function result contains a raw-pointer type"
         ))
-    );
+    ));
 }
 
 #[test]
