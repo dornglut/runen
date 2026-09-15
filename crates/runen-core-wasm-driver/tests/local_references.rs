@@ -1,4 +1,4 @@
-use runen_core_ir::Value;
+use runen_core_ir::{Fault, Value};
 use runen_core_wasm::ExecutionOutcome;
 use runen_core_wasm_driver::RealizedCompilation;
 use runen_hir::{FunctionId, ModuleId, SourceUnit, TypedCompilation, build_typed_hir};
@@ -56,6 +56,28 @@ fn projected_shared_reborrow_executes_through_driver() {
     );
 
     assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(17))));
+}
+
+#[test]
+fn nested_reference_cleanup_and_defined_fault_execute_through_driver() {
+    let outcome = execute(
+        "fn entry() {\
+             let x: I64 = 5;\
+             {\
+                 let r: &I64 = &x;\
+                 {\
+                     let s: &I64 = r;\
+                     let value: I64 = *s;\
+                     fault;\
+                 }\
+             }\
+         }",
+    );
+
+    assert_eq!(
+        outcome,
+        ExecutionOutcome::Faulted(Fault::new("source.explicit"))
+    );
 }
 
 #[test]
