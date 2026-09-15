@@ -20,7 +20,7 @@ It consumes accepted source semantics from `spec/language/source/` and lossless 
 
 It may depend on `runen-syntax`. It MUST NOT infer module identity from filesystem/package conventions or source-unit order, and it MUST NOT own Core MIR lowering, Exec/Model IR, runtime execution, realization, or backend behavior.
 
-Core, Exec, reference, and backend/proving packages do not depend on `runen-hir`. Source-to-Core consumption belongs only to the dedicated lowering package below.
+Core semantic/realization packages, reference semantics, Exec/Model packages, and verification-only proving packages do not depend on `runen-hir`. Source-to-Core consumption belongs only to the dedicated lowering package below; the separately owned target-specific source-to-realization composition belongs only to `runen-core-wasm-driver`.
 
 ### `crates/runen-core-lowering`
 
@@ -49,6 +49,14 @@ The package owns no normative language semantics. Its WebAssembly modules, scala
 Its production Runen dependency is only `runen-core-ir`. It may use `runen-reference` only as a test/dev dependency for differential conformance. It MUST NOT use the reference machine as a production fallback, depend on source/HIR/lowering or Exec/Model oracle packages, expose Wasm identities as Runen identities, or become a universal target representation for future Exec, Model, GPU, or other realization domains.
 
 Unsupported valid Core remains a realization-coverage rejection rather than a language-validation failure. Backend compilation, instantiation, execution, trap, or physical-resource failures remain realization failures and MUST NOT be reclassified as Runen defined faults or undefined behavior.
+
+### `crates/runen-core-wasm-driver`
+
+Owns the bounded target-specific production composition from an already-built `runen-hir::TypedCompilation`, through the accepted `runen-core-lowering` refinement artifact and its ordinary-function correspondence, into `runen-core-wasm` realization and explicit caller-selected execution.
+
+The package owns no normative language semantics, source executable-entry rule, package/filesystem discovery, backend selection, external-provider identity policy, public generic-specialization identity, public closure identity, stable ABI/layout/symbol identity, or Wasm identity. Its caller-visible function selection remains the existing opaque per-compilation HIR `FunctionId`; the driver does not infer selection from names, accessibility, source order, Core order, or a `main` convention.
+
+Its production Runen dependencies are exactly `runen-hir`, `runen-core-lowering`, and `runen-core-wasm`. The Core function identity carried by the lowering artifact remains an implementation bridge between lowering and Core-Wasm and does not require a direct production dependency on `runen-core-ir` in this package. Tests may use `runen-core-ir` and `runen-syntax` as assurance dependencies. The package MUST NOT make lowering depend on a backend, make Core-Wasm depend on HIR/lowering, use the reference machine as a production fallback, or become a universal runtime/realization abstraction for future backends.
 
 ### `crates/runen-exec-oracle`
 
@@ -112,6 +120,10 @@ runen-syntax
                     │       ▼
                     └──▶ runen-reference
 
+runen-hir ───────────────────────────────────────────────▶ runen-core-wasm-driver
+runen-core-lowering ─────────────────────────────────────▶ runen-core-wasm-driver
+runen-core-wasm ─────────────────────────────────────────▶ runen-core-wasm-driver
+
 runen-core-lowering ──[test-only end-to-end evidence]──▶ runen-reference
 runen-core-lowering ──[test-only end-to-end evidence]──▶ runen-core-wasm
 runen-core-ir ──────[test-only P0-F region-overlap evidence]──────▶ runen-exec-oracle
@@ -121,4 +133,4 @@ runen-model-oracle
 repository tooling is orthogonal
 ```
 
-`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core production consumer and depends on both `runen-hir` and `runen-core-ir` in production. Its test/dev edges to `runen-reference` and `runen-core-wasm` exist only for explicitly owned end-to-end refinement and differential evidence; they do not create a production source-to-execution composition layer. `runen-reference` and `runen-core-wasm` are independent consumers of validated Core programs: the former is the executable reference semantics, while the latter is a bounded production physical realization with explicit coverage admission. `runen-core-wasm` may consume `runen-reference` only in tests for differential conformance, never as production implementation or fallback. `runen-exec-oracle`, `runen-numeric-oracle`, and `runen-model-oracle` remain verification-only packages outside the source/HIR and Core/reference/realization production chains. The Exec oracle's accepted test-only consumption of Core structural-region overlap evidence composes the Core-owned overlap relation with the Exec-owned ordinary-access conflict relation without creating production coupling or transferring semantic ownership. The numeric oracle's accepted test-only consumption of Exec reduction evidence likewise composes independently owned proving relations; other proving-package composition still requires an accepted semantic or assurance consumer.
+`runen-hir` depends only on `runen-syntax` among Runen packages in the source-frontend architecture. `runen-core-lowering` is the only accepted HIR-to-Core production consumer and depends on both `runen-hir` and `runen-core-ir` in production. Its test/dev edges to `runen-reference` and `runen-core-wasm` exist only for explicitly owned end-to-end refinement and differential evidence; they do not themselves create a production source-to-execution composition layer. `runen-core-wasm-driver` is the separate bounded production composition owner above HIR lowering and the Core-Wasm realization; its dependency on those layers does not transfer source ownership into Core-Wasm or realization ownership into lowering. `runen-reference` and `runen-core-wasm` remain independent consumers of validated Core programs: the former is the executable reference semantics, while the latter is a bounded production physical realization with explicit coverage admission. `runen-core-wasm` may consume `runen-reference` only in tests for differential conformance, never as production implementation or fallback. `runen-exec-oracle`, `runen-numeric-oracle`, and `runen-model-oracle` remain verification-only packages outside the source/HIR and Core/reference/realization production chains. The Exec oracle's accepted test-only consumption of Core structural-region overlap evidence composes the Core-owned overlap relation with the Exec-owned ordinary-access conflict relation without creating production coupling or transferring semantic ownership. The numeric oracle's accepted test-only consumption of Exec reduction evidence likewise composes independently owned proving relations; other proving-package composition still requires an accepted semantic or assurance consumer.
