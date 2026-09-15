@@ -1,0 +1,142 @@
+name: Scratch 840 lowering artifact
+
+on: push
+
+jobs:
+  build-artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 39a1673f0b84a3f15ac77d917f0e01c2a454a870
+          persist-credentials: false
+
+      - name: Apply exact lowering patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+
+          path = Path("crates/runen-core-lowering/src/lib.rs")
+          expected_blob = "bdbd02f4d59a042393b5137a37af018a06188227"
+          actual_blob = subprocess.check_output(
+              ["git", "hash-object", str(path)], text=True
+          ).strip()
+          if actual_blob != expected_blob:
+              raise SystemExit(
+                  f"unexpected lowering blob: expected {expected_blob}, got {actual_blob}"
+              )
+
+          text = path.read_text()
+          replacements = [
+              (
+                  """/// One validated Core refinement together with the ordinary source-function
+/// correspondence preserved by that refinement.
+///
+/// The correspondence covers only non-external, non-generic Runen functions. It
+/// is compiler refinement evidence, not executable-entry selection, generic
+/// specialization identity, closure identity, or external-provider identity.
+pub struct LoweredCompilation {
+    program: core::ValidatedProgram,
+    ordinary_functions: BTreeMap<hir::FunctionId, core::FunctionId>,
+}
+""",
+                  """/// One validated Core refinement together with the source-identity
+/// correspondences preserved by that refinement.
+///
+/// Ordinary correspondence covers non-external, non-generic Runen functions;
+/// external correspondence covers represented external declarations. Both are
+/// compiler refinement evidence, not executable-entry selection, provider lookup
+/// policy, generic specialization identity, closure identity, or ABI/symbol identity.
+pub struct LoweredCompilation {
+    program: core::ValidatedProgram,
+    ordinary_functions: BTreeMap<hir::FunctionId, core::FunctionId>,
+    external_functions: BTreeMap<hir::FunctionId, core::ExternalCallableId>,
+}
+""",
+              ),
+              (
+                  """    pub fn core_function(&self, function: hir::FunctionId) -> Option<core::FunctionId> {
+        self.ordinary_functions.get(&function).copied()
+    }
+
+    /// Consume the refinement artifact and retain only its validated Core program.
+""",
+                  """    pub fn core_function(&self, function: hir::FunctionId) -> Option<core::FunctionId> {
+        self.ordinary_functions.get(&function).copied()
+    }
+
+    /// Resolve one external HIR declaration into the exact Core external callable
+    /// identity created by this refinement.
+    #[must_use]
+    pub fn core_external_callable(
+        &self,
+        function: hir::FunctionId,
+    ) -> Option<core::ExternalCallableId> {
+        self.external_functions.get(&function).copied()
+    }
+
+    /// Consume the refinement artifact and retain only its validated Core program.
+""",
+              ),
+              (
+                  """/// Lower one accepted typed HIR compilation into validated Core together with
+/// the exact ordinary non-generic function correspondence retained by lowering.
+""",
+                  """/// Lower one accepted typed HIR compilation into validated Core together with
+/// the exact ordinary-function and external-declaration correspondences retained
+/// by lowering.
+""",
+              ),
+              (
+                  """    fn lower(self) -> Result<LoweredCompilation, LoweringError> {
+        let ordinary_functions = self.ordinary_function_correspondence()?;
+        let capacity = self
+""",
+                  """    fn lower(self) -> Result<LoweredCompilation, LoweringError> {
+        let ordinary_functions = self.ordinary_function_correspondence()?;
+        let external_functions = self.external_callables.clone();
+        let capacity = self
+""",
+              ),
+              (
+                  """        Ok(LoweredCompilation {
+            program,
+            ordinary_functions,
+        })
+""",
+                  """        Ok(LoweredCompilation {
+            program,
+            ordinary_functions,
+            external_functions,
+        })
+""",
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected one replacement site, found {count}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+          git diff --check
+          changed="$(git diff --name-only)"
+          test "${changed}" = "crates/runen-core-lowering/src/lib.rs"
+          git diff -- crates/runen-core-lowering/src/lib.rs > /tmp/lowering.patch
+          git hash-object crates/runen-core-lowering/src/lib.rs > /tmp/lowering.blob
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: scratch-840-lowering-candidate
+          path: |
+            crates/runen-core-lowering/src/lib.rs
+            /tmp/lowering.patch
+            /tmp/lowering.blob
+          if-no-files-found: error
+          retention-days: 1
