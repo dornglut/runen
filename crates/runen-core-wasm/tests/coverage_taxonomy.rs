@@ -111,19 +111,6 @@ fn passive_local_types_report_every_remaining_excluded_type_family() {
     let raw_ty = raw.push(TypeDef::raw_pointer("RawI64", raw_pointee));
     assert_local_type_category(raw, raw_ty, UnsupportedTypeCategory::RawPointer);
 
-    let mut reference = TypeTable::new();
-    let referent = reference.push(TypeDef::scalar("I64", ScalarType::I64));
-    let reference_ty = reference.push(TypeDef::reference(
-        "SharedI64",
-        referent,
-        ReferencePermission::Shared,
-    ));
-    assert_local_type_category(
-        reference,
-        reference_ty,
-        UnsupportedTypeCategory::SafeReference,
-    );
-
     let mut tracked = TypeTable::new();
     let tracked_ty = tracked.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     assert_local_type_category(tracked, tracked_ty, UnsupportedTypeCategory::TrackedFixture);
@@ -135,6 +122,95 @@ fn passive_local_types_report_every_remaining_excluded_type_family() {
         interior,
         interior_ty,
         UnsupportedTypeCategory::InteriorMutable,
+    );
+}
+
+#[test]
+fn activation_local_safe_reference_local_and_root_are_admitted() {
+    let mut types = TypeTable::new();
+    let referent = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let shared = types.push(TypeDef::reference(
+        "SharedI64",
+        referent,
+        ReferencePermission::Shared,
+    ));
+    let program = validated(
+        types,
+        Vec::new(),
+        vec![function(
+            "reference_root",
+            Vec::new(),
+            None,
+            Body {
+                locals: vec![
+                    LocalDecl::new("target", referent, false),
+                    LocalDecl::new("reference", shared, false),
+                ],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(
+                    vec![
+                        Statement::Init {
+                            dst: Place::local(LocalId(0)),
+                            src: Operand::Constant(Value::I64(1)),
+                        },
+                        Statement::Init {
+                            dst: Place::local(LocalId(1)),
+                            src: Operand::ReferenceRoot {
+                                permission: ReferencePermission::Shared,
+                                place: Place::local(LocalId(0)),
+                            },
+                        },
+                    ],
+                    Terminator::Return(None),
+                )],
+            },
+        )],
+    );
+    RealizedProgram::new(&program).expect("activation-local Shared root must be admitted");
+}
+
+#[test]
+fn safe_reference_parameter_remains_rejected_at_the_parameter_boundary() {
+    let mut types = TypeTable::new();
+    let referent = types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let shared = types.push(TypeDef::reference(
+        "SharedI64",
+        referent,
+        ReferencePermission::Shared,
+    ));
+    let program = validated(
+        types,
+        Vec::new(),
+        vec![function(
+            "reference_parameter",
+            vec![LocalId(0)],
+            None,
+            Body {
+                locals: vec![LocalDecl::new("reference", shared, false)],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(
+                    vec![Statement::ReferenceRead {
+                        src: ReferenceAccess::new(Place::local(LocalId(0))),
+                    }],
+                    Terminator::Return(None),
+                )],
+            },
+        )],
+    );
+    assert_eq!(
+        coverage_error(&program),
+        CoverageError {
+            location: CoverageLocation::Parameter {
+                function: FunctionId(0),
+                local: LocalId(0),
+            },
+            kind: CoverageErrorKind::UnsupportedType {
+                ty: shared,
+                category: UnsupportedTypeCategory::SafeReference,
+            },
+        }
     );
 }
 
@@ -232,7 +308,7 @@ fn projected_floating_statement_is_admitted() {
 }
 
 #[test]
-fn valid_core_can_reach_every_excluded_statement_family() {
+fn valid_core_reaches_every_still_excluded_statement_family() {
     let mut borrowing_types = TypeTable::new();
     let i64_ty = borrowing_types.push(TypeDef::scalar("I64", ScalarType::I64));
     let source = Place::local(LocalId(0));
@@ -268,38 +344,6 @@ fn valid_core_can_reach_every_excluded_statement_family() {
     assert_eq!(
         coverage_error(&borrowing_program).kind,
         CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Borrowing)
-    );
-
-    let mut reference_types = TypeTable::new();
-    let referent = reference_types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let shared = reference_types.push(TypeDef::reference(
-        "SharedI64",
-        referent,
-        ReferencePermission::Shared,
-    ));
-    let reference_program = validated(
-        reference_types,
-        Vec::new(),
-        vec![function(
-            "reference",
-            vec![LocalId(0)],
-            None,
-            Body {
-                locals: vec![LocalDecl::new("reference", shared, false)],
-                loans: Vec::new(),
-                entry: BasicBlockId(0),
-                blocks: vec![BasicBlock::new(
-                    vec![Statement::ReferenceRead {
-                        src: ReferenceAccess::new(Place::local(LocalId(0))),
-                    }],
-                    Terminator::Return(None),
-                )],
-            },
-        )],
-    );
-    assert_eq!(
-        coverage_error(&reference_program).kind,
-        CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Reference)
     );
 
     let mut raw_types = TypeTable::new();
@@ -485,50 +529,5 @@ fn representative_remaining_excluded_operand_families_have_stable_categories() {
     assert_eq!(
         coverage_error(&raw_program).kind,
         CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::AddressOf)
-    );
-
-    let mut reference_types = TypeTable::new();
-    let referent = reference_types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let shared = reference_types.push(TypeDef::reference(
-        "SharedI64",
-        referent,
-        ReferencePermission::Shared,
-    ));
-    let reference_program = validated(
-        reference_types,
-        Vec::new(),
-        vec![function(
-            "reference_root",
-            Vec::new(),
-            None,
-            Body {
-                locals: vec![
-                    LocalDecl::new("target", referent, false),
-                    LocalDecl::new("reference", shared, false),
-                ],
-                loans: Vec::new(),
-                entry: BasicBlockId(0),
-                blocks: vec![BasicBlock::new(
-                    vec![
-                        Statement::Init {
-                            dst: Place::local(LocalId(0)),
-                            src: Operand::Constant(Value::I64(1)),
-                        },
-                        Statement::Init {
-                            dst: Place::local(LocalId(1)),
-                            src: Operand::ReferenceRoot {
-                                permission: ReferencePermission::Shared,
-                                place: Place::local(LocalId(0)),
-                            },
-                        },
-                    ],
-                    Terminator::Return(None),
-                )],
-            },
-        )],
-    );
-    assert_eq!(
-        coverage_error(&reference_program).kind,
-        CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::ReferenceRoot)
     );
 }
