@@ -31,9 +31,7 @@ pub(crate) fn emit_widen_carrier_to_f64(
     emit_i64_const(
         encoded,
         nonnegative_i64(
-            i64::from(f64.bias())
-                + i64::from(f16.emin())
-                - i64::from(f16.precision() - 1),
+            i64::from(f64.bias()) + i64::from(f16.emin()) - i64::from(f16.precision() - 1),
             "private F16-to-F64 subnormal exponent underflow",
         )?,
     );
@@ -64,10 +62,7 @@ pub(crate) fn emit_widen_carrier_to_f64(
     encoded.instruction(&Instruction::I64Eqz);
     encoded.instruction(&Instruction::If(BlockType::Result(ValType::F64)));
     emit_rebased_sign(encoded, scratch, f16, f64);
-    emit_i64_const(
-        encoded,
-        f64.exponent_mask() << f64.fraction_bits(),
-    );
+    emit_i64_const(encoded, f64.exponent_mask() << f64.fraction_bits());
     encoded.instruction(&Instruction::I64Or);
     encoded.instruction(&Instruction::F64ReinterpretI64);
     encoded.instruction(&Instruction::Else);
@@ -224,10 +219,7 @@ fn emit_normal_magnitude(
     emit_i64_const(encoded, upper_raw);
     encoded.instruction(&Instruction::I64Eq);
     encoded.instruction(&Instruction::If(BlockType::Result(ValType::I64)));
-    emit_i64_const(
-        encoded,
-        f16.exponent_mask() << f16.fraction_bits(),
-    );
+    emit_i64_const(encoded, f16.exponent_mask() << f16.fraction_bits());
     encoded.instruction(&Instruction::Else);
     emit_raw_exponent(encoded, scratch, f64);
     emit_i64_const(
@@ -281,12 +273,7 @@ fn emit_subnormal_f16_carrier(
     Ok(())
 }
 
-fn emit_round_up_fixed(
-    encoded: &mut WasmFunction,
-    scratch: u32,
-    format: FloatFormat,
-    shift: u32,
-) {
+fn emit_round_up_fixed(encoded: &mut WasmFunction, scratch: u32, format: FloatFormat, shift: u32) {
     emit_significand(encoded, scratch, format);
     emit_i64_const(encoded, mask(shift));
     encoded.instruction(&Instruction::I64And);
@@ -463,10 +450,7 @@ fn emit_signed_infinity(
     source: FloatFormat,
 ) {
     emit_rebased_sign(encoded, scratch, source, target);
-    emit_i64_const(
-        encoded,
-        target.exponent_mask() << target.fraction_bits(),
-    );
+    emit_i64_const(encoded, target.exponent_mask() << target.fraction_bits());
     encoded.instruction(&Instruction::I64Or);
 }
 
