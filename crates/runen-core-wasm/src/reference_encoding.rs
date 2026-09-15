@@ -1,5 +1,6 @@
 use runen_core_ir::{
-    Function, LocalId, Place, ReferenceAccess, ScalarType, TypeId, TypeKind, TypeTable,
+    Function, LocalId, PersistentDecl, PersistentId, Place, ReferenceAccess, ScalarType, TypeId,
+    TypeKind, TypeTable,
 };
 use wasm_encoder::{Function as WasmFunction, Instruction};
 
@@ -9,15 +10,22 @@ use crate::layout::storage_carrier_count;
 use super::{FunctionEncoder, add_carriers, direct_access_place, invariant};
 
 #[derive(Clone, Debug)]
+pub(super) enum ReferenceTargetStorage {
+    Local(Place),
+    Persistent(PersistentId),
+}
+
+#[derive(Clone, Debug)]
 pub(super) struct ReferenceTarget {
     pub(super) handle: u32,
-    pub(super) place: Place,
+    pub(super) storage: ReferenceTargetStorage,
     pub(super) ty: TypeId,
 }
 
 pub(super) fn collect_reference_targets(
     types: &TypeTable,
     function: &Function,
+    persistent: &[PersistentDecl],
 ) -> Result<Vec<ReferenceTarget>, RealizationError> {
     let has_reference_local = function.body.locals.iter().any(|local| {
         matches!(
@@ -36,6 +44,20 @@ pub(super) fn collect_reference_targets(
         );
         collect_target_regions(types, Place::local(local_id), local.ty, &mut targets)?;
     }
+    for (index, declaration) in persistent.iter().enumerate() {
+        if !reference_target_type_supported(types, declaration.ty) {
+            continue;
+        }
+        let persistent = PersistentId(
+            u32::try_from(index)
+                .map_err(|_| invariant("Core persistent index exceeds u32::MAX"))?,
+        );
+        push_target(
+            &mut targets,
+            ReferenceTargetStorage::Persistent(persistent),
+            declaration.ty,
+        )?;
+    }
     Ok(targets)
 }
 
@@ -49,15 +71,11 @@ fn collect_target_regions(
         return Ok(());
     }
 
-    let next_handle = u32::try_from(targets.len())
-        .map_err(|_| invariant("private reference target count exceeds u32::MAX"))?
-        .checked_add(1)
-        .ok_or_else(|| invariant("private reference target handle overflow"))?;
-    targets.push(ReferenceTarget {
-        handle: next_handle,
-        place: place.clone(),
+    push_target(
+        targets,
+        ReferenceTargetStorage::Local(place.clone()),
         ty,
-    });
+    )?;
 
     let definition = types
         .get(ty)
@@ -69,6 +87,23 @@ fn collect_target_regions(
             collect_target_regions(types, place.clone().field(field_index), field.ty, targets)?;
         }
     }
+    Ok(())
+}
+
+fn push_target(
+    targets: &mut Vec<ReferenceTarget>,
+    storage: ReferenceTargetStorage,
+    ty: TypeId,
+) -> Result<(), RealizationError> {
+    let handle = u32::try_from(targets.len())
+        .map_err(|_| invariant("private reference target count exceeds u32::MAX"))?
+        .checked_add(1)
+        .ok_or_else(|| invariant("private reference target handle overflow"))?;
+    targets.push(ReferenceTarget {
+        handle,
+        storage,
+        ty,
+    });
     Ok(())
 }
 
@@ -119,6 +154,20 @@ impl FunctionEncoder<'_> {
         Ok(1)
     }
 
+    pub(super) fn emit_persistent_shared_root(
+        &self,
+        encoded: &mut WasmFunction,
+        persistent: PersistentId,
+    ) -> Result<usize, RealizationError> {
+        let target = self
+            .reference_target_for_persistent(persistent)
+            .ok_or_else(|| {
+                invariant("admitted persistent Shared root has no private target handle")
+            })?;
+        encoded.instruction(&Instruction::I64Const(i64::from(target.handle)));
+        Ok(1)
+    }
+
     pub(super) fn emit_reference_reborrow(
         &self,
         encoded: &mut WasmFunction,
@@ -134,12 +183,29 @@ impl FunctionEncoder<'_> {
             .iter()
             .filter(|target| target.ty == referent)
         {
-            let child_place = projected_place(&parent.place, &access.projections);
-            let child = self
-                .reference_target_for_place(&child_place)
-                .ok_or_else(|| {
-                    invariant("admitted reference reborrow has no projected private target handle")
-                })?;
+            let child = match &parent.storage {
+                ReferenceTargetStorage::Local(parent_place) => {
+                    let child_place = projected_place(parent_place, &access.projections);
+                    self.reference_target_for_place(&child_place).ok_or_else(|| {
+                        invariant(
+                            "admitted reference reborrow has no projected private target handle",
+                        )
+                    })?
+                }
+                ReferenceTargetStorage::Persistent(persistent) => {
+                    if !access.projections.is_empty() {
+                        return Err(invariant(
+                            "admitted persistent Shared reborrow has a structural projection",
+                        ));
+                    }
+                    self.reference_target_for_persistent(*persistent)
+                        .ok_or_else(|| {
+                            invariant(
+                                "admitted persistent Shared reborrow has no private target handle",
+                            )
+                        })?
+                }
+            };
             self.emit_handle_match_start(encoded, parent.handle)?;
             encoded.instruction(&Instruction::I64Const(i64::from(child.handle)));
             encoded.instruction(&Instruction::LocalSet(value_scratch));
@@ -170,21 +236,34 @@ impl FunctionEncoder<'_> {
             .iter()
             .filter(|target| target.ty == referent)
         {
-            let selected_place = projected_place(&parent.place, &access.projections);
-            let selected = self.place_layout(&selected_place)?;
-            if selected.len != carrier_count {
-                return Err(invariant(
-                    "private reference target carrier count disagrees with validated referent",
-                ));
-            }
             self.emit_handle_match_start(encoded, parent.handle)?;
-            for index in 0..carrier_count {
-                encoded.instruction(&Instruction::LocalGet(add_carriers(
-                    selected.start,
-                    index,
-                    "reference target carrier index overflow",
-                )?));
-                encoded.instruction(&Instruction::LocalSet(self.layout.scratch(index)?));
+            match &parent.storage {
+                ReferenceTargetStorage::Local(parent_place) => {
+                    let selected_place = projected_place(parent_place, &access.projections);
+                    let selected = self.place_layout(&selected_place)?;
+                    if selected.len != carrier_count {
+                        return Err(invariant(
+                            "private reference target carrier count disagrees with validated referent",
+                        ));
+                    }
+                    for index in 0..carrier_count {
+                        encoded.instruction(&Instruction::LocalGet(add_carriers(
+                            selected.start,
+                            index,
+                            "reference target carrier index overflow",
+                        )?));
+                        encoded.instruction(&Instruction::LocalSet(self.layout.scratch(index)?));
+                    }
+                }
+                ReferenceTargetStorage::Persistent(persistent) => {
+                    if !access.projections.is_empty() || carrier_count != 1 {
+                        return Err(invariant(
+                            "admitted persistent Shared access is not one complete scalar root",
+                        ));
+                    }
+                    encoded.instruction(&Instruction::GlobalGet(persistent.0));
+                    encoded.instruction(&Instruction::LocalSet(self.layout.scratch(0)?));
+                }
             }
             self.emit_handle_match_end(encoded);
         }
@@ -238,7 +317,10 @@ impl FunctionEncoder<'_> {
             .iter()
             .filter(|target| target.ty == referent)
         {
-            let selected_place = projected_place(&parent.place, &destination.projections);
+            let ReferenceTargetStorage::Local(parent_place) = &parent.storage else {
+                continue;
+            };
+            let selected_place = projected_place(parent_place, &destination.projections);
             let selected = self.place_layout(&selected_place)?;
             if selected.len != carrier_count {
                 return Err(invariant(
@@ -305,10 +387,22 @@ impl FunctionEncoder<'_> {
     }
 
     fn reference_target_for_place(&self, place: &Place) -> Option<&ReferenceTarget> {
-        self.layout
-            .reference_targets
-            .iter()
-            .find(|target| target.place == *place)
+        self.layout.reference_targets.iter().find(|target| {
+            matches!(&target.storage, ReferenceTargetStorage::Local(target_place) if target_place == place)
+        })
+    }
+
+    fn reference_target_for_persistent(
+        &self,
+        persistent: PersistentId,
+    ) -> Option<&ReferenceTarget> {
+        self.layout.reference_targets.iter().find(|target| {
+            matches!(
+                target.storage,
+                ReferenceTargetStorage::Persistent(target_persistent)
+                    if target_persistent == persistent
+            )
+        })
     }
 
     fn emit_handle_match_start(
