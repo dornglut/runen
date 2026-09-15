@@ -108,9 +108,6 @@ fn projected_exclusive_replace_move_and_reinitialize_executes_through_driver() {
 
     assert_eq!(
         outcome,
-        ExecutionOutcome::Returned(Some(Value::Struct(vec![
-            Value::I64(73),
-            Value::I64(5),
-        ])))
+        ExecutionOutcome::Returned(Some(Value::Struct(vec![Value::I64(73), Value::I64(5),])))
     );
 }
