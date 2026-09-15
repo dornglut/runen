@@ -21,7 +21,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -172,7 +174,9 @@ fn numeric_contracts_lower_one_to_one_without_redefaulting() {
         panic!("expected float-add HIR value");
     };
     *contract = HirNumericContract::Reproducible;
-    let reproducible = lower(&reproducible).expect("valid Reproducible HIR must lower");
+    let reproducible = lower(&reproducible)
+        .expect("valid Reproducible HIR must lower")
+        .into_program();
     assert_eq!(
         float_add_contract(float_add_statements(function(reproducible.as_program(), "f"))[0]),
         CoreNumericContract::Reproducible
@@ -307,12 +311,12 @@ fn lowering_rejects_non_floating_retained_float_add_result_fact() {
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::Bool);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Float-add result type is not a represented floating type"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -327,12 +331,12 @@ fn lowering_rejects_float_add_operand_type_facts_that_do_not_match_result() {
         panic!("expected float-add HIR value");
     };
     left.ty = Type::Intrinsic(IntrinsicType::F16);
-    assert_eq!(
+    assert!(matches!(
         lower(&left_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Float-add left operand type does not match result type"
         ))
-    );
+    ));
 
     let mut right_mismatch = hir("fn f(left: F32, right: F32) -> F32 { return left + right; }");
     let value = runen_body_mut(&mut right_mismatch.functions[0])
@@ -344,12 +348,12 @@ fn lowering_rejects_float_add_operand_type_facts_that_do_not_match_result() {
         panic!("expected float-add HIR value");
     };
     right.ty = Type::Intrinsic(IntrinsicType::F64);
-    assert_eq!(
+    assert!(matches!(
         lower(&right_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Float-add right operand type does not match result type"
         ))
-    );
+    ));
 }
 
 #[test]

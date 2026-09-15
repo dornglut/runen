@@ -18,7 +18,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -206,12 +208,12 @@ fn lowering_rejects_non_bool_integer_ordering_outer_type() {
     let mut compilation = hir("fn f(left: I32, right: I32) -> Bool { return left < right; }");
     returned_value_mut(&mut compilation, "f").ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-ordering result type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -223,12 +225,12 @@ fn lowering_rejects_unsupported_retained_integer_ordering_operand_type() {
     };
     *operand_type = Type::Intrinsic(IntrinsicType::F32);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-ordering operand type is not a fixed-width integer"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -246,10 +248,10 @@ fn lowering_rejects_ordering_operand_type_disagreement_without_repair() {
     assert_eq!(*operand_type, Type::Intrinsic(IntrinsicType::I32));
     right.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-ordering right operand type does not match retained operand type"
         ))
-    );
+    ));
 }

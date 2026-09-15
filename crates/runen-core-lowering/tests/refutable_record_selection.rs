@@ -21,7 +21,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower through canonical Core validation")
+    lower(&hir(source))
+        .expect("accepted HIR must lower through canonical Core validation")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a CoreFunction {
@@ -617,7 +619,6 @@ fn field_value_receiver_cleanup_precedes_the_distinct_pattern_transient() {
         receiver_drop < test,
         "field-value receiver cleanup must complete before the pattern test/transient relation"
     );
-
     let Terminator::Branch { false_target, .. } = block.terminator else {
         panic!("integer pattern test must branch");
     };
@@ -646,12 +647,12 @@ fn lowering_rejects_literal_value_that_disagrees_with_retained_test_type() {
     };
     tests[0].value = LiteralValue::Bool(true);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record test value does not match retained test type"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -665,12 +666,12 @@ fn lowering_rejects_test_path_type_disagreement_without_reconstructing_source_se
     };
     tests[0].ty = Type::Intrinsic(IntrinsicType::U8);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record test type does not match projected field type"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -684,12 +685,12 @@ fn lowering_rejects_strict_upper_bound_kind_with_bool_retained_type() {
     };
     tests[0].kind = RecordPatternTestKind::StrictUpperBound;
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record strict-upper-bound test type is not a fixed-width integer"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -702,12 +703,12 @@ fn lowering_rejects_strict_upper_bound_value_that_disagrees_with_retained_type()
     };
     tests[0].value = LiteralValue::Bool(true);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record test value does not match retained test type"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -725,12 +726,12 @@ fn lowering_rejects_direct_root_with_impossible_pattern_transient_mismatch_clean
         paths: vec![Vec::new()],
     });
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "direct-root refutable selection retains producer mismatch cleanup"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -1101,12 +1102,12 @@ fn lowering_rejects_equal_test_binding_overlap_without_explicit_composite_associ
     bindings[0].fields = vec![0];
     assert_eq!(bindings[0].composite_test, None);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record selection ordinary binding overlaps a retained test"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -1120,12 +1121,12 @@ fn lowering_rejects_out_of_range_composite_test_index() {
     };
     bindings[0].composite_test = Some(1);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record selection composite test index is out of range"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -1139,12 +1140,12 @@ fn lowering_rejects_composite_associated_path_mismatch() {
     };
     bindings[0].fields = vec![1];
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record selection composite binding path does not match associated test path"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -1158,12 +1159,12 @@ fn lowering_rejects_composite_associated_type_mismatch() {
     };
     bindings[0].ty = Type::Intrinsic(IntrinsicType::U8);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record selection composite binding type does not match associated test type"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -1177,12 +1178,12 @@ fn lowering_rejects_consume_ownership_on_composite_binding() {
     };
     bindings[0].ownership = runen_hir::OwnedUse::Consume;
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record selection composite binding is not a source duplication"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -1196,12 +1197,12 @@ fn lowering_rejects_duplicate_bindings_claiming_one_composite_test() {
     };
     bindings[1].composite_test = Some(0);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "refutable record selection retained test has multiple composite bindings"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -1215,10 +1216,10 @@ fn lowering_rejects_composite_association_on_irrefutable_destructuring() {
     };
     bindings[0].composite_test = Some(0);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "record destructuring binding retains a refutable composite association"
         ))
-    );
+    ));
 }

@@ -21,7 +21,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower through canonical Core validation")
+    lower(&hir(source))
+        .expect("accepted HIR must lower through canonical Core validation")
+        .into_program()
 }
 
 fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
@@ -255,7 +257,7 @@ fn producer_zero_leaf_cleanup_is_retained_in_hir_but_erases_to_no_core_drop() {
     assert_eq!(cleanup.paths, vec![vec![1]]);
 
     let lowered = lower(&compilation).expect("zero-leaf cleanup must lower");
-    let f = function(lowered.as_program(), "f");
+    let f = function(lowered.program().as_program(), "f");
     assert_eq!(f.body.blocks[1].statements.len(), 1);
     assert!(matches!(
         f.body.blocks[1].statements[0],
@@ -508,12 +510,12 @@ fn lowering_rejects_empty_resolved_field_path_as_invalid_hir() {
     assert_eq!(*ownership, OwnedUse::Duplicate);
     fields.clear();
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "field-value use has empty field path"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -530,12 +532,12 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
         panic!("expected field-value use");
     };
     *ownership = OwnedUse::Consume;
-    assert_eq!(
+    assert!(matches!(
         lower(&wrong_ownership),
         Err(LoweringError::InvalidHirInvariant(
             "field-value ownership does not match retained result duplicability"
         ))
-    );
+    ));
 
     let mut wrong_category = hir("record Box { value: I8 } \
          fn make() -> Box { return Box { value: 1 }; } \
@@ -555,12 +557,12 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
         panic!("expected producer receiver");
     };
     producer.kind = ValueKind::Literal(LiteralValue::I8(1));
-    assert_eq!(
+    assert!(matches!(
         lower(&wrong_category),
         Err(LoweringError::InvalidHirInvariant(
             "field-value producer receiver has unrepresented producer category"
         ))
-    );
+    ));
 
     let mut wrong_type = hir(
         "record Token { value: I8 } record Box { token: Token, tail: I8 } \
@@ -577,12 +579,12 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
     };
     wrong_type_value.ty = Type::Intrinsic(IntrinsicType::I8);
     *ownership = OwnedUse::Duplicate;
-    assert_eq!(
+    assert!(matches!(
         lower(&wrong_type),
         Err(LoweringError::InvalidHirInvariant(
             "field-value retained result type does not match projected receiver field type"
         ))
-    );
+    ));
 
     let mut overlap = hir(
         "record Token { value: I8 } record Box { token: Token, tail: I8 } \
@@ -601,12 +603,12 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
         panic!("expected producer receiver");
     };
     cleanup.paths = vec![vec![0]];
-    assert_eq!(
+    assert!(matches!(
         lower(&overlap),
         Err(LoweringError::InvalidHirInvariant(
             "consumed field receiver path overlaps retained cleanup frontier"
         ))
-    );
+    ));
 
     let mut incomplete_consume = hir(
         "record Token { value: I8 } record Box { token: Token, tail: I8 } \
@@ -625,12 +627,12 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
         panic!("expected producer receiver");
     };
     cleanup.paths.clear();
-    assert_eq!(
+    assert!(matches!(
         lower(&incomplete_consume),
         Err(LoweringError::InvalidHirInvariant(
             "consuming field receiver cleanup does not match canonical remaining frontier"
         ))
-    );
+    ));
 
     let mut incomplete_duplicate = hir("record Box { value: I8, tail: I8 } \
          fn make() -> Box { return Box { value: 1, tail: 2 }; } \
@@ -647,10 +649,10 @@ fn lowering_rejects_corrupted_producer_field_type_category_ownership_and_cleanup
         panic!("expected producer receiver");
     };
     cleanup.paths = vec![vec![1]];
-    assert_eq!(
+    assert!(matches!(
         lower(&incomplete_duplicate),
         Err(LoweringError::InvalidHirInvariant(
             "duplicating field receiver does not retain complete receiver cleanup"
         ))
-    );
+    ));
 }

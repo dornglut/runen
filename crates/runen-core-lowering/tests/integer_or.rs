@@ -20,7 +20,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
@@ -239,12 +241,12 @@ fn lowering_rejects_malformed_integer_or_retained_type_facts() {
         .and_then(|returned| returned.value.as_mut())
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::Bool);
-    assert_eq!(
+    assert!(matches!(
         lower(&non_integer),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-OR result type is not a fixed-width integer"
         ))
-    );
+    ));
 
     let mut left_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left | right; }");
     let value = runen_body_mut(&mut left_mismatch.functions[0])
@@ -256,12 +258,12 @@ fn lowering_rejects_malformed_integer_or_retained_type_facts() {
         panic!("expected integer-OR HIR value");
     };
     left.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&left_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-OR left operand type does not match result type"
         ))
-    );
+    ));
 
     let mut right_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left | right; }");
     let value = runen_body_mut(&mut right_mismatch.functions[0])
@@ -273,12 +275,12 @@ fn lowering_rejects_malformed_integer_or_retained_type_facts() {
         panic!("expected integer-OR HIR value");
     };
     right.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&right_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-OR right operand type does not match result type"
         ))
-    );
+    ));
 }
 
 #[test]

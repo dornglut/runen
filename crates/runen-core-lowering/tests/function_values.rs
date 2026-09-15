@@ -19,7 +19,9 @@ fn lower_source(source: &str) -> ValidatedProgram {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
         .expect("function-value source must produce accepted HIR");
-    lower(&hir).expect("accepted function-value HIR must lower to validated Core")
+    lower(&hir)
+        .expect("accepted function-value HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a Function {

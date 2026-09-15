@@ -21,7 +21,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted generic HIR must lower to validated concrete Core")
+    lower(&hir(source))
+        .expect("accepted generic HIR must lower to validated concrete Core")
+        .into_program()
 }
 
 fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {

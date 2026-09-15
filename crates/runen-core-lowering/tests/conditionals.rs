@@ -19,7 +19,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -211,12 +213,12 @@ fn non_bool_retained_conditional_is_rejected_as_hir_invariant() {
     };
     condition.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "conditional condition type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -382,12 +384,12 @@ fn lowering_rejects_normal_cleanup_on_no_normal_block() {
         fields: Vec::new(),
     });
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "no-normal HIR block retains normal cleanup"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -402,10 +404,10 @@ fn lowering_rejects_retained_continuation_that_disagrees_with_sequence() {
         .expect("function f");
     runen_body_mut(f).has_normal_continuation = true;
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "HIR retained continuation disagrees with its statement sequence"
         ))
-    );
+    ));
 }

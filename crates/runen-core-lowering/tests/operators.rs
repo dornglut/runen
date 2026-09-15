@@ -19,7 +19,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
@@ -218,12 +220,12 @@ fn lowering_rejects_non_bool_retained_outer_boolean_not_fact() {
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-not result type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -244,12 +246,12 @@ fn lowering_rejects_non_bool_retained_boolean_not_operand_fact() {
     };
     operand.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-not operand type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -529,12 +531,12 @@ fn lowering_rejects_non_bool_retained_outer_boolean_equality_fact() {
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-equality result type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -555,12 +557,12 @@ fn lowering_rejects_non_bool_retained_boolean_equality_left_fact() {
     };
     left.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-equality left operand type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -581,12 +583,12 @@ fn lowering_rejects_non_bool_retained_boolean_equality_right_fact() {
     };
     right.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-equality right operand type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]

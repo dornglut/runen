@@ -25,7 +25,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted safe-reference HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted safe-reference HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -884,12 +886,12 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         ReferenceReferent::Intrinsic(IntrinsicType::I64),
         HirReferencePermission::Shared,
     );
-    assert_eq!(
+    assert!(matches!(
         lower(&field_reference),
         Err(LoweringError::InvalidHirInvariant(
             "HIR record field contains a safe-reference type"
         ))
-    );
+    ));
 
     let mut consuming_shared = hir("fn f(r: &I64) { let s: &I64 = r; }");
     let HirStatement::Local { initializer, .. } =
@@ -901,12 +903,12 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         panic!("expected reference binding use");
     };
     *ownership = OwnedUse::Consume;
-    assert_eq!(
+    assert!(matches!(
         lower(&consuming_shared),
         Err(LoweringError::InvalidHirInvariant(
             "Shared-reference binding use is not a source duplication"
         ))
-    );
+    ));
 
     let mut duplicating_replacement = hir("fn f(r: &mut I64) { let moved: &mut I64 = r; }");
     let HirStatement::Local { initializer, .. } =
@@ -918,12 +920,12 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         panic!("expected replacement-reference binding use");
     };
     *ownership = OwnedUse::Duplicate;
-    assert_eq!(
+    assert!(matches!(
         lower(&duplicating_replacement),
         Err(LoweringError::InvalidHirInvariant(
             "replacement-reference binding use is not a source move"
         ))
-    );
+    ));
 
     let mut projected_type_mismatch = hir("record copy Pair { left: I64 }\
          fn f(r: &Pair) { let child: &I64 = &*r.left; }");
@@ -936,12 +938,12 @@ fn lowering_rejects_malformed_reference_hir_instead_of_widening_the_slice() {
         ReferenceReferent::Intrinsic(IntrinsicType::I32),
         HirReferencePermission::Shared,
     );
-    assert_eq!(
+    assert!(matches!(
         lower(&projected_type_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "reference-reborrow projected parent referent does not match child referent"
         ))
-    );
+    ));
 }
 
 #[test]

@@ -23,7 +23,9 @@ fn lower_source(source: &str) -> ValidatedProgram {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
         .expect("external-callable source must produce accepted HIR");
-    lower(&hir).expect("accepted external-callable HIR must lower to validated Core")
+    lower(&hir)
+        .expect("accepted external-callable HIR must lower to validated Core")
+        .into_program()
 }
 
 fn external_calls(program: &runen_core_ir::Program) -> Vec<ExternalCallableId> {
@@ -257,7 +259,7 @@ fn qualified_exported_external_call_lowers_to_same_structural_external_category(
     ])
     .expect("qualified exported external call is accepted HIR");
     let lowered = lower(&hir).expect("qualified external call lowers to Core");
-    let program = lowered.as_program();
+    let program = lowered.program().as_program();
     assert_eq!(program.external_callables.len(), 1);
     assert_eq!(program.functions.len(), 1);
     assert_eq!(program.functions[0].name, "caller");

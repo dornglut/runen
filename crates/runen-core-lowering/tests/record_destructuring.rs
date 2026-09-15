@@ -21,7 +21,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower through canonical Core validation")
+    lower(&hir(source))
+        .expect("accepted HIR must lower through canonical Core validation")
+        .into_program()
 }
 
 fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
@@ -383,12 +385,12 @@ fn lowering_rejects_invalid_recursive_pattern_path() {
     };
     bindings[0].fields = vec![0, 99];
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "HIR structural path does not match lowered Core type shape"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -404,12 +406,12 @@ fn lowering_rejects_overlapping_retained_binding_paths() {
     };
     bindings[1].fields = vec![0];
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "record destructuring binding paths are not structurally disjoint"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -424,12 +426,12 @@ fn lowering_rejects_pattern_record_root_identity_mismatch() {
     };
     *record = other;
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "record destructuring root type does not match its record identity"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -444,12 +446,12 @@ fn lowering_rejects_producer_record_identity_mismatch() {
     };
     *record = other;
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "producer-backed record destructuring value type does not match its record identity"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -463,12 +465,12 @@ fn lowering_rejects_retained_pattern_binding_type_mismatch() {
     };
     bindings[0].ty = Type::Intrinsic(runen_hir::IntrinsicType::U8);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "record destructuring retained binding type does not match projected field type"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -484,7 +486,7 @@ fn lowering_uses_retained_pattern_ownership_without_rederiving_source_duplicabil
 
     let lowered = lower(&compilation)
         .expect("lowering must refine retained ownership without source re-analysis");
-    let f = function(lowered.as_program(), "f");
+    let f = function(lowered.program().as_program(), "f");
     assert_eq!(
         f.body.blocks[0].statements[0],
         CoreStatement::Init {
@@ -517,7 +519,7 @@ fn lowering_uses_retained_recursive_transient_cleanup_without_rederiving_frontie
 
     let lowered = lower(&compilation)
         .expect("lowering must consume retained cleanup without source re-analysis");
-    let f = function(lowered.as_program(), "f");
+    let f = function(lowered.program().as_program(), "f");
     let paths = drops(f)
         .iter()
         .map(|place| match place {
@@ -553,10 +555,10 @@ fn lowering_rejects_overlapping_retained_transient_cleanup_paths() {
     };
     cleanup.paths = vec![vec![0], vec![0, 1]];
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "record pattern transient cleanup paths are not structurally disjoint"
         ))
-    );
+    ));
 }
