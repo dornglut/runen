@@ -126,7 +126,6 @@ impl FunctionEncoder<'_> {
     ) -> Result<usize, RealizationError> {
         let (_, referent, _) = self.reference_access_shape(access)?;
         self.emit_reference_handle_to_scratch(encoded, access)?;
-        let handle_scratch = self.layout.reference_handle_scratch()?;
         let value_scratch = self.layout.scratch(0)?;
 
         for parent in self
