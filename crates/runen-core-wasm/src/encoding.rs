@@ -396,16 +396,16 @@ impl FunctionLayout {
         };
         let raw_pointer_targets =
             raw_pointer_encoding::collect_raw_pointer_targets(types, function)?;
-        let (raw_pointer_handle_scratch, raw_assign_target_scratch) = if raw_pointer_targets.is_empty()
-        {
-            (None, None)
-        } else {
-            let dispatch = next;
-            next = add_carriers(next, 1, "Wasm raw-pointer handle scratch index overflow")?;
-            let assign = next;
-            next = add_carriers(next, 1, "Wasm RawAssign target scratch index overflow")?;
-            (Some(dispatch), Some(assign))
-        };
+        let (raw_pointer_handle_scratch, raw_assign_target_scratch) =
+            if raw_pointer_targets.is_empty() {
+                (None, None)
+            } else {
+                let dispatch = next;
+                next = add_carriers(next, 1, "Wasm raw-pointer handle scratch index overflow")?;
+                let assign = next;
+                next = add_carriers(next, 1, "Wasm RawAssign target scratch index overflow")?;
+                (Some(dispatch), Some(assign))
+            };
         let total_i64_slots = next as usize;
         let non_parameter_i64_count = total_i64_slots
             .checked_sub(parameter_carrier_count)

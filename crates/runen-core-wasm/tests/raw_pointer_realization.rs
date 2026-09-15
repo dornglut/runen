@@ -1,7 +1,7 @@
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
-    Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId,
-    TypeTable, ValidatedProgram, Value, validate_program,
+    BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId, Operand,
+    Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
+    TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
@@ -53,9 +53,7 @@ fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> Executio
         TerminalStatus::Returned => {
             ExecutionOutcome::Returned(report.result.map(observed_to_value))
         }
-        TerminalStatus::Faulted(code) => {
-            ExecutionOutcome::Faulted(runen_core_ir::Fault::new(code))
-        }
+        TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(runen_core_ir::Fault::new(code)),
     }
 }
 
@@ -179,7 +177,7 @@ fn raw_pointer_copy_and_retarget_select_exact_runtime_roots() {
             locals: vec![
                 LocalDecl::new("left", i64_ty, false),
                 LocalDecl::new("right", i64_ty, false),
-                LocalDecl::new("pointer", raw_i64, false),
+                LocalDecl::new("pointer", raw_i64, true),
                 LocalDecl::new("copy", raw_i64, false),
                 LocalDecl::new("left_value", i64_ty, false),
                 LocalDecl::new("right_value", i64_ty, false),

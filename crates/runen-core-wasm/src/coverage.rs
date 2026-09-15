@@ -256,7 +256,8 @@ fn require_supported_local_storage_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_local_reference_type(types, ty) || is_supported_local_raw_pointer_type(types, ty)
+    if is_supported_local_reference_type(types, ty)
+        || is_supported_local_raw_pointer_type(types, ty)
     {
         return Ok(());
     }
@@ -791,7 +792,9 @@ fn validate_raw_address_of(
     location: &CoverageLocation,
 ) -> Result<(), CoverageError> {
     match access {
-        PlaceAccess::Direct(place) if place.projections.is_empty() => validate_place(place, location),
+        PlaceAccess::Direct(place) if place.projections.is_empty() => {
+            validate_place(place, location)
+        }
         PlaceAccess::Direct(_) | PlaceAccess::Loan { .. } => {
             unsupported_operand(location, UnsupportedOperandKind::AddressOf)
         }
