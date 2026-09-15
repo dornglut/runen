@@ -168,18 +168,18 @@ fn passive_higher_order_callable_local_is_admitted_recursively() {
 }
 
 #[test]
-fn nested_aggregate_reports_the_exact_unsupported_floating_leaf() {
+fn nested_aggregate_with_floating_leaf_is_admitted() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let inner_ty = types.push(TypeDef::structure(
         "Inner",
-        vec![Field::new("unsupported", f32_ty)],
+        vec![Field::new("floating", f32_ty)],
     ));
     let outer_ty = types.push(TypeDef::structure(
         "Outer",
         vec![
-            Field::new("supported", i64_ty),
+            Field::new("integer", i64_ty),
             Field::new("nested", inner_ty),
         ],
     ));
@@ -193,19 +193,7 @@ fn nested_aggregate_reports_the_exact_unsupported_floating_leaf() {
             empty_body(vec![LocalDecl::new("value", outer_ty, false)]),
         )],
     );
-    assert_eq!(
-        coverage_error(&program),
-        CoverageError {
-            location: CoverageLocation::Local {
-                function: FunctionId(0),
-                local: LocalId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: f32_ty,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        }
-    );
+    RealizedProgram::new(&program).expect("nested floating aggregate local must realize");
 }
 
 #[test]
