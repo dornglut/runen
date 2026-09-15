@@ -754,9 +754,9 @@ fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<()
     match operand {
         Operand::Constant(value) => validate_constant(value, location),
         Operand::Move(access) | Operand::Copy(access) => validate_access(access, location),
-        Operand::PersistentRead(_) | Operand::PersistentSharedRoot(_) | Operand::FunctionValue(_) => {
-            Ok(())
-        }
+        Operand::PersistentRead(_)
+        | Operand::PersistentSharedRoot(_)
+        | Operand::FunctionValue(_) => Ok(()),
         Operand::RawMove(_) => unsupported_operand(location, UnsupportedOperandKind::RawMove),
         Operand::AddressOf(_) => unsupported_operand(location, UnsupportedOperandKind::AddressOf),
         Operand::ReferenceRoot { place, .. } => validate_place(place, location),
