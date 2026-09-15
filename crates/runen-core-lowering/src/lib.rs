@@ -104,7 +104,7 @@ impl<'a> Lowerer<'a> {
             let function_index = specializations
                 .len()
                 .checked_add(index)
-                .ok_or(LoweringError::RepresentationLimit("Core function identity"))?;
+                .ok_or(LoweringError::RepresentationLimit("Core function identity")?);
             let id = core::FunctionId(index_u32(function_index, "Core function identity")?);
             if closure_functions.insert(closure.id, id).is_some() {
                 return Err(LoweringError::InvalidHirInvariant(
@@ -140,7 +140,10 @@ impl<'a> Lowerer<'a> {
                     "ordinary HIR function is absent from root specialization map",
                 ),
             )?;
-            if ordinary_functions.insert(function.id, core_function).is_some() {
+            if ordinary_functions
+                .insert(function.id, core_function)
+                .is_some()
+            {
                 return Err(LoweringError::InvalidHirInvariant(
                     "duplicate ordinary HIR function correspondence",
                 ));
@@ -155,7 +158,7 @@ impl<'a> Lowerer<'a> {
             .specializations
             .len()
             .checked_add(self.compilation.closures.len())
-            .ok_or(LoweringError::RepresentationLimit("Core function identity"))?;
+            .ok_or(LoweringError::RepresentationLimit("Core function identity")?);
         let mut functions = Vec::with_capacity(capacity);
         let context = FunctionLoweringContext {
             compilation: self.compilation,
