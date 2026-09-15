@@ -6,12 +6,12 @@ license.workspace = true
 publish = false
 
 [dependencies]
+runen-core-ir = { path = "../runen-core-ir" }
 runen-core-lowering = { path = "../runen-core-lowering" }
 runen-core-wasm = { path = "../runen-core-wasm" }
 runen-hir = { path = "../runen-hir" }
 
 [dev-dependencies]
-runen-core-ir = { path = "../runen-core-ir" }
 runen-syntax = { path = "../runen-syntax" }
 
 [lints]
