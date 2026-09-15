@@ -46,13 +46,15 @@ Owns the first production physical realization for an explicitly admitted bounde
 
 The package owns no normative language semantics. Its WebAssembly modules, scalar carrier, status/payload protocol, exported function names, fault indexing, control-flow legalization, and Wasmtime configuration are implementation details rather than Runen ABI, layout, entry-point, target-IR, or source-language contracts.
 
+For the admitted activation-local safe-reference subset, canonical Core validation remains the sole owner of semantic reference target, permission, authority ancestry/delegation, carrier validity, aliasing, and lifetime rules. Core-Wasm may erase unobservable authority identity after validation and realize each top-level non-parameter local reference carrier as one private function-local target handle with generated dispatch into the existing flattened local-storage representation. Those handles are backend-private data, not Core identities, numeric addresses, physical pointers, stable storage locations, layout/ABI tokens, or cross-activation reference identities; safe-reference parameters/results, persistent reference roots, reference-containing aggregates, explicit loans, raw pointers, and other non-admitted reference forms remain coverage rejections.
+
 Its production Runen dependency is only `runen-core-ir`. It may use `runen-reference` only as a test/dev dependency for differential conformance. It MUST NOT use the reference machine as a production fallback, depend on source/HIR/lowering or Exec/Model oracle packages, expose Wasm identities as Runen identities, or become a universal target representation for future Exec, Model, GPU, or other realization domains.
 
 Unsupported valid Core remains a realization-coverage rejection rather than a language-validation failure. Backend compilation, instantiation, execution, trap, or physical-resource failures remain realization failures and MUST NOT be reclassified as Runen defined faults or undefined behavior.
 
 ### `crates/runen-core-wasm-driver`
 
-Owns the bounded target-specific production composition from an already-built `runen-hir::TypedCompilation`, through the accepted `runen-core-lowering` refinement artifact and its ordinary-function and external-declaration correspondences, into `runen-core-wasm` realization with HIR-keyed external-provider association and explicit caller-selected execution.
+Owns the bounded target-specific production composition from an already-built `runen_hir::TypedCompilation`, through the accepted `runen-core-lowering` refinement artifact and its ordinary-function and external-declaration correspondences, into `runen-core-wasm` realization with HIR-keyed external-provider association and explicit caller-selected execution.
 
 The package owns no normative language semantics, source executable-entry rule, package/filesystem discovery, backend selection, external-provider naming/discovery policy, public generic-specialization identity, public closure identity, stable ABI/layout/symbol identity, or Wasm identity. Its caller-visible function selection and external-provider association use the existing opaque per-compilation HIR `FunctionId`; the driver does not infer either from names, accessibility, source order, Core order, symbols, or a `main` convention.
 
