@@ -15,7 +15,9 @@ fn lower_source(source: &str) -> ValidatedProgram {
     let parsed = parse(source);
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
         .expect("test source must produce accepted HIR");
-    lower(&hir).expect("accepted HIR must lower to valid Core")
+    lower(&hir)
+        .expect("accepted HIR must lower to valid Core")
+        .into_program()
 }
 
 fn lower_units(module: ModuleId, sources: &[&str]) -> ValidatedProgram {
@@ -28,7 +30,9 @@ fn lower_units(module: ModuleId, sources: &[&str]) -> ValidatedProgram {
         .map(|parse| SourceUnit::new(module, parse, &[]))
         .collect::<Vec<_>>();
     let hir = build_typed_hir(&units).expect("test units must produce accepted HIR");
-    lower(&hir).expect("accepted HIR must lower to valid Core")
+    lower(&hir)
+        .expect("accepted HIR must lower to valid Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a Program, name: &str) -> &'a CoreFunction {
