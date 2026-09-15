@@ -431,7 +431,7 @@ fn valid_core_reaches_every_still_excluded_statement_family() {
 }
 
 #[test]
-fn representative_remaining_excluded_operand_families_have_stable_categories() {
+fn persistent_shared_root_is_admitted_and_other_excluded_operands_keep_their_categories() {
     let mut tracked_types = TypeTable::new();
     let tracked_ty = tracked_types.push(TypeDef::scalar("Tracked", ScalarType::TrackedFixture));
     let tracked_program = validated(
@@ -488,10 +488,8 @@ fn representative_remaining_excluded_operand_families_have_stable_categories() {
             },
         )],
     );
-    assert_eq!(
-        coverage_error(&persistent_program).kind,
-        CoverageErrorKind::UnsupportedOperand(UnsupportedOperandKind::PersistentSharedRoot)
-    );
+    RealizedProgram::new(&persistent_program)
+        .expect("persistent Shared root must be admitted by Core-Wasm coverage");
 
     let mut raw_types = TypeTable::new();
     let pointee = raw_types.push(TypeDef::scalar("I64", ScalarType::I64));
