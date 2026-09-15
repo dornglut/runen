@@ -256,7 +256,8 @@ fn require_supported_local_storage_type(
     ty: TypeId,
     location: CoverageLocation,
 ) -> Result<(), CoverageError> {
-    if is_supported_local_reference_type(types, ty) {
+    if is_supported_local_reference_type(types, ty) || is_supported_local_raw_pointer_type(types, ty)
+    {
         return Ok(());
     }
     require_supported_non_reference_storage_type(types, ty, location)
@@ -476,6 +477,23 @@ fn is_supported_reference_referent_type(types: &TypeTable, ty: TypeId) -> bool {
     is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty)
 }
 
+fn is_supported_local_raw_pointer_type(types: &TypeTable, ty: TypeId) -> bool {
+    let Some(definition) = types.get(ty) else {
+        return false;
+    };
+    if definition.interior_mutable {
+        return false;
+    }
+    let TypeKind::Scalar(ScalarType::RawPointer(pointee)) = definition.kind else {
+        return false;
+    };
+    is_supported_raw_pointer_pointee_type(types, pointee)
+}
+
+pub(crate) fn is_supported_raw_pointer_pointee_type(types: &TypeTable, ty: TypeId) -> bool {
+    is_supported_direct_scalar_type(types, ty) || is_supported_aggregate_type(types, ty)
+}
+
 fn is_supported_aggregate_leaf_type(types: &TypeTable, ty: TypeId) -> bool {
     let Some(definition) = types.get(ty) else {
         return false;
@@ -685,10 +703,11 @@ fn validate_statement(
                 UnsupportedStatementKind::InteriorMutation,
             ),
         }),
-        Statement::RawRead { .. } | Statement::RawAssign { .. } => Err(CoverageError {
-            location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::RawPointer),
-        }),
+        Statement::RawRead { pointer } => validate_access(pointer, location),
+        Statement::RawAssign { pointer, src } => {
+            validate_access(pointer, location)?;
+            validate_operand(src, location)
+        }
         Statement::InteriorAssign { .. } => Err(CoverageError {
             location: location.clone(),
             kind: CoverageErrorKind::UnsupportedStatement(
@@ -753,16 +772,29 @@ fn validate_terminator(
 fn validate_operand(operand: &Operand, location: &CoverageLocation) -> Result<(), CoverageError> {
     match operand {
         Operand::Constant(value) => validate_constant(value, location),
-        Operand::Move(access) | Operand::Copy(access) => validate_access(access, location),
+        Operand::Move(access) | Operand::Copy(access) | Operand::RawMove(access) => {
+            validate_access(access, location)
+        }
         Operand::PersistentRead(_)
         | Operand::PersistentSharedRoot(_)
         | Operand::FunctionValue(_) => Ok(()),
-        Operand::RawMove(_) => unsupported_operand(location, UnsupportedOperandKind::RawMove),
-        Operand::AddressOf(_) => unsupported_operand(location, UnsupportedOperandKind::AddressOf),
+        Operand::AddressOf(access) => validate_raw_address_of(access, location),
         Operand::ReferenceRoot { place, .. } => validate_place(place, location),
         Operand::ReferenceReborrow { src, .. }
         | Operand::ReferenceMove(src)
         | Operand::ReferenceCopy(src) => validate_reference_access(src, location),
+    }
+}
+
+fn validate_raw_address_of(
+    access: &PlaceAccess,
+    location: &CoverageLocation,
+) -> Result<(), CoverageError> {
+    match access {
+        PlaceAccess::Direct(place) if place.projections.is_empty() => validate_place(place, location),
+        PlaceAccess::Direct(_) | PlaceAccess::Loan { .. } => {
+            unsupported_operand(location, UnsupportedOperandKind::AddressOf)
+        }
     }
 }
 
