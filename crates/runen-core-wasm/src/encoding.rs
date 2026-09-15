@@ -147,6 +147,7 @@ pub(crate) fn encode(program: &ValidatedProgram) -> Result<EncodedProgram, Reali
     for function in &program.functions {
         let encoded = encode_function(
             &program.types,
+            &program.persistent,
             function,
             &callable_type_indices,
             external_count,
@@ -261,12 +262,13 @@ fn callable_carrier_counts(
 
 fn encode_function(
     types: &TypeTable,
+    persistent: &[runen_core_ir::PersistentDecl],
     function: &Function,
     callable_type_indices: &BTreeMap<TypeId, u32>,
     defined_function_offset: u32,
     faults: &mut Vec<Fault>,
 ) -> Result<WasmFunction, RealizationError> {
-    let layout = FunctionLayout::new(types, function)?;
+    let layout = FunctionLayout::new(types, persistent, function)?;
     let i64_local_count = u32::try_from(layout.non_parameter_i64_count)
         .map_err(|_| invariant("Wasm i64 local count exceeds u32::MAX"))?;
     let mut encoded = WasmFunction::new([
@@ -338,7 +340,11 @@ struct FunctionLayout {
 }
 
 impl FunctionLayout {
-    fn new(types: &TypeTable, function: &Function) -> Result<Self, RealizationError> {
+    fn new(
+        types: &TypeTable,
+        persistent: &[runen_core_ir::PersistentDecl],
+        function: &Function,
+    ) -> Result<Self, RealizationError> {
         let mut locals = vec![None; function.body.locals.len()];
         let mut next = 0_u32;
 
@@ -374,7 +380,8 @@ impl FunctionLayout {
         let scratch_len = maximum_local_len.max(1);
         let scratch_start = next;
         next = add_carriers(next, scratch_len, "Wasm scratch local index overflow")?;
-        let reference_targets = reference_encoding::collect_reference_targets(types, function)?;
+        let reference_targets =
+            reference_encoding::collect_reference_targets(types, function, persistent)?;
         let reference_handle_scratch = if reference_targets.is_empty() {
             None
         } else {
@@ -936,9 +943,12 @@ impl FunctionEncoder<'_> {
             Operand::ReferenceMove(src) | Operand::ReferenceCopy(src) => {
                 self.emit_reference_value(encoded, src)
             }
-            Operand::PersistentSharedRoot(_) | Operand::RawMove(_) | Operand::AddressOf(_) => Err(
-                invariant("coverage admission allowed an unsupported Core operand"),
-            ),
+            Operand::PersistentSharedRoot(persistent) => {
+                self.emit_persistent_shared_root(encoded, *persistent)
+            }
+            Operand::RawMove(_) | Operand::AddressOf(_) => Err(invariant(
+                "coverage admission allowed an unsupported Core operand",
+            )),
         }
     }
 
