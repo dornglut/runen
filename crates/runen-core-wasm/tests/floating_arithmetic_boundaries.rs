@@ -352,9 +352,7 @@ fn f16_underflow_normal_transition_and_overflow_boundaries_are_directly_exercise
             max_finite,
             sixteen,
         ),
-        FloatingScalarValue::Represented(BinaryFloatValue::Infinity(
-            BinaryFloatSign::Positive,
-        )),
+        FloatingScalarValue::Represented(BinaryFloatValue::Infinity(BinaryFloatSign::Positive,)),
         "exact 65520 overflow midpoint rounds to infinity"
     );
     assert_eq!(
