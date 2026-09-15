@@ -14,7 +14,9 @@ fn lower_source(source: &str) -> ValidatedProgram {
     let parsed = parse(source);
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
         .expect("test source must produce accepted HIR");
-    lower(&hir).expect("accepted assignment HIR must lower to valid Core")
+    lower(&hir)
+        .expect("accepted assignment HIR must lower to valid Core")
+        .into_program()
 }
 
 fn direct(place: Place) -> PlaceAccess {
