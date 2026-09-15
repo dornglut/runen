@@ -1,4 +1,6 @@
-use runen_core_ir::{BinaryFloatSign, BinaryFloatValue, ExternalCallableId, FunctionId, ValidatedProgram};
+use runen_core_ir::{
+    BinaryFloatSign, BinaryFloatValue, ExternalCallableId, FunctionId, ValidatedProgram,
+};
 use runen_core_lowering::lower;
 use runen_core_wasm::{
     ExecutionOutcome, ExternalProviderBinding as WasmExternalProviderBinding,
