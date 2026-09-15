@@ -104,3 +104,79 @@ fn each_source_arithmetic_family_lowers_once_and_executes_through_both_engines()
         assert_eq!(report.result, Some(ObservedValue::Bool(true)));
     }
 }
+
+#[test]
+fn each_f16_source_arithmetic_family_lowers_once_and_executes_through_both_engines() {
+    let one = normal(1_u64 << 10, 0);
+    let two = normal(1_u64 << 10, 1);
+    let three = normal(3_u64 << 9, 1);
+    let four = normal(1_u64 << 10, 2);
+    let cases = [
+        (
+            "external fn classify(F16) -> Bool; fn caller() -> Bool { return classify(1.0 + 2.0); }",
+            three,
+        ),
+        (
+            "external fn classify(F16) -> Bool; fn caller() -> Bool { return classify(2.0 - 1.0); }",
+            one,
+        ),
+        (
+            "external fn classify(F16) -> Bool; fn caller() -> Bool { return classify(2.0 * 2.0); }",
+            four,
+        ),
+        (
+            "external fn classify(F16) -> Bool; fn caller() -> Bool { return classify(@fast(4.0 / 2.0)); }",
+            two,
+        ),
+    ];
+
+    for (source, expected) in cases {
+        let lowered = lower_source(source);
+        let interface = lowered.as_program().external_callables[0].interface.clone();
+
+        let realized = RealizedProgram::new_with_external_providers(
+            &lowered,
+            vec![WasmExternalProviderBinding::scalar_result(
+                ExternalCallableId(0),
+                interface.clone(),
+                move |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[WasmExternalScalarValue::F16(
+                            FloatingScalarValue::Represented(expected)
+                        )]
+                    );
+                    WasmExternalScalarValue::Bool(true)
+                },
+            )],
+        )
+        .expect("the once-lowered F16 source program must realize through Core Wasm");
+        assert_eq!(
+            realized.execute(FunctionId(0)).unwrap(),
+            ExecutionOutcome::Returned(Some(runen_core_ir::Value::Bool(true)))
+        );
+
+        let report = Machine::new_with_external_providers(
+            lowered,
+            FunctionId(0),
+            vec![ExternalProviderBinding::scalar_result(
+                ExternalCallableId(0),
+                interface,
+                move |arguments| {
+                    assert_eq!(
+                        arguments,
+                        &[ExternalScalarValue::F16(
+                            ObservedBinaryFloatValue::Represented(expected)
+                        )]
+                    );
+                    ExternalScalarValue::Bool(true)
+                },
+            )],
+        )
+        .expect("the same once-lowered F16 source program must admit in the reference machine")
+        .execute()
+        .expect("the same once-lowered F16 source program must execute in the reference machine");
+        assert_eq!(report.terminal, TerminalStatus::Returned);
+        assert_eq!(report.result, Some(ObservedValue::Bool(true)));
+    }
+}
