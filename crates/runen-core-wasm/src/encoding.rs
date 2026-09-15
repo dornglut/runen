@@ -19,6 +19,8 @@ use crate::scalar::{FloatingScalarValue, ScalarKind, constant_residue, mask};
 
 #[path = "f16_encoding.rs"]
 mod f16_encoding;
+#[path = "raw_pointer_encoding.rs"]
+mod raw_pointer_encoding;
 #[path = "reference_encoding.rs"]
 mod reference_encoding;
 
@@ -333,6 +335,9 @@ struct FunctionLayout {
     scratch_len: usize,
     reference_targets: Vec<reference_encoding::ReferenceTarget>,
     reference_handle_scratch: Option<u32>,
+    raw_pointer_targets: Vec<raw_pointer_encoding::RawPointerTarget>,
+    raw_pointer_handle_scratch: Option<u32>,
+    raw_assign_target_scratch: Option<u32>,
     f32_scratch: u32,
     f64_scratch: u32,
     pc: u32,
@@ -389,6 +394,18 @@ impl FunctionLayout {
             next = add_carriers(next, 1, "Wasm reference handle scratch index overflow")?;
             Some(scratch)
         };
+        let raw_pointer_targets =
+            raw_pointer_encoding::collect_raw_pointer_targets(types, function)?;
+        let (raw_pointer_handle_scratch, raw_assign_target_scratch) = if raw_pointer_targets.is_empty()
+        {
+            (None, None)
+        } else {
+            let dispatch = next;
+            next = add_carriers(next, 1, "Wasm raw-pointer handle scratch index overflow")?;
+            let assign = next;
+            next = add_carriers(next, 1, "Wasm RawAssign target scratch index overflow")?;
+            (Some(dispatch), Some(assign))
+        };
         let total_i64_slots = next as usize;
         let non_parameter_i64_count = total_i64_slots
             .checked_sub(parameter_carrier_count)
@@ -414,6 +431,9 @@ impl FunctionLayout {
             scratch_len,
             reference_targets,
             reference_handle_scratch,
+            raw_pointer_targets,
+            raw_pointer_handle_scratch,
+            raw_assign_target_scratch,
             f32_scratch,
             f64_scratch,
             pc,
@@ -442,6 +462,16 @@ impl FunctionLayout {
     fn reference_handle_scratch(&self) -> Result<u32, RealizationError> {
         self.reference_handle_scratch
             .ok_or_else(|| invariant("reference encoding has no private handle scratch"))
+    }
+
+    fn raw_pointer_handle_scratch(&self) -> Result<u32, RealizationError> {
+        self.raw_pointer_handle_scratch
+            .ok_or_else(|| invariant("raw-pointer encoding has no private handle scratch"))
+    }
+
+    fn raw_assign_target_scratch(&self) -> Result<u32, RealizationError> {
+        self.raw_assign_target_scratch
+            .ok_or_else(|| invariant("RawAssign encoding has no private target scratch"))
     }
 }
 
@@ -576,10 +606,10 @@ impl FunctionEncoder<'_> {
                 self.emit_reference_assign(encoded, dst, src)
             }
             Statement::ReferenceDrop { place } => self.emit_reference_read_or_drop(encoded, place),
+            Statement::RawRead { pointer } => self.emit_raw_read(encoded, pointer),
+            Statement::RawAssign { pointer, src } => self.emit_raw_assign(encoded, pointer, src),
             Statement::Borrow { .. }
             | Statement::EndBorrow { .. }
-            | Statement::RawRead { .. }
-            | Statement::RawAssign { .. }
             | Statement::InteriorAssign { .. }
             | Statement::ReferenceInteriorAssign { .. } => Err(invariant(
                 "coverage admission allowed an unsupported Core statement",
@@ -946,9 +976,8 @@ impl FunctionEncoder<'_> {
             Operand::PersistentSharedRoot(persistent) => {
                 self.emit_persistent_shared_root(encoded, *persistent)
             }
-            Operand::RawMove(_) | Operand::AddressOf(_) => Err(invariant(
-                "coverage admission allowed an unsupported Core operand",
-            )),
+            Operand::RawMove(pointer) => self.emit_raw_move(encoded, pointer),
+            Operand::AddressOf(access) => self.emit_raw_address_of(encoded, access),
         }
     }
 
