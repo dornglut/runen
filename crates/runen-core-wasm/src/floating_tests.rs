@@ -356,12 +356,8 @@ fn arithmetic_nan_uses_the_existing_private_carrier_before_provider_decode() {
             Ok(())
         },
     );
-    let instance = wasmtime::Instance::new(
-        &mut store,
-        &module,
-        &[wasmtime::Extern::Func(import)],
-    )
-    .expect("raw arithmetic NaN fixture must instantiate");
+    let instance = wasmtime::Instance::new(&mut store, &module, &[wasmtime::Extern::Func(import)])
+        .expect("raw arithmetic NaN fixture must instantiate");
     let entry = instance
         .get_func(&mut store, &encoding::entry_export_name(FunctionId(0)))
         .expect("raw arithmetic NaN entry export must exist");
