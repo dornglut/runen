@@ -140,7 +140,10 @@ impl<'a> Lowerer<'a> {
                     "ordinary HIR function is absent from root specialization map",
                 ),
             )?;
-            if ordinary_functions.insert(function.id, core_function).is_some() {
+            if ordinary_functions
+                .insert(function.id, core_function)
+                .is_some()
+            {
                 return Err(LoweringError::InvalidHirInvariant(
                     "duplicate ordinary HIR function correspondence",
                 ));
