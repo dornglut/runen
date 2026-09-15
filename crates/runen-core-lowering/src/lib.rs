@@ -16,15 +16,17 @@ pub enum LoweringError {
     CoreValidation(core::MirValidationError),
 }
 
-/// One validated Core refinement together with the ordinary source-function
-/// correspondence preserved by that refinement.
+/// One validated Core refinement together with the source-identity
+/// correspondences preserved by that refinement.
 ///
-/// The correspondence covers only non-external, non-generic Runen functions. It
-/// is compiler refinement evidence, not executable-entry selection, generic
-/// specialization identity, closure identity, or external-provider identity.
+/// Ordinary correspondence covers non-external, non-generic Runen functions;
+/// external correspondence covers represented external declarations. Both are
+/// compiler refinement evidence, not executable-entry selection, provider lookup
+/// policy, generic specialization identity, closure identity, or ABI/symbol identity.
 pub struct LoweredCompilation {
     program: core::ValidatedProgram,
     ordinary_functions: BTreeMap<hir::FunctionId, core::FunctionId>,
+    external_functions: BTreeMap<hir::FunctionId, core::ExternalCallableId>,
 }
 
 impl LoweredCompilation {
@@ -41,6 +43,16 @@ impl LoweredCompilation {
         self.ordinary_functions.get(&function).copied()
     }
 
+    /// Resolve one external HIR declaration into the exact Core external callable
+    /// identity created by this refinement.
+    #[must_use]
+    pub fn core_external_callable(
+        &self,
+        function: hir::FunctionId,
+    ) -> Option<core::ExternalCallableId> {
+        self.external_functions.get(&function).copied()
+    }
+
     /// Consume the refinement artifact and retain only its validated Core program.
     #[must_use]
     pub fn into_program(self) -> core::ValidatedProgram {
@@ -49,7 +61,8 @@ impl LoweredCompilation {
 }
 
 /// Lower one accepted typed HIR compilation into validated Core together with
-/// the exact ordinary non-generic function correspondence retained by lowering.
+/// the exact ordinary-function and external-declaration correspondences retained
+/// by lowering.
 pub fn lower(compilation: &hir::TypedCompilation) -> Result<LoweredCompilation, LoweringError> {
     Lowerer::new(compilation)?.lower()
 }
@@ -154,6 +167,7 @@ impl<'a> Lowerer<'a> {
 
     fn lower(self) -> Result<LoweredCompilation, LoweringError> {
         let ordinary_functions = self.ordinary_function_correspondence()?;
+        let external_functions = self.external_callables.clone();
         let capacity = self
             .specializations
             .len()
@@ -237,6 +251,7 @@ impl<'a> Lowerer<'a> {
         Ok(LoweredCompilation {
             program,
             ordinary_functions,
+            external_functions,
         })
     }
 }

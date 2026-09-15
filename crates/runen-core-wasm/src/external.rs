@@ -159,6 +159,11 @@ pub enum ExternalProviderAdmissionError {
         expected: CallableInterface,
         found: CallableInterface,
     },
+    ProviderResultShapeMismatch {
+        external: ExternalCallableId,
+        declaration_has_result: bool,
+        provider_has_result: bool,
+    },
 }
 
 impl fmt::Display for ExternalProviderAdmissionError {
@@ -248,6 +253,53 @@ impl ExternalProviderBinding {
         }
     }
 
+    pub fn no_result_for_program(
+        program: &ValidatedProgram,
+        external: ExternalCallableId,
+        provider: impl Fn(&[ExternalScalarValue]) + Send + Sync + 'static,
+    ) -> Result<Self, ExternalProviderAdmissionError> {
+        Self::try_no_result_for_program(program, external, move |arguments| {
+            provider(arguments);
+            Ok(())
+        })
+    }
+
+    pub fn scalar_result_for_program(
+        program: &ValidatedProgram,
+        external: ExternalCallableId,
+        provider: impl Fn(&[ExternalScalarValue]) -> ExternalScalarValue + Send + Sync + 'static,
+    ) -> Result<Self, ExternalProviderAdmissionError> {
+        Self::try_scalar_result_for_program(program, external, move |arguments| {
+            Ok(provider(arguments))
+        })
+    }
+
+    pub fn try_no_result_for_program(
+        program: &ValidatedProgram,
+        external: ExternalCallableId,
+        provider: impl Fn(&[ExternalScalarValue]) -> Result<(), ExternalProviderFailure>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Result<Self, ExternalProviderAdmissionError> {
+        let interface = interface_for_program(program, external, false)?;
+        Ok(Self::try_no_result(external, interface, provider))
+    }
+
+    pub fn try_scalar_result_for_program(
+        program: &ValidatedProgram,
+        external: ExternalCallableId,
+        provider: impl Fn(
+            &[ExternalScalarValue],
+        ) -> Result<ExternalScalarValue, ExternalProviderFailure>
+        + Send
+        + Sync
+        + 'static,
+    ) -> Result<Self, ExternalProviderAdmissionError> {
+        let interface = interface_for_program(program, external, true)?;
+        Ok(Self::try_scalar_result(external, interface, provider))
+    }
+
     pub fn external(&self) -> ExternalCallableId {
         self.external
     }
@@ -255,6 +307,29 @@ impl ExternalProviderBinding {
     pub fn interface(&self) -> &CallableInterface {
         &self.interface
     }
+}
+
+fn interface_for_program(
+    program: &ValidatedProgram,
+    external: ExternalCallableId,
+    provider_has_result: bool,
+) -> Result<CallableInterface, ExternalProviderAdmissionError> {
+    let declaration = program
+        .as_program()
+        .external_callables
+        .get(external.0 as usize)
+        .ok_or(ExternalProviderAdmissionError::UnknownProvider(external))?;
+    let declaration_has_result = declaration.interface.result.is_some();
+    if declaration_has_result != provider_has_result {
+        return Err(
+            ExternalProviderAdmissionError::ProviderResultShapeMismatch {
+                external,
+                declaration_has_result,
+                provider_has_result,
+            },
+        );
+    }
+    Ok(declaration.interface.clone())
 }
 
 pub(crate) fn admit(
