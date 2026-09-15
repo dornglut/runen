@@ -20,7 +20,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
@@ -239,12 +241,12 @@ fn lowering_rejects_malformed_retained_conjunction_type_facts() {
         .and_then(|returned| returned.value.as_mut())
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::I64);
-    assert_eq!(
+    assert!(matches!(
         lower(&result_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-conjunction result type is not Bool"
         ))
-    );
+    ));
 
     let mut left_mismatch = hir("fn f(a: Bool, b: Bool) -> Bool { return a && b; }");
     let value = runen_body_mut(&mut left_mismatch.functions[0])
@@ -256,12 +258,12 @@ fn lowering_rejects_malformed_retained_conjunction_type_facts() {
         panic!("expected conjunction HIR value");
     };
     left.ty = Type::Intrinsic(IntrinsicType::I64);
-    assert_eq!(
+    assert!(matches!(
         lower(&left_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-conjunction left operand type is not Bool"
         ))
-    );
+    ));
 
     let mut right_mismatch = hir("fn f(a: Bool, b: Bool) -> Bool { return a && b; }");
     let value = runen_body_mut(&mut right_mismatch.functions[0])
@@ -273,12 +275,12 @@ fn lowering_rejects_malformed_retained_conjunction_type_facts() {
         panic!("expected conjunction HIR value");
     };
     right.ty = Type::Intrinsic(IntrinsicType::I64);
-    assert_eq!(
+    assert!(matches!(
         lower(&right_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Boolean-conjunction right operand type is not Bool"
         ))
-    );
+    ));
 }
 
 #[test]
