@@ -701,6 +701,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "runen-core-wasm-driver"
+version = "0.0.0"
+dependencies = [
+ "runen-core-ir",
+ "runen-core-lowering",
+ "runen-core-wasm",
+ "runen-hir",
+ "runen-syntax",
+]
+
+[[package]]
 name = "runen-exec-oracle"
 version = "0.0.0"
 dependencies = [
