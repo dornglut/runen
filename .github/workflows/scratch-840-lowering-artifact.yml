@@ -1,20 +1,21 @@
-name: Scratch 840 lowering artifact
+name: Scratch 840 lowering patch transfer
 
 on: push
 
 jobs:
-  build-artifact:
+  transfer:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: 39a1673f0b84a3f15ac77d917f0e01c2a454a870
-          persist-credentials: false
+          ref: issue-840-hir-external-providers
+          persist-credentials: true
 
-      - name: Apply exact lowering patch
+      - name: Verify exact PR head and apply patch
         shell: bash
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "39a1673f0b84a3f15ac77d917f0e01c2a454a870"
           python - <<'PY'
           from pathlib import Path
           import base64
@@ -46,16 +47,10 @@ jobs:
           PY
 
           git diff --check
-          changed="$(git diff --name-only)"
-          test "${changed}" = "crates/runen-core-lowering/src/lib.rs"
-          mkdir -p scratch-artifact
-          cp crates/runen-core-lowering/src/lib.rs scratch-artifact/lib.rs
-          git diff -- crates/runen-core-lowering/src/lib.rs > scratch-artifact/lowering.patch
-          git hash-object crates/runen-core-lowering/src/lib.rs > scratch-artifact/lowering.blob
-
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        with:
-          name: scratch-840-lowering-candidate
-          path: scratch-artifact
-          if-no-files-found: error
-          retention-days: 1
+          test "$(git diff --name-only)" = "crates/runen-core-lowering/src/lib.rs"
+          test "$(git hash-object crates/runen-core-lowering/src/lib.rs)" = "e115bf5b5a932617614591ceb2267614ed772027"
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add crates/runen-core-lowering/src/lib.rs
+          git commit -m "Expose lowering external callable correspondence"
+          git push origin HEAD:issue-840-hir-external-providers
