@@ -8,7 +8,6 @@ use runen_core_ir::{
 use runen_core_wasm::{
     CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome,
     ExternalProviderAdmissionError, RealizationError, RealizedProgram, UnsupportedOperandKind,
-    UnsupportedTypeCategory,
 };
 
 fn body(locals: Vec<LocalDecl>, loans: Vec<LoanDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -442,15 +441,15 @@ fn higher_order_indirect_call_is_admitted_at_the_consuming_terminator() {
 }
 
 #[test]
-fn projected_access_does_not_hide_unsupported_nested_parameter_type() {
+fn projected_access_through_floating_aggregate_parameter_is_admitted() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let pair_ty = types.push(TypeDef::structure(
         "Pair",
         vec![
-            runen_core_ir::Field::new("supported", i64_ty),
-            runen_core_ir::Field::new("unsupported", f32_ty),
+            runen_core_ir::Field::new("integer", i64_ty),
+            runen_core_ir::Field::new("floating", f32_ty),
         ],
     ));
     let program = validated(
@@ -475,19 +474,8 @@ fn projected_access_does_not_hide_unsupported_nested_parameter_type() {
         )],
     );
 
-    assert_eq!(
-        coverage_error(&program),
-        CoverageError {
-            location: CoverageLocation::Parameter {
-                function: FunctionId(0),
-                local: LocalId(0),
-            },
-            kind: CoverageErrorKind::UnsupportedType {
-                ty: f32_ty,
-                category: UnsupportedTypeCategory::Floating,
-            },
-        }
-    );
+    RealizedProgram::new(&program)
+        .expect("projected access through floating aggregate parameter must realize");
 }
 
 #[test]

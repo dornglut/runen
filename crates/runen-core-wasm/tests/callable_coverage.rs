@@ -65,7 +65,7 @@ fn floating_callable_parameter_is_admitted_as_a_direct_scalar_component() {
 }
 
 #[test]
-fn nested_floating_callable_result_reports_exact_interface_role_and_leaf_type() {
+fn nested_floating_callable_result_is_admitted_for_internal_transport() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let wrapper_ty = types.push(TypeDef::structure(
@@ -80,14 +80,13 @@ fn nested_floating_callable_result_reports_exact_interface_role_and_leaf_type() 
             SafeReferenceResultContract::None,
         ),
     ));
-    assert_callable_local_rejected(
-        types,
-        callable,
-        CoverageErrorKind::UnsupportedCallableResultType {
-            callable,
-            ty: f32_ty,
-            category: UnsupportedTypeCategory::Floating,
-        },
+    let program = callable_local_program(types, callable);
+    assert_eq!(
+        RealizedProgram::new(&program)
+            .expect("floating aggregate callable result must realize internally")
+            .execute(FunctionId(0))
+            .expect("passive callable fixture must execute"),
+        ExecutionOutcome::Returned(None)
     );
 }
 

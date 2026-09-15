@@ -4,8 +4,8 @@ use runen_core_ir::{
     TypeDef, TypeId, TypeTable, validate_program,
 };
 use runen_core_wasm::{
-    CoverageError, CoverageErrorKind, CoverageLocation, RealizationError, RealizedProgram,
-    UnsupportedTypeCategory,
+    CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError,
+    RealizedProgram, UnsupportedTypeCategory,
 };
 
 fn realization_error(program: &runen_core_ir::ValidatedProgram) -> RealizationError {
@@ -53,11 +53,49 @@ fn assert_nested_leaf_rejected(
 }
 
 #[test]
-fn nested_excluded_leaf_families_reject_with_exact_type_categories() {
-    let mut floating = TypeTable::new();
-    let f32_ty = floating.push(TypeDef::scalar("F32", ScalarType::F32));
-    assert_nested_leaf_rejected(floating, f32_ty, UnsupportedTypeCategory::Floating);
+fn nested_floating_leaf_families_are_admitted() {
+    let mut types = TypeTable::new();
+    let f16_ty = types.push(TypeDef::scalar("F16", ScalarType::F16));
+    let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
+    let f64_ty = types.push(TypeDef::scalar("F64", ScalarType::F64));
+    let inner = types.push(TypeDef::structure(
+        "Inner",
+        vec![Field::new("half", f16_ty), Field::new("single", f32_ty)],
+    ));
+    let outer = types.push(TypeDef::structure(
+        "Outer",
+        vec![Field::new("inner", inner), Field::new("double", f64_ty)],
+    ));
+    let program = validate_program(Program {
+        types,
+        persistent: Vec::new(),
+        external_callables: Vec::new(),
+        functions: vec![Function {
+            name: "entry".into(),
+            parameters: Vec::new(),
+            result: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
+            body: Body {
+                locals: vec![LocalDecl::new("value", outer, false)],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+            },
+        }],
+    })
+    .expect("nested floating aggregate fixture must remain valid Core");
 
+    assert_eq!(
+        RealizedProgram::new(&program)
+            .expect("nested floating aggregate must realize")
+            .execute(FunctionId(0))
+            .expect("passive floating aggregate fixture must execute"),
+        ExecutionOutcome::Returned(None)
+    );
+}
+
+#[test]
+fn nested_excluded_leaf_families_reject_with_exact_type_categories() {
     let mut raw = TypeTable::new();
     let raw_pointee = raw.push(TypeDef::scalar("I64", ScalarType::I64));
     let raw_ty = raw.push(TypeDef::raw_pointer("RawI64", raw_pointee));

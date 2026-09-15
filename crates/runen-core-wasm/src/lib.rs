@@ -8,6 +8,8 @@ mod coverage;
 mod encoding;
 mod external;
 #[cfg(test)]
+mod floating_aggregate_tests;
+#[cfg(test)]
 mod floating_tests;
 mod layout;
 mod scalar;
@@ -15,7 +17,9 @@ mod scalar;
 use std::error::Error;
 use std::fmt;
 
-use runen_core_ir::{Fault, FunctionId, ScalarType, TypeKind, TypeTable, ValidatedProgram, Value};
+use runen_core_ir::{
+    Fault, FunctionId, ScalarType, TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
+};
 use wasmtime::{Engine, Instance, Module, Store, Val};
 
 pub use coverage::{
@@ -123,6 +127,21 @@ pub struct RealizedProgram {
     external_providers: Vec<ExternalProviderBinding>,
 }
 
+fn entry_result_is_unobservable(types: &TypeTable, ty: TypeId) -> bool {
+    let Some(definition) = types.get(ty) else {
+        return true;
+    };
+    match &definition.kind {
+        TypeKind::Scalar(
+            ScalarType::Callable(_) | ScalarType::F16 | ScalarType::F32 | ScalarType::F64,
+        ) => true,
+        TypeKind::Scalar(_) => false,
+        TypeKind::Struct(fields) => fields
+            .iter()
+            .any(|field| entry_result_is_unobservable(types, field.ty)),
+    }
+}
+
 impl RealizedProgram {
     pub fn new(program: &ValidatedProgram) -> Result<Self, RealizationError> {
         Self::new_with_external_providers(program, Vec::new())
@@ -163,14 +182,10 @@ impl RealizedProgram {
         if entry_info.parameter_count != 0 {
             return Err(RealizationError::EntryHasParameters(entry));
         }
-        if entry_info.result.is_some_and(|ty| {
-            matches!(
-                self.types.get(ty).map(|definition| &definition.kind),
-                Some(TypeKind::Scalar(
-                    ScalarType::Callable(_) | ScalarType::F16 | ScalarType::F32 | ScalarType::F64
-                ))
-            )
-        }) {
+        if entry_info
+            .result
+            .is_some_and(|ty| entry_result_is_unobservable(&self.types, ty))
+        {
             return Err(RealizationError::EntryResultUnsupported(entry));
         }
 
