@@ -18,7 +18,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -213,12 +215,12 @@ fn lowering_rejects_malformed_integer_xor_retained_type_facts() {
         .and_then(|returned| returned.value.as_mut())
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::Bool);
-    assert_eq!(
+    assert!(matches!(
         lower(&non_integer),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-XOR result type is not a fixed-width integer"
         ))
-    );
+    ));
 
     let mut left_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left ^ right; }");
     let value = runen_body_mut(&mut left_mismatch.functions[0])
@@ -230,12 +232,12 @@ fn lowering_rejects_malformed_integer_xor_retained_type_facts() {
         panic!("expected integer-XOR HIR value");
     };
     left.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&left_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-XOR left operand type does not match result type"
         ))
-    );
+    ));
 
     let mut right_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left ^ right; }");
     let value = runen_body_mut(&mut right_mismatch.functions[0])
@@ -247,12 +249,12 @@ fn lowering_rejects_malformed_integer_xor_retained_type_facts() {
         panic!("expected integer-XOR HIR value");
     };
     right.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&right_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-XOR right operand type does not match result type"
         ))
-    );
+    ));
 }
 
 #[test]
