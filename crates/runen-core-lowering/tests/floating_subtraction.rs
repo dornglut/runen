@@ -19,7 +19,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -133,7 +135,9 @@ fn float_sub_numeric_contracts_lower_one_to_one_without_redefaulting() {
         panic!("expected FloatSub HIR value");
     };
     *contract = HirNumericContract::Reproducible;
-    let reproducible = lower(&reproducible).expect("valid Reproducible FloatSub HIR must lower");
+    let reproducible = lower(&reproducible)
+        .expect("valid Reproducible FloatSub HIR must lower")
+        .into_program();
     assert_eq!(
         float_sub_contract(float_sub_statements(function(reproducible.as_program(), "f"))[0]),
         CoreNumericContract::Reproducible
