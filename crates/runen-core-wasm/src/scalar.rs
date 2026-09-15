@@ -31,8 +31,12 @@ pub(crate) enum ScalarKind {
     F64,
 }
 
+/// Private physical floating-carrier metadata used only by the Core-Wasm realization.
+///
+/// This is not a Runen layout or ABI contract. Keeping the metadata here gives
+/// transport, provider admission, and arithmetic encoding one implementation owner.
 #[derive(Clone, Copy)]
-struct FloatFormat {
+pub(crate) struct FloatFormat {
     width: u32,
     precision: u32,
     emin: i16,
@@ -41,23 +45,39 @@ struct FloatFormat {
 }
 
 impl FloatFormat {
-    const fn fraction_bits(self) -> u32 {
+    pub(crate) const fn width(self) -> u32 {
+        self.width
+    }
+
+    pub(crate) const fn precision(self) -> u32 {
+        self.precision
+    }
+
+    pub(crate) const fn emin(self) -> i16 {
+        self.emin
+    }
+
+    pub(crate) const fn emax(self) -> i16 {
+        self.emax
+    }
+
+    pub(crate) const fn fraction_bits(self) -> u32 {
         self.precision - 1
     }
 
-    const fn exponent_mask(self) -> u64 {
+    pub(crate) const fn exponent_mask(self) -> u64 {
         (1_u64 << self.exponent_bits) - 1
     }
 
-    const fn bias(self) -> i16 {
+    pub(crate) const fn bias(self) -> i16 {
         ((1_u16 << (self.exponent_bits - 1)) - 1) as i16
     }
 
-    const fn sign_mask(self) -> u64 {
+    pub(crate) const fn sign_mask(self) -> u64 {
         1_u64 << (self.width - 1)
     }
 
-    const fn canonical_nan_residue(self) -> u64 {
+    pub(crate) const fn canonical_nan_residue(self) -> u64 {
         (self.exponent_mask() << self.fraction_bits()) | 1
     }
 }
@@ -192,7 +212,7 @@ impl ScalarKind {
             .is_some_and(|format| encode_binary_float(format, value).is_some())
     }
 
-    const fn float_format(self) -> Option<FloatFormat> {
+    pub(crate) const fn float_format(self) -> Option<FloatFormat> {
         match self {
             Self::F16 => Some(FloatFormat {
                 width: 16,
