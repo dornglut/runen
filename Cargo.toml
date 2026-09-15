@@ -3,7 +3,6 @@ members = [
     "crates/runen-core-ir",
     "crates/runen-core-lowering",
     "crates/runen-core-wasm",
-    "crates/runen-core-wasm-driver",
     "crates/runen-exec-oracle",
     "crates/runen-hir",
     "crates/runen-model-oracle",
