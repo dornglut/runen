@@ -217,18 +217,12 @@ fn valid_core_can_reach_every_excluded_statement_family() {
                 loans: Vec::new(),
                 entry: BasicBlockId(0),
                 blocks: vec![BasicBlock::new(
-                    vec![
-                        Statement::Init {
-                            dst: Place::local(LocalId(0)),
-                            src: Operand::Constant(Value::Struct(vec![zero.clone()])),
-                        },
-                        Statement::FloatAdd {
-                            dst: Place::local(LocalId(0)).field(0),
-                            left: Operand::Constant(zero.clone()),
-                            right: Operand::Constant(zero),
-                            contract: NumericContract::Standard,
-                        },
-                    ],
+                    vec![Statement::FloatAdd {
+                        dst: Place::local(LocalId(0)).field(0),
+                        left: Operand::Constant(zero.clone()),
+                        right: Operand::Constant(zero),
+                        contract: NumericContract::Standard,
+                    }],
                     Terminator::Return(None),
                 )],
             },
