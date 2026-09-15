@@ -452,6 +452,9 @@ fn is_supported_aggregate_leaf_type(types: &TypeTable, ty: TypeId) -> bool {
                 | ScalarType::U16
                 | ScalarType::U32
                 | ScalarType::U64
+                | ScalarType::F16
+                | ScalarType::F32
+                | ScalarType::F64
         )
     )
 }
@@ -550,11 +553,11 @@ fn first_unsupported_aggregate_component(
             | ScalarType::U8
             | ScalarType::U16
             | ScalarType::U32
-            | ScalarType::U64,
+            | ScalarType::U64
+            | ScalarType::F16
+            | ScalarType::F32
+            | ScalarType::F64,
         ) => None,
-        TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64) => {
-            Some((ty, UnsupportedTypeCategory::Floating))
-        }
         TypeKind::Scalar(ScalarType::RawPointer(_)) => {
             Some((ty, UnsupportedTypeCategory::RawPointer))
         }
