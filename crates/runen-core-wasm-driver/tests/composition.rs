@@ -90,6 +90,20 @@ fn internal_generic_specialization_is_realized_but_generic_function_is_not_selec
 }
 
 #[test]
+fn identity_absent_from_current_compilation_fails_without_global_provenance() {
+    let foreign = compilation("fn first() -> I64 { return 1; } fn second() -> I64 { return 2; }");
+    let absent = function(&foreign, "second");
+
+    let current = compilation("fn only() -> I64 { return 7; }");
+    let realized = RealizedCompilation::new(&current).expect("current program must realize");
+
+    assert_eq!(
+        realized.execute(absent),
+        Err(ExecutionError::FunctionNotSelectable(absent))
+    );
+}
+
+#[test]
 fn external_declarations_are_rejected_before_provider_composition_is_exposed() {
     let compilation = compilation(
         "external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }",
