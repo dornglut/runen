@@ -15,7 +15,7 @@ use crate::RealizationError;
 use crate::layout::{
     constant_carriers, projected_span, result_carrier_count, storage_carrier_count,
 };
-use crate::scalar::{ScalarKind, constant_residue, mask};
+use crate::scalar::{FloatingScalarValue, ScalarKind, constant_residue, mask};
 
 pub(crate) struct EncodedProgram {
     pub(crate) bytes: Vec<u8>,
@@ -264,7 +264,12 @@ fn encode_function(
     let layout = FunctionLayout::new(types, function)?;
     let i64_local_count = u32::try_from(layout.non_parameter_i64_count)
         .map_err(|_| invariant("Wasm i64 local count exceeds u32::MAX"))?;
-    let mut encoded = WasmFunction::new([(i64_local_count, ValType::I64), (2, ValType::I32)]);
+    let mut encoded = WasmFunction::new([
+        (i64_local_count, ValType::I64),
+        (1, ValType::F32),
+        (1, ValType::F64),
+        (2, ValType::I32),
+    ]);
 
     emit_i32_const(&mut encoded, function.body.entry.0);
     encoded.instruction(&Instruction::LocalSet(layout.pc));
@@ -319,6 +324,8 @@ struct FunctionLayout {
     non_parameter_i64_count: usize,
     scratch_start: u32,
     scratch_len: usize,
+    f32_scratch: u32,
+    f64_scratch: u32,
     pc: u32,
     status: u32,
 }
@@ -333,8 +340,9 @@ impl FunctionLayout {
             let declaration = function
                 .body
                 .local(local)
-                .ok_or_else(|| invariant("validated parameter local is missing"))?;
-            let len = storage_carrier_count(types, declaration.ty)?;
+                .ok_or_else(|| invariant("validated parameter local is missing"))?
+                .ty;
+            let len = storage_carrier_count(types, declaration)?;
             let target = locals
                 .get_mut(local_index)
                 .ok_or_else(|| invariant("validated parameter local is outside the body"))?;
@@ -363,7 +371,13 @@ impl FunctionLayout {
         let non_parameter_i64_count = total_i64_slots
             .checked_sub(parameter_carrier_count)
             .ok_or_else(|| invariant("Wasm local carrier accounting underflow"))?;
-        let pc = next;
+        let f32_scratch = next;
+        let f64_scratch = f32_scratch
+            .checked_add(1)
+            .ok_or_else(|| invariant("Wasm f64 scratch local index overflow"))?;
+        let pc = f64_scratch
+            .checked_add(1)
+            .ok_or_else(|| invariant("Wasm pc local index overflow"))?;
         let status = pc
             .checked_add(1)
             .ok_or_else(|| invariant("Wasm status local index overflow"))?;
@@ -376,6 +390,8 @@ impl FunctionLayout {
             non_parameter_i64_count,
             scratch_start,
             scratch_len,
+            f32_scratch,
+            f64_scratch,
             pc,
             status,
         })
@@ -468,6 +484,46 @@ impl FunctionEncoder<'_> {
                 encoded.instruction(&Instruction::I64ExtendI32U);
                 self.emit_scalar_place_set(encoded, dst)
             }
+            Statement::FloatAdd {
+                dst, left, right, ..
+            } => self.emit_binary_float(
+                encoded,
+                dst,
+                left,
+                right,
+                Instruction::F32Add,
+                Instruction::F64Add,
+            ),
+            Statement::FloatSub {
+                dst, left, right, ..
+            } => self.emit_binary_float(
+                encoded,
+                dst,
+                left,
+                right,
+                Instruction::F32Sub,
+                Instruction::F64Sub,
+            ),
+            Statement::FloatMul {
+                dst, left, right, ..
+            } => self.emit_binary_float(
+                encoded,
+                dst,
+                left,
+                right,
+                Instruction::F32Mul,
+                Instruction::F64Mul,
+            ),
+            Statement::FloatDiv {
+                dst, left, right, ..
+            } => self.emit_binary_float(
+                encoded,
+                dst,
+                left,
+                right,
+                Instruction::F32Div,
+                Instruction::F64Div,
+            ),
             Statement::Read { src } => {
                 let place = direct_access_place(src)?;
                 let range = self.place_layout(place)?;
@@ -486,11 +542,7 @@ impl FunctionEncoder<'_> {
                 self.emit_store(encoded, place, src)
             }
             Statement::Drop { .. } => Ok(()),
-            Statement::FloatAdd { .. }
-            | Statement::FloatSub { .. }
-            | Statement::FloatMul { .. }
-            | Statement::FloatDiv { .. }
-            | Statement::Borrow { .. }
+            Statement::Borrow { .. }
             | Statement::EndBorrow { .. }
             | Statement::ReferenceRead { .. }
             | Statement::RawRead { .. }
@@ -684,6 +736,96 @@ impl FunctionEncoder<'_> {
         let kind = self.place_kind(dst)?;
         emit_canonicalization(encoded, kind.width());
         self.emit_scalar_place_set(encoded, dst)
+    }
+
+    fn emit_binary_float(
+        &self,
+        encoded: &mut WasmFunction,
+        dst: &Place,
+        left: &Operand,
+        right: &Operand,
+        f32_operation: Instruction<'static>,
+        f64_operation: Instruction<'static>,
+    ) -> Result<(), RealizationError> {
+        let kind = self.place_kind(dst)?;
+        match kind {
+            ScalarKind::F32 => {
+                self.emit_scalar_operand(encoded, left)?;
+                encoded.instruction(&Instruction::I32WrapI64);
+                encoded.instruction(&Instruction::F32ReinterpretI32);
+                self.emit_scalar_operand(encoded, right)?;
+                encoded.instruction(&Instruction::I32WrapI64);
+                encoded.instruction(&Instruction::F32ReinterpretI32);
+                encoded.instruction(&f32_operation);
+                encoded.instruction(&Instruction::LocalSet(self.layout.f32_scratch));
+                self.emit_normalized_float_result(encoded, kind)?;
+                self.emit_scalar_place_set(encoded, dst)
+            }
+            ScalarKind::F64 => {
+                self.emit_scalar_operand(encoded, left)?;
+                encoded.instruction(&Instruction::F64ReinterpretI64);
+                self.emit_scalar_operand(encoded, right)?;
+                encoded.instruction(&Instruction::F64ReinterpretI64);
+                encoded.instruction(&f64_operation);
+                encoded.instruction(&Instruction::LocalSet(self.layout.f64_scratch));
+                self.emit_normalized_float_result(encoded, kind)?;
+                self.emit_scalar_place_set(encoded, dst)
+            }
+            ScalarKind::Bool
+            | ScalarKind::I8
+            | ScalarKind::I16
+            | ScalarKind::I32
+            | ScalarKind::I64
+            | ScalarKind::U8
+            | ScalarKind::U16
+            | ScalarKind::U32
+            | ScalarKind::U64
+            | ScalarKind::F16 => Err(invariant(
+                "coverage admission allowed unsupported floating arithmetic type",
+            )),
+        }
+    }
+
+    fn emit_normalized_float_result(
+        &self,
+        encoded: &mut WasmFunction,
+        kind: ScalarKind,
+    ) -> Result<(), RealizationError> {
+        let canonical_nan = kind.floating_residue(FloatingScalarValue::NaNClass)?;
+        emit_i64_const(encoded, canonical_nan);
+        match kind {
+            ScalarKind::F32 => {
+                encoded.instruction(&Instruction::LocalGet(self.layout.f32_scratch));
+                encoded.instruction(&Instruction::I32ReinterpretF32);
+                encoded.instruction(&Instruction::I64ExtendI32U);
+                encoded.instruction(&Instruction::LocalGet(self.layout.f32_scratch));
+                encoded.instruction(&Instruction::LocalGet(self.layout.f32_scratch));
+                encoded.instruction(&Instruction::F32Ne);
+            }
+            ScalarKind::F64 => {
+                encoded.instruction(&Instruction::LocalGet(self.layout.f64_scratch));
+                encoded.instruction(&Instruction::I64ReinterpretF64);
+                encoded.instruction(&Instruction::LocalGet(self.layout.f64_scratch));
+                encoded.instruction(&Instruction::LocalGet(self.layout.f64_scratch));
+                encoded.instruction(&Instruction::F64Ne);
+            }
+            ScalarKind::Bool
+            | ScalarKind::I8
+            | ScalarKind::I16
+            | ScalarKind::I32
+            | ScalarKind::I64
+            | ScalarKind::U8
+            | ScalarKind::U16
+            | ScalarKind::U32
+            | ScalarKind::U64
+            | ScalarKind::F16 => {
+                return Err(invariant(
+                    "private floating normalization received unsupported scalar kind",
+                ));
+            }
+        }
+        encoded.instruction(&Instruction::Select);
+        Ok(())
     }
 
     fn emit_store(

@@ -211,8 +211,8 @@ fn nested_aggregate_reports_the_exact_unsupported_floating_leaf() {
 #[test]
 fn valid_core_can_reach_every_excluded_statement_family() {
     let mut floating_types = TypeTable::new();
-    let f32_ty = floating_types.push(TypeDef::scalar("F32", ScalarType::F32));
-    let zero = Value::F32(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
+    let f16_ty = floating_types.push(TypeDef::scalar("F16", ScalarType::F16));
+    let zero = Value::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
     let floating_program = validated(
         floating_types,
         Vec::new(),
@@ -221,7 +221,7 @@ fn valid_core_can_reach_every_excluded_statement_family() {
             Vec::new(),
             None,
             Body {
-                locals: vec![LocalDecl::new("value", f32_ty, false)],
+                locals: vec![LocalDecl::new("value", f16_ty, false)],
                 loans: Vec::new(),
                 entry: BasicBlockId(0),
                 blocks: vec![BasicBlock::new(
