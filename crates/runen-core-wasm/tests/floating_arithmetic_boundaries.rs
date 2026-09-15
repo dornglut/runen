@@ -7,9 +7,8 @@ use runen_core_ir::{
     Terminator, TypeDef, TypeId, TypeTable, Value, validate_program,
 };
 use runen_core_wasm::{
-    CoverageErrorKind, CoverageLocation, ExecutionOutcome, ExternalProviderBinding,
-    ExternalScalarValue, FloatingScalarValue, RealizationError, RealizedProgram,
-    UnsupportedStatementKind,
+    ExecutionOutcome, ExternalProviderBinding, ExternalScalarValue, FloatingScalarValue,
+    RealizedProgram,
 };
 
 #[derive(Clone, Copy)]
@@ -61,18 +60,19 @@ fn statement(
 
 fn value(scalar: &ScalarType, value: BinaryFloatValue) -> Value {
     match scalar {
+        ScalarType::F16 => Value::F16(value),
         ScalarType::F32 => Value::F32(value),
         ScalarType::F64 => Value::F64(value),
-        ScalarType::F16 => Value::F16(value),
         _ => panic!("floating arithmetic fixture requires a represented float"),
     }
 }
 
 fn format(scalar: &ScalarType) -> (u32, i16, i16) {
     match scalar {
+        ScalarType::F16 => (11, -14, 15),
         ScalarType::F32 => (24, -126, 127),
         ScalarType::F64 => (53, -1022, 1023),
-        _ => panic!("boundary fixture only supports F32/F64"),
+        _ => panic!("boundary fixture only supports represented binary floats"),
     }
 }
 
@@ -142,14 +142,16 @@ fn observe(
                     panic!("boundary observer expects one value");
                 };
                 let value = match argument {
-                    ExternalScalarValue::F32(value) | ExternalScalarValue::F64(value) => *value,
+                    ExternalScalarValue::F16(value)
+                    | ExternalScalarValue::F32(value)
+                    | ExternalScalarValue::F64(value) => *value,
                     other => panic!("boundary observer received {other:?}"),
                 };
                 *capture.lock().unwrap() = Some(value);
             },
         )],
     )
-    .expect("F32/F64 boundary arithmetic must realize");
+    .expect("represented floating boundary arithmetic must realize");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
         ExecutionOutcome::Returned(None)
@@ -161,7 +163,7 @@ fn observe(
 
 #[test]
 fn baseline_rounding_subnormal_overflow_and_signed_zero_results_are_exact() {
-    for scalar in [ScalarType::F32, ScalarType::F64] {
+    for scalar in [ScalarType::F16, ScalarType::F32, ScalarType::F64] {
         let (precision, emin, emax) = format(&scalar);
         let one = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 0);
         let two = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 1);
@@ -243,57 +245,181 @@ fn baseline_rounding_subnormal_overflow_and_signed_zero_results_are_exact() {
     }
 }
 
-fn f16_program(operation: Operation) -> runen_core_ir::ValidatedProgram {
-    let mut types = TypeTable::new();
-    let f16 = types.push(TypeDef::scalar("F16", ScalarType::F16));
-    let zero = BinaryFloatValue::Zero(BinaryFloatSign::Positive);
-    validate_program(Program {
-        types,
-        persistent: Vec::new(),
-        external_callables: Vec::new(),
-        functions: vec![Function {
-            name: "entry".into(),
-            parameters: Vec::new(),
-            result: None,
-            safe_reference_result_contract: SafeReferenceResultContract::None,
-            body: Body {
-                locals: vec![LocalDecl::new("result", f16, false)],
-                loans: Vec::new(),
-                entry: BasicBlockId(0),
-                blocks: vec![BasicBlock::new(
-                    vec![statement(
-                        operation,
-                        Place::local(LocalId(0)),
-                        Operand::Constant(value(&ScalarType::F16, zero)),
-                        Operand::Constant(value(&ScalarType::F16, zero)),
-                        NumericContract::Standard,
-                    )],
-                    Terminator::Return(None),
-                )],
-            },
-        }],
-    })
-    .expect("F16 arithmetic exclusion fixture must be valid Core")
+#[test]
+fn f16_underflow_and_overflow_rounding_boundaries_are_directly_exercised() {
+    let scalar = ScalarType::F16;
+    let min_subnormal = BinaryFloatValue::Subnormal {
+        sign: BinaryFloatSign::Positive,
+        significand: 1,
+    };
+    let positive_zero = BinaryFloatValue::Zero(BinaryFloatSign::Positive);
+    let min_normal = normal(BinaryFloatSign::Positive, 1_u64 << 10, -14);
+    let one = normal(BinaryFloatSign::Positive, 1_u64 << 10, 0);
+    let below_two = normal(BinaryFloatSign::Positive, 2047, 0);
+    let two = normal(BinaryFloatSign::Positive, 1_u64 << 10, 1);
+    let above_two = normal(BinaryFloatSign::Positive, 1025, 1);
+    let max_finite = normal(BinaryFloatSign::Positive, 2047, 15);
+    let sixteen = normal(BinaryFloatSign::Positive, 1_u64 << 10, 4);
+    let eight = normal(BinaryFloatSign::Positive, 1_u64 << 10, 3);
+
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            min_subnormal,
+            two,
+        ),
+        FloatingScalarValue::Represented(positive_zero),
+        "exact 2^-25 underflow midpoint ties to even zero"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            min_subnormal,
+            below_two,
+        ),
+        FloatingScalarValue::Represented(min_subnormal),
+        "quotient immediately above the zero/min-subnormal midpoint rounds upward"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            min_subnormal,
+            above_two,
+        ),
+        FloatingScalarValue::Represented(positive_zero),
+        "quotient immediately below the zero/min-subnormal midpoint rounds downward"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            min_normal,
+            one,
+        ),
+        FloatingScalarValue::Represented(min_normal),
+        "minimum normal survives direct narrowing"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Add,
+            NumericContract::Standard,
+            max_finite,
+            sixteen,
+        ),
+        FloatingScalarValue::Represented(BinaryFloatValue::Infinity(
+            BinaryFloatSign::Positive,
+        )),
+        "exact 65520 overflow midpoint rounds to infinity"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Add,
+            NumericContract::Standard,
+            max_finite,
+            eight,
+        ),
+        FloatingScalarValue::Represented(max_finite),
+        "value below the overflow midpoint rounds to maximum finite"
+    );
 }
 
 #[test]
-fn all_four_f16_basic_operations_remain_structured_floating_rejections() {
-    for operation in [
-        Operation::Add,
-        Operation::Sub,
-        Operation::Mul,
-        Operation::Div,
-    ] {
-        assert_eq!(
-            RealizedProgram::new(&f16_program(operation)).err(),
-            Some(RealizationError::Coverage(runen_core_wasm::CoverageError {
-                location: CoverageLocation::Statement {
-                    function: FunctionId(0),
-                    block: BasicBlockId(0),
-                    statement: 0,
-                },
-                kind: CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Floating,),
-            }))
-        );
-    }
+fn f16_division_rounds_recurring_and_adversarial_near_midpoint_quotients() {
+    let scalar = ScalarType::F16;
+    let one = normal(BinaryFloatSign::Positive, 1024, 0);
+    let three = normal(BinaryFloatSign::Positive, 1536, 1);
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            one,
+            three,
+        ),
+        FloatingScalarValue::Represented(normal(BinaryFloatSign::Positive, 1365, -2)),
+        "one third rounds to the expected binary16 neighbor"
+    );
+
+    let left = normal(BinaryFloatSign::Positive, 1981, 0);
+    let right = normal(BinaryFloatSign::Positive, 2025, 0);
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            left,
+            right,
+        ),
+        FloatingScalarValue::Represented(normal(BinaryFloatSign::Positive, 2004, -1)),
+        "a quotient very near an F16 midpoint must stay on the mathematically correct side"
+    );
+}
+
+#[test]
+fn f16_special_values_and_nan_class_are_normalized_semantically() {
+    let scalar = ScalarType::F16;
+    let positive_zero = BinaryFloatValue::Zero(BinaryFloatSign::Positive);
+    let positive_infinity = BinaryFloatValue::Infinity(BinaryFloatSign::Positive);
+    let negative_infinity = BinaryFloatValue::Infinity(BinaryFloatSign::Negative);
+    let one = normal(BinaryFloatSign::Positive, 1024, 0);
+
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Mul,
+            NumericContract::Standard,
+            positive_zero,
+            positive_infinity,
+        ),
+        FloatingScalarValue::NaNClass
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            positive_infinity,
+            positive_infinity,
+        ),
+        FloatingScalarValue::NaNClass
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Add,
+            NumericContract::Standard,
+            positive_infinity,
+            negative_infinity,
+        ),
+        FloatingScalarValue::NaNClass
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            positive_zero,
+            positive_zero,
+        ),
+        FloatingScalarValue::NaNClass
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Add,
+            NumericContract::Standard,
+            positive_infinity,
+            one,
+        ),
+        FloatingScalarValue::Represented(positive_infinity)
+    );
 }
