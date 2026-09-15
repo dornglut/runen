@@ -246,6 +246,92 @@ fn baseline_rounding_subnormal_overflow_and_signed_zero_results_are_exact() {
 }
 
 #[test]
+fn f16_representative_inputs_widen_exactly_before_arithmetic() {
+    let scalar = ScalarType::F16;
+    let one = normal(BinaryFloatSign::Positive, 1024, 0);
+    let cases = [
+        BinaryFloatValue::Zero(BinaryFloatSign::Positive),
+        BinaryFloatValue::Zero(BinaryFloatSign::Negative),
+        BinaryFloatValue::Subnormal {
+            sign: BinaryFloatSign::Positive,
+            significand: 1,
+        },
+        BinaryFloatValue::Subnormal {
+            sign: BinaryFloatSign::Positive,
+            significand: 1023,
+        },
+        normal(BinaryFloatSign::Positive, 1024, -14),
+        normal(BinaryFloatSign::Negative, 1537, -3),
+        normal(BinaryFloatSign::Positive, 2047, 15),
+        BinaryFloatValue::Infinity(BinaryFloatSign::Positive),
+        BinaryFloatValue::Infinity(BinaryFloatSign::Negative),
+    ];
+
+    for input in cases {
+        let expected = input;
+        assert_eq!(
+            observe(
+                &scalar,
+                Operation::Mul,
+                NumericContract::Standard,
+                input,
+                one,
+            ),
+            FloatingScalarValue::Represented(expected),
+            "multiplication by one must preserve each representative F16 input exactly"
+        );
+    }
+}
+
+#[test]
+fn f16_interior_midpoint_and_both_neighboring_sides_round_correctly() {
+    let scalar = ScalarType::F16;
+    let one = normal(BinaryFloatSign::Positive, 1024, 0);
+    let next_after_one = normal(BinaryFloatSign::Positive, 1025, 0);
+    let exact_half_ulp = normal(BinaryFloatSign::Positive, 1024, -11);
+
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Add,
+            NumericContract::Standard,
+            one,
+            exact_half_ulp,
+        ),
+        FloatingScalarValue::Represented(one),
+        "the exact interior midpoint must tie to the even lower significand"
+    );
+
+    let below_midpoint_left = normal(BinaryFloatSign::Positive, 1025, -2);
+    let below_midpoint_right = normal(BinaryFloatSign::Positive, 2047, 1);
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Mul,
+            NumericContract::Standard,
+            below_midpoint_left,
+            below_midpoint_right,
+        ),
+        FloatingScalarValue::Represented(one),
+        "a realizable exact result below the interior midpoint must round down"
+    );
+
+    let above_midpoint_numerator = normal(BinaryFloatSign::Positive, 2047, 0);
+    let above_midpoint_denominator = normal(BinaryFloatSign::Positive, 2046, 0);
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Div,
+            NumericContract::Standard,
+            above_midpoint_numerator,
+            above_midpoint_denominator,
+        ),
+        FloatingScalarValue::Represented(next_after_one),
+        "a realizable exact quotient above the interior midpoint must round up"
+    );
+}
+
+#[test]
 fn f16_underflow_normal_transition_and_overflow_boundaries_are_directly_exercised() {
     let scalar = ScalarType::F16;
     let min_subnormal = BinaryFloatValue::Subnormal {
@@ -264,8 +350,9 @@ fn f16_underflow_normal_transition_and_overflow_boundaries_are_directly_exercise
     let two = normal(BinaryFloatSign::Positive, 1_u64 << 10, 1);
     let above_two = normal(BinaryFloatSign::Positive, 1025, 1);
     let max_finite = normal(BinaryFloatSign::Positive, 2047, 15);
-    let sixteen = normal(BinaryFloatSign::Positive, 1_u64 << 10, 4);
     let eight = normal(BinaryFloatSign::Positive, 1_u64 << 10, 3);
+    let sixteen = normal(BinaryFloatSign::Positive, 1_u64 << 10, 4);
+    let thirty_two = normal(BinaryFloatSign::Positive, 1_u64 << 10, 5);
 
     assert_eq!(
         observe(
@@ -350,6 +437,17 @@ fn f16_underflow_normal_transition_and_overflow_boundaries_are_directly_exercise
             Operation::Add,
             NumericContract::Standard,
             max_finite,
+            eight,
+        ),
+        FloatingScalarValue::Represented(max_finite),
+        "value below the overflow midpoint rounds to maximum finite"
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Add,
+            NumericContract::Standard,
+            max_finite,
             sixteen,
         ),
         FloatingScalarValue::Represented(BinaryFloatValue::Infinity(BinaryFloatSign::Positive,)),
@@ -361,10 +459,10 @@ fn f16_underflow_normal_transition_and_overflow_boundaries_are_directly_exercise
             Operation::Add,
             NumericContract::Standard,
             max_finite,
-            eight,
+            thirty_two,
         ),
-        FloatingScalarValue::Represented(max_finite),
-        "value below the overflow midpoint rounds to maximum finite"
+        FloatingScalarValue::Represented(BinaryFloatValue::Infinity(BinaryFloatSign::Positive,)),
+        "the nearest realizable exact value above the overflow midpoint rounds to infinity"
     );
 }
 
@@ -435,6 +533,16 @@ fn f16_special_values_and_nan_class_are_normalized_semantically() {
             NumericContract::Standard,
             positive_infinity,
             negative_infinity,
+        ),
+        FloatingScalarValue::NaNClass
+    );
+    assert_eq!(
+        observe(
+            &scalar,
+            Operation::Sub,
+            NumericContract::Standard,
+            positive_infinity,
+            positive_infinity,
         ),
         FloatingScalarValue::NaNClass
     );
