@@ -161,11 +161,7 @@ fn projected_program(
     let observer = interface(vec![float_ty, u8_ty, float_ty], None);
 
     let precision = format(scalar);
-    let sibling = normal(
-        BinaryFloatSign::Negative,
-        1_u64 << (precision - 1),
-        0,
-    );
+    let sibling = normal(BinaryFloatSign::Negative, 1_u64 << (precision - 1), 0);
     let aggregate = Place::local(LocalId(0));
     let result = aggregate.clone().field(1).field(0);
     let sibling_place = aggregate.clone().field(1).field(1);
@@ -223,8 +219,7 @@ fn run_differential(
     left: BinaryFloatValue,
     right: BinaryFloatValue,
 ) -> SeenFloat {
-    let (program, observer, sibling) =
-        projected_program(scalar, operation, contract, left, right);
+    let (program, observer, sibling) = projected_program(scalar, operation, contract, left, right);
 
     let wasm_seen = Arc::new(Mutex::new(None));
     let wasm_capture = Arc::clone(&wasm_seen);
