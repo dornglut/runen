@@ -568,9 +568,7 @@ impl FunctionEncoder<'_> {
             Statement::ReferenceAssign { dst, src } => {
                 self.emit_reference_assign(encoded, dst, src)
             }
-            Statement::ReferenceDrop { place } => {
-                self.emit_reference_read_or_drop(encoded, place)
-            }
+            Statement::ReferenceDrop { place } => self.emit_reference_read_or_drop(encoded, place),
             Statement::Borrow { .. }
             | Statement::EndBorrow { .. }
             | Statement::RawRead { .. }
@@ -934,9 +932,7 @@ impl FunctionEncoder<'_> {
                 Ok(1)
             }
             Operand::ReferenceRoot { place, .. } => self.emit_reference_root(encoded, place),
-            Operand::ReferenceReborrow { src, .. } => {
-                self.emit_reference_reborrow(encoded, src)
-            }
+            Operand::ReferenceReborrow { src, .. } => self.emit_reference_reborrow(encoded, src),
             Operand::ReferenceMove(src) | Operand::ReferenceCopy(src) => {
                 self.emit_reference_value(encoded, src)
             }
