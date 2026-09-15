@@ -102,13 +102,14 @@ fn identity_absent_from_current_compilation_fails_without_global_provenance() {
 }
 
 #[test]
-fn external_declarations_are_rejected_before_provider_composition_is_exposed() {
+fn external_declarations_without_provider_fail_in_hir_terms() {
     let compilation =
         compilation("external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }");
+    let transform = function(&compilation, "transform");
 
     assert!(matches!(
         RealizedCompilation::new(&compilation),
-        Err(BuildError::ExternalDeclarationsUnsupported)
+        Err(BuildError::MissingExternalProvider(function)) if function == transform
     ));
 }
 

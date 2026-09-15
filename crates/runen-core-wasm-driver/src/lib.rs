@@ -141,7 +141,7 @@ impl ExternalProviderBinding {
     }
 
     fn has_result(&self) -> bool {
-        matches!(self.implementation, ProviderImplementation::ScalarResult(_))
+        matches!(&self.implementation, ProviderImplementation::ScalarResult(_))
     }
 }
 
