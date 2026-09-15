@@ -200,6 +200,10 @@ fn nested_aggregate_with_floating_leaf_is_admitted() {
 fn valid_core_can_reach_every_excluded_statement_family() {
     let mut floating_types = TypeTable::new();
     let f16_ty = floating_types.push(TypeDef::scalar("F16", ScalarType::F16));
+    let aggregate_ty = floating_types.push(TypeDef::structure(
+        "FloatBox",
+        vec![Field::new("value", f16_ty)],
+    ));
     let zero = Value::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
     let floating_program = validated(
         floating_types,
@@ -209,16 +213,22 @@ fn valid_core_can_reach_every_excluded_statement_family() {
             Vec::new(),
             None,
             Body {
-                locals: vec![LocalDecl::new("value", f16_ty, false)],
+                locals: vec![LocalDecl::new("aggregate", aggregate_ty, false)],
                 loans: Vec::new(),
                 entry: BasicBlockId(0),
                 blocks: vec![BasicBlock::new(
-                    vec![Statement::FloatAdd {
-                        dst: Place::local(LocalId(0)),
-                        left: Operand::Constant(zero.clone()),
-                        right: Operand::Constant(zero),
-                        contract: NumericContract::Standard,
-                    }],
+                    vec![
+                        Statement::Init {
+                            dst: Place::local(LocalId(0)),
+                            src: Operand::Constant(Value::Struct(vec![zero.clone()])),
+                        },
+                        Statement::FloatAdd {
+                            dst: Place::local(LocalId(0)).field(0),
+                            left: Operand::Constant(zero.clone()),
+                            right: Operand::Constant(zero),
+                            contract: NumericContract::Standard,
+                        },
+                    ],
                     Terminator::Return(None),
                 )],
             },
