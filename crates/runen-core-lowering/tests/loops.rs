@@ -18,7 +18,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -553,12 +555,12 @@ fn invalid_retained_transfer_placement_is_a_lowering_invariant_failure() {
     runen_body_mut(f).terminal_return = None;
     runen_body_mut(f).has_normal_continuation = false;
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "loop transfer has no enclosing lowering target"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -574,10 +576,10 @@ fn non_bool_retained_while_is_rejected_as_hir_invariant() {
     };
     condition.ty = Type::Intrinsic(IntrinsicType::I64);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "while condition type is not Bool"
         ))
-    );
+    ));
 }
