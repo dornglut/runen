@@ -80,12 +80,11 @@ fn validated_with_external(has_result: bool) -> runen_core_ir::ValidatedProgram 
 #[test]
 fn scalar_result_binding_derives_canonical_interface_from_program() {
     let program = validated_with_external(true);
-    let binding = ExternalProviderBinding::scalar_result_for_program(
-        &program,
-        ExternalCallableId(0),
-        |_| ExternalScalarValue::I64(42),
-    )
-    .expect("result-bearing provider shape must match declaration");
+    let binding =
+        ExternalProviderBinding::scalar_result_for_program(&program, ExternalCallableId(0), |_| {
+            ExternalScalarValue::I64(42)
+        })
+        .expect("result-bearing provider shape must match declaration");
 
     let realized = RealizedProgram::new_with_external_providers(&program, vec![binding])
         .expect("derived provider binding must admit");
@@ -104,11 +103,13 @@ fn derived_binding_rejects_result_shape_mismatch() {
             ExternalCallableId(0),
             |_| {},
         ),
-        Err(ExternalProviderAdmissionError::ProviderResultShapeMismatch {
-            external: ExternalCallableId(0),
-            declaration_has_result: true,
-            provider_has_result: false,
-        })
+        Err(
+            ExternalProviderAdmissionError::ProviderResultShapeMismatch {
+                external: ExternalCallableId(0),
+                declaration_has_result: true,
+                provider_has_result: false,
+            }
+        )
     ));
 
     let no_result_program = validated_with_external(false);
@@ -118,11 +119,13 @@ fn derived_binding_rejects_result_shape_mismatch() {
             ExternalCallableId(0),
             |_| ExternalScalarValue::I64(1),
         ),
-        Err(ExternalProviderAdmissionError::ProviderResultShapeMismatch {
-            external: ExternalCallableId(0),
-            declaration_has_result: false,
-            provider_has_result: true,
-        })
+        Err(
+            ExternalProviderAdmissionError::ProviderResultShapeMismatch {
+                external: ExternalCallableId(0),
+                declaration_has_result: false,
+                provider_has_result: true,
+            }
+        )
     ));
 }
 
@@ -130,11 +133,7 @@ fn derived_binding_rejects_result_shape_mismatch() {
 fn derived_binding_rejects_unknown_external_identity() {
     let program = validated_with_external(false);
     assert!(matches!(
-        ExternalProviderBinding::no_result_for_program(
-            &program,
-            ExternalCallableId(1),
-            |_| {},
-        ),
+        ExternalProviderBinding::no_result_for_program(&program, ExternalCallableId(1), |_| {},),
         Err(ExternalProviderAdmissionError::UnknownProvider(
             ExternalCallableId(1)
         ))
