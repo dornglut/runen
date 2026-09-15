@@ -7,7 +7,7 @@ use runen_core_ir::{
 };
 use runen_core_wasm::{
     CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome,
-    ExternalProviderAdmissionError, RealizationError, RealizedProgram, UnsupportedOperandKind,
+    ExternalProviderAdmissionError, RealizationError, RealizedProgram,
 };
 
 fn body(locals: Vec<LocalDecl>, loans: Vec<LoanDecl>, blocks: Vec<BasicBlock>) -> Body {
@@ -262,7 +262,7 @@ fn direct_floating_persistent_is_admitted() {
 }
 
 #[test]
-fn persistent_shared_root_is_rejected_at_its_consuming_statement() {
+fn persistent_shared_root_is_admitted_at_its_consuming_statement() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let shared_i64 = types.push(TypeDef::reference(
@@ -293,19 +293,8 @@ fn persistent_shared_root_is_rejected_at_its_consuming_statement() {
         )],
     );
 
-    assert_eq!(
-        coverage_error(&program),
-        CoverageError {
-            location: CoverageLocation::Statement {
-                function: FunctionId(0),
-                block: BasicBlockId(0),
-                statement: 0,
-            },
-            kind: CoverageErrorKind::UnsupportedOperand(
-                UnsupportedOperandKind::PersistentSharedRoot,
-            ),
-        }
-    );
+    RealizedProgram::new(&program)
+        .expect("persistent Shared root must pass Core-Wasm coverage admission");
 }
 
 #[test]
