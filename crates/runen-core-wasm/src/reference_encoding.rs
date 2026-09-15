@@ -136,9 +136,11 @@ impl FunctionEncoder<'_> {
             .filter(|target| target.ty == referent)
         {
             let child_place = projected_place(&parent.place, &access.projections);
-            let child = self.reference_target_for_place(&child_place).ok_or_else(|| {
-                invariant("admitted reference reborrow has no projected private target handle")
-            })?;
+            let child = self
+                .reference_target_for_place(&child_place)
+                .ok_or_else(|| {
+                    invariant("admitted reference reborrow has no projected private target handle")
+                })?;
             self.emit_handle_match_start(encoded, parent.handle)?;
             encoded.instruction(&Instruction::I64Const(i64::from(child.handle)));
             encoded.instruction(&Instruction::LocalSet(value_scratch));
