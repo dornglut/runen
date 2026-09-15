@@ -42,7 +42,7 @@ fn assert_coverage_rejected(validated: runen_core_ir::ValidatedProgram) {
 }
 
 #[test]
-fn rejects_floating_types_and_operations() {
+fn admits_f32_basic_arithmetic_for_internal_transport() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let zero = Value::F32(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
@@ -57,12 +57,41 @@ fn rejects_floating_types_and_operations() {
                 right: Operand::Constant(zero),
                 contract: NumericContract::Standard,
             }],
-            Terminator::Return(Some(Operand::Move(Place::local(LocalId(0)).into()))),
+            Terminator::Return(None),
+        )],
+    };
+    let validated = validate(types, vec![function("entry", Vec::new(), None, body)]);
+    assert_eq!(
+        RealizedProgram::new(&validated)
+            .expect("direct F32 arithmetic must realize")
+            .execute(FunctionId(0))
+            .expect("direct F32 arithmetic fixture must execute"),
+        ExecutionOutcome::Returned(None)
+    );
+}
+
+#[test]
+fn f16_basic_arithmetic_remains_outside_realization_coverage() {
+    let mut types = TypeTable::new();
+    let f16_ty = types.push(TypeDef::scalar("F16", ScalarType::F16));
+    let zero = Value::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
+    let body = Body {
+        locals: vec![LocalDecl::new("result", f16_ty, false)],
+        loans: Vec::new(),
+        entry: BasicBlockId(0),
+        blocks: vec![BasicBlock::new(
+            vec![Statement::FloatAdd {
+                dst: Place::local(LocalId(0)),
+                left: Operand::Constant(zero.clone()),
+                right: Operand::Constant(zero),
+                contract: NumericContract::Standard,
+            }],
+            Terminator::Return(None),
         )],
     };
     assert_coverage_rejected(validate(
         types,
-        vec![function("entry", Vec::new(), Some(f32_ty), body)],
+        vec![function("entry", Vec::new(), None, body)],
     ));
 }
 
