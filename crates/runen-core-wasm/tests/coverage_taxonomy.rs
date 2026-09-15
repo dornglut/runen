@@ -197,16 +197,16 @@ fn nested_aggregate_with_floating_leaf_is_admitted() {
 }
 
 #[test]
-fn valid_core_can_reach_every_excluded_statement_family() {
-    let mut floating_types = TypeTable::new();
-    let f16_ty = floating_types.push(TypeDef::scalar("F16", ScalarType::F16));
-    let aggregate_ty = floating_types.push(TypeDef::structure(
+fn projected_floating_statement_is_admitted() {
+    let mut types = TypeTable::new();
+    let f16_ty = types.push(TypeDef::scalar("F16", ScalarType::F16));
+    let aggregate_ty = types.push(TypeDef::structure(
         "FloatBox",
         vec![Field::new("value", f16_ty)],
     ));
     let zero = Value::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
-    let floating_program = validated(
-        floating_types,
+    let program = validated(
+        types,
         Vec::new(),
         vec![function(
             "floating",
@@ -228,11 +228,11 @@ fn valid_core_can_reach_every_excluded_statement_family() {
             },
         )],
     );
-    assert_eq!(
-        coverage_error(&floating_program).kind,
-        CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Floating)
-    );
+    RealizedProgram::new(&program).expect("projected F16 arithmetic must be admitted");
+}
 
+#[test]
+fn valid_core_can_reach_every_excluded_statement_family() {
     let mut borrowing_types = TypeTable::new();
     let i64_ty = borrowing_types.push(TypeDef::scalar("I64", ScalarType::I64));
     let source = Place::local(LocalId(0));
