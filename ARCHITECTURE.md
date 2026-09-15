@@ -20,7 +20,7 @@ It consumes accepted source semantics from `spec/language/source/` and lossless 
 
 It may depend on `runen-syntax`. It MUST NOT infer module identity from filesystem/package conventions or source-unit order, and it MUST NOT own Core MIR lowering, Exec/Model IR, runtime execution, realization, or backend behavior.
 
-Core semantic/realization packages, reference semantics, Exec/Model packages, and verification-only proving packages do not depend on `runen-hir`. Source-to-Core consumption belongs only to the dedicated lowering package below; the separately owned target-specific source-to-realization composition belongs only to `runen-core-wasm-driver`.
+Core semantic/realization packages, reference semantics, Exec/Model packages, and verification-only proving packages do not depend on `runen-hir`. Source-to-Core consumption belongs only to the dedicated lowering package below; the separately owned target-specific typed-HIR-to-realization composition belongs only to `runen-core-wasm-driver`.
 
 ### `crates/runen-core-lowering`
 
