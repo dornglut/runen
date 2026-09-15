@@ -14,7 +14,7 @@ pub(crate) fn storage_carrier_count(
     types: &TypeTable,
     ty: TypeId,
 ) -> Result<usize, RealizationError> {
-    carrier_count(types, ty, true, true)
+    carrier_count(types, ty, true, true, true)
 }
 
 pub(crate) fn result_carrier_count(
@@ -23,10 +23,10 @@ pub(crate) fn result_carrier_count(
 ) -> Result<usize, RealizationError> {
     // Coverage remains the admission authority for each result context. Ordinary
     // function results may now be a supported callable root, while callable-valued
-    // interface components still reject before encoding. Safe-reference results
-    // remain outside the realized subset even though local reference carriers use
-    // one private i64 slot.
-    carrier_count(types, ty, true, false)
+    // interface components still reject before encoding. Safe-reference and raw-
+    // pointer results remain outside the realized subset even though admitted local
+    // carriers use one private i64 slot.
+    carrier_count(types, ty, true, false, false)
 }
 
 fn carrier_count(
@@ -34,6 +34,7 @@ fn carrier_count(
     ty: TypeId,
     allow_callable_root: bool,
     allow_reference_root: bool,
+    allow_raw_pointer_root: bool,
 ) -> Result<usize, RealizationError> {
     let definition = types
         .get(ty)
@@ -47,8 +48,9 @@ fn carrier_count(
         TypeKind::Scalar(_) if ScalarKind::from_type(types, ty).is_some() => Ok(1),
         TypeKind::Scalar(ScalarType::Callable(_)) if allow_callable_root => Ok(1),
         TypeKind::Scalar(ScalarType::Reference { .. }) if allow_reference_root => Ok(1),
+        TypeKind::Scalar(ScalarType::RawPointer(_)) if allow_raw_pointer_root => Ok(1),
         TypeKind::Struct(fields) => fields.iter().try_fold(0_usize, |count, field| {
-            let field_count = carrier_count(types, field.ty, false, false)?;
+            let field_count = carrier_count(types, field.ty, false, false, false)?;
             count
                 .checked_add(field_count)
                 .ok_or_else(|| invariant("structural carrier count overflow"))
@@ -82,14 +84,20 @@ pub(crate) fn projected_span(
             .ok_or_else(|| invariant("validated Core projection is out of bounds"))?;
         for preceding in &fields[..field_index] {
             offset = offset
-                .checked_add(carrier_count(types, preceding.ty, false, false)?)
+                .checked_add(carrier_count(types, preceding.ty, false, false, false)?)
                 .ok_or_else(|| invariant("projected carrier offset overflow"))?;
         }
         ty = field.ty;
     }
     Ok(CarrierSpan {
         offset,
-        len: carrier_count(types, ty, projections.is_empty(), projections.is_empty())?,
+        len: carrier_count(
+            types,
+            ty,
+            projections.is_empty(),
+            projections.is_empty(),
+            projections.is_empty(),
+        )?,
         ty,
     })
 }

@@ -108,7 +108,8 @@ fn direct_floating_local_and_constant_transport_are_admitted() {
 fn passive_local_types_report_every_remaining_excluded_type_family() {
     let mut raw = TypeTable::new();
     let raw_pointee = raw.push(TypeDef::scalar("I64", ScalarType::I64));
-    let raw_ty = raw.push(TypeDef::raw_pointer("RawI64", raw_pointee));
+    let inner_raw = raw.push(TypeDef::raw_pointer("RawI64", raw_pointee));
+    let raw_ty = raw.push(TypeDef::raw_pointer("RawRawI64", inner_raw));
     assert_local_type_category(raw, raw_ty, UnsupportedTypeCategory::RawPointer);
 
     let mut tracked = TypeTable::new();
@@ -346,54 +347,6 @@ fn valid_core_reaches_every_still_excluded_statement_family() {
         CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Borrowing)
     );
 
-    let mut raw_types = TypeTable::new();
-    let pointee = raw_types.push(TypeDef::scalar("I64", ScalarType::I64));
-    let pointer_ty = raw_types.push(TypeDef::raw_pointer("RawI64", pointee));
-    let target = Place::local(LocalId(0));
-    let pointer = Place::local(LocalId(1));
-    let raw_program = validated(
-        raw_types,
-        Vec::new(),
-        vec![function(
-            "raw",
-            Vec::new(),
-            None,
-            Body {
-                locals: vec![
-                    LocalDecl::new("target", pointee, false),
-                    LocalDecl::new("pointer", pointer_ty, false),
-                ],
-                loans: Vec::new(),
-                entry: BasicBlockId(1),
-                blocks: vec![
-                    BasicBlock::new(
-                        vec![Statement::RawRead {
-                            pointer: pointer.clone().into(),
-                        }],
-                        Terminator::Return(None),
-                    ),
-                    BasicBlock::new(
-                        vec![
-                            Statement::Init {
-                                dst: target.clone(),
-                                src: Operand::Constant(Value::I64(1)),
-                            },
-                            Statement::Init {
-                                dst: pointer,
-                                src: Operand::AddressOf(target.into()),
-                            },
-                        ],
-                        Terminator::Goto(BasicBlockId(0)),
-                    ),
-                ],
-            },
-        )],
-    );
-    assert_eq!(
-        coverage_error(&raw_program).kind,
-        CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::RawPointer)
-    );
-
     let mut interior_types = TypeTable::new();
     let interior_ty = interior_types
         .push(TypeDef::scalar("Interior", ScalarType::I64).with_interior_mutability());
@@ -493,17 +446,21 @@ fn persistent_shared_root_is_admitted_and_other_excluded_operands_keep_their_cat
 
     let mut raw_types = TypeTable::new();
     let pointee = raw_types.push(TypeDef::scalar("I64", ScalarType::I64));
+    let record = raw_types.push(TypeDef::structure(
+        "Box",
+        vec![Field::new("value", pointee)],
+    ));
     let pointer_ty = raw_types.push(TypeDef::raw_pointer("RawI64", pointee));
     let raw_program = validated(
         raw_types,
         Vec::new(),
         vec![function(
-            "address_of",
+            "projected_address_of",
             Vec::new(),
             None,
             Body {
                 locals: vec![
-                    LocalDecl::new("target", pointee, false),
+                    LocalDecl::new("target", record, false),
                     LocalDecl::new("pointer", pointer_ty, false),
                 ],
                 loans: Vec::new(),
@@ -512,11 +469,11 @@ fn persistent_shared_root_is_admitted_and_other_excluded_operands_keep_their_cat
                     vec![
                         Statement::Init {
                             dst: Place::local(LocalId(0)),
-                            src: Operand::Constant(Value::I64(1)),
+                            src: Operand::Constant(Value::Struct(vec![Value::I64(1)])),
                         },
                         Statement::Init {
                             dst: Place::local(LocalId(1)),
-                            src: Operand::AddressOf(Place::local(LocalId(0)).into()),
+                            src: Operand::AddressOf(Place::local(LocalId(0)).field(0).into()),
                         },
                     ],
                     Terminator::Return(None),
