@@ -89,10 +89,7 @@ impl RealizedCompilation {
     /// The `FunctionId` is interpreted only relative to the `TypedCompilation`
     /// used to construct this realization. Backend entry admissibility remains
     /// owned by Core-Wasm and is returned unchanged through `ExecutionError`.
-    pub fn execute(
-        &self,
-        function: hir::FunctionId,
-    ) -> Result<ExecutionOutcome, ExecutionError> {
+    pub fn execute(&self, function: hir::FunctionId) -> Result<ExecutionOutcome, ExecutionError> {
         let function = self
             .ordinary_functions
             .get(&function)

@@ -44,10 +44,8 @@ fn caller_selects_non_first_hir_function_without_core_order_knowledge() {
 
 #[test]
 fn declaration_reordering_does_not_change_hir_selected_behavior() {
-    let first_order =
-        "fn first() -> I64 { return 11; } fn selected() -> I64 { return 37; }";
-    let second_order =
-        "fn selected() -> I64 { return 37; } fn first() -> I64 { return 11; }";
+    let first_order = "fn first() -> I64 { return 11; } fn selected() -> I64 { return 37; }";
+    let second_order = "fn selected() -> I64 { return 37; } fn first() -> I64 { return 11; }";
 
     assert_eq!(
         execute_named(first_order, "selected"),
@@ -105,9 +103,8 @@ fn identity_absent_from_current_compilation_fails_without_global_provenance() {
 
 #[test]
 fn external_declarations_are_rejected_before_provider_composition_is_exposed() {
-    let compilation = compilation(
-        "external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }",
-    );
+    let compilation =
+        compilation("external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }");
 
     assert!(matches!(
         RealizedCompilation::new(&compilation),
