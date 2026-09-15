@@ -16,9 +16,41 @@ pub enum LoweringError {
     CoreValidation(core::MirValidationError),
 }
 
-/// Lower one accepted typed HIR compilation into a Core program that has passed
-/// the canonical Core validator.
-pub fn lower(compilation: &hir::TypedCompilation) -> Result<core::ValidatedProgram, LoweringError> {
+/// One validated Core refinement together with the ordinary source-function
+/// correspondence preserved by that refinement.
+///
+/// The correspondence covers only non-external, non-generic Runen functions. It
+/// is compiler refinement evidence, not executable-entry selection, generic
+/// specialization identity, closure identity, or external-provider identity.
+pub struct LoweredCompilation {
+    program: core::ValidatedProgram,
+    ordinary_functions: BTreeMap<hir::FunctionId, core::FunctionId>,
+}
+
+impl LoweredCompilation {
+    /// Borrow the validated Core program produced by this refinement.
+    #[must_use]
+    pub const fn program(&self) -> &core::ValidatedProgram {
+        &self.program
+    }
+
+    /// Resolve one ordinary non-external, non-generic HIR function into the
+    /// exact Core function created for that root specialization.
+    #[must_use]
+    pub fn core_function(&self, function: hir::FunctionId) -> Option<core::FunctionId> {
+        self.ordinary_functions.get(&function).copied()
+    }
+
+    /// Consume the refinement artifact and retain only its validated Core program.
+    #[must_use]
+    pub fn into_program(self) -> core::ValidatedProgram {
+        self.program
+    }
+}
+
+/// Lower one accepted typed HIR compilation into validated Core together with
+/// the exact ordinary non-generic function correspondence retained by lowering.
+pub fn lower(compilation: &hir::TypedCompilation) -> Result<LoweredCompilation, LoweringError> {
     Lowerer::new(compilation)?.lower()
 }
 
@@ -91,7 +123,34 @@ impl<'a> Lowerer<'a> {
         })
     }
 
-    fn lower(self) -> Result<core::ValidatedProgram, LoweringError> {
+    fn ordinary_function_correspondence(
+        &self,
+    ) -> Result<BTreeMap<hir::FunctionId, core::FunctionId>, LoweringError> {
+        let mut ordinary_functions = BTreeMap::new();
+        for function in &self.compilation.functions {
+            if function.is_external() || !function.type_parameters.is_empty() {
+                continue;
+            }
+            let specialization = SpecializationKey {
+                function: function.id,
+                type_arguments: Vec::new(),
+            };
+            let core_function = self.functions.get(&specialization).copied().ok_or(
+                LoweringError::InvalidHirInvariant(
+                    "ordinary HIR function is absent from root specialization map",
+                ),
+            )?;
+            if ordinary_functions.insert(function.id, core_function).is_some() {
+                return Err(LoweringError::InvalidHirInvariant(
+                    "duplicate ordinary HIR function correspondence",
+                ));
+            }
+        }
+        Ok(ordinary_functions)
+    }
+
+    fn lower(self) -> Result<LoweredCompilation, LoweringError> {
+        let ordinary_functions = self.ordinary_function_correspondence()?;
         let capacity = self
             .specializations
             .len()
@@ -171,7 +230,11 @@ impl<'a> Lowerer<'a> {
             types: self.types.types,
             functions,
         };
-        core::validate_program(program).map_err(LoweringError::CoreValidation)
+        let program = core::validate_program(program).map_err(LoweringError::CoreValidation)?;
+        Ok(LoweredCompilation {
+            program,
+            ordinary_functions,
+        })
     }
 }
 
