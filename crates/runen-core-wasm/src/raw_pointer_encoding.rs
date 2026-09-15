@@ -1,4 +1,6 @@
-use runen_core_ir::{Function, LocalId, Place, PlaceAccess, ScalarType, TypeId, TypeKind, TypeTable};
+use runen_core_ir::{
+    Function, LocalId, Place, PlaceAccess, ScalarType, TypeId, TypeKind, TypeTable,
+};
 use wasm_encoder::{Function as WasmFunction, Instruction};
 
 use crate::RealizationError;
@@ -18,18 +20,12 @@ pub(super) fn collect_raw_pointer_targets(
     types: &TypeTable,
     function: &Function,
 ) -> Result<Vec<RawPointerTarget>, RealizationError> {
-    let has_raw_pointer_local = function
-        .body
-        .locals
-        .iter()
-        .enumerate()
-        .any(|(index, local)| {
-            !function.parameters.contains(&LocalId(index as u32))
-                && matches!(
-                    types.get(local.ty).map(|definition| &definition.kind),
-                    Some(TypeKind::Scalar(ScalarType::RawPointer(_)))
-                )
-        });
+    let has_raw_pointer_local = function.body.locals.iter().any(|local| {
+        matches!(
+            types.get(local.ty).map(|definition| &definition.kind),
+            Some(TypeKind::Scalar(ScalarType::RawPointer(_)))
+        )
+    });
     if !has_raw_pointer_local {
         return Ok(Vec::new());
     }
@@ -147,7 +143,8 @@ impl FunctionEncoder<'_> {
             }
             self.emit_raw_handle_match_end(encoded, target_scratch);
         }
-        self.emit_raw_handle_dispatch_finish(encoded, target_scratch)
+        self.emit_raw_handle_dispatch_finish(encoded, target_scratch);
+        Ok(())
     }
 
     fn emit_raw_target_value(
@@ -188,7 +185,7 @@ impl FunctionEncoder<'_> {
             }
             self.emit_raw_handle_match_end(encoded, handle_scratch);
         }
-        self.emit_raw_handle_dispatch_finish(encoded, handle_scratch)?;
+        self.emit_raw_handle_dispatch_finish(encoded, handle_scratch);
 
         for index in 0..carrier_count {
             encoded.instruction(&Instruction::LocalGet(self.layout.scratch(index)?));
@@ -213,12 +210,12 @@ impl FunctionEncoder<'_> {
             .types
             .get(pointer_ty)
             .ok_or_else(|| invariant("validated raw-pointer type is missing"))?;
-        let TypeKind::Scalar(ScalarType::RawPointer(pointee)) = definition.kind else {
+        let TypeKind::Scalar(ScalarType::RawPointer(pointee)) = &definition.kind else {
             return Err(invariant(
                 "coverage admission allowed raw operation on non-pointer storage",
             ));
         };
-        Ok(pointee)
+        Ok(*pointee)
     }
 
     fn emit_raw_pointer_handle_to_scratch(
@@ -246,12 +243,7 @@ impl FunctionEncoder<'_> {
             .find(|target| target.place == *place)
     }
 
-    fn emit_raw_handle_match_start(
-        &self,
-        encoded: &mut WasmFunction,
-        scratch: u32,
-        handle: u32,
-    ) {
+    fn emit_raw_handle_match_start(&self, encoded: &mut WasmFunction, scratch: u32, handle: u32) {
         encoded.instruction(&Instruction::LocalGet(scratch));
         encoded.instruction(&Instruction::I64Const(i64::from(handle)));
         encoded.instruction(&Instruction::I64Eq);
@@ -264,18 +256,13 @@ impl FunctionEncoder<'_> {
         encoded.instruction(&Instruction::End);
     }
 
-    fn emit_raw_handle_dispatch_finish(
-        &self,
-        encoded: &mut WasmFunction,
-        scratch: u32,
-    ) -> Result<(), RealizationError> {
+    fn emit_raw_handle_dispatch_finish(&self, encoded: &mut WasmFunction, scratch: u32) {
         encoded.instruction(&Instruction::LocalGet(scratch));
         encoded.instruction(&Instruction::I64Eqz);
         encoded.instruction(&Instruction::If(wasm_encoder::BlockType::Empty));
         encoded.instruction(&Instruction::Else);
         encoded.instruction(&Instruction::Unreachable);
         encoded.instruction(&Instruction::End);
-        Ok(())
     }
 }
 
