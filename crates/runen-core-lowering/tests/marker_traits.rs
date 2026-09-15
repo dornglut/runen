@@ -11,7 +11,9 @@ fn lower_source(source: &str) -> runen_core_ir::ValidatedProgram {
     assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
     let hir = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
         .expect("accepted marker-bearing source must build typed HIR");
-    lower(&hir).expect("accepted marker-bearing HIR must lower through existing Core refinement")
+    lower(&hir)
+        .expect("accepted marker-bearing HIR must lower through existing Core refinement")
+        .into_program()
 }
 
 fn functions_named<'a>(program: &'a runen_core_ir::Program, name: &str) -> Vec<&'a CoreFunction> {
