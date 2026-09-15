@@ -17,126 +17,45 @@ jobs:
           set -euo pipefail
           python - <<'PY'
           from pathlib import Path
+          import base64
           import subprocess
 
           path = Path("crates/runen-core-lowering/src/lib.rs")
           expected_blob = "bdbd02f4d59a042393b5137a37af018a06188227"
-          actual_blob = subprocess.check_output(
-              ["git", "hash-object", str(path)], text=True
-          ).strip()
+          actual_blob = subprocess.check_output(["git", "hash-object", str(path)], text=True).strip()
           if actual_blob != expected_blob:
-              raise SystemExit(
-                  f"unexpected lowering blob: expected {expected_blob}, got {actual_blob}"
-              )
+              raise SystemExit(f"unexpected lowering blob: expected {expected_blob}, got {actual_blob}")
 
-          text = path.read_text()
-          replacements = [
-              (
-                  """/// One validated Core refinement together with the ordinary source-function
-/// correspondence preserved by that refinement.
-///
-/// The correspondence covers only non-external, non-generic Runen functions. It
-/// is compiler refinement evidence, not executable-entry selection, generic
-/// specialization identity, closure identity, or external-provider identity.
-pub struct LoweredCompilation {
-    program: core::ValidatedProgram,
-    ordinary_functions: BTreeMap<hir::FunctionId, core::FunctionId>,
-}
-""",
-                  """/// One validated Core refinement together with the source-identity
-/// correspondences preserved by that refinement.
-///
-/// Ordinary correspondence covers non-external, non-generic Runen functions;
-/// external correspondence covers represented external declarations. Both are
-/// compiler refinement evidence, not executable-entry selection, provider lookup
-/// policy, generic specialization identity, closure identity, or ABI/symbol identity.
-pub struct LoweredCompilation {
-    program: core::ValidatedProgram,
-    ordinary_functions: BTreeMap<hir::FunctionId, core::FunctionId>,
-    external_functions: BTreeMap<hir::FunctionId, core::ExternalCallableId>,
-}
-""",
-              ),
-              (
-                  """    pub fn core_function(&self, function: hir::FunctionId) -> Option<core::FunctionId> {
-        self.ordinary_functions.get(&function).copied()
-    }
-
-    /// Consume the refinement artifact and retain only its validated Core program.
-""",
-                  """    pub fn core_function(&self, function: hir::FunctionId) -> Option<core::FunctionId> {
-        self.ordinary_functions.get(&function).copied()
-    }
-
-    /// Resolve one external HIR declaration into the exact Core external callable
-    /// identity created by this refinement.
-    #[must_use]
-    pub fn core_external_callable(
-        &self,
-        function: hir::FunctionId,
-    ) -> Option<core::ExternalCallableId> {
-        self.external_functions.get(&function).copied()
-    }
-
-    /// Consume the refinement artifact and retain only its validated Core program.
-""",
-              ),
-              (
-                  """/// Lower one accepted typed HIR compilation into validated Core together with
-/// the exact ordinary non-generic function correspondence retained by lowering.
-""",
-                  """/// Lower one accepted typed HIR compilation into validated Core together with
-/// the exact ordinary-function and external-declaration correspondences retained
-/// by lowering.
-""",
-              ),
-              (
-                  """    fn lower(self) -> Result<LoweredCompilation, LoweringError> {
-        let ordinary_functions = self.ordinary_function_correspondence()?;
-        let capacity = self
-""",
-                  """    fn lower(self) -> Result<LoweredCompilation, LoweringError> {
-        let ordinary_functions = self.ordinary_function_correspondence()?;
-        let external_functions = self.external_callables.clone();
-        let capacity = self
-""",
-              ),
-              (
-                  """        Ok(LoweredCompilation {
-            program,
-            ordinary_functions,
-        })
-""",
-                  """        Ok(LoweredCompilation {
-            program,
-            ordinary_functions,
-            external_functions,
-        })
-""",
-              ),
+          encoded_pairs = [
+              ("Ly8vIE9uZSB2YWxpZGF0ZWQgQ29yZSByZWZpbmVtZW50IHRvZ2V0aGVyIHdpdGggdGhlIG9yZGluYXJ5IHNvdXJjZS1mdW5jdGlvbgovLy8gY29ycmVzcG9uZGVuY2UgcHJlc2VydmVkIGJ5IHRoYXQgcmVmaW5lbWVudC4KLy8vCi8vLyBUaGUgY29ycmVzcG9uZGVuY2UgY292ZXJzIG9ubHkgbm9uLWV4dGVybmFsLCBub24tZ2VuZXJpYyBSdW5lbiBmdW5jdGlvbnMuIEl0Ci8vLyBpcyBjb21waWxlciByZWZpbmVtZW50IGV2aWRlbmNlLCBub3QgZXhlY3V0YWJsZS1lbnRyeSBzZWxlY3Rpb24sIGdlbmVyaWMKLy8vIHNwZWNpYWxpemF0aW9uIGlkZW50aXR5LCBjbG9zdXJlIGlkZW50aXR5LCBvciBleHRlcm5hbC1wcm92aWRlciBpZGVudGl0eS4KcHViIHN0cnVjdCBMb3dlcmVkQ29tcGlsYXRpb24gewogICAgcHJvZ3JhbTogY29yZTo6VmFsaWRhdGVkUHJvZ3JhbSwKICAgIG9yZGluYXJ5X2Z1bmN0aW9uczogQlRyZWVNYXA8aGlyOjpGdW5jdGlvbklkLCBjb3JlOjpGdW5jdGlvbklkPiwKfQo=", "Ly8vIE9uZSB2YWxpZGF0ZWQgQ29yZSByZWZpbmVtZW50IHRvZ2V0aGVyIHdpdGggdGhlIHNvdXJjZS1pZGVudGl0eQovLy8gY29ycmVzcG9uZGVuY2VzIHByZXNlcnZlZCBieSB0aGF0IHJlZmluZW1lbnQuCi8vLwovLy8gT3JkaW5hcnkgY29ycmVzcG9uZGVuY2UgY292ZXJzIG5vbi1leHRlcm5hbCwgbm9uLWdlbmVyaWMgUnVuZW4gZnVuY3Rpb25zOwovLy8gZXh0ZXJuYWwgY29ycmVzcG9uZGVuY2UgY292ZXJzIHJlcHJlc2VudGVkIGV4dGVybmFsIGRlY2xhcmF0aW9ucy4gQm90aCBhcmUKLy8vIGNvbXBpbGVyIHJlZmluZW1lbnQgZXZpZGVuY2UsIG5vdCBleGVjdXRhYmxlLWVudHJ5IHNlbGVjdGlvbiwgcHJvdmlkZXIgbG9va3VwCi8vLyBwb2xpY3ksIGdlbmVyaWMgc3BlY2lhbGl6YXRpb24gaWRlbnRpdHksIGNsb3N1cmUgaWRlbnRpdHksIG9yIEFCSS9zeW1ib2wgaWRlbnRpdHkuCnB1YiBzdHJ1Y3QgTG93ZXJlZENvbXBpbGF0aW9uIHsKICAgIHByb2dyYW06IGNvcmU6OlZhbGlkYXRlZFByb2dyYW0sCiAgICBvcmRpbmFyeV9mdW5jdGlvbnM6IEJUcmVlTWFwPGhpcjo6RnVuY3Rpb25JZCwgY29yZTo6RnVuY3Rpb25JZD4sCiAgICBleHRlcm5hbF9mdW5jdGlvbnM6IEJUcmVlTWFwPGhpcjo6RnVuY3Rpb25JZCwgY29yZTo6RXh0ZXJuYWxDYWxsYWJsZUlkPiwKfQo="),
+              ("ICAgIHB1YiBmbiBjb3JlX2Z1bmN0aW9uKCZzZWxmLCBmdW5jdGlvbjogaGlyOjpGdW5jdGlvbklkKSAtPiBPcHRpb248Y29yZTo6RnVuY3Rpb25JZD4gewogICAgICAgIHNlbGYub3JkaW5hcnlfZnVuY3Rpb25zLmdldCgmZnVuY3Rpb24pLmNvcGllZCgpCiAgICB9CgogICAgLy8vIENvbnN1bWUgdGhlIHJlZmluZW1lbnQgYXJ0aWZhY3QgYW5kIHJldGFpbiBvbmx5IGl0cyB2YWxpZGF0ZWQgQ29yZSBwcm9ncmFtLgo=", "ICAgIHB1YiBmbiBjb3JlX2Z1bmN0aW9uKCZzZWxmLCBmdW5jdGlvbjogaGlyOjpGdW5jdGlvbklkKSAtPiBPcHRpb248Y29yZTo6RnVuY3Rpb25JZD4gewogICAgICAgIHNlbGYub3JkaW5hcnlfZnVuY3Rpb25zLmdldCgmZnVuY3Rpb24pLmNvcGllZCgpCiAgICB9CgogICAgLy8vIFJlc29sdmUgb25lIGV4dGVybmFsIEhJUiBkZWNsYXJhdGlvbiBpbnRvIHRoZSBleGFjdCBDb3JlIGV4dGVybmFsIGNhbGxhYmxlCiAgICAvLy8gaWRlbnRpdHkgY3JlYXRlZCBieSB0aGlzIHJlZmluZW1lbnQuCiAgICAjW211c3RfdXNlXQogICAgcHViIGZuIGNvcmVfZXh0ZXJuYWxfY2FsbGFibGUoCiAgICAgICAgJnNlbGYsCiAgICAgICAgZnVuY3Rpb246IGhpcjo6RnVuY3Rpb25JZCwKICAgICkgLT4gT3B0aW9uPGNvcmU6OkV4dGVybmFsQ2FsbGFibGVJZD4gewogICAgICAgIHNlbGYuZXh0ZXJuYWxfZnVuY3Rpb25zLmdldCgmZnVuY3Rpb24pLmNvcGllZCgpCiAgICB9CgogICAgLy8vIENvbnN1bWUgdGhlIHJlZmluZW1lbnQgYXJ0aWZhY3QgYW5kIHJldGFpbiBvbmx5IGl0cyB2YWxpZGF0ZWQgQ29yZSBwcm9ncmFtLgo="),
+              ("Ly8vIExvd2VyIG9uZSBhY2NlcHRlZCB0eXBlZCBISVIgY29tcGlsYXRpb24gaW50byB2YWxpZGF0ZWQgQ29yZSB0b2dldGhlciB3aXRoCi8vLyB0aGUgZXhhY3Qgb3JkaW5hcnkgbm9uLWdlbmVyaWMgZnVuY3Rpb24gY29ycmVzcG9uZGVuY2UgcmV0YWluZWQgYnkgbG93ZXJpbmcuCg==", "Ly8vIExvd2VyIG9uZSBhY2NlcHRlZCB0eXBlZCBISVIgY29tcGlsYXRpb24gaW50byB2YWxpZGF0ZWQgQ29yZSB0b2dldGhlciB3aXRoCi8vLyB0aGUgZXhhY3Qgb3JkaW5hcnktZnVuY3Rpb24gYW5kIGV4dGVybmFsLWRlY2xhcmF0aW9uIGNvcnJlc3BvbmRlbmNlcyByZXRhaW5lZAovLy8gYnkgbG93ZXJpbmcuCg=="),
+              ("ICAgIGZuIGxvd2VyKHNlbGYpIC0+IFJlc3VsdDxMb3dlcmVkQ29tcGlsYXRpb24sIExvd2VyaW5nRXJyb3I+IHsKICAgICAgICBsZXQgb3JkaW5hcnlfZnVuY3Rpb25zID0gc2VsZi5vcmRpbmFyeV9mdW5jdGlvbl9jb3JyZXNwb25kZW5jZSgpPzsKICAgICAgICBsZXQgY2FwYWNpdHkgPSBzZWxmCg==", "ICAgIGZuIGxvd2VyKHNlbGYpIC0+IFJlc3VsdDxMb3dlcmVkQ29tcGlsYXRpb24sIExvd2VyaW5nRXJyb3I+IHsKICAgICAgICBsZXQgb3JkaW5hcnlfZnVuY3Rpb25zID0gc2VsZi5vcmRpbmFyeV9mdW5jdGlvbl9jb3JyZXNwb25kZW5jZSgpPzsKICAgICAgICBsZXQgZXh0ZXJuYWxfZnVuY3Rpb25zID0gc2VsZi5leHRlcm5hbF9jYWxsYWJsZXMuY2xvbmUoKTsKICAgICAgICBsZXQgY2FwYWNpdHkgPSBzZWxmCg=="),
+              ("ICAgICAgICBPayhMb3dlcmVkQ29tcGlsYXRpb24gewogICAgICAgICAgICBwcm9ncmFtLAogICAgICAgICAgICBvcmRpbmFyeV9mdW5jdGlvbnMsCiAgICAgICAgfSkK", "ICAgICAgICBPayhMb3dlcmVkQ29tcGlsYXRpb24gewogICAgICAgICAgICBwcm9ncmFtLAogICAgICAgICAgICBvcmRpbmFyeV9mdW5jdGlvbnMsCiAgICAgICAgICAgIGV4dGVybmFsX2Z1bmN0aW9ucywKICAgICAgICB9KQo="),
           ]
 
-          for old, new in replacements:
+          text = path.read_text()
+          for old64, new64 in encoded_pairs:
+              old = base64.b64decode(old64).decode()
+              new = base64.b64decode(new64).decode()
               count = text.count(old)
               if count != 1:
                   raise SystemExit(f"expected one replacement site, found {count}")
               text = text.replace(old, new, 1)
-
           path.write_text(text)
           PY
 
           git diff --check
           changed="$(git diff --name-only)"
           test "${changed}" = "crates/runen-core-lowering/src/lib.rs"
-          git diff -- crates/runen-core-lowering/src/lib.rs > /tmp/lowering.patch
-          git hash-object crates/runen-core-lowering/src/lib.rs > /tmp/lowering.blob
+          mkdir -p scratch-artifact
+          cp crates/runen-core-lowering/src/lib.rs scratch-artifact/lib.rs
+          git diff -- crates/runen-core-lowering/src/lib.rs > scratch-artifact/lowering.patch
+          git hash-object crates/runen-core-lowering/src/lib.rs > scratch-artifact/lowering.blob
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: scratch-840-lowering-candidate
-          path: |
-            crates/runen-core-lowering/src/lib.rs
-            /tmp/lowering.patch
-            /tmp/lowering.blob
+          path: scratch-artifact
           if-no-files-found: error
           retention-days: 1
