@@ -49,10 +49,8 @@ fn execute_equal_interface_second(source: &str) -> ExecutionOutcome {
 
 #[test]
 fn equal_interfaces_remain_hir_identity_keyed_across_declaration_reordering() {
-    let first_order =
-        "external fn first() -> I64; external fn second() -> I64; fn entry() -> I64 { return second(); }";
-    let second_order =
-        "external fn second() -> I64; external fn first() -> I64; fn entry() -> I64 { return second(); }";
+    let first_order = "external fn first() -> I64; external fn second() -> I64; fn entry() -> I64 { return second(); }";
+    let second_order = "external fn second() -> I64; external fn first() -> I64; fn entry() -> I64 { return second(); }";
 
     assert_eq!(
         execute_equal_interface_second(first_order),
@@ -79,10 +77,7 @@ fn scalar_result_provider_composes_from_hir_identity_to_execution() {
             |arguments| {
                 assert_eq!(
                     arguments,
-                    &[
-                        ExternalScalarValue::I64(7),
-                        ExternalScalarValue::Bool(true),
-                    ]
+                    &[ExternalScalarValue::I64(7), ExternalScalarValue::Bool(true),]
                 );
                 ExternalScalarValue::U64(42)
             },
@@ -184,13 +179,16 @@ fn generic_specialization_and_closure_share_one_hir_keyed_external_provider() {
     let provider_seen = Arc::clone(&seen);
     let realized = RealizedCompilation::new_with_external_providers(
         &compilation,
-        vec![ExternalProviderBinding::scalar_result(ext, move |arguments| {
-            let [ExternalScalarValue::I64(value)] = arguments else {
-                panic!("external provider must receive exactly one I64 argument");
-            };
-            provider_seen.lock().unwrap().push(*value);
-            ExternalScalarValue::I64(value + 1)
-        })],
+        vec![ExternalProviderBinding::scalar_result(
+            ext,
+            move |arguments| {
+                let [ExternalScalarValue::I64(value)] = arguments else {
+                    panic!("external provider must receive exactly one I64 argument");
+                };
+                provider_seen.lock().unwrap().push(*value);
+                ExternalScalarValue::I64(value + 1)
+            },
+        )],
     )
     .expect("generic and closure external call paths must realize");
 
@@ -219,8 +217,7 @@ fn provider_key_must_name_an_external_in_the_current_compilation() {
 
 #[test]
 fn duplicate_provider_is_rejected_by_hir_identity_before_realization() {
-    let compilation =
-        compilation("external fn ext() -> I64; fn entry() -> I64 { return ext(); }");
+    let compilation = compilation("external fn ext() -> I64; fn entry() -> I64 { return ext(); }");
     let ext = function(&compilation, "ext");
 
     assert!(matches!(
@@ -237,8 +234,7 @@ fn duplicate_provider_is_rejected_by_hir_identity_before_realization() {
 
 #[test]
 fn every_external_declaration_requires_a_provider_even_when_unused() {
-    let compilation =
-        compilation("external fn unused() -> I64; fn entry() -> I64 { return 7; }");
+    let compilation = compilation("external fn unused() -> I64; fn entry() -> I64 { return 7; }");
     let unused = function(&compilation, "unused");
 
     assert!(matches!(
@@ -264,8 +260,7 @@ fn provider_result_shape_is_checked_in_hir_terms_before_realization() {
         }) if function == value
     ));
 
-    let no_result_compilation =
-        compilation("external fn sink(); fn entry() -> I64 { return 1; }");
+    let no_result_compilation = compilation("external fn sink(); fn entry() -> I64 { return 1; }");
     let sink = function(&no_result_compilation, "sink");
     assert!(matches!(
         RealizedCompilation::new_with_external_providers(
