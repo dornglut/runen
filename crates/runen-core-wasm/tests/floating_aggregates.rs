@@ -8,9 +8,8 @@ use runen_core_ir::{
     ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{
-    CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, ExternalProviderBinding,
-    ExternalScalarValue, FloatingScalarValue, RealizationError, RealizedProgram,
-    UnsupportedTypeCategory,
+    ExecutionOutcome, ExternalProviderBinding, ExternalScalarValue, FloatingScalarValue,
+    RealizationError, RealizedProgram,
 };
 
 fn interface(parameters: Vec<TypeId>, result: Option<TypeId>) -> CallableInterface {
@@ -507,31 +506,28 @@ fn aggregate_external_interfaces_remain_outside_provider_transfer_scope() {
         "FloatWrapper",
         vec![Field::new("value", parameter_f32)],
     ));
-    let parameter_program = validated(
-        parameter_types,
-        vec![ExternalCallableDecl::new(interface(
+    let parameter_error = validate_program(Program {
+        types: parameter_types,
+        persistent: Vec::new(),
+        external_callables: vec![ExternalCallableDecl::new(interface(
             vec![parameter_aggregate],
             None,
         ))],
-        vec![function(
+        functions: vec![function(
             "entry",
             Vec::new(),
             None,
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
         )],
-    );
+    })
+    .expect_err("aggregate external parameter must remain invalid Core");
     assert_eq!(
-        RealizedProgram::new(&parameter_program).err(),
-        Some(RealizationError::Coverage(CoverageError {
-            location: CoverageLocation::ExternalCallable(ExternalCallableId(0)),
-            kind: CoverageErrorKind::UnsupportedExternalParameterType {
-                external: ExternalCallableId(0),
-                parameter: 0,
-                ty: parameter_aggregate,
-                category: UnsupportedTypeCategory::Unknown,
-            },
-        }))
+        parameter_error.kind,
+        MirValidationErrorKind::InvalidExternalCallableType {
+            external: ExternalCallableId(0),
+            ty: parameter_aggregate,
+        }
     );
 
     let mut result_types = TypeTable::new();
@@ -540,30 +536,28 @@ fn aggregate_external_interfaces_remain_outside_provider_transfer_scope() {
         "FloatWrapper",
         vec![Field::new("value", result_f64)],
     ));
-    let result_program = validated(
-        result_types,
-        vec![ExternalCallableDecl::new(interface(
+    let result_error = validate_program(Program {
+        types: result_types,
+        persistent: Vec::new(),
+        external_callables: vec![ExternalCallableDecl::new(interface(
             Vec::new(),
             Some(result_aggregate),
         ))],
-        vec![function(
+        functions: vec![function(
             "entry",
             Vec::new(),
             None,
             Vec::new(),
             vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
         )],
-    );
+    })
+    .expect_err("aggregate external result must remain invalid Core");
     assert_eq!(
-        RealizedProgram::new(&result_program).err(),
-        Some(RealizationError::Coverage(CoverageError {
-            location: CoverageLocation::ExternalCallable(ExternalCallableId(0)),
-            kind: CoverageErrorKind::UnsupportedExternalResultType {
-                external: ExternalCallableId(0),
-                ty: result_aggregate,
-                category: UnsupportedTypeCategory::Unknown,
-            },
-        }))
+        result_error.kind,
+        MirValidationErrorKind::InvalidExternalCallableType {
+            external: ExternalCallableId(0),
+            ty: result_aggregate,
+        }
     );
 }
 
