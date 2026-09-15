@@ -18,7 +18,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn function<'a>(program: &'a runen_core_ir::Program, name: &str) -> &'a runen_core_ir::Function {
@@ -240,12 +242,12 @@ fn lowering_rejects_non_integer_retained_integer_mul_result_fact() {
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::Bool);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-mul result type is not a fixed-width integer"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -260,12 +262,12 @@ fn lowering_rejects_integer_mul_operand_type_facts_that_do_not_match_result() {
         panic!("expected integer-mul HIR value");
     };
     left.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&left_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-mul left operand type does not match result type"
         ))
-    );
+    ));
 
     let mut right_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left * right; }");
     let value = runen_body_mut(&mut right_mismatch.functions[0])
@@ -277,12 +279,12 @@ fn lowering_rejects_integer_mul_operand_type_facts_that_do_not_match_result() {
         panic!("expected integer-mul HIR value");
     };
     right.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&right_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-mul right operand type does not match result type"
         ))
-    );
+    ));
 }
 
 #[test]
