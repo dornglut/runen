@@ -669,7 +669,7 @@ fn validate_floating_statement(
                 !definition.interior_mutable
                     && matches!(
                         definition.kind,
-                        TypeKind::Scalar(ScalarType::F32 | ScalarType::F64)
+                        TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64)
                     )
             });
     if !supported {

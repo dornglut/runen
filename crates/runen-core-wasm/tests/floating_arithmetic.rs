@@ -50,9 +50,10 @@ fn function(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Function {
 
 fn value(scalar: &ScalarType, value: BinaryFloatValue) -> Value {
     match scalar {
+        ScalarType::F16 => Value::F16(value),
         ScalarType::F32 => Value::F32(value),
         ScalarType::F64 => Value::F64(value),
-        _ => panic!("floating arithmetic test only supports F32/F64"),
+        _ => panic!("floating arithmetic test only supports F16/F32/F64"),
     }
 }
 
@@ -93,11 +94,13 @@ fn statement(
 
 fn represented_from_wasm(value: &ExternalScalarValue) -> SeenFloat {
     match value {
-        ExternalScalarValue::F32(FloatingScalarValue::Represented(value))
+        ExternalScalarValue::F16(FloatingScalarValue::Represented(value))
+        | ExternalScalarValue::F32(FloatingScalarValue::Represented(value))
         | ExternalScalarValue::F64(FloatingScalarValue::Represented(value)) => {
             SeenFloat::Represented(*value)
         }
-        ExternalScalarValue::F32(FloatingScalarValue::NaNClass)
+        ExternalScalarValue::F16(FloatingScalarValue::NaNClass)
+        | ExternalScalarValue::F32(FloatingScalarValue::NaNClass)
         | ExternalScalarValue::F64(FloatingScalarValue::NaNClass) => SeenFloat::NaNClass,
         other => panic!("observer received non-floating Core-Wasm value: {other:?}"),
     }
@@ -105,11 +108,13 @@ fn represented_from_wasm(value: &ExternalScalarValue) -> SeenFloat {
 
 fn represented_from_reference(value: &ReferenceScalarValue) -> SeenFloat {
     match value {
-        ReferenceScalarValue::F32(ObservedBinaryFloatValue::Represented(value))
+        ReferenceScalarValue::F16(ObservedBinaryFloatValue::Represented(value))
+        | ReferenceScalarValue::F32(ObservedBinaryFloatValue::Represented(value))
         | ReferenceScalarValue::F64(ObservedBinaryFloatValue::Represented(value)) => {
             SeenFloat::Represented(*value)
         }
-        ReferenceScalarValue::F32(ObservedBinaryFloatValue::NaNClass)
+        ReferenceScalarValue::F16(ObservedBinaryFloatValue::NaNClass)
+        | ReferenceScalarValue::F32(ObservedBinaryFloatValue::NaNClass)
         | ReferenceScalarValue::F64(ObservedBinaryFloatValue::NaNClass) => SeenFloat::NaNClass,
         other => panic!("observer received non-floating reference value: {other:?}"),
     }
@@ -180,7 +185,7 @@ fn run_differential(
             },
         )],
     )
-    .expect("F32/F64 arithmetic fixture must realize");
+    .expect("F16/F32/F64 arithmetic fixture must realize");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
         ExecutionOutcome::Returned(None)
@@ -221,9 +226,10 @@ fn run_differential(
 
 fn format(scalar: &ScalarType) -> (u32, i16, i16) {
     match scalar {
+        ScalarType::F16 => (11, -14, 15),
         ScalarType::F32 => (24, -126, 127),
         ScalarType::F64 => (53, -1022, 1023),
-        _ => panic!("floating arithmetic test only supports F32/F64"),
+        _ => panic!("floating arithmetic test only supports F16/F32/F64"),
     }
 }
 
@@ -244,8 +250,8 @@ fn normal(sign: BinaryFloatSign, significand: u64, exponent: i16) -> BinaryFloat
 }
 
 #[test]
-fn all_basic_operations_execute_for_f32_f64_and_all_numeric_contracts() {
-    for scalar in [ScalarType::F32, ScalarType::F64] {
+fn all_basic_operations_execute_for_all_formats_and_numeric_contracts() {
+    for scalar in [ScalarType::F16, ScalarType::F32, ScalarType::F64] {
         let (precision, _, _) = format(&scalar);
         let one = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 0);
         let two = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 1);
@@ -271,7 +277,7 @@ fn all_basic_operations_execute_for_f32_f64_and_all_numeric_contracts() {
 
 #[test]
 fn boundary_rounding_signed_zero_subnormal_overflow_and_special_values_match_reference() {
-    for scalar in [ScalarType::F32, ScalarType::F64] {
+    for scalar in [ScalarType::F16, ScalarType::F32, ScalarType::F64] {
         let (precision, emin, emax) = format(&scalar);
         let one = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 0);
         let two = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 1);
@@ -340,15 +346,16 @@ fn boundary_rounding_signed_zero_subnormal_overflow_and_special_values_match_ref
 
 fn provider_nan_value(scalar: &ScalarType) -> ExternalScalarValue {
     match scalar {
+        ScalarType::F16 => ExternalScalarValue::F16(FloatingScalarValue::NaNClass),
         ScalarType::F32 => ExternalScalarValue::F32(FloatingScalarValue::NaNClass),
         ScalarType::F64 => ExternalScalarValue::F64(FloatingScalarValue::NaNClass),
-        _ => panic!("floating arithmetic test only supports F32/F64"),
+        _ => panic!("floating arithmetic test only supports F16/F32/F64"),
     }
 }
 
 #[test]
 fn provider_nan_class_is_an_arithmetic_input_and_returns_to_semantic_nan_class() {
-    for scalar in [ScalarType::F32, ScalarType::F64] {
+    for scalar in [ScalarType::F16, ScalarType::F32, ScalarType::F64] {
         let (precision, _, _) = format(&scalar);
         let one = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 0);
         for operation in [

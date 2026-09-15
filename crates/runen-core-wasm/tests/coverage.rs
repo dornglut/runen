@@ -71,7 +71,7 @@ fn admits_f32_basic_arithmetic_for_internal_transport() {
 }
 
 #[test]
-fn f16_basic_arithmetic_remains_outside_realization_coverage() {
+fn admits_f16_basic_arithmetic_for_internal_transport() {
     let mut types = TypeTable::new();
     let f16_ty = types.push(TypeDef::scalar("F16", ScalarType::F16));
     let zero = Value::F16(BinaryFloatValue::Zero(BinaryFloatSign::Positive));
@@ -89,10 +89,14 @@ fn f16_basic_arithmetic_remains_outside_realization_coverage() {
             Terminator::Return(None),
         )],
     };
-    assert_coverage_rejected(validate(
-        types,
-        vec![function("entry", Vec::new(), None, body)],
-    ));
+    let validated = validate(types, vec![function("entry", Vec::new(), None, body)]);
+    assert_eq!(
+        RealizedProgram::new(&validated)
+            .expect("direct F16 arithmetic must realize")
+            .execute(FunctionId(0))
+            .expect("direct F16 arithmetic fixture must execute"),
+        ExecutionOutcome::Returned(None)
+    );
 }
 
 #[test]
