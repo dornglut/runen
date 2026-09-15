@@ -1,9 +1,0 @@
-name: Scratch 840 workflow smoke test
-
-on: push
-
-jobs:
-  smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo scratch-workflow-ok
