@@ -1,8 +1,8 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl, ExternalCallableId,
-    Fault, Field, Function, FunctionId, LocalDecl, LocalId, Operand, Place, Program,
-    ReferenceAccess, ReferencePermission, SafeReferenceResultContract, ScalarType, Statement,
-    Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
+    Fault, Field, Function, FunctionId, LocalDecl, LocalId, MirValidationErrorKind, Operand, Place,
+    Program, ReferenceAccess, ReferencePermission, SafeReferenceResultContract, ScalarType,
+    Statement, Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{
     CoverageError, CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError,
@@ -10,12 +10,7 @@ use runen_core_wasm::{
 };
 use runen_reference::{Machine, ObservedValue, TerminalStatus};
 
-fn function(
-    name: &str,
-    parameters: Vec<LocalId>,
-    result: Option<TypeId>,
-    body: Body,
-) -> Function {
+fn function(name: &str, parameters: Vec<LocalId>, result: Option<TypeId>, body: Body) -> Function {
     Function {
         name: name.into(),
         parameters,
@@ -377,7 +372,7 @@ fn reference_containing_aggregate_remains_a_coverage_rejection() {
 }
 
 #[test]
-fn external_reference_transfer_remains_a_coverage_rejection() {
+fn external_reference_transfer_is_rejected_by_core_validation() {
     let mut types = TypeTable::new();
     let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
     let shared_i64 = types.push(TypeDef::reference(
@@ -385,35 +380,24 @@ fn external_reference_transfer_remains_a_coverage_rejection() {
         i64_ty,
         ReferencePermission::Shared,
     ));
-    let external = ExternalCallableDecl::new(CallableInterface::new(
-        vec![shared_i64],
-        None,
-        SafeReferenceResultContract::None,
-    ));
-    let entry = function(
-        "entry",
-        Vec::new(),
-        None,
-        Body {
-            locals: Vec::new(),
-            loans: Vec::new(),
-            entry: BasicBlockId(0),
-            blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
-        },
-    );
-    let validated = validate(types, vec![external], vec![entry]);
+    let error = validate_program(Program {
+        types,
+        persistent: Vec::new(),
+        external_callables: vec![ExternalCallableDecl::new(CallableInterface::new(
+            vec![shared_i64],
+            None,
+            SafeReferenceResultContract::None,
+        ))],
+        functions: Vec::new(),
+    })
+    .expect_err("external reference transfer must remain outside valid Core");
 
     assert_eq!(
-        RealizedProgram::new(&validated).err(),
-        Some(RealizationError::Coverage(CoverageError {
-            location: CoverageLocation::ExternalCallable(ExternalCallableId(0)),
-            kind: CoverageErrorKind::UnsupportedExternalParameterType {
-                external: ExternalCallableId(0),
-                parameter: 0,
-                ty: shared_i64,
-                category: UnsupportedTypeCategory::SafeReference,
-            },
-        }))
+        error.kind,
+        MirValidationErrorKind::InvalidExternalCallableType {
+            external: ExternalCallableId(0),
+            ty: shared_i64,
+        }
     );
 }
 
