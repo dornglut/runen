@@ -1,6 +1,6 @@
 use runen_core_ir::{Fault, Value};
-use runen_core_wasm::ExecutionOutcome;
-use runen_core_wasm_driver::RealizedCompilation;
+use runen_core_wasm::{ExecutionOutcome, RealizationError};
+use runen_core_wasm_driver::{BuildError, RealizedCompilation};
 use runen_hir::{FunctionId, ModuleId, SourceUnit, TypedCompilation, build_typed_hir};
 use runen_syntax::parse_source;
 
@@ -110,4 +110,31 @@ fn projected_exclusive_replace_move_and_reinitialize_executes_through_driver() {
         outcome,
         ExecutionOutcome::Returned(Some(Value::Struct(vec![Value::I64(73), Value::I64(5),])))
     );
+}
+
+#[test]
+fn persistent_shared_static_root_executes_through_existing_driver() {
+    let outcome = execute(
+        "static VALUE: I64 = 89;\
+         fn entry() -> I64 {\
+             let r: &I64 = &VALUE;\
+             return *r;\
+         }",
+    );
+
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(89))));
+}
+
+#[test]
+fn persistent_shared_static_root_does_not_widen_reference_call_transfer() {
+    let compilation = compilation(
+        "static VALUE: I64 = 97;\
+         fn read(r: &I64) -> I64 { return *r; }\
+         fn entry() -> I64 { return read(&VALUE); }",
+    );
+
+    assert!(matches!(
+        RealizedCompilation::new(&compilation),
+        Err(BuildError::Realization(RealizationError::Coverage(_)))
+    ));
 }
