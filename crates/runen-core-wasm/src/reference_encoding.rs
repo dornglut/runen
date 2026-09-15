@@ -71,11 +71,7 @@ fn collect_target_regions(
         return Ok(());
     }
 
-    push_target(
-        targets,
-        ReferenceTargetStorage::Local(place.clone()),
-        ty,
-    )?;
+    push_target(targets, ReferenceTargetStorage::Local(place.clone()), ty)?;
 
     let definition = types
         .get(ty)
