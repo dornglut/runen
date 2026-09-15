@@ -154,11 +154,9 @@ fn observe(
         realized.execute(FunctionId(0)).unwrap(),
         ExecutionOutcome::Returned(None)
     );
-    let observed = seen
-        .lock()
+    seen.lock()
         .unwrap()
-        .expect("boundary observer must receive the result");
-    observed
+        .expect("boundary observer must receive the result")
 }
 
 #[test]
