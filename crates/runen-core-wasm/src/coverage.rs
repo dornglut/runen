@@ -58,7 +58,6 @@ pub enum UnsupportedOperandKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UnsupportedStatementKind {
-    Floating,
     Borrowing,
     Reference,
     RawPointer,
@@ -192,7 +191,7 @@ fn validate_function(
                 block: block_id,
                 statement: statement_index,
             };
-            validate_statement(types, function, statement, &location)?;
+            validate_statement(statement, &location)?;
         }
         let location = CoverageLocation::Terminator {
             function: function_id,
@@ -575,8 +574,6 @@ fn first_unsupported_aggregate_component(
 }
 
 fn validate_statement(
-    types: &TypeTable,
-    function: &Function,
     statement: &Statement,
     location: &CoverageLocation,
 ) -> Result<(), CoverageError> {
@@ -605,12 +602,8 @@ fn validate_statement(
         }
         | Statement::IntegerLt {
             dst, left, right, ..
-        } => {
-            validate_place(dst, location)?;
-            validate_operand(left, location)?;
-            validate_operand(right, location)
         }
-        Statement::FloatAdd {
+        | Statement::FloatAdd {
             dst, left, right, ..
         }
         | Statement::FloatSub {
@@ -621,7 +614,11 @@ fn validate_statement(
         }
         | Statement::FloatDiv {
             dst, left, right, ..
-        } => validate_floating_statement(types, function, dst, left, right, location),
+        } => {
+            validate_place(dst, location)?;
+            validate_operand(left, location)?;
+            validate_operand(right, location)
+        }
         Statement::Read { src } => validate_access(src, location),
         Statement::Assign { dst, src } => {
             validate_access(dst, location)?;
@@ -650,37 +647,6 @@ fn validate_statement(
             ),
         }),
     }
-}
-
-fn validate_floating_statement(
-    types: &TypeTable,
-    function: &Function,
-    dst: &Place,
-    left: &Operand,
-    right: &Operand,
-    location: &CoverageLocation,
-) -> Result<(), CoverageError> {
-    let supported = dst.projections.is_empty()
-        && function
-            .body
-            .local(dst.local)
-            .and_then(|local| types.get(local.ty))
-            .is_some_and(|definition| {
-                !definition.interior_mutable
-                    && matches!(
-                        definition.kind,
-                        TypeKind::Scalar(ScalarType::F16 | ScalarType::F32 | ScalarType::F64)
-                    )
-            });
-    if !supported {
-        return Err(CoverageError {
-            location: location.clone(),
-            kind: CoverageErrorKind::UnsupportedStatement(UnsupportedStatementKind::Floating),
-        });
-    }
-    validate_place(dst, location)?;
-    validate_operand(left, location)?;
-    validate_operand(right, location)
 }
 
 fn validate_terminator(
