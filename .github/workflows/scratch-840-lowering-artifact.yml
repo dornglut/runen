@@ -18,6 +18,7 @@ jobs:
           test "$(git rev-parse HEAD)" = "a9fa7c9c2827cb9fe3c5e32ddd5bac56cc643953"
           python - <<'PY'
           from pathlib import Path
+          import base64
 
           lib = Path("crates/runen-core-wasm-driver/src/lib.rs")
           text = lib.read_text()
@@ -29,29 +30,8 @@ jobs:
 
           composition = Path("crates/runen-core-wasm-driver/tests/composition.rs")
           text = composition.read_text()
-          old = '''#[test]
-fn external_declarations_are_rejected_before_provider_composition_is_exposed() {
-    let compilation =
-        compilation("external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }");
-
-    assert!(matches!(
-        RealizedCompilation::new(&compilation),
-        Err(BuildError::ExternalDeclarationsUnsupported)
-    ));
-}
-'''
-          new = '''#[test]
-fn external_declarations_without_provider_fail_in_hir_terms() {
-    let compilation =
-        compilation("external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }");
-    let transform = function(&compilation, "transform");
-
-    assert!(matches!(
-        RealizedCompilation::new(&compilation),
-        Err(BuildError::MissingExternalProvider(function)) if function == transform
-    ));
-}
-'''
+          old = base64.b64decode("I1t0ZXN0XQpmbiBleHRlcm5hbF9kZWNsYXJhdGlvbnNfYXJlX3JlamVjdGVkX2JlZm9yZV9wcm92aWRlcl9jb21wb3NpdGlvbl9pc19leHBvc2VkKCkgewogICAgbGV0IGNvbXBpbGF0aW9uID0KICAgICAgICBjb21waWxhdGlvbigiZXh0ZXJuYWwgZm4gdHJhbnNmb3JtKEk2NCkgLT4gSTY0OyBmbiBlbnRyeSgpIC0+IEk2NCB7IHJldHVybiAxOyB9Iik7CgogICAgYXNzZXJ0IShtYXRjaGVzISgKICAgICAgICBSZWFsaXplZENvbXBpbGF0aW9uOjpuZXcoJmNvbXBpbGF0aW9uKSwKICAgICAgICBFcnIoQnVpbGRFcnJvcjo6RXh0ZXJuYWxEZWNsYXJhdGlvbnNVbnN1cHBvcnRlZCkKICAgICkpOwp9Cg==").decode()
+          new = base64.b64decode("I1t0ZXN0XQpmbiBleHRlcm5hbF9kZWNsYXJhdGlvbnNfd2l0aG91dF9wcm92aWRlcl9mYWlsX2luX2hpcl90ZXJtcygpIHsKICAgIGxldCBjb21waWxhdGlvbiA9CiAgICAgICAgY29tcGlsYXRpb24oImV4dGVybmFsIGZuIHRyYW5zZm9ybShJNjQpIC0+IEk2NDsgZm4gZW50cnkoKSAtPiBJNjQgeyByZXR1cm4gMTsgfSIpOwogICAgbGV0IHRyYW5zZm9ybSA9IGZ1bmN0aW9uKCZjb21waWxhdGlvbiwgInRyYW5zZm9ybSIpOwoKICAgIGFzc2VydCEobWF0Y2hlcyEoCiAgICAgICAgUmVhbGl6ZWRDb21waWxhdGlvbjo6bmV3KCZjb21waWxhdGlvbiksCiAgICAgICAgRXJyKEJ1aWxkRXJyb3I6Ok1pc3NpbmdFeHRlcm5hbFByb3ZpZGVyKGZ1bmN0aW9uKSkgaWYgZnVuY3Rpb24gPT0gdHJhbnNmb3JtCiAgICApKTsKfQo=").decode()
           if text.count(old) != 1:
               raise SystemExit("composition replacement site changed")
           composition.write_text(text.replace(old, new, 1))
