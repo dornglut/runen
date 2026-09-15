@@ -12,8 +12,7 @@ use runen_core_wasm::{
 };
 use runen_reference::{
     ExternalProviderBinding as ReferenceProviderBinding,
-    ExternalScalarValue as ReferenceScalarValue, Machine, ObservedBinaryFloatValue,
-    TerminalStatus,
+    ExternalScalarValue as ReferenceScalarValue, Machine, ObservedBinaryFloatValue, TerminalStatus,
 };
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -49,7 +48,7 @@ fn function(locals: Vec<LocalDecl>, blocks: Vec<BasicBlock>) -> Function {
     }
 }
 
-fn value(scalar: ScalarType, value: BinaryFloatValue) -> Value {
+fn value(scalar: &ScalarType, value: BinaryFloatValue) -> Value {
     match scalar {
         ScalarType::F32 => Value::F32(value),
         ScalarType::F64 => Value::F64(value),
@@ -117,14 +116,14 @@ fn represented_from_reference(value: &ReferenceScalarValue) -> SeenFloat {
 }
 
 fn validated_observation_program(
-    scalar: ScalarType,
+    scalar: &ScalarType,
     operation: Operation,
     contract: NumericContract,
     left: BinaryFloatValue,
     right: BinaryFloatValue,
 ) -> (ValidatedProgram, CallableInterface) {
     let mut types = TypeTable::new();
-    let ty = types.push(TypeDef::scalar("Float", scalar));
+    let ty = types.push(TypeDef::scalar("Float", scalar.clone()));
     let observer = interface(vec![ty], None);
     let program = validate_program(Program {
         types,
@@ -157,7 +156,7 @@ fn validated_observation_program(
 }
 
 fn run_differential(
-    scalar: ScalarType,
+    scalar: &ScalarType,
     operation: Operation,
     contract: NumericContract,
     left: BinaryFloatValue,
@@ -208,7 +207,10 @@ fn run_differential(
     .expect("reference floating arithmetic fixture must execute");
     assert_eq!(report.terminal, TerminalStatus::Returned);
 
-    let wasm = wasm_seen.lock().unwrap().expect("Core-Wasm observer must run");
+    let wasm = wasm_seen
+        .lock()
+        .unwrap()
+        .expect("Core-Wasm observer must run");
     let reference = reference_seen
         .lock()
         .unwrap()
@@ -217,7 +219,7 @@ fn run_differential(
     wasm
 }
 
-fn format(scalar: ScalarType) -> (u32, i16, i16) {
+fn format(scalar: &ScalarType) -> (u32, i16, i16) {
     match scalar {
         ScalarType::F32 => (24, -126, 127),
         ScalarType::F64 => (53, -1022, 1023),
@@ -233,11 +235,7 @@ fn infinity(sign: BinaryFloatSign) -> BinaryFloatValue {
     BinaryFloatValue::Infinity(sign)
 }
 
-fn normal(
-    sign: BinaryFloatSign,
-    significand: u64,
-    exponent: i16,
-) -> BinaryFloatValue {
+fn normal(sign: BinaryFloatSign, significand: u64, exponent: i16) -> BinaryFloatValue {
     BinaryFloatValue::Normal {
         sign,
         significand,
@@ -248,7 +246,7 @@ fn normal(
 #[test]
 fn all_basic_operations_execute_for_f32_f64_and_all_numeric_contracts() {
     for scalar in [ScalarType::F32, ScalarType::F64] {
-        let (precision, _, _) = format(scalar);
+        let (precision, _, _) = format(&scalar);
         let one = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 0);
         let two = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 1);
         for contract in [
@@ -263,7 +261,7 @@ fn all_basic_operations_execute_for_f32_f64_and_all_numeric_contracts() {
                 (Operation::Div, two, one),
             ] {
                 assert_ne!(
-                    run_differential(scalar, operation, contract, left, right),
+                    run_differential(&scalar, operation, contract, left, right),
                     SeenFloat::NaNClass
                 );
             }
@@ -274,7 +272,7 @@ fn all_basic_operations_execute_for_f32_f64_and_all_numeric_contracts() {
 #[test]
 fn boundary_rounding_signed_zero_subnormal_overflow_and_special_values_match_reference() {
     for scalar in [ScalarType::F32, ScalarType::F64] {
-        let (precision, emin, emax) = format(scalar);
+        let (precision, emin, emax) = format(&scalar);
         let one = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 0);
         let two = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 1);
         let half_ulp_at_one = normal(
@@ -282,16 +280,8 @@ fn boundary_rounding_signed_zero_subnormal_overflow_and_special_values_match_ref
             1_u64 << (precision - 1),
             -(precision as i16),
         );
-        let min_normal = normal(
-            BinaryFloatSign::Positive,
-            1_u64 << (precision - 1),
-            emin,
-        );
-        let max_finite = normal(
-            BinaryFloatSign::Positive,
-            (1_u64 << precision) - 1,
-            emax,
-        );
+        let min_normal = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), emin);
+        let max_finite = normal(BinaryFloatSign::Positive, (1_u64 << precision) - 1, emax);
         let min_subnormal = BinaryFloatValue::Subnormal {
             sign: BinaryFloatSign::Positive,
             significand: 1,
@@ -302,7 +292,11 @@ fn boundary_rounding_signed_zero_subnormal_overflow_and_special_values_match_ref
             (Operation::Sub, one, one),
             (Operation::Mul, zero(BinaryFloatSign::Negative), one),
             (Operation::Div, min_normal, two),
-            (Operation::Add, min_subnormal, zero(BinaryFloatSign::Positive)),
+            (
+                Operation::Add,
+                min_subnormal,
+                zero(BinaryFloatSign::Positive),
+            ),
             (Operation::Add, max_finite, max_finite),
             (Operation::Div, one, zero(BinaryFloatSign::Negative)),
             (
@@ -338,13 +332,13 @@ fn boundary_rounding_signed_zero_subnormal_overflow_and_special_values_match_ref
             NumericContract::Fast,
         ] {
             for (operation, left, right) in cases {
-                run_differential(scalar, operation, contract, left, right);
+                run_differential(&scalar, operation, contract, left, right);
             }
         }
     }
 }
 
-fn provider_nan_value(scalar: ScalarType) -> ExternalScalarValue {
+fn provider_nan_value(scalar: &ScalarType) -> ExternalScalarValue {
     match scalar {
         ScalarType::F32 => ExternalScalarValue::F32(FloatingScalarValue::NaNClass),
         ScalarType::F64 => ExternalScalarValue::F64(FloatingScalarValue::NaNClass),
@@ -355,7 +349,7 @@ fn provider_nan_value(scalar: ScalarType) -> ExternalScalarValue {
 #[test]
 fn provider_nan_class_is_an_arithmetic_input_and_returns_to_semantic_nan_class() {
     for scalar in [ScalarType::F32, ScalarType::F64] {
-        let (precision, _, _) = format(scalar);
+        let (precision, _, _) = format(&scalar);
         let one = normal(BinaryFloatSign::Positive, 1_u64 << (precision - 1), 0);
         for operation in [
             Operation::Add,
@@ -364,7 +358,7 @@ fn provider_nan_class_is_an_arithmetic_input_and_returns_to_semantic_nan_class()
             Operation::Div,
         ] {
             let mut types = TypeTable::new();
-            let ty = types.push(TypeDef::scalar("Float", scalar));
+            let ty = types.push(TypeDef::scalar("Float", scalar.clone()));
             let produce = interface(Vec::new(), Some(ty));
             let observe = interface(vec![ty], None);
             let program = validate_program(Program {
@@ -394,7 +388,7 @@ fn provider_nan_class_is_an_arithmetic_input_and_returns_to_semantic_nan_class()
                                 operation,
                                 Place::local(LocalId(1)),
                                 Operand::Move(Place::local(LocalId(0)).into()),
-                                Operand::Constant(value(scalar, one)),
+                                Operand::Constant(value(&scalar, one)),
                                 NumericContract::Standard,
                             )],
                             Terminator::ExternalCall {
@@ -410,7 +404,7 @@ fn provider_nan_class_is_an_arithmetic_input_and_returns_to_semantic_nan_class()
             })
             .expect("provider-NaN arithmetic fixture must be valid Core");
 
-            let expected_nan = provider_nan_value(scalar);
+            let expected_nan = provider_nan_value(&scalar);
             let realized = RealizedProgram::new_with_external_providers(
                 &program,
                 vec![
