@@ -1,7 +1,7 @@
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, FunctionId,
-    LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
-    Terminator, TypeDef, TypeTable, Value, validate_program,
+    LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType,
+    Statement, Terminator, TypeDef, TypeTable, Value, validate_program,
 };
 
 use crate::{coverage, encoding};
@@ -90,7 +90,8 @@ fn floating_aggregate_transport_reuses_existing_private_module_shape() {
     })
     .expect("floating aggregate module-shape fixture must be valid Core");
 
-    coverage::validate(&program).expect("floating aggregate fixture must be in realization coverage");
+    coverage::validate(&program)
+        .expect("floating aggregate fixture must be in realization coverage");
     let encoded = encoding::encode(&program).expect("floating aggregate fixture must encode");
     let module = &encoded.bytes[8..];
 
@@ -156,7 +157,11 @@ fn export_kinds(bytes: &[u8]) -> Vec<u8> {
         let _index = read_u32_leb(bytes, &mut cursor);
         kinds.push(kind);
     }
-    assert_eq!(cursor, bytes.len(), "export section must be consumed exactly");
+    assert_eq!(
+        cursor,
+        bytes.len(),
+        "export section must be consumed exactly"
+    );
     kinds
 }
 
