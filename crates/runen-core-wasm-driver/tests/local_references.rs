@@ -85,7 +85,8 @@ fn projected_exclusive_replace_move_and_reinitialize_executes_through_driver() {
     let outcome = execute(
         "record Ticket { value: I64 }\
          record Holder { ticket: Ticket, other: I64 }\
-         fn entry() -> I64 {\
+         record copy Snapshot { updated: I64, untouched: I64 }\
+         fn entry() -> Snapshot {\
              let mut holder: Holder = Holder {\
                  ticket: Ticket { value: 11 },\
                  other: 5\
@@ -98,9 +99,18 @@ fn projected_exclusive_replace_move_and_reinitialize_executes_through_driver() {
                      *child = Ticket { value: 73 };\
                  }\
              }\
-             return holder.ticket.value + holder.other;\
+             return Snapshot {\
+                 updated: holder.ticket.value,\
+                 untouched: holder.other\
+             };\
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(78))));
+    assert_eq!(
+        outcome,
+        ExecutionOutcome::Returned(Some(Value::Struct(vec![
+            Value::I64(73),
+            Value::I64(5),
+        ])))
+    );
 }
