@@ -76,9 +76,9 @@ fn projected_exclusive_replace_move_and_reinitialize_executes_through_driver() {
                      *child = Ticket { value: 73 };\
                  }\
              }\
-             return holder.ticket.value;\
+             return holder.ticket.value + holder.other;\
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(73))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(78))));
 }
