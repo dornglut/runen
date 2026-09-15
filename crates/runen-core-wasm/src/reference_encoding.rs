@@ -446,3 +446,56 @@ fn projected_place(root: &Place, projections: &[runen_core_ir::Projection]) -> P
     place.projections.extend_from_slice(projections);
     place
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use runen_core_ir::{
+        BasicBlock, BasicBlockId, Body, LocalDecl, ReferencePermission,
+        SafeReferenceResultContract, Terminator, TypeDef, Value,
+    };
+
+    #[test]
+    fn equal_persistent_declarations_receive_distinct_private_target_handles() {
+        let mut types = TypeTable::new();
+        let i64_ty = types.push(TypeDef::scalar("I64", ScalarType::I64));
+        let shared_i64 = types.push(TypeDef::reference(
+            "SharedI64",
+            i64_ty,
+            ReferencePermission::Shared,
+        ));
+        let function = Function {
+            name: "entry".into(),
+            parameters: Vec::new(),
+            result: None,
+            safe_reference_result_contract: SafeReferenceResultContract::None,
+            body: Body {
+                locals: vec![LocalDecl::new("reference", shared_i64, false)],
+                loans: Vec::new(),
+                entry: BasicBlockId(0),
+                blocks: vec![BasicBlock::new(Vec::new(), Terminator::Return(None))],
+            },
+        };
+        let persistent = vec![
+            PersistentDecl::new(i64_ty, Value::I64(5)),
+            PersistentDecl::new(i64_ty, Value::I64(5)),
+        ];
+
+        let targets = collect_reference_targets(&types, &function, &persistent)
+            .expect("private target collection must succeed");
+        let persistent_targets = targets
+            .iter()
+            .filter_map(|target| match &target.storage {
+                ReferenceTargetStorage::Persistent(persistent) => {
+                    Some((*persistent, target.handle))
+                }
+                ReferenceTargetStorage::Local(_) => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(persistent_targets.len(), 2);
+        assert_eq!(persistent_targets[0].0, PersistentId(0));
+        assert_eq!(persistent_targets[1].0, PersistentId(1));
+        assert_ne!(persistent_targets[0].1, persistent_targets[1].1);
+    }
+}
