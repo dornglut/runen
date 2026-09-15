@@ -1,4 +1,4 @@
-name: Scratch 840 lowering patch transfer
+name: Scratch 840 driver cleanup transfer
 
 on: push
 
@@ -11,46 +11,56 @@ jobs:
           ref: issue-840-hir-external-providers
           persist-credentials: true
 
-      - name: Verify exact PR head and apply patch
+      - name: Verify exact PR head and apply cleanup
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "39a1673f0b84a3f15ac77d917f0e01c2a454a870"
+          test "$(git rev-parse HEAD)" = "a9fa7c9c2827cb9fe3c5e32ddd5bac56cc643953"
           python - <<'PY'
           from pathlib import Path
-          import base64
-          import subprocess
 
-          path = Path("crates/runen-core-lowering/src/lib.rs")
-          expected_blob = "bdbd02f4d59a042393b5137a37af018a06188227"
-          actual_blob = subprocess.check_output(["git", "hash-object", str(path)], text=True).strip()
-          if actual_blob != expected_blob:
-              raise SystemExit(f"unexpected lowering blob: expected {expected_blob}, got {actual_blob}")
+          lib = Path("crates/runen-core-wasm-driver/src/lib.rs")
+          text = lib.read_text()
+          old = "matches!(self.implementation, ProviderImplementation::ScalarResult(_))"
+          new = "matches!(&self.implementation, ProviderImplementation::ScalarResult(_))"
+          if text.count(old) != 1:
+              raise SystemExit("driver has_result replacement site changed")
+          lib.write_text(text.replace(old, new, 1))
 
-          encoded_pairs = [
-              ("Ly8vIE9uZSB2YWxpZGF0ZWQgQ29yZSByZWZpbmVtZW50IHRvZ2V0aGVyIHdpdGggdGhlIG9yZGluYXJ5IHNvdXJjZS1mdW5jdGlvbgovLy8gY29ycmVzcG9uZGVuY2UgcHJlc2VydmVkIGJ5IHRoYXQgcmVmaW5lbWVudC4KLy8vCi8vLyBUaGUgY29ycmVzcG9uZGVuY2UgY292ZXJzIG9ubHkgbm9uLWV4dGVybmFsLCBub24tZ2VuZXJpYyBSdW5lbiBmdW5jdGlvbnMuIEl0Ci8vLyBpcyBjb21waWxlciByZWZpbmVtZW50IGV2aWRlbmNlLCBub3QgZXhlY3V0YWJsZS1lbnRyeSBzZWxlY3Rpb24sIGdlbmVyaWMKLy8vIHNwZWNpYWxpemF0aW9uIGlkZW50aXR5LCBjbG9zdXJlIGlkZW50aXR5LCBvciBleHRlcm5hbC1wcm92aWRlciBpZGVudGl0eS4KcHViIHN0cnVjdCBMb3dlcmVkQ29tcGlsYXRpb24gewogICAgcHJvZ3JhbTogY29yZTo6VmFsaWRhdGVkUHJvZ3JhbSwKICAgIG9yZGluYXJ5X2Z1bmN0aW9uczogQlRyZWVNYXA8aGlyOjpGdW5jdGlvbklkLCBjb3JlOjpGdW5jdGlvbklkPiwKfQo=", "Ly8vIE9uZSB2YWxpZGF0ZWQgQ29yZSByZWZpbmVtZW50IHRvZ2V0aGVyIHdpdGggdGhlIHNvdXJjZS1pZGVudGl0eQovLy8gY29ycmVzcG9uZGVuY2VzIHByZXNlcnZlZCBieSB0aGF0IHJlZmluZW1lbnQuCi8vLwovLy8gT3JkaW5hcnkgY29ycmVzcG9uZGVuY2UgY292ZXJzIG5vbi1leHRlcm5hbCwgbm9uLWdlbmVyaWMgUnVuZW4gZnVuY3Rpb25zOwovLy8gZXh0ZXJuYWwgY29ycmVzcG9uZGVuY2UgY292ZXJzIHJlcHJlc2VudGVkIGV4dGVybmFsIGRlY2xhcmF0aW9ucy4gQm90aCBhcmUKLy8vIGNvbXBpbGVyIHJlZmluZW1lbnQgZXZpZGVuY2UsIG5vdCBleGVjdXRhYmxlLWVudHJ5IHNlbGVjdGlvbiwgcHJvdmlkZXIgbG9va3VwCi8vLyBwb2xpY3ksIGdlbmVyaWMgc3BlY2lhbGl6YXRpb24gaWRlbnRpdHksIGNsb3N1cmUgaWRlbnRpdHksIG9yIEFCSS9zeW1ib2wgaWRlbnRpdHkuCnB1YiBzdHJ1Y3QgTG93ZXJlZENvbXBpbGF0aW9uIHsKICAgIHByb2dyYW06IGNvcmU6OlZhbGlkYXRlZFByb2dyYW0sCiAgICBvcmRpbmFyeV9mdW5jdGlvbnM6IEJUcmVlTWFwPGhpcjo6RnVuY3Rpb25JZCwgY29yZTo6RnVuY3Rpb25JZD4sCiAgICBleHRlcm5hbF9mdW5jdGlvbnM6IEJUcmVlTWFwPGhpcjo6RnVuY3Rpb25JZCwgY29yZTo6RXh0ZXJuYWxDYWxsYWJsZUlkPiwKfQo="),
-              ("ICAgIHB1YiBmbiBjb3JlX2Z1bmN0aW9uKCZzZWxmLCBmdW5jdGlvbjogaGlyOjpGdW5jdGlvbklkKSAtPiBPcHRpb248Y29yZTo6RnVuY3Rpb25JZD4gewogICAgICAgIHNlbGYub3JkaW5hcnlfZnVuY3Rpb25zLmdldCgmZnVuY3Rpb24pLmNvcGllZCgpCiAgICB9CgogICAgLy8vIENvbnN1bWUgdGhlIHJlZmluZW1lbnQgYXJ0aWZhY3QgYW5kIHJldGFpbiBvbmx5IGl0cyB2YWxpZGF0ZWQgQ29yZSBwcm9ncmFtLgo=", "ICAgIHB1YiBmbiBjb3JlX2Z1bmN0aW9uKCZzZWxmLCBmdW5jdGlvbjogaGlyOjpGdW5jdGlvbklkKSAtPiBPcHRpb248Y29yZTo6RnVuY3Rpb25JZD4gewogICAgICAgIHNlbGYub3JkaW5hcnlfZnVuY3Rpb25zLmdldCgmZnVuY3Rpb24pLmNvcGllZCgpCiAgICB9CgogICAgLy8vIFJlc29sdmUgb25lIGV4dGVybmFsIEhJUiBkZWNsYXJhdGlvbiBpbnRvIHRoZSBleGFjdCBDb3JlIGV4dGVybmFsIGNhbGxhYmxlCiAgICAvLy8gaWRlbnRpdHkgY3JlYXRlZCBieSB0aGlzIHJlZmluZW1lbnQuCiAgICAjW211c3RfdXNlXQogICAgcHViIGZuIGNvcmVfZXh0ZXJuYWxfY2FsbGFibGUoCiAgICAgICAgJnNlbGYsCiAgICAgICAgZnVuY3Rpb246IGhpcjo6RnVuY3Rpb25JZCwKICAgICkgLT4gT3B0aW9uPGNvcmU6OkV4dGVybmFsQ2FsbGFibGVJZD4gewogICAgICAgIHNlbGYuZXh0ZXJuYWxfZnVuY3Rpb25zLmdldCgmZnVuY3Rpb24pLmNvcGllZCgpCiAgICB9CgogICAgLy8vIENvbnN1bWUgdGhlIHJlZmluZW1lbnQgYXJ0aWZhY3QgYW5kIHJldGFpbiBvbmx5IGl0cyB2YWxpZGF0ZWQgQ29yZSBwcm9ncmFtLgo="),
-              ("Ly8vIExvd2VyIG9uZSBhY2NlcHRlZCB0eXBlZCBISVIgY29tcGlsYXRpb24gaW50byB2YWxpZGF0ZWQgQ29yZSB0b2dldGhlciB3aXRoCi8vLyB0aGUgZXhhY3Qgb3JkaW5hcnkgbm9uLWdlbmVyaWMgZnVuY3Rpb24gY29ycmVzcG9uZGVuY2UgcmV0YWluZWQgYnkgbG93ZXJpbmcuCg==", "Ly8vIExvd2VyIG9uZSBhY2NlcHRlZCB0eXBlZCBISVIgY29tcGlsYXRpb24gaW50byB2YWxpZGF0ZWQgQ29yZSB0b2dldGhlciB3aXRoCi8vLyB0aGUgZXhhY3Qgb3JkaW5hcnktZnVuY3Rpb24gYW5kIGV4dGVybmFsLWRlY2xhcmF0aW9uIGNvcnJlc3BvbmRlbmNlcyByZXRhaW5lZAovLy8gYnkgbG93ZXJpbmcuCg=="),
-              ("ICAgIGZuIGxvd2VyKHNlbGYpIC0+IFJlc3VsdDxMb3dlcmVkQ29tcGlsYXRpb24sIExvd2VyaW5nRXJyb3I+IHsKICAgICAgICBsZXQgb3JkaW5hcnlfZnVuY3Rpb25zID0gc2VsZi5vcmRpbmFyeV9mdW5jdGlvbl9jb3JyZXNwb25kZW5jZSgpPzsKICAgICAgICBsZXQgY2FwYWNpdHkgPSBzZWxmCg==", "ICAgIGZuIGxvd2VyKHNlbGYpIC0+IFJlc3VsdDxMb3dlcmVkQ29tcGlsYXRpb24sIExvd2VyaW5nRXJyb3I+IHsKICAgICAgICBsZXQgb3JkaW5hcnlfZnVuY3Rpb25zID0gc2VsZi5vcmRpbmFyeV9mdW5jdGlvbl9jb3JyZXNwb25kZW5jZSgpPzsKICAgICAgICBsZXQgZXh0ZXJuYWxfZnVuY3Rpb25zID0gc2VsZi5leHRlcm5hbF9jYWxsYWJsZXMuY2xvbmUoKTsKICAgICAgICBsZXQgY2FwYWNpdHkgPSBzZWxmCg=="),
-              ("ICAgICAgICBPayhMb3dlcmVkQ29tcGlsYXRpb24gewogICAgICAgICAgICBwcm9ncmFtLAogICAgICAgICAgICBvcmRpbmFyeV9mdW5jdGlvbnMsCiAgICAgICAgfSkK", "ICAgICAgICBPayhMb3dlcmVkQ29tcGlsYXRpb24gewogICAgICAgICAgICBwcm9ncmFtLAogICAgICAgICAgICBvcmRpbmFyeV9mdW5jdGlvbnMsCiAgICAgICAgICAgIGV4dGVybmFsX2Z1bmN0aW9ucywKICAgICAgICB9KQo="),
-          ]
+          composition = Path("crates/runen-core-wasm-driver/tests/composition.rs")
+          text = composition.read_text()
+          old = '''#[test]
+fn external_declarations_are_rejected_before_provider_composition_is_exposed() {
+    let compilation =
+        compilation("external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }");
 
-          text = path.read_text()
-          for old64, new64 in encoded_pairs:
-              old = base64.b64decode(old64).decode()
-              new = base64.b64decode(new64).decode()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"expected one replacement site, found {count}")
-              text = text.replace(old, new, 1)
-          path.write_text(text)
+    assert!(matches!(
+        RealizedCompilation::new(&compilation),
+        Err(BuildError::ExternalDeclarationsUnsupported)
+    ));
+}
+'''
+          new = '''#[test]
+fn external_declarations_without_provider_fail_in_hir_terms() {
+    let compilation =
+        compilation("external fn transform(I64) -> I64; fn entry() -> I64 { return 1; }");
+    let transform = function(&compilation, "transform");
+
+    assert!(matches!(
+        RealizedCompilation::new(&compilation),
+        Err(BuildError::MissingExternalProvider(function)) if function == transform
+    ));
+}
+'''
+          if text.count(old) != 1:
+              raise SystemExit("composition replacement site changed")
+          composition.write_text(text.replace(old, new, 1))
           PY
 
           git diff --check
-          test "$(git diff --name-only)" = "crates/runen-core-lowering/src/lib.rs"
-          test "$(git hash-object crates/runen-core-lowering/src/lib.rs)" = "e115bf5b5a932617614591ceb2267614ed772027"
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "crates/runen-core-wasm-driver/src/lib.rs crates/runen-core-wasm-driver/tests/composition.rs "
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add crates/runen-core-lowering/src/lib.rs
-          git commit -m "Expose lowering external callable correspondence"
+          git add crates/runen-core-wasm-driver/src/lib.rs crates/runen-core-wasm-driver/tests/composition.rs
+          git commit -m "Fix driver provider composition cleanup"
           git push origin HEAD:issue-840-hir-external-providers
