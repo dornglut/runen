@@ -20,7 +20,9 @@ fn hir(source: &str) -> runen_hir::TypedCompilation {
 }
 
 fn lower_source(source: &str) -> ValidatedProgram {
-    lower(&hir(source)).expect("accepted HIR must lower to validated Core")
+    lower(&hir(source))
+        .expect("accepted HIR must lower to validated Core")
+        .into_program()
 }
 
 fn runen_body_mut(function: &mut runen_hir::Function) -> &mut runen_hir::Body {
@@ -202,12 +204,12 @@ fn lowering_rejects_non_integer_retained_integer_add_result_fact() {
         .expect("return value");
     value.ty = Type::Intrinsic(IntrinsicType::Bool);
 
-    assert_eq!(
+    assert!(matches!(
         lower(&compilation),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-add result type is not a fixed-width integer"
         ))
-    );
+    ));
 }
 
 #[test]
@@ -222,12 +224,12 @@ fn lowering_rejects_integer_add_operand_type_facts_that_do_not_match_result() {
         panic!("expected integer-add HIR value");
     };
     left.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&left_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-add left operand type does not match result type"
         ))
-    );
+    ));
 
     let mut right_mismatch = hir("fn f(left: I8, right: I8) -> I8 { return left + right; }");
     let value = runen_body_mut(&mut right_mismatch.functions[0])
@@ -239,12 +241,12 @@ fn lowering_rejects_integer_add_operand_type_facts_that_do_not_match_result() {
         panic!("expected integer-add HIR value");
     };
     right.ty = Type::Intrinsic(IntrinsicType::I16);
-    assert_eq!(
+    assert!(matches!(
         lower(&right_mismatch),
         Err(LoweringError::InvalidHirInvariant(
             "Integer-add right operand type does not match result type"
         ))
-    );
+    ));
 }
 
 #[test]
