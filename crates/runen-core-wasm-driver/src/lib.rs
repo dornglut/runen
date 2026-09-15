@@ -5,7 +5,10 @@
 //! owns no source entry-point, package, filesystem, backend-selection, or Runen
 //! semantic policy.
 
-use runen_core_lowering::{self as lowering, LoweredCompilation};
+use std::collections::BTreeMap;
+
+use runen_core_ir as core;
+use runen_core_lowering as lowering;
 use runen_core_wasm::{self as wasm, ExecutionOutcome, RealizationError};
 use runen_hir as hir;
 
@@ -16,6 +19,11 @@ pub enum BuildError {
     /// This first composition slice does not expose source/HIR correspondence
     /// for Core external-provider identities.
     ExternalDeclarationsUnsupported,
+    /// Successful lowering did not preserve the required ordinary-function
+    /// correspondence for one admitted HIR identity.
+    MissingOrdinaryCorrespondence(hir::FunctionId),
+    /// Successful lowering exposed the same ordinary HIR identity more than once.
+    DuplicateOrdinaryCorrespondence(hir::FunctionId),
     Lowering(lowering::LoweringError),
     Realization(RealizationError),
 }
@@ -36,7 +44,7 @@ pub enum ExecutionError {
 /// not infer a `main`, source entry point, package convention, or Core function
 /// order.
 pub struct RealizedCompilation {
-    lowered: LoweredCompilation,
+    ordinary_functions: BTreeMap<hir::FunctionId, core::FunctionId>,
     realized: wasm::RealizedProgram,
 }
 
@@ -52,8 +60,28 @@ impl RealizedCompilation {
         }
 
         let lowered = lowering::lower(compilation).map_err(BuildError::Lowering)?;
-        let realized = wasm::RealizedProgram::new(lowered.program()).map_err(BuildError::Realization)?;
-        Ok(Self { lowered, realized })
+        let mut ordinary_functions = BTreeMap::new();
+        for function in &compilation.functions {
+            if function.is_external() || !function.type_parameters.is_empty() {
+                continue;
+            }
+            let core_function = lowered
+                .core_function(function.id)
+                .ok_or(BuildError::MissingOrdinaryCorrespondence(function.id))?;
+            if ordinary_functions
+                .insert(function.id, core_function)
+                .is_some()
+            {
+                return Err(BuildError::DuplicateOrdinaryCorrespondence(function.id));
+            }
+        }
+
+        let realized =
+            wasm::RealizedProgram::new(lowered.program()).map_err(BuildError::Realization)?;
+        Ok(Self {
+            ordinary_functions,
+            realized,
+        })
     }
 
     /// Execute one explicitly caller-selected ordinary non-generic HIR function.
@@ -66,8 +94,9 @@ impl RealizedCompilation {
         function: hir::FunctionId,
     ) -> Result<ExecutionOutcome, ExecutionError> {
         let function = self
-            .lowered
-            .core_function(function)
+            .ordinary_functions
+            .get(&function)
+            .copied()
             .ok_or(ExecutionError::FunctionNotSelectable(function))?;
         self.realized
             .execute(function)
