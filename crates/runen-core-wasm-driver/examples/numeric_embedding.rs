@@ -66,21 +66,26 @@ fn main() -> Result<(), String> {
     };
     let realized = RealizedCompilation::new_with_external_providers(
         &compilation,
-        vec![ExternalProviderBinding::scalar_result(input, move |arguments| {
-            assert!(arguments.is_empty(), "input provider must take zero arguments");
-            ExternalScalarValue::F32(FloatingScalarValue::Represented(host_input))
-        })],
+        vec![ExternalProviderBinding::scalar_result(
+            input,
+            move |arguments| {
+                assert!(
+                    arguments.is_empty(),
+                    "input provider must take zero arguments"
+                );
+                ExternalScalarValue::F32(FloatingScalarValue::Represented(host_input))
+            },
+        )],
     )
     .map_err(|error| format!("build/realization failure: {error:?}"))?;
 
     // Input 1.0 comes from the Rust provider; Runen computes 1.0 + 2.0.
-    let expected = ExecutionValue::F32(FloatingScalarValue::Represented(
-        BinaryFloatValue::Normal {
+    let expected =
+        ExecutionValue::F32(FloatingScalarValue::Represented(BinaryFloatValue::Normal {
             sign: BinaryFloatSign::Positive,
             significand: 3_u64 << 22,
             exponent: 1,
-        },
-    ));
+        }));
     let actual_scalar = observed_result(&realized, scalar)?;
     if actual_scalar != expected {
         return Err(format!("direct result mismatch: {actual_scalar:?}"));
