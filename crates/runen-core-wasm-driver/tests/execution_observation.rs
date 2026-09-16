@@ -35,7 +35,8 @@ fn represented_one(precision: u32) -> FloatingScalarValue {
 #[test]
 fn direct_f16_f32_f64_results_are_observed_by_the_selected_hir_function() {
     for (ty, precision) in [("F16", 11), ("F32", 24), ("F64", 53)] {
-        let source = format!("fn other() -> I64 {{ return 9; }} fn selected() -> {ty} {{ return 1.0; }}");
+        let source =
+            format!("fn other() -> I64 {{ return 9; }} fn selected() -> {ty} {{ return 1.0; }}");
         let compilation = compilation(&source);
         let selected = function(&compilation, "selected");
         let realized = RealizedCompilation::new(&compilation).expect("realization must succeed");
@@ -45,7 +46,10 @@ fn direct_f16_f32_f64_results_are_observed_by_the_selected_hir_function() {
             "F64" => ExecutionValue::F64(represented_one(precision)),
             _ => unreachable!(),
         };
-        assert_eq!(realized.execute(selected).unwrap(), ExecutionOutcome::Returned(Some(value)));
+        assert_eq!(
+            realized.execute(selected).unwrap(),
+            ExecutionOutcome::Returned(Some(value))
+        );
     }
 }
 
