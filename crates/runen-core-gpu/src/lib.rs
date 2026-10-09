@@ -47,8 +47,9 @@ fn complete_root(place: &Place) -> Result<String, CoverageError> {
 fn u32_operand(operand: &Operand) -> Result<String, CoverageError> {
     match operand {
         Operand::Constant(Value::U32(value)) => Ok(format!("{value}u")),
-        Operand::Move(PlaceAccess::Direct(place))
-        | Operand::Copy(PlaceAccess::Direct(place)) if place.projections.is_empty() => {
+        Operand::Move(PlaceAccess::Direct(place)) | Operand::Copy(PlaceAccess::Direct(place))
+            if place.projections.is_empty() =>
+        {
             Ok(format!("v{}", place.local.0))
         }
         _ => Err(CoverageError::UnsupportedOperand),
@@ -76,7 +77,11 @@ pub fn compile_u32_kernel(
             .is_some_and(|item| matches!(item.kind, TypeKind::Scalar(ScalarType::U32)))
     };
     if function.parameters.len() != 1
-        || !is_u32(function.parameter_type(0).ok_or(CoverageError::UnsupportedSignature)?)
+        || !is_u32(
+            function
+                .parameter_type(0)
+                .ok_or(CoverageError::UnsupportedSignature)?,
+        )
         || !function.result.is_some_and(is_u32)
     {
         return Err(CoverageError::UnsupportedSignature);
@@ -92,10 +97,7 @@ pub fn compile_u32_kernel(
     for (index, _) in function.body.locals.iter().enumerate() {
         scalar.push_str(&format!("    var v{index}: u32;\n"));
     }
-    scalar.push_str(&format!(
-        "    v{} = value;\n",
-        function.parameters[0].0
-    ));
+    scalar.push_str(&format!("    v{} = value;\n", function.parameters[0].0));
     let block = &function.body.blocks[0];
     for statement in &block.statements {
         match statement {
@@ -173,7 +175,10 @@ mod tests {
             .expect("selected function")
             .id;
         let lowered = lower(&compilation).expect("accepted HIR must lower to Core");
-        compile_u32_kernel(lowered.program(), lowered.core_function(selected).expect("HIR mapping"))
+        compile_u32_kernel(
+            lowered.program(),
+            lowered.core_function(selected).expect("HIR mapping"),
+        )
     }
 
     #[test]

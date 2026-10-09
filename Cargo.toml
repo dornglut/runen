@@ -1,7 +1,7 @@
 [workspace]
 members = [
-    "crates/runen-core-ir",
     "crates/runen-core-gpu",
+    "crates/runen-core-ir",
     "crates/runen-core-lowering",
     "crates/runen-core-wasm",
     "crates/runen-core-wasm-driver",
