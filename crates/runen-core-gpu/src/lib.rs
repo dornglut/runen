@@ -343,18 +343,28 @@ mod gpu_contract_tests {
             .unwrap()
     }
 
+    #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+    enum HostMapError {
+        TooManyElements,
+    }
+
+    fn admitted_workgroups(len: usize) -> Result<Option<u32>, HostMapError> {
+        if len == 0 {
+            return Ok(None);
+        }
+        if len > 4097 {
+            return Err(HostMapError::TooManyElements);
+        }
+        Ok(Some(u32::try_from(len.div_ceil(64)).expect("bounded input")))
+    }
+
     fn graph(
         pipeline: gpu::GpuComputePipelineDescriptor,
         values: &[u32],
-    ) -> (gpu::GpuPreparedWorkGraph, gpu::GpuReadbackId) {
-        assert!(
-            !values.is_empty(),
-            "empty host map must not create GPU storage"
-        );
-        assert!(
-            values.len() <= 4097,
-            "the first proof is deliberately bounded"
-        );
+    ) -> Result<Option<(gpu::GpuPreparedWorkGraph, gpu::GpuReadbackId)>, HostMapError> {
+        let Some(workgroups) = admitted_workgroups(values.len())? else {
+            return Ok(None);
+        };
 
         let mut scope = gpu::GpuResourceScope::new();
         let inputs = input_buffer(&mut scope, values);
@@ -369,7 +379,7 @@ mod gpu_contract_tests {
             pipeline,
             bindings,
             gpu::GpuDispatchIntent::direct(gpu::GpuDispatchSize::new(
-                u32::try_from(values.len().div_ceil(64)).unwrap(),
+                workgroups,
                 1,
                 1,
             )),
@@ -392,7 +402,7 @@ mod gpu_contract_tests {
             [fragment],
         )
         .unwrap();
-        (graph, readback_id)
+        Ok(Some((graph, readback_id)))
     }
 
     fn inputs() -> Vec<u32> {
@@ -407,9 +417,20 @@ mod gpu_contract_tests {
     fn runen_gpu_admits_the_generated_source_and_its_compute_graph() {
         let kernel = generated("fn transform(value: U32) -> U32 { return value * value + 2; }");
         let pipeline = admitted_pipeline(&kernel);
-        let (graph, _) = graph(pipeline, &inputs());
+        let (graph, _) = graph(pipeline, &inputs()).unwrap().unwrap();
         assert_eq!(graph.nodes().len(), 2);
         assert_eq!(graph.topological_order().len(), 2);
+    }
+
+    #[test]
+    fn empty_host_map_does_not_dispatch_and_excess_size_rejects_before_allocating() {
+        let kernel = generated("fn transform(value: U32) -> U32 { return value * value + 2; }");
+        let pipeline = admitted_pipeline(&kernel);
+        assert!(matches!(graph(pipeline.clone(), &[]), Ok(None)));
+        assert!(matches!(
+            graph(pipeline, &vec![0_u32; 4098]),
+            Err(HostMapError::TooManyElements)
+        ));
     }
 
     /// This is intentionally separate from normal CI. Successful hardware GPU
@@ -448,7 +469,9 @@ mod gpu_contract_tests {
         ] {
             let values = inputs();
             let kernel = generated(source);
-            let (graph, read_id) = graph(admitted_pipeline(&kernel), &values);
+            let (graph, read_id) = graph(admitted_pipeline(&kernel), &values)
+                .unwrap()
+                .unwrap();
             let prepared = pollster::block_on(context.prepare_submission(graph))
                 .expect("GPU graph must admit");
             let submission = context.submit_prepared(prepared).expect("GPU submission");
