@@ -489,11 +489,11 @@ mod gpu_contract_tests {
             .collect()
     }
 
-    /// Run with software Vulkan in conformance CI. On a separate physical GPU
-    /// executor, set RUNEN_GPU_REQUIRE_HARDWARE=1 to forbid fallback. Only the
-    /// second mode can establish independently recorded hardware evidence.
+    /// The default software-Vulkan job is API-level conformance only. The Metal
+    /// qualification sets RUNEN_GPU_REQUIRE_HARDWARE=1, forbids software
+    /// fallback, and records exact hardware adapter evidence and readback.
     #[test]
-    #[ignore = "requires native Vulkan execution and actual GPU API dispatch/readback"]
+    #[ignore = "requires native Vulkan or Metal execution and actual readback"]
     fn native_runen_source_derived_u32_kernel_executes_and_reads_back() {
         use std::time::{Duration, Instant};
         let hardware_required =
@@ -511,9 +511,14 @@ mod gpu_contract_tests {
         } else {
             gpu::GpuSoftwareFallbackPolicy::Require
         };
+        let backend = if hardware_required {
+            gpu::GpuBackendFamily::Metal
+        } else {
+            gpu::GpuBackendFamily::Vulkan
+        };
         let descriptor = gpu::GpuContextDescriptor::new(reqs)
             .with_fallback_policy(fallback_policy)
-            .with_allowed_backends([gpu::GpuBackendFamily::Vulkan])
+            .with_allowed_backends([backend])
             .with_label("Runen U32 source-to-device conformance");
         let context = pollster::block_on(gpu::GpuContext::request(descriptor))
             .expect("selected Vulkan conformance adapter must be available");
@@ -522,6 +527,7 @@ mod gpu_contract_tests {
             context.adapter_facts()
         );
         if hardware_required {
+            assert_eq!(context.adapter_facts().backend(), gpu::GpuBackendFamily::Metal);
             assert_eq!(
                 context.adapter_facts().software(),
                 gpu::GpuSoftwareStatus::Hardware,

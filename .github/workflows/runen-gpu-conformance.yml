@@ -93,3 +93,57 @@ jobs:
         run: |
           echo "This job proves real RunenGPU API submission/readback using software Vulkan." 
           echo "It does not qualify a non-software hardware GPU adapter."
+
+  metal-hardware:
+    name: Source-derived U32 GPU execution and readback (Apple Metal hardware)
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Resolve exact event revision
+        id: revision
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) expected="$PR_HEAD_SHA" ;;
+            push|workflow_dispatch) expected="$EVENT_SHA" ;;
+            *) echo "Unsupported event: $EVENT_NAME" >&2; exit 1 ;;
+          esac
+          test -n "$expected"
+          echo "expected_revision=$expected" >> "$GITHUB_OUTPUT"
+      - name: Checkout exact event revision
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ steps.revision.outputs.expected_revision }}
+          persist-credentials: false
+          clean: true
+      - name: Prove checked out revision and ARM64 Metal host
+        env:
+          EXPECTED_REVISION: ${{ steps.revision.outputs.expected_revision }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
+          sw_vers
+          echo "Host architecture: $(uname -m)"
+          test "$(uname -m)" = "arm64"
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Cache Cargo dependencies
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
+      - name: Prove generated Runen U32 kernel on non-software Metal adapter
+        env:
+          RUST_BACKTRACE: "1"
+          WGPU_BACKEND: metal
+          RUNEN_GPU_REQUIRE_HARDWARE: "1"
+        run: |
+          set -euo pipefail
+          cargo +stable test --locked -p runen-core-gpu \
+            native_runen_source_derived_u32_kernel_executes_and_reads_back \
+            -- --ignored --nocapture --test-threads=1
+      - name: Record hardware conformance boundary
+        run: |
+          echo "Requires adapter backend Metal, software=Hardware and fallback=ConfirmedNotFallback."
+          echo "Successful source-derived dispatch, readback and CPU differential apply to this exact revision."
