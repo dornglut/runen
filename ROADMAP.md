@@ -112,6 +112,18 @@ Future consumers and realizations must add the strongest applicable integrated e
 
 **Gate:** integrated proving does not require ordinary source to expose implementation machinery merely to preserve the intended semantics.
 
+## Post-P0 — Conditional next-delivery directions
+
+Completion of the represented P0-A through P0-F foundations and the accepted bounded Core-Wasm realization does not mean the whole language, developer workflow, or heterogeneous execution stack is production-complete. The existing Rust numerical-embedding example already supplies scalar input through an external provider and observes the selected zero-parameter function's floating or structural result; it does not establish a separate need for direct host-to-entry arguments.
+
+Potential directions for a **fresh, consumer-backed sequencing investigation** include:
+
+- **Host invocation and developer workflows:** investigate direct Rust-supplied function arguments only for a concrete caller that cannot meet its requirement through the current semantic external-provider mechanism. Investigate a source runner or simpler compilation interface independently, only with an accepted workflow for source-unit/module provisioning, explicit function selection, provider binding, and diagnostics; neither candidate implicitly selects a `main` convention, package discovery, persistent session, or stable ABI.
+- **Realization of already-represented source behavior:** investigate an end-to-end source-produced capability still rejected by Core-Wasm when a bounded correct physical realization is feasible. Cross-activation safe-reference parameter/result transfer requires preservation of caller-origin targets and authority/lifetime across activations. Projected raw-pointer formation and broader storage/provider interfaces cannot be selected from Core-only fixtures or backend convenience where source or normative admission remains narrower.
+- **Heterogeneous numerical execution:** independently investigate a concrete Runen workload requiring CPU/parallel/GPU realization, including the actual source/Core/Exec producer, resource/transfer and numeric contracts, target admission, observation, and integrated cross-realization proof. This direction is not inherently downstream of a command-line runner or expanded Rust embedding API, and existing standalone GPU/shader framework capabilities do not themselves establish a Runen-language backend.
+
+These are **unranked possibilities**, not approved issues, milestones, dependencies, or implementation commitments. Other Model, interoperability, state, and tooling directions remain subject to their respective semantic and consumer boundaries. Before selecting one delivery, re-establish the accepted repository state and identify a concrete consumer, represented producer, owning contract, smallest coherent implementation scope, excluded behavior, and exact conformance/validation evidence. If these cannot be established, record the blocker or stop rather than inventing a roadmap priority. No further post-P0 frontier is selected here.
+
 ## Deferred until evidence requires them
 
 Graph/path algebra, Datalog recursion, CRDT semantics, universal replication/network syntax, mandatory information-flow labels, full hard-realtime syntax, live schema migration, stable serialized logical IR, rendering/ECS/UI/field language semantics, and broad package/ecosystem work are not on the P0 critical path.
