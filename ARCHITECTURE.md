@@ -40,6 +40,12 @@ The crate does not execute programs or define host/runtime behavior.
 
 It MUST NOT depend on the reference machine, a production backend, host platform services, or repository tooling.
 
+### \`crates/runen-core-gpu\`
+
+Owns a narrowly admitted private WGSL translation from one caller-selected function in an already validated Core program. Its first implementation covers only a straight-line, single-parameter and single-result U32 scalar function with supported scalar local operations. It enforces target-coverage admission, not Core language validity, and consumes canonical Core identities and semantic types without inspecting source text, reconstructing HIR, or treating generated WGSL as a Runen ABI.
+
+Its production Runen dependency is only \`runen-core-ir\`. Tests may use \`runen-syntax\`, \`runen-hir\`, and \`runen-core-lowering\` to verify that a selected source function maps to the same Core producer; these edges must not become production dependencies. This package currently emits WGSL but owns no device execution, buffer allocation, GPU submission, result observation, or hardware conformance. It is not yet a production GPU backend. Later physical realization must be separately reviewed against the accepted RunenGPU public contracts without transferring Runen language semantics or RunenGPU's execution authority.
+
 ### `crates/runen-core-wasm`
 
 Owns the first production physical realization for an explicitly admitted bounded subset of validated `runen-core-ir` programs. It performs realization-coverage admission, lowers the admitted Core subset to private WebAssembly, and executes that private representation through Wasmtime/Cranelift.

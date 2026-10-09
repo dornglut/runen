@@ -676,6 +676,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "runen-core-gpu"
+version = "0.0.0"
+dependencies = [
+ "runen-core-ir",
+ "runen-core-lowering",
+ "runen-hir",
+ "runen-syntax",
+]
+
+[[package]]
 name = "runen-core-ir"
 version = "0.0.0"
 
