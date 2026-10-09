@@ -251,7 +251,6 @@ mod tests {
     }
 }
 
-
 #[cfg(test)]
 mod gpu_contract_tests {
     use super::*;
@@ -263,9 +262,8 @@ mod gpu_contract_tests {
     fn generated(source: &str) -> U32Kernel {
         let parsed = parse_source(source.as_bytes()).expect("Runen source should be UTF-8");
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
-        let compilation =
-            build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
-                .expect("Runen source must be accepted");
+        let compilation = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
+            .expect("Runen source must be accepted");
         let selected = compilation
             .functions
             .iter()
@@ -275,7 +273,9 @@ mod gpu_contract_tests {
         let lowered = lower(&compilation).expect("typed Runen source must lower");
         compile_u32_kernel(
             lowered.program(),
-            lowered.core_function(selected).expect("exact ordinary function mapping"),
+            lowered
+                .core_function(selected)
+                .expect("exact ordinary function mapping"),
         )
         .expect("bounded U32 target must admit source function")
     }
@@ -292,11 +292,8 @@ mod gpu_contract_tests {
             .admit_wgsl(
                 identity,
                 kernel.wgsl(),
-                gpu::GpuProgramSourceProvenance::new(
-                    "runen-validated-core-gpu-test",
-                    None,
-                )
-                .unwrap(),
+                gpu::GpuProgramSourceProvenance::new("runen-validated-core-gpu-test", None)
+                    .unwrap(),
             )
             .unwrap();
         gpu::GpuComputePipelineDescriptor::ordinary(admitted, "runen_main")
