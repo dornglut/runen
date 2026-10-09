@@ -256,14 +256,16 @@ mod gpu_contract_tests {
     use super::*;
     use runen_core_lowering::lower;
     use runen_core_wasm::{ExecutionOutcome, ExecutionValue};
-    use runen_core_wasm_driver::{ExternalProviderBinding, ExternalScalarValue, RealizedCompilation};
+    use runen_core_wasm_driver::{
+        ExternalProviderBinding, ExternalScalarValue, RealizedCompilation,
+    };
     use runen_gpu as gpu;
+    use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
+    use runen_syntax::parse_source;
     use std::sync::{
         Arc,
         atomic::{AtomicU32, Ordering},
     };
-    use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
-    use runen_syntax::parse_source;
 
     fn generated(source: &str) -> U32Kernel {
         let parsed = parse_source(source.as_bytes()).expect("Runen source should be UTF-8");
@@ -558,7 +560,8 @@ mod gpu_contract_tests {
                             .collect::<Vec<_>>();
                         assert!(remainder.is_empty());
                         assert_eq!(outputs.len(), values.len());
-                        for ((input, output), cpu) in values.iter().zip(&outputs).zip(&cpu_results) {
+                        for ((input, output), cpu) in values.iter().zip(&outputs).zip(&cpu_results)
+                        {
                             assert_eq!(
                                 *cpu,
                                 input.wrapping_mul(*input).wrapping_add(constant),
