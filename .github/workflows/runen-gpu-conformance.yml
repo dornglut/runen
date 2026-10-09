@@ -95,7 +95,7 @@ jobs:
           echo "It does not qualify a non-software hardware GPU adapter."
 
   metal-hardware:
-    name: Source-derived U32 GPU execution and readback (Apple Metal hardware)
+    name: Source-derived U32 GPU API readback (Apple paravirtual Metal)
     runs-on: macos-15
     timeout-minutes: 30
     steps:
@@ -133,17 +133,18 @@ jobs:
         run: rustup toolchain install stable --profile minimal
       - name: Cache Cargo dependencies
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32
-      - name: Prove generated Runen U32 kernel on non-software Metal adapter
+      - name: Prove generated Runen U32 kernel through Metal API
         env:
           RUST_BACKTRACE: "1"
           WGPU_BACKEND: metal
-          RUNEN_GPU_REQUIRE_HARDWARE: "1"
+          RUNEN_GPU_USE_METAL_API: "1"
         run: |
           set -euo pipefail
           cargo +stable test --locked -p runen-core-gpu \
             native_runen_source_derived_u32_kernel_executes_and_reads_back \
             -- --ignored --nocapture --test-threads=1
-      - name: Record hardware conformance boundary
+      - name: Record adapter qualification boundary
         run: |
-          echo "Requires adapter backend Metal, software=Hardware and fallback=ConfirmedNotFallback."
-          echo "Successful source-derived dispatch, readback and CPU differential apply to this exact revision."
+          echo "Metal API execution and readback only: Apple Paravirtual may report Unknown software/fallback."
+          echo "Do not classify this as independently confirmed hardware GPU execution."
+          echo "Manual hardware qualification requires RUNEN_GPU_REQUIRE_HARDWARE=1 on a real GPU host."

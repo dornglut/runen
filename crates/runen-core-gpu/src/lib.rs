@@ -489,15 +489,17 @@ mod gpu_contract_tests {
             .collect()
     }
 
-    /// The default software-Vulkan job is API-level conformance only. The Metal
-    /// qualification sets RUNEN_GPU_REQUIRE_HARDWARE=1, forbids software
-    /// fallback, and records exact hardware adapter evidence and readback.
+    /// Software Vulkan and macOS Metal API jobs are execution tests only, not
+    /// confirmed hardware qualification. RUNEN_GPU_REQUIRE_HARDWARE=1 separately
+    /// forbids unqualified/virtual adapters and requires non-software Metal.
     #[test]
     #[ignore = "requires native Vulkan or Metal execution and actual readback"]
     fn native_runen_source_derived_u32_kernel_executes_and_reads_back() {
         use std::time::{Duration, Instant};
         let hardware_required =
             std::env::var("RUNEN_GPU_REQUIRE_HARDWARE").ok().as_deref() == Some("1");
+        let metal_api = hardware_required
+            || std::env::var("RUNEN_GPU_USE_METAL_API").ok().as_deref() == Some("1");
         let mut reqs = gpu::GpuCapabilityRequirements::new();
         for feature in [
             gpu::GpuCapabilityFeature::Compute,
@@ -508,10 +510,12 @@ mod gpu_contract_tests {
         }
         let fallback_policy = if hardware_required {
             gpu::GpuSoftwareFallbackPolicy::Forbid
+        } else if metal_api {
+            gpu::GpuSoftwareFallbackPolicy::Allow
         } else {
             gpu::GpuSoftwareFallbackPolicy::Require
         };
-        let backend = if hardware_required {
+        let backend = if metal_api {
             gpu::GpuBackendFamily::Metal
         } else {
             gpu::GpuBackendFamily::Vulkan
@@ -527,7 +531,10 @@ mod gpu_contract_tests {
             context.adapter_facts()
         );
         if hardware_required {
-            assert_eq!(context.adapter_facts().backend(), gpu::GpuBackendFamily::Metal);
+            assert_eq!(
+                context.adapter_facts().backend(),
+                gpu::GpuBackendFamily::Metal
+            );
             assert_eq!(
                 context.adapter_facts().software(),
                 gpu::GpuSoftwareStatus::Hardware,
@@ -537,6 +544,13 @@ mod gpu_contract_tests {
                 context.adapter_facts().fallback(),
                 gpu::GpuFallbackStatus::ConfirmedNotFallback
             );
+        } else if metal_api {
+            assert_eq!(
+                context.adapter_facts().backend(),
+                gpu::GpuBackendFamily::Metal
+            );
+            // The hosted Apple Paravirtual adapter can have Unknown software
+            // and fallback evidence. Do not upgrade this to hardware proof.
         } else {
             assert_eq!(
                 context.adapter_facts().fallback(),
