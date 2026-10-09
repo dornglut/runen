@@ -3,7 +3,7 @@ use runen_core_ir::{
 };
 use runen_core_lowering::lower;
 use runen_core_wasm::{
-    ExecutionOutcome, ExternalProviderBinding as WasmExternalProviderBinding,
+    ExecutionOutcome, ExecutionValue, ExternalProviderBinding as WasmExternalProviderBinding,
     ExternalScalarValue as WasmExternalScalarValue, FloatingScalarValue, RealizedProgram,
 };
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
@@ -63,7 +63,7 @@ fn lowered_floating_record_field_observation_agrees_between_core_wasm_and_refere
     .expect("lowered floating-record program must realize");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(runen_core_ir::Value::Bool(true)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::Bool(true)))
     );
 
     let report = Machine::new_with_external_providers(

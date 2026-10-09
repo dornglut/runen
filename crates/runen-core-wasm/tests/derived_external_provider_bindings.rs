@@ -1,3 +1,5 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl, ExternalCallableId,
     Function, FunctionId, LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract,
@@ -90,7 +92,7 @@ fn scalar_result_binding_derives_canonical_interface_from_program() {
         .expect("derived provider binding must admit");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 

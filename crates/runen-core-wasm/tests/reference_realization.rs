@@ -1,3 +1,5 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, ExternalCallableDecl, ExternalCallableId,
     Fault, Field, Function, FunctionId, LocalDecl, LocalId, MirValidationErrorKind, Operand, Place,
@@ -42,7 +44,7 @@ fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> Executio
     match report.terminal {
         TerminalStatus::Returned => ExecutionOutcome::Returned(match report.result {
             None => None,
-            Some(ObservedValue::I64(value)) => Some(Value::I64(value)),
+            Some(ObservedValue::I64(value)) => Some(runen_core_wasm::ExecutionValue::I64(value)),
             other => panic!("unexpected reference differential result: {other:?}"),
         }),
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
@@ -118,7 +120,7 @@ fn shared_scalar_root_copy_and_dereference_match_reference_semantics() {
 
     assert_eq!(
         assert_differential(validate(types, Vec::new(), vec![entry]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(41)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(41))))
     );
 }
 
@@ -251,7 +253,7 @@ fn dynamic_reference_handle_flow_selects_each_runtime_target() {
             validate(types, Vec::new(), vec![entry, helper]),
             FunctionId(0),
         ),
-        ExecutionOutcome::Returned(Some(Value::I64(33)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(33))))
     );
 }
 

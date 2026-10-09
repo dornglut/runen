@@ -1,3 +1,5 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, CallableInterface,
     ExternalCallableDecl, ExternalCallableId, Function, FunctionId, LoanDecl, LocalDecl, LocalId,
@@ -426,7 +428,7 @@ fn higher_order_indirect_call_is_admitted_at_the_consuming_terminator() {
         .expect("higher-order indirect call must be admitted")
         .execute(FunctionId(0))
         .expect("higher-order indirect call fixture must execute");
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(42))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42)))));
 }
 
 #[test]

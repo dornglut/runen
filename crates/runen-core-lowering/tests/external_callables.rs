@@ -4,7 +4,7 @@ use runen_core_ir::{
 };
 use runen_core_lowering::lower;
 use runen_core_wasm::{
-    ExecutionOutcome, ExternalProviderBinding as WasmExternalProviderBinding,
+    ExecutionOutcome, ExecutionValue, ExternalProviderBinding as WasmExternalProviderBinding,
     ExternalScalarValue as WasmExternalScalarValue, FloatingScalarValue, RealizedProgram,
 };
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
@@ -101,7 +101,7 @@ fn lowered_external_scalar_call_executes_differentially_through_both_engines() {
         .expect("lowered source external call must execute through Core Wasm");
     assert_eq!(
         wasm_outcome,
-        ExecutionOutcome::Returned(Some(runen_core_ir::Value::U64(42)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::U64(42)))
     );
 
     let machine = Machine::new_with_external_providers(
@@ -179,7 +179,7 @@ fn lowered_floating_external_chain_agrees_between_core_wasm_and_reference() {
     .expect("lowered floating external chain must realize");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(runen_core_ir::Value::Bool(true)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::Bool(true)))
     );
 
     let report = Machine::new_with_external_providers(

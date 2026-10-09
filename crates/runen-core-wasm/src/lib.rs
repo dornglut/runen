@@ -6,6 +6,7 @@
 
 mod coverage;
 mod encoding;
+mod execution_value;
 mod external;
 #[cfg(test)]
 mod floating_aggregate_tests;
@@ -17,9 +18,7 @@ mod scalar;
 use std::error::Error;
 use std::fmt;
 
-use runen_core_ir::{
-    Fault, FunctionId, ScalarType, TypeId, TypeKind, TypeTable, ValidatedProgram, Value,
-};
+use runen_core_ir::{Fault, FunctionId, TypeTable, ValidatedProgram};
 use wasmtime::{Engine, Instance, Module, Store, Val};
 
 pub use coverage::{
@@ -27,6 +26,7 @@ pub use coverage::{
     UnsupportedStatementKind, UnsupportedTypeCategory,
 };
 use encoding::{EncodedProgram, EntryInfo, entry_export_name};
+pub use execution_value::ExecutionValue;
 pub use external::{
     ExternalProviderAdmissionError, ExternalProviderBinding, ExternalProviderFailure,
     ExternalScalarValue,
@@ -39,7 +39,7 @@ const INVALID_BACKEND_RESULT: &str = "private backend produced an invalid result
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ExecutionOutcome {
-    Returned(Option<Value>),
+    Returned(Option<ExecutionValue>),
     Faulted(Fault),
 }
 
@@ -127,21 +127,6 @@ pub struct RealizedProgram {
     external_providers: Vec<ExternalProviderBinding>,
 }
 
-fn entry_result_is_unobservable(types: &TypeTable, ty: TypeId) -> bool {
-    let Some(definition) = types.get(ty) else {
-        return true;
-    };
-    match &definition.kind {
-        TypeKind::Scalar(
-            ScalarType::Callable(_) | ScalarType::F16 | ScalarType::F32 | ScalarType::F64,
-        ) => true,
-        TypeKind::Scalar(_) => false,
-        TypeKind::Struct(fields) => fields
-            .iter()
-            .any(|field| entry_result_is_unobservable(types, field.ty)),
-    }
-}
-
 impl RealizedProgram {
     pub fn new(program: &ValidatedProgram) -> Result<Self, RealizationError> {
         Self::new_with_external_providers(program, Vec::new())
@@ -184,7 +169,7 @@ impl RealizedProgram {
         }
         if entry_info
             .result
-            .is_some_and(|ty| entry_result_is_unobservable(&self.types, ty))
+            .is_some_and(|ty| !execution_value::is_observable_entry_result(&self.types, ty))
         {
             return Err(RealizationError::EntryResultUnsupported(entry));
         }
@@ -236,7 +221,7 @@ impl RealizedProgram {
                 let result = entry_info
                     .result
                     .map(|ty| {
-                        layout::decode_value(
+                        execution_value::decode_result(
                             &self.types,
                             ty,
                             &payloads[..entry_info.result_carrier_count],

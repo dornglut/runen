@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Fault, Field, Function, FunctionId,
     LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType,
     Statement, Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(
     name: &str,
@@ -49,23 +51,6 @@ fn callable_type(
     ))
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        ObservedValue::Struct(fields) => {
-            Value::Struct(fields.into_iter().map(observed_to_value).collect())
-        }
-        other => panic!("unsupported structural callable observation: {other:?}"),
-    }
-}
 
 fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(program, entry)
@@ -74,7 +59,7 @@ fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionO
         .expect("structural callable realization subset contains no Core UB operations");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
     }
@@ -155,7 +140,7 @@ fn flat_and_empty_parameters_with_aggregate_result_match_reference() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(value))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
     );
 }
 
@@ -263,11 +248,11 @@ fn nested_aggregate_and_empty_results_match_reference() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(value))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
     );
     assert_eq!(
         assert_differential(&program, FunctionId(1)),
-        ExecutionOutcome::Returned(Some(Value::Struct(Vec::new())))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(Vec::new()))))
     );
 }
 
@@ -345,11 +330,11 @@ fn equal_interface_target_identities_remain_distinct_for_aggregate_results() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(left))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(left)))
     );
     assert_eq!(
         assert_differential(&program, FunctionId(1)),
-        ExecutionOutcome::Returned(Some(right))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(right)))
     );
 }
 
@@ -428,7 +413,7 @@ fn direct_callable_transport_then_structural_indirect_call_matches_reference() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(value))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
     );
 }
 
@@ -546,7 +531,7 @@ fn returned_aggregate_projection_composes_with_integer_operation() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -640,9 +625,9 @@ fn finite_structural_indirect_recursion_matches_reference() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::Struct(vec![
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![
             Value::Bool(false),
             Value::I64(42),
-        ])))
+        ]))))
     );
 }

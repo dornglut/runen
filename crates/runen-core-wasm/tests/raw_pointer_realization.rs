@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId, Operand,
     Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
     TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(name: &str, parameters: Vec<LocalId>, result: Option<TypeId>, body: Body) -> Function {
     Function {
@@ -26,23 +28,6 @@ fn validate(types: TypeTable, functions: Vec<Function>) -> ValidatedProgram {
     .expect("raw-pointer realization fixture must be valid Core")
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        ObservedValue::Struct(fields) => {
-            Value::Struct(fields.into_iter().map(observed_to_value).collect())
-        }
-        other => panic!("unexpected raw-pointer differential result: {other:?}"),
-    }
-}
 
 fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(validated, entry)
@@ -51,7 +36,7 @@ fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> Executio
         .expect("accepted raw-pointer fixture must execute in reference semantics");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(runen_core_ir::Fault::new(code)),
     }
@@ -114,7 +99,7 @@ fn raw_move_scalar_matches_reference_semantics() {
 
     assert_eq!(
         assert_differential(validate(types, vec![entry]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(41)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(41))))
     );
 }
 
@@ -155,7 +140,7 @@ fn raw_read_is_non_consuming_on_a_defined_target() {
 
     assert_eq!(
         assert_differential(validate(types, vec![entry]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(43)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(43))))
     );
 }
 
@@ -228,7 +213,7 @@ fn raw_pointer_copy_and_retarget_select_exact_runtime_roots() {
 
     assert_eq!(
         assert_differential(validate(types, vec![entry]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(33)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(33))))
     );
 }
 
@@ -270,7 +255,7 @@ fn raw_assign_from_raw_move_uses_the_snapshotted_target() {
 
     assert_eq!(
         assert_differential(validate(types, vec![entry]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(55)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(55))))
     );
 }
 
@@ -327,7 +312,7 @@ fn aggregate_raw_move_then_replace_matches_reference_semantics() {
 
     assert_eq!(
         assert_differential(validate(types, vec![entry]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::Struct(vec![Value::I64(7), Value::I64(8)])))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![Value::I64(7), Value::I64(8)]))))
     );
 }
 
@@ -418,6 +403,6 @@ fn caller_raw_target_survives_nested_activation_with_its_own_handles() {
 
     assert_eq!(
         assert_differential(validate(types, vec![entry, helper]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(46)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(46))))
     );
 }

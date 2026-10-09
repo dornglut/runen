@@ -3,7 +3,7 @@ use runen_core_ir::{
 };
 use runen_core_lowering::lower;
 use runen_core_wasm::{
-    ExecutionOutcome, ExternalProviderBinding as WasmExternalProviderBinding,
+    ExecutionOutcome, ExecutionValue, ExternalProviderBinding as WasmExternalProviderBinding,
     ExternalScalarValue as WasmExternalScalarValue, FloatingScalarValue, RealizedProgram,
 };
 use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
@@ -79,7 +79,7 @@ fn each_source_arithmetic_family_lowers_once_and_executes_through_both_engines()
         .expect("the once-lowered source program must realize through Core Wasm");
         assert_eq!(
             realized.execute(FunctionId(0)).unwrap(),
-            ExecutionOutcome::Returned(Some(runen_core_ir::Value::Bool(true)))
+            ExecutionOutcome::Returned(Some(ExecutionValue::Bool(true)))
         );
 
         let report = Machine::new_with_external_providers(
@@ -155,7 +155,7 @@ fn each_f16_source_arithmetic_family_lowers_once_and_executes_through_both_engin
         .expect("the once-lowered F16 source program must realize through Core Wasm");
         assert_eq!(
             realized.execute(FunctionId(0)).unwrap(),
-            ExecutionOutcome::Returned(Some(runen_core_ir::Value::Bool(true)))
+            ExecutionOutcome::Returned(Some(ExecutionValue::Bool(true)))
         );
 
         let report = Machine::new_with_external_providers(

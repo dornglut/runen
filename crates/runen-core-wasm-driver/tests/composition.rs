@@ -1,5 +1,5 @@
-use runen_core_ir::Value;
-use runen_core_wasm::{ExecutionOutcome, RealizationError};
+use runen_core_ir::{BinaryFloatSign, BinaryFloatValue};
+use runen_core_wasm::{ExecutionOutcome, ExecutionValue, FloatingScalarValue, RealizationError};
 use runen_core_wasm_driver::{BuildError, ExecutionError, RealizedCompilation};
 use runen_hir::{FunctionId, ModuleId, SourceUnit, TypedCompilation, build_typed_hir};
 use runen_syntax::parse_source;
@@ -38,7 +38,7 @@ fn caller_selects_non_first_hir_function_without_core_order_knowledge() {
 
     assert_eq!(
         realized.execute(second).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(22)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(22)))
     );
 }
 
@@ -49,11 +49,11 @@ fn declaration_reordering_does_not_change_hir_selected_behavior() {
 
     assert_eq!(
         execute_named(first_order, "selected"),
-        ExecutionOutcome::Returned(Some(Value::I64(37)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(37)))
     );
     assert_eq!(
         execute_named(second_order, "selected"),
-        ExecutionOutcome::Returned(Some(Value::I64(37)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(37)))
     );
 }
 
@@ -64,7 +64,7 @@ fn selected_ordinary_function_may_call_another_ordinary_function() {
         "entry",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(42))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(42))));
 }
 
 #[test]
@@ -79,7 +79,7 @@ fn internal_generic_specialization_is_realized_but_generic_function_is_not_selec
 
     assert_eq!(
         realized.execute(entry).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(9)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(9)))
     );
     assert_eq!(
         realized.execute(generic),
@@ -128,16 +128,21 @@ fn parameterized_entry_rejection_remains_owned_by_core_wasm() {
 }
 
 #[test]
-fn floating_result_observation_rejections_remain_owned_by_core_wasm() {
+fn floating_result_observations_are_owned_by_core_wasm() {
+    let one = ExecutionValue::F32(FloatingScalarValue::Represented(
+        BinaryFloatValue::Normal {
+            sign: BinaryFloatSign::Positive,
+            significand: 1_u64 << 23,
+            exponent: 0,
+        },
+    ));
     let scalar = compilation("fn selected() -> F32 { return 1.0; }");
     let scalar_selected = function(&scalar, "selected");
     let scalar_realized = RealizedCompilation::new(&scalar).expect("scalar program must realize");
-    assert!(matches!(
+    assert_eq!(
         scalar_realized.execute(scalar_selected),
-        Err(ExecutionError::Realization(
-            RealizationError::EntryResultUnsupported(_)
-        ))
-    ));
+        Ok(ExecutionOutcome::Returned(Some(one.clone())))
+    );
 
     let aggregate = compilation(
         "record Sample { value: F32 } \
@@ -146,10 +151,10 @@ fn floating_result_observation_rejections_remain_owned_by_core_wasm() {
     let aggregate_selected = function(&aggregate, "selected");
     let aggregate_realized =
         RealizedCompilation::new(&aggregate).expect("aggregate program must realize");
-    assert!(matches!(
+    assert_eq!(
         aggregate_realized.execute(aggregate_selected),
-        Err(ExecutionError::Realization(
-            RealizationError::EntryResultUnsupported(_)
-        ))
-    ));
+        Ok(ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![
+            one,
+        ]))))
+    );
 }

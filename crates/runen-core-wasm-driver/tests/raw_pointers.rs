@@ -1,5 +1,5 @@
-use runen_core_ir::{Fault, Value};
-use runen_core_wasm::ExecutionOutcome;
+use runen_core_ir::Fault;
+use runen_core_wasm::{ExecutionOutcome, ExecutionValue};
 use runen_core_wasm_driver::RealizedCompilation;
 use runen_hir::{FunctionId, ModuleId, SourceUnit, TypedCompilation, build_typed_hir};
 use runen_syntax::parse_source;
@@ -41,7 +41,7 @@ fn scalar_raw_move_executes_through_existing_driver() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(41))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(41))));
 }
 
 #[test]
@@ -58,7 +58,7 @@ fn pointer_retarget_and_copy_select_the_exact_source_binding() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(40))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(40))));
 }
 
 #[test]
@@ -72,7 +72,7 @@ fn raw_assign_from_raw_move_round_trips_through_driver() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(53))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(53))));
 }
 
 #[test]
@@ -89,7 +89,7 @@ fn raw_assign_restores_an_unavailable_aggregate_root() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(67))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(67))));
 }
 
 #[test]
@@ -115,7 +115,7 @@ fn raw_assign_restores_a_partially_moved_aggregate_root() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(71))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(71))));
 }
 
 #[test]
@@ -130,7 +130,7 @@ fn raw_assign_call_result_writes_only_after_normal_return() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(7))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(7))));
 }
 
 #[test]
@@ -171,5 +171,5 @@ fn caller_pointer_survives_nested_raw_pointer_activation() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(46))));
+    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(46))));
 }

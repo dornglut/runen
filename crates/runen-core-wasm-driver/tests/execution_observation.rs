@@ -106,3 +106,132 @@ fn provider_nan_class_is_a_direct_result_and_a_nested_result_not_a_fault() {
         ]))),
     );
 }
+
+#[test]
+fn all_formats_preserve_host_supplied_represented_floating_results() {
+    for (ty, precision) in [("F16", 11), ("F32", 24), ("F64", 53)] {
+        let source = format!(
+            "record Sample {{ value: {ty}, count: I64 }} \
+             external fn input() -> {ty}; \
+             fn scalar() -> {ty} {{ return input(); }} \
+             fn nested() -> Sample {{ return Sample {{ value: input(), count: 7 }}; }}"
+        );
+        let compilation = compilation(&source);
+        let input = function(&compilation, "input");
+        let scalar = function(&compilation, "scalar");
+        let nested = function(&compilation, "nested");
+        let values = [
+            BinaryFloatValue::Zero(BinaryFloatSign::Positive),
+            BinaryFloatValue::Zero(BinaryFloatSign::Negative),
+            BinaryFloatValue::Subnormal {
+                sign: BinaryFloatSign::Negative,
+                significand: 1,
+            },
+            BinaryFloatValue::Normal {
+                sign: BinaryFloatSign::Positive,
+                significand: 1_u64 << (precision - 1),
+                exponent: 0,
+            },
+            BinaryFloatValue::Infinity(BinaryFloatSign::Positive),
+            BinaryFloatValue::Infinity(BinaryFloatSign::Negative),
+        ];
+        for value in values {
+            let represented = FloatingScalarValue::Represented(value);
+            let realized = RealizedCompilation::new_with_external_providers(
+                &compilation,
+                vec![ExternalProviderBinding::scalar_result(input, move |arguments| {
+                    assert!(arguments.is_empty());
+                    match ty {
+                        "F16" => ExternalScalarValue::F16(represented),
+                        "F32" => ExternalScalarValue::F32(represented),
+                        "F64" => ExternalScalarValue::F64(represented),
+                        _ => unreachable!(),
+                    }
+                })],
+            )
+            .expect("represented provider must realize");
+            let expected = match ty {
+                "F16" => ExecutionValue::F16(represented),
+                "F32" => ExecutionValue::F32(represented),
+                "F64" => ExecutionValue::F64(represented),
+                _ => unreachable!(),
+            };
+            assert_eq!(
+                realized.execute(scalar).unwrap(),
+                ExecutionOutcome::Returned(Some(expected.clone()))
+            );
+            assert_eq!(
+                realized.execute(nested).unwrap(),
+                ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![
+                    expected,
+                    ExecutionValue::I64(7),
+                ])))
+            );
+        }
+    }
+}
+
+#[test]
+fn every_format_observes_provider_and_arithmetic_nan_class_directly_and_nested() {
+    for ty in ["F16", "F32", "F64"] {
+        let source = format!(
+            "record Sample {{ value: {ty} }} \
+             external fn input() -> {ty}; \
+             fn scalar() -> {ty} {{ return input(); }} \
+             fn nested() -> Sample {{ return Sample {{ value: input() }}; }} \
+             fn arithmetic() -> {ty} {{ return input() / input(); }}"
+        );
+        let compilation = compilation(&source);
+        let input = function(&compilation, "input");
+        let scalar = function(&compilation, "scalar");
+        let nested = function(&compilation, "nested");
+        let arithmetic = function(&compilation, "arithmetic");
+        let wrap = |value| match ty {
+            "F16" => ExecutionValue::F16(value),
+            "F32" => ExecutionValue::F32(value),
+            "F64" => ExecutionValue::F64(value),
+            _ => unreachable!(),
+        };
+
+        let nan_provider = RealizedCompilation::new_with_external_providers(
+            &compilation,
+            vec![ExternalProviderBinding::scalar_result(input, move |_| match ty {
+                "F16" => ExternalScalarValue::F16(FloatingScalarValue::NaNClass),
+                "F32" => ExternalScalarValue::F32(FloatingScalarValue::NaNClass),
+                "F64" => ExternalScalarValue::F64(FloatingScalarValue::NaNClass),
+                _ => unreachable!(),
+            })],
+        )
+        .expect("NaN class provider must realize");
+        assert_eq!(
+            nan_provider.execute(scalar).unwrap(),
+            ExecutionOutcome::Returned(Some(wrap(FloatingScalarValue::NaNClass)))
+        );
+        assert_eq!(
+            nan_provider.execute(nested).unwrap(),
+            ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![
+                wrap(FloatingScalarValue::NaNClass),
+            ])))
+        );
+
+        let zero_provider = RealizedCompilation::new_with_external_providers(
+            &compilation,
+            vec![ExternalProviderBinding::scalar_result(input, move |_| {
+                let zero = FloatingScalarValue::Represented(BinaryFloatValue::Zero(
+                    BinaryFloatSign::Positive,
+                ));
+                match ty {
+                    "F16" => ExternalScalarValue::F16(zero),
+                    "F32" => ExternalScalarValue::F32(zero),
+                    "F64" => ExternalScalarValue::F64(zero),
+                    _ => unreachable!(),
+                }
+            })],
+        )
+        .expect("zero provider must realize");
+        assert_eq!(
+            zero_provider.execute(arithmetic).unwrap(),
+            ExecutionOutcome::Returned(Some(wrap(FloatingScalarValue::NaNClass)))
+        );
+    }
+}

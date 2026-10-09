@@ -124,44 +124,6 @@ fn append_constant_carriers(
     Ok(())
 }
 
-pub(crate) fn decode_value(
-    types: &TypeTable,
-    ty: TypeId,
-    carriers: &[i64],
-) -> Result<Value, RealizationError> {
-    let mut cursor = 0_usize;
-    let value = decode_value_at(types, ty, carriers, &mut cursor)?;
-    if cursor != carriers.len() {
-        return Err(invalid_backend_result());
-    }
-    Ok(value)
-}
-
-fn decode_value_at(
-    types: &TypeTable,
-    ty: TypeId,
-    carriers: &[i64],
-    cursor: &mut usize,
-) -> Result<Value, RealizationError> {
-    if let Some(kind) = ScalarKind::from_type(types, ty) {
-        let carrier = carriers
-            .get(*cursor)
-            .copied()
-            .ok_or_else(invalid_backend_result)?;
-        *cursor += 1;
-        return kind.decode(carrier);
-    }
-    let definition = types.get(ty).ok_or_else(invalid_backend_result)?;
-    let TypeKind::Struct(fields) = &definition.kind else {
-        return Err(invalid_backend_result());
-    };
-    let mut values = Vec::with_capacity(fields.len());
-    for field in fields {
-        values.push(decode_value_at(types, field.ty, carriers, cursor)?);
-    }
-    Ok(Value::Struct(values))
-}
-
 fn invariant(message: impl Into<String>) -> RealizationError {
     RealizationError::BackendInvariant(message.into())
 }

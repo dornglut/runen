@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
     PersistentDecl, PersistentId, Place, Program, SafeReferenceResultContract, ScalarType,
     Statement, Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(name: &str, parameters: Vec<LocalId>, result: Option<TypeId>, body: Body) -> Function {
     Function {
@@ -39,20 +41,6 @@ fn validated(
     .expect("persistent realization fixture must be valid Core")
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        other => panic!("unsupported persistent differential observation: {other:?}"),
-    }
-}
 
 fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(validated, entry)
@@ -61,7 +49,7 @@ fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> Executio
         .expect("persistent realization subset contains no Core UB operations");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
     }
@@ -125,7 +113,7 @@ fn persistent_reads_round_trip_all_supported_scalar_boundaries() {
         let program = persistent_return_program(scalar, value.clone());
         assert_eq!(
             assert_differential(&program, FunctionId(0)),
-            ExecutionOutcome::Returned(Some(value))
+            ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
         );
     }
 }
@@ -211,7 +199,7 @@ fn persistent_reads_compose_with_integer_ops_and_nested_direct_calls() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::U64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::U64(42))))
     );
 }
 
@@ -219,7 +207,7 @@ fn persistent_reads_compose_with_integer_ops_and_nested_direct_calls() {
 fn repeated_execute_reestablishes_the_same_persistent_initial_state() {
     let program = persistent_return_program(ScalarType::I64, Value::I64(-42));
     let realized = RealizedProgram::new(&program).expect("persistent program must realize");
-    let expected = ExecutionOutcome::Returned(Some(Value::I64(-42)));
+    let expected = ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(-42))));
 
     assert_eq!(
         realized
