@@ -460,12 +460,12 @@ mod gpu_contract_tests {
                     gpu::GpuReadbackStatus::Ready(bytes)
                         if matches!(submission.status(), gpu::GpuSubmissionStatus::Completed) =>
                     {
-                        let mut chunks = bytes.as_bytes().chunks_exact(4);
+                        let (chunks, remainder) = bytes.as_bytes().as_chunks::<4>();
                         let outputs = chunks
-                            .by_ref()
-                            .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
+                            .iter()
+                            .map(|chunk| u32::from_le_bytes(*chunk))
                             .collect::<Vec<_>>();
-                        assert!(chunks.remainder().is_empty());
+                        assert!(remainder.is_empty());
                         assert_eq!(outputs.len(), values.len());
                         for (input, output) in values.iter().zip(&outputs) {
                             assert_eq!(
