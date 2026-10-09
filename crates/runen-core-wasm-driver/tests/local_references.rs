@@ -1,5 +1,5 @@
-use runen_core_ir::{Fault, Value};
-use runen_core_wasm::{ExecutionOutcome, RealizationError};
+use runen_core_ir::Fault;
+use runen_core_wasm::{ExecutionOutcome, ExecutionValue, RealizationError};
 use runen_core_wasm_driver::{BuildError, RealizedCompilation};
 use runen_hir::{FunctionId, ModuleId, SourceUnit, TypedCompilation, build_typed_hir};
 use runen_syntax::parse_source;
@@ -40,7 +40,10 @@ fn projected_shared_root_executes_through_driver() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(83))));
+    assert_eq!(
+        outcome,
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(83)))
+    );
 }
 
 #[test]
@@ -55,7 +58,10 @@ fn projected_shared_reborrow_executes_through_driver() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(17))));
+    assert_eq!(
+        outcome,
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(17)))
+    );
 }
 
 #[test]
@@ -108,7 +114,10 @@ fn projected_exclusive_replace_move_and_reinitialize_executes_through_driver() {
 
     assert_eq!(
         outcome,
-        ExecutionOutcome::Returned(Some(Value::Struct(vec![Value::I64(73), Value::I64(5),])))
+        ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![
+            ExecutionValue::I64(73),
+            ExecutionValue::I64(5),
+        ])))
     );
 }
 
@@ -122,7 +131,10 @@ fn persistent_shared_static_root_executes_through_existing_driver() {
          }",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(Value::I64(89))));
+    assert_eq!(
+        outcome,
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(89)))
+    );
 }
 
 #[test]

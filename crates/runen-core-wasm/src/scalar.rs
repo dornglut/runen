@@ -4,7 +4,8 @@ use runen_core_ir::{
 
 use crate::{RealizationError, invalid_backend_result};
 
-/// Semantic floating value exposed at the Core-Wasm provider boundary.
+/// Semantic floating value exposed at the Core-Wasm scalar-provider and
+/// execution-result observation boundaries.
 ///
 /// `NaNClass` records only membership in the Runen semantic NaN class. It does not
 /// assign a NaN member identity, sign, payload, quiet/signaling state, physical

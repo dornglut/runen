@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -121,7 +123,7 @@ fn directly_called_function_can_invoke_external_provider_and_return_normally() {
 
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
     assert_eq!(invocation_count.load(Ordering::SeqCst), 1);
 }
@@ -220,6 +222,6 @@ fn callable_valued_indirect_result_transport_survives_external_import_offset() {
 
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }

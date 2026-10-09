@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Field, Function, FunctionId, LocalDecl, LocalId, Operand,
     Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
     TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(
     result: runen_core_ir::TypeId,
@@ -39,24 +41,6 @@ fn validate(types: TypeTable, entry: Function) -> ValidatedProgram {
     .expect("raw-pointer target-identity fixture must be valid Core")
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        ObservedValue::Struct(fields) => {
-            Value::Struct(fields.into_iter().map(observed_to_value).collect())
-        }
-        other => panic!("unexpected target-identity differential result: {other:?}"),
-    }
-}
-
 fn assert_differential(validated: ValidatedProgram) -> ExecutionOutcome {
     let reference = Machine::new(validated.clone(), FunctionId(0))
         .expect("target-identity entry must be admitted")
@@ -64,7 +48,7 @@ fn assert_differential(validated: ValidatedProgram) -> ExecutionOutcome {
         .expect("target-identity fixture must execute in reference semantics");
     let expected = match reference.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(reference.result.map(observed_to_value))
+            ExecutionOutcome::Returned(reference.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(runen_core_ir::Fault::new(code)),
     };
@@ -121,7 +105,7 @@ fn type_and_value_equal_roots_remain_distinct_private_targets() {
 
     assert_eq!(
         assert_differential(validate(types, entry)),
-        ExecutionOutcome::Returned(Some(Value::I64(16)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(16))))
     );
 }
 
@@ -167,6 +151,9 @@ fn aggregate_raw_move_preserves_the_complete_carrier_sequence_before_replacement
 
     assert_eq!(
         assert_differential(validate(types, entry)),
-        ExecutionOutcome::Returned(Some(Value::Struct(vec![Value::I64(1), Value::I64(2)])))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![
+            Value::I64(1),
+            Value::I64(2)
+        ]))))
     );
 }

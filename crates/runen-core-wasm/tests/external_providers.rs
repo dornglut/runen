@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use runen_core_ir::{
@@ -254,7 +256,7 @@ fn no_result_and_scalar_result_providers_preserve_order_and_match_reference() {
         realized
             .execute(FunctionId(0))
             .expect("provider calls return normally"),
-        ExecutionOutcome::Returned(Some(Value::I64(8)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(8))))
     );
     assert_eq!(
         *wasm_seen.lock().unwrap(),
@@ -397,7 +399,7 @@ fn every_admitted_scalar_width_round_trips_semantically() {
     for (scalar, core_value, provider_value, expected) in cases {
         assert_eq!(
             scalar_round_trip(scalar, core_value, provider_value),
-            ExecutionOutcome::Returned(Some(expected))
+            ExecutionOutcome::Returned(Some(support::from_core_constant(expected)))
         );
     }
 }
@@ -460,7 +462,7 @@ fn equal_interfaces_keep_external_declaration_identity_distinct() {
     .expect("distinct provider identities must admit");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(22)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(22))))
     );
     assert_eq!(*first_count.lock().unwrap(), 0);
     assert_eq!(*second_count.lock().unwrap(), 1);
@@ -588,7 +590,7 @@ fn imports_shift_element_function_indices_but_callable_table_slots_stay_function
     .expect("unused import must coexist with private callable table");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(73)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(73))))
     );
 }
 
@@ -673,7 +675,7 @@ fn callable_direct_result_transport_stays_correct_in_a_module_with_imports() {
     .expect("imports must not change callable payload identity");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -724,7 +726,7 @@ fn persistent_reads_compose_with_external_imports() {
     .expect("persistent/global and import sections must compose");
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 

@@ -1,3 +1,5 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
     PersistentDecl, PersistentId, Place, Program, ReferenceAccess, ReferencePermission,
@@ -39,7 +41,7 @@ fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> Executio
     match report.terminal {
         TerminalStatus::Returned => ExecutionOutcome::Returned(match report.result {
             None => None,
-            Some(ObservedValue::I64(value)) => Some(Value::I64(value)),
+            Some(ObservedValue::I64(value)) => Some(runen_core_wasm::ExecutionValue::I64(value)),
             other => panic!("unexpected persistent reference differential result: {other:?}"),
         }),
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
@@ -109,7 +111,7 @@ fn persistent_shared_i64_dereference_matches_reference_semantics() {
 
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(41)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(41))))
     );
 }
 
@@ -230,7 +232,7 @@ fn dynamic_persistent_reference_handle_flow_selects_each_runtime_target() {
     );
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(33)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(33))))
     );
 }
 
@@ -291,7 +293,7 @@ fn persistent_shared_carrier_copy_and_move_preserve_the_target() {
 
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(53)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(53))))
     );
 }
 
@@ -349,7 +351,7 @@ fn complete_shared_reborrow_of_persistent_root_preserves_the_target() {
 
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(67)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(67))))
     );
 }
 

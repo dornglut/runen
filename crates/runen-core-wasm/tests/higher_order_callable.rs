@@ -1,3 +1,5 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Fault, Field, Function, FunctionId,
     LocalDecl, LocalId, Operand, Place, Program, ReferencePermission, SafeReferenceResultContract,
@@ -8,7 +10,7 @@ use runen_core_wasm::{
     CoverageErrorKind, CoverageLocation, ExecutionOutcome, RealizationError, RealizedProgram,
     UnsupportedTypeCategory,
 };
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(
     name: &str,
@@ -53,24 +55,6 @@ fn callable_type(
     ))
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        ObservedValue::Struct(fields) => {
-            Value::Struct(fields.into_iter().map(observed_to_value).collect())
-        }
-        other => panic!("unsupported higher-order callable observation: {other:?}"),
-    }
-}
-
 fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(program, entry)
         .expect("higher-order callable entry must be admitted by reference machine")
@@ -78,7 +62,7 @@ fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionO
         .expect("higher-order callable realization subset contains no Core UB operations");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
     }
@@ -194,11 +178,11 @@ fn higher_order_parameter_preserves_distinct_function_identity_and_copy_transpor
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(11)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(11))))
     );
     assert_eq!(
         assert_differential(&program, FunctionId(1)),
-        ExecutionOutcome::Returned(Some(Value::I64(22)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(22))))
     );
 }
 
@@ -276,7 +260,7 @@ fn callable_valued_indirect_result_copies_then_invokes() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -379,7 +363,7 @@ fn multiple_callable_signature_levels_remain_scalar_carriers() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(73)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(73))))
     );
 }
 
@@ -500,7 +484,7 @@ fn cyclic_callable_signature_graph_executes_without_recursive_layout() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 

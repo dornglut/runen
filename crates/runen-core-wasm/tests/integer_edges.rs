@@ -1,3 +1,5 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Function, FunctionId, LocalDecl, LocalId, Operand, Place,
     Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeTable,
@@ -90,7 +92,10 @@ fn run(case: Case) {
         .expect("integer boundary fixture is within realization coverage")
         .execute(FunctionId(0))
         .expect("integer boundary fixture must execute physically");
-    assert_eq!(realized, ExecutionOutcome::Returned(Some(case.expected)));
+    assert_eq!(
+        realized,
+        ExecutionOutcome::Returned(Some(support::from_core_constant(case.expected)))
+    );
 }
 
 #[test]

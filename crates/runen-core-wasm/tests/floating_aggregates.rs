@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use runen_core_ir::{
@@ -9,7 +11,7 @@ use runen_core_ir::{
 };
 use runen_core_wasm::{
     ExecutionOutcome, ExternalProviderBinding, ExternalScalarValue, FloatingScalarValue,
-    RealizationError, RealizedProgram,
+    RealizedProgram,
 };
 
 fn interface(parameters: Vec<TypeId>, result: Option<TypeId>) -> CallableInterface {
@@ -335,7 +337,7 @@ fn indirect_call_round_trips_float_bearing_aggregate_without_changing_callable_i
 
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::Bool(true)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Bool(true))))
     );
 }
 
@@ -434,12 +436,12 @@ fn provider_nan_class_survives_structural_transport_and_projection() {
 
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::Bool(true)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Bool(true))))
     );
 }
 
 #[test]
-fn public_float_bearing_aggregate_entry_results_are_rejected_recursively_for_all_formats() {
+fn public_float_bearing_aggregate_entry_results_are_observed_recursively_for_all_formats() {
     let cases = [
         (
             "F16",
@@ -472,6 +474,8 @@ fn public_float_bearing_aggregate_entry_results_are_rejected_recursively_for_all
             "Outer",
             vec![Field::new("inner", inner_ty)],
         ));
+        let expected =
+            support::from_core_constant(Value::Struct(vec![Value::Struct(vec![value.clone()])]));
         let program = validated(
             types,
             Vec::new(),
@@ -493,7 +497,7 @@ fn public_float_bearing_aggregate_entry_results_are_rejected_recursively_for_all
             .expect("float-bearing aggregate result must remain internally realizable");
         assert_eq!(
             realized.execute(FunctionId(0)),
-            Err(RealizationError::EntryResultUnsupported(FunctionId(0)))
+            Ok(ExecutionOutcome::Returned(Some(expected)))
         );
     }
 }

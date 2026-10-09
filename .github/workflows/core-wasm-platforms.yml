@@ -10,6 +10,8 @@ on:
       - rust-toolchain.toml
       - crates/runen-core-ir/**
       - crates/runen-core-wasm/**
+      - crates/runen-core-wasm-driver/**
+      - crates/runen-core-lowering/**
       - .github/workflows/core-wasm-platforms.yml
   push:
     branches:
@@ -20,6 +22,8 @@ on:
       - rust-toolchain.toml
       - crates/runen-core-ir/**
       - crates/runen-core-wasm/**
+      - crates/runen-core-wasm-driver/**
+      - crates/runen-core-lowering/**
       - .github/workflows/core-wasm-platforms.yml
   workflow_dispatch:
 
@@ -109,6 +113,17 @@ jobs:
             exit 1
           fi
 
-      - name: Test bounded Core Wasm realization
+      - name: Record target architecture
         shell: bash
-        run: cargo +stable test -p runen-core-wasm --all-targets --locked
+        run: |
+          set -euo pipefail
+          echo "Runner architecture: $(uname -m)"
+          rustc +stable -vV
+
+      - name: Test bounded Core Wasm and source-to-driver integration
+        shell: bash
+        run: cargo +stable test -p runen-core-wasm -p runen-core-wasm-driver --all-targets --locked
+
+      - name: Smoke Rust numerical embedding example
+        shell: bash
+        run: cargo +stable run -p runen-core-wasm-driver --example numeric_embedding --locked

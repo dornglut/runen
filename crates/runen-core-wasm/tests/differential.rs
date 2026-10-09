@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Function, FunctionId, LocalDecl, LocalId, Operand,
     Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef,
     TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 #[derive(Clone, Copy)]
 enum BinaryOp {
@@ -46,21 +48,6 @@ fn program(types: TypeTable, functions: Vec<Function>) -> ValidatedProgram {
     .expect("differential fixture must be valid Core")
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        other => panic!("unsupported differential observation: {other:?}"),
-    }
-}
-
 fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(validated, entry)
         .expect("differential entry must be admitted by reference machine")
@@ -68,7 +55,7 @@ fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> Executio
         .expect("supported realization subset contains no Core UB operations");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
     }
@@ -193,7 +180,7 @@ fn scalar_carrier_round_trips_all_supported_kinds_at_boundaries() {
     for (scalar, value) in cases {
         assert_eq!(
             assert_differential(scalar_return_program(scalar, value.clone()), FunctionId(0)),
-            ExecutionOutcome::Returned(Some(value))
+            ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
         );
     }
 }
@@ -237,7 +224,7 @@ fn integer_arithmetic_explicitly_preserves_modulo_residues() {
                 binary_program(scalar, left, right, operation),
                 FunctionId(0)
             ),
-            ExecutionOutcome::Returned(Some(expected))
+            ExecutionOutcome::Returned(Some(support::from_core_constant(expected)))
         );
     }
 }
@@ -288,7 +275,7 @@ fn integer_bitwise_equality_and_order_match_reference_semantics() {
                 binary_program(scalar, left, right, operation),
                 FunctionId(0)
             ),
-            ExecutionOutcome::Returned(Some(expected))
+            ExecutionOutcome::Returned(Some(support::from_core_constant(expected)))
         );
     }
 }
@@ -337,7 +324,7 @@ fn direct_scalar_storage_transport_matches_reference_machine() {
     let validated = program(types, vec![function("entry", Some(ty), body)]);
     assert_eq!(
         assert_differential(validated, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::U32(11)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::U32(11))))
     );
 }
 
@@ -401,7 +388,7 @@ fn branch_goto_and_backedge_loop_match_reference_machine() {
     let validated = program(types, vec![function("entry", Some(u64_ty), body)]);
     assert_eq!(
         assert_differential(validated, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::U64(3)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::U64(3))))
     );
 }
 
@@ -493,7 +480,7 @@ fn direct_calls_nested_calls_and_scalar_results_match_reference_machine() {
     let validated = program(types, vec![entry, middle, leaf]);
     assert_eq!(
         assert_differential(validated, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::U64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::U64(42))))
     );
 }
 
@@ -586,7 +573,7 @@ fn finite_direct_recursion_matches_reference_machine() {
     let validated = program(types, vec![entry, recursive]);
     assert_eq!(
         assert_differential(validated, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::U64(1)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::U64(1))))
     );
 }
 

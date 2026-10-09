@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Fault, Function, FunctionId, LocalDecl,
     LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement,
     Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(
     name: &str,
@@ -37,21 +39,6 @@ fn validated(types: TypeTable, functions: Vec<Function>) -> ValidatedProgram {
     .expect("callable realization fixture must be valid Core")
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        other => panic!("unsupported callable differential observation: {other:?}"),
-    }
-}
-
 fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(validated, entry)
         .expect("callable differential entry must be admitted by reference machine")
@@ -59,7 +46,7 @@ fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> Executio
         .expect("callable realization subset contains no Core UB operations");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
     }
@@ -150,11 +137,11 @@ fn equal_interface_function_identities_remain_distinct_through_indirect_dispatch
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(41)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(41))))
     );
     assert_eq!(
         assert_differential(&program, FunctionId(1)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -235,7 +222,7 @@ fn callable_parameter_composes_direct_and_indirect_calls() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -297,7 +284,7 @@ fn indirect_call_with_multiple_arguments_matches_reference() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -382,7 +369,7 @@ fn no_result_and_defined_fault_indirect_calls_match_reference() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(9)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(9))))
     );
     assert_eq!(
         assert_differential(&program, FunctionId(1)),
@@ -477,6 +464,6 @@ fn finite_indirect_recursion_matches_reference() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::U64(1)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::U64(1))))
     );
 }

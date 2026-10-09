@@ -1,3 +1,5 @@
+mod support;
+
 use std::sync::{Arc, Mutex};
 
 use runen_core_ir::{
@@ -220,7 +222,7 @@ fn provider_nan_class_round_trips_to_a_later_provider_without_public_float_obser
 
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::U8(1)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::U8(1))))
     );
 }
 
@@ -305,7 +307,7 @@ fn direct_function_float_parameter_and_result_transport_remain_internal() {
 
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::Bool(true)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Bool(true))))
     );
 }
 
@@ -398,7 +400,7 @@ fn indirect_call_transports_direct_float_components_without_changing_callable_id
 
     assert_eq!(
         realized.execute(FunctionId(0)).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::Bool(true)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Bool(true))))
     );
 }
 
@@ -478,7 +480,7 @@ fn floating_persistent_and_local_operations_reuse_the_same_private_carrier() {
 }
 
 #[test]
-fn public_floating_entry_result_remains_structurally_unobservable() {
+fn public_floating_entry_result_is_observable() {
     let mut types = TypeTable::new();
     let f32_ty = types.push(TypeDef::scalar("F32", ScalarType::F32));
     let value = BinaryFloatValue::Zero(BinaryFloatSign::Positive);
@@ -500,7 +502,9 @@ fn public_floating_entry_result_remains_structurally_unobservable() {
     let realized = RealizedProgram::new(&program).expect("floating result function must realize");
     assert_eq!(
         realized.execute(FunctionId(0)),
-        Err(RealizationError::EntryResultUnsupported(FunctionId(0)))
+        Ok(ExecutionOutcome::Returned(Some(
+            support::from_core_constant(Value::F32(value)),
+        )))
     );
 }
 

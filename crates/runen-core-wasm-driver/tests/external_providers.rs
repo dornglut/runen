@@ -1,8 +1,8 @@
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
-use runen_core_ir::{BinaryFloatSign, BinaryFloatValue, Value};
-use runen_core_wasm::{ExecutionOutcome, FloatingScalarValue};
+use runen_core_ir::{BinaryFloatSign, BinaryFloatValue};
+use runen_core_wasm::{ExecutionOutcome, ExecutionValue, FloatingScalarValue};
 use runen_core_wasm_driver::{
     BuildError, ExternalProviderBinding, ExternalScalarValue, RealizedCompilation,
 };
@@ -54,11 +54,11 @@ fn equal_interfaces_remain_hir_identity_keyed_across_declaration_reordering() {
 
     assert_eq!(
         execute_equal_interface_second(first_order),
-        ExecutionOutcome::Returned(Some(Value::I64(22)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(22)))
     );
     assert_eq!(
         execute_equal_interface_second(second_order),
-        ExecutionOutcome::Returned(Some(Value::I64(22)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(22)))
     );
 }
 
@@ -87,7 +87,7 @@ fn scalar_result_provider_composes_from_hir_identity_to_execution() {
 
     assert_eq!(
         realized.execute(entry).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::U64(42)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::U64(42)))
     );
 }
 
@@ -112,7 +112,7 @@ fn no_result_provider_runs_once_and_runen_execution_continues() {
 
     assert_eq!(
         realized.execute(entry).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(9)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(9)))
     );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 }
@@ -157,7 +157,7 @@ fn floating_nan_class_round_trips_between_hir_keyed_providers() {
 
     assert_eq!(
         realized.execute(entry).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::Bool(true)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::Bool(true)))
     );
 }
 
@@ -194,7 +194,7 @@ fn generic_specialization_and_closure_share_one_hir_keyed_external_provider() {
 
     assert_eq!(
         realized.execute(entry).unwrap(),
-        ExecutionOutcome::Returned(Some(Value::I64(9)))
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(9)))
     );
     assert_eq!(*seen.lock().unwrap(), vec![7, 8]);
 }

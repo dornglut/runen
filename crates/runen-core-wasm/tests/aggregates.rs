@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, Fault, Field, Function, FunctionId, LocalDecl, LocalId,
     Operand, Place, Program, SafeReferenceResultContract, ScalarType, Statement, Terminator,
     TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(
     name: &str,
@@ -37,24 +39,6 @@ fn validated(types: TypeTable, functions: Vec<Function>) -> ValidatedProgram {
     .expect("aggregate fixture must be valid Core")
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        ObservedValue::Struct(values) => {
-            Value::Struct(values.into_iter().map(observed_to_value).collect())
-        }
-        other => panic!("unsupported aggregate differential observation: {other:?}"),
-    }
-}
-
 fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(program, entry)
         .expect("aggregate differential entry must be admitted by reference machine")
@@ -62,7 +46,7 @@ fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionO
         .expect("aggregate realization subset contains no Core UB operations");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
     }
@@ -110,7 +94,7 @@ fn nested_and_empty_aggregate_entry_results_match_reference() {
     );
     assert_eq!(
         assert_differential(nested, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(value))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
     );
 
     let mut empty_types = TypeTable::new();
@@ -131,7 +115,7 @@ fn nested_and_empty_aggregate_entry_results_match_reference() {
     );
     assert_eq!(
         assert_differential(empty_program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(empty))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(empty)))
     );
 }
 
@@ -173,7 +157,7 @@ fn projected_move_copy_and_integer_operation_match_reference() {
     );
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -221,7 +205,7 @@ fn whole_aggregate_copy_then_move_transport_matches_reference() {
     );
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(value))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
     );
 }
 
@@ -259,7 +243,7 @@ fn projected_init_builds_aggregate_in_place() {
     );
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(expected))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(expected)))
     );
 }
 
@@ -302,7 +286,7 @@ fn projected_assign_read_and_drop_preserve_structural_state() {
     );
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -340,7 +324,7 @@ fn exact_root_overlapping_assignment_snapshots_before_replacement() {
     );
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(value))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(value)))
     );
 }
 
@@ -390,7 +374,10 @@ fn direct_aggregate_parameter_and_result_match_reference() {
     let program = validated(types, vec![entry, identity]);
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::Struct(vec![Value::I64(20), Value::I64(22),])))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![
+            Value::I64(20),
+            Value::I64(22),
+        ]))))
     );
 }
 
@@ -475,10 +462,10 @@ fn finite_direct_recursion_with_aggregate_parameter_and_result_matches_reference
     let program = validated(types, vec![entry, recurse]);
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::Struct(vec![
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![
             Value::Bool(false),
             Value::I64(42),
-        ])))
+        ]))))
     );
 }
 
@@ -598,6 +585,6 @@ fn closure_environment_shape_uses_generic_structural_direct_call_transport() {
     let program = validated(types, vec![entry, wrapper]);
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }

@@ -1,10 +1,12 @@
+mod support;
+
 use runen_core_ir::{
     BasicBlock, BasicBlockId, Body, CallableInterface, Fault, Field, Function, FunctionId,
     LocalDecl, LocalId, Operand, Place, Program, SafeReferenceResultContract, ScalarType,
     Statement, Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value, validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, RealizationError, RealizedProgram};
-use runen_reference::{Machine, ObservedValue, TerminalStatus};
+use runen_reference::{Machine, TerminalStatus};
 
 fn function(
     name: &str,
@@ -49,24 +51,6 @@ fn callable_type(
     ))
 }
 
-fn observed_to_value(value: ObservedValue) -> Value {
-    match value {
-        ObservedValue::Bool(value) => Value::Bool(value),
-        ObservedValue::I8(value) => Value::I8(value),
-        ObservedValue::I16(value) => Value::I16(value),
-        ObservedValue::I32(value) => Value::I32(value),
-        ObservedValue::I64(value) => Value::I64(value),
-        ObservedValue::U8(value) => Value::U8(value),
-        ObservedValue::U16(value) => Value::U16(value),
-        ObservedValue::U32(value) => Value::U32(value),
-        ObservedValue::U64(value) => Value::U64(value),
-        ObservedValue::Struct(fields) => {
-            Value::Struct(fields.into_iter().map(observed_to_value).collect())
-        }
-        other => panic!("unsupported callable-result observation: {other:?}"),
-    }
-}
-
 fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(program, entry)
         .expect("callable-result entry must be admitted by reference machine")
@@ -74,7 +58,7 @@ fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionO
         .expect("callable-result realization subset contains no Core UB operations");
     match report.terminal {
         TerminalStatus::Returned => {
-            ExecutionOutcome::Returned(report.result.map(observed_to_value))
+            ExecutionOutcome::Returned(report.result.map(support::from_reference_observation))
         }
         TerminalStatus::Faulted(code) => ExecutionOutcome::Faulted(Fault::new(code)),
     }
@@ -158,7 +142,7 @@ fn direct_callable_result_copies_then_invokes_and_entry_identity_stays_private()
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 
     let realized = RealizedProgram::new(&program).expect("program must realize");
@@ -267,11 +251,11 @@ fn same_interface_callable_results_preserve_distinct_function_identity() {
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(11)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(11))))
     );
     assert_eq!(
         assert_differential(&program, FunctionId(1)),
-        ExecutionOutcome::Returned(Some(Value::I64(22)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(22))))
     );
 }
 
@@ -360,7 +344,7 @@ fn callable_result_survives_multiple_direct_result_boundaries_before_invocation(
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
@@ -442,7 +426,7 @@ fn callable_result_with_structural_interface_composes_with_existing_indirect_tra
 
     assert_eq!(
         assert_differential(&program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(Value::I64(42)))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
     );
 }
 
