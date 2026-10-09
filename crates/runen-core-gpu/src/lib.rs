@@ -437,6 +437,16 @@ mod gpu_contract_tests {
         ));
     }
 
+    const SOURCE_TWO: &str = concat!(
+        "external fn input() -> U32; ",
+        "fn transform(value: U32) -> U32 { return value * value + 2; } ",
+        "fn cpu_entry() -> U32 { return transform(input()); }"
+    );
+    const SOURCE_SEVEN: &str = concat!(
+        "external fn input() -> U32; ",
+        "fn transform(value: U32) -> U32 { return value * value + 7; } ",
+        "fn cpu_entry() -> U32 { return transform(input()); }"
+    );
 
     fn cpu_outputs_from_same_runen_source(source: &str, inputs: &[u32]) -> Vec<u32> {
         let parsed = parse_source(source.as_bytes()).expect("Runen source must be UTF-8");
@@ -525,16 +535,7 @@ mod gpu_contract_tests {
                 gpu::GpuFallbackStatus::ConfirmedFallback
             );
         }
-        for (source, constant) in [
-            (
-                "external fn input() -> U32;                  fn transform(value: U32) -> U32 { return value * value + 2; }                  fn cpu_entry() -> U32 { return transform(input()); }",
-                2_u32,
-            ),
-            (
-                "external fn input() -> U32;                  fn transform(value: U32) -> U32 { return value * value + 7; }                  fn cpu_entry() -> U32 { return transform(input()); }",
-                7_u32,
-            ),
-        ] {
+        for (source, constant) in [(SOURCE_TWO, 2_u32), (SOURCE_SEVEN, 7_u32)] {
             let values = inputs();
             let cpu_results = cpu_outputs_from_same_runen_source(source, &values);
             let kernel = generated(source);
