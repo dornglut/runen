@@ -182,13 +182,15 @@ fn every_format_observes_provider_and_arithmetic_nan_class_directly_and_nested()
              external fn input() -> {ty}; \
              fn scalar() -> {ty} {{ return input(); }} \
              fn nested() -> Sample {{ return Sample {{ value: input() }}; }} \
-             fn arithmetic() -> {ty} {{ return input() / input(); }}"
+             fn arithmetic() -> {ty} {{ return input() / input(); }} \
+             fn nested_arithmetic() -> Sample {{ return Sample {{ value: input() / input() }}; }}"
         );
         let compilation = compilation(&source);
         let input = function(&compilation, "input");
         let scalar = function(&compilation, "scalar");
         let nested = function(&compilation, "nested");
         let arithmetic = function(&compilation, "arithmetic");
+        let nested_arithmetic = function(&compilation, "nested_arithmetic");
         let wrap = |value| match ty {
             "F16" => ExecutionValue::F16(value),
             "F32" => ExecutionValue::F32(value),
@@ -238,6 +240,12 @@ fn every_format_observes_provider_and_arithmetic_nan_class_directly_and_nested()
         assert_eq!(
             zero_provider.execute(arithmetic).unwrap(),
             ExecutionOutcome::Returned(Some(wrap(FloatingScalarValue::NaNClass)))
+        );
+        assert_eq!(
+            zero_provider.execute(nested_arithmetic).unwrap(),
+            ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![wrap(
+                FloatingScalarValue::NaNClass
+            ),])))
         );
     }
 }
