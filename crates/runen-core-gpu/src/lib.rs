@@ -250,3 +250,235 @@ mod tests {
         );
     }
 }
+
+
+#[cfg(test)]
+mod gpu_contract_tests {
+    use super::*;
+    use runen_core_lowering::lower;
+    use runen_gpu as gpu;
+    use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
+    use runen_syntax::parse_source;
+
+    fn generated(source: &str) -> U32Kernel {
+        let parsed = parse_source(source.as_bytes()).expect("Runen source should be UTF-8");
+        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        let compilation =
+            build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
+                .expect("Runen source must be accepted");
+        let selected = compilation
+            .functions
+            .iter()
+            .find(|function| function.name == "transform")
+            .expect("test transform")
+            .id;
+        let lowered = lower(&compilation).expect("typed Runen source must lower");
+        compile_u32_kernel(
+            lowered.program(),
+            lowered.core_function(selected).expect("exact ordinary function mapping"),
+        )
+        .expect("bounded U32 target must admit source function")
+    }
+
+    fn admitted_pipeline(kernel: &U32Kernel) -> gpu::GpuComputePipelineDescriptor {
+        let owner = gpu::GpuProgramSourceOwnerId::allocate().unwrap();
+        let identity = gpu::GpuProgramSourceIdentity::new(
+            owner,
+            gpu::GpuProgramSourceKey::new("runen.core.u32.proof").unwrap(),
+            gpu::GpuProgramSourceRevision::try_from_raw(1).unwrap(),
+        );
+        let mut registry = gpu::GpuProgramSourceRegistry::new(2, 16 * 1024).unwrap();
+        let admitted = registry
+            .admit_wgsl(
+                identity,
+                kernel.wgsl(),
+                gpu::GpuProgramSourceProvenance::new(
+                    "runen-validated-core-gpu-test",
+                    None,
+                )
+                .unwrap(),
+            )
+            .unwrap();
+        gpu::GpuComputePipelineDescriptor::ordinary(admitted, "runen_main")
+            .expect("generated Runen WGSL must pass RunenGPU's canonical program admission")
+    }
+
+    fn input_buffer(
+        scope: &mut gpu::GpuResourceScope,
+        inputs: &[u32],
+    ) -> gpu::GpuBufferHandle {
+        let prepared = gpu::PreparedGpuData::<gpu::TransferData>::ordinary_pod_transfer(
+            "runen U32 scalar-map inputs",
+            inputs,
+        )
+        .unwrap();
+        scope
+            .buffer(
+                gpu::GpuBufferDescriptor::ordinary_owned(
+                    "runen U32 scalar-map inputs",
+                    gpu::GpuResourceLifetime::Transient,
+                    gpu::GpuReconstruction::SourceBacked,
+                    prepared.layout().byte_len(),
+                    [gpu::GpuBufferUsage::Storage, gpu::GpuBufferUsage::CopyDestination],
+                    gpu::GpuBufferInitialization::Prepared(prepared),
+                )
+                .unwrap(),
+            )
+            .unwrap()
+    }
+
+    fn output_buffer(
+        scope: &mut gpu::GpuResourceScope,
+        count: usize,
+    ) -> gpu::GpuBufferHandle {
+        scope
+            .buffer(
+                gpu::GpuBufferDescriptor::ordinary_owned(
+                    "runen U32 scalar-map outputs",
+                    gpu::GpuResourceLifetime::Transient,
+                    gpu::GpuReconstruction::SourceBacked,
+                    u64::try_from(count).unwrap() * 4,
+                    [gpu::GpuBufferUsage::Storage, gpu::GpuBufferUsage::CopySource],
+                    gpu::GpuBufferInitialization::Zeroed,
+                )
+                .unwrap(),
+            )
+            .unwrap()
+    }
+
+    fn graph(
+        pipeline: gpu::GpuComputePipelineDescriptor,
+        values: &[u32],
+    ) -> (gpu::GpuPreparedWorkGraph, gpu::GpuReadbackId) {
+        assert!(!values.is_empty(), "empty host map must not create GPU storage");
+        assert!(values.len() <= 4097, "the first proof is deliberately bounded");
+
+        let mut scope = gpu::GpuResourceScope::new();
+        let inputs = input_buffer(&mut scope, values);
+        let outputs = output_buffer(&mut scope, values.len());
+        let bindings = pipeline
+            .runtime_bindings([
+                gpu::GpuRuntimeBindingValue::whole_buffer(0, 0, &inputs),
+                gpu::GpuRuntimeBindingValue::whole_buffer(0, 1, &outputs),
+            ])
+            .unwrap();
+        let compute = gpu::GpuComputeOperation::new(
+            pipeline,
+            bindings,
+            gpu::GpuDispatchIntent::direct(gpu::GpuDispatchSize::new(
+                u32::try_from(values.len().div_ceil(64)).unwrap(),
+                1,
+                1,
+            )),
+        )
+        .unwrap();
+        let read = gpu::GpuReadbackOperation::ordinary(
+            gpu::GpuBufferRegion::whole(&outputs).unwrap().into(),
+        )
+        .unwrap();
+        let readback_id = read.id();
+        let fragment = gpu::GpuWorkFragment::build(
+            "runen source-derived scalar-map proof",
+            |work| {
+                work.operation("runen selected source computation", compute)?;
+                work.operation("observe Runen computed buffer", read)?;
+                Ok(())
+            },
+        )
+        .unwrap();
+        let graph = gpu::GpuPreparedWorkGraph::prepare(
+            gpu::GpuResourceLabel::new("runen source-derived U32 scalar map").unwrap(),
+            [fragment],
+        )
+        .unwrap();
+        (graph, readback_id)
+    }
+
+    fn inputs() -> Vec<u32> {
+        let mut values = vec![0, 1, 65536, u32::MAX, 2, 3, 65535];
+        for i in 0_u32..72 {
+            values.push(i.wrapping_mul(1_103_515_245).wrapping_add(12345));
+        }
+        values
+    }
+
+    #[test]
+    fn runen_gpu_admits_the_generated_source_and_its_compute_graph() {
+        let kernel = generated(
+            "fn transform(value: U32) -> U32 { return value * value + 2; }",
+        );
+        let pipeline = admitted_pipeline(&kernel);
+        let (graph, _) = graph(pipeline, &inputs());
+        assert_eq!(graph.nodes().len(), 2);
+        assert_eq!(graph.topological_order().len(), 2);
+    }
+
+    /// This is intentionally separate from normal CI. Successful hardware GPU
+    /// evidence requires an admitted non-software adapter and exact readback.
+    #[test]
+    #[ignore = "requires a Vulkan software-fallback adapter and actual GPU API dispatch/readback"]
+    fn native_runen_source_derived_u32_kernel_executes_and_reads_back() {
+        use std::time::{Duration, Instant};
+        let mut reqs = gpu::GpuCapabilityRequirements::new();
+        for feature in [
+            gpu::GpuCapabilityFeature::Compute,
+            gpu::GpuCapabilityFeature::Copy,
+        ] {
+            reqs.insert(gpu::GpuCapabilityRequirement::Required(feature))
+                .unwrap();
+        }
+        let descriptor = gpu::GpuContextDescriptor::new(reqs)
+            .with_fallback_policy(gpu::GpuSoftwareFallbackPolicy::Require)
+            .with_allowed_backends([gpu::GpuBackendFamily::Vulkan])
+            .with_label("Runen U32 source-to-device conformance");
+        let context = pollster::block_on(gpu::GpuContext::request(descriptor))
+            .expect("the selected native test environment must supply a fallback adapter");
+        assert_eq!(
+            context.adapter_facts().fallback(),
+            gpu::GpuFallbackStatus::ConfirmedFallback
+        );
+        for (source, constant) in [
+            ("fn transform(value: U32) -> U32 { return value * value + 2; }", 2_u32),
+            ("fn transform(value: U32) -> U32 { return value * value + 7; }", 7_u32),
+        ] {
+            let values = inputs();
+            let kernel = generated(source);
+            let (graph, read_id) = graph(admitted_pipeline(&kernel), &values);
+            let prepared = pollster::block_on(context.prepare_submission(graph))
+                .expect("GPU graph must admit");
+            let submission = context.submit_prepared(prepared).expect("GPU submission");
+            let readback = submission.readback(read_id).unwrap().clone();
+            let deadline = Instant::now() + Duration::from_secs(30);
+            loop {
+                context.progress();
+                match readback.status() {
+                    gpu::GpuReadbackStatus::Ready(bytes)
+                        if matches!(submission.status(), gpu::GpuSubmissionStatus::Completed) =>
+                    {
+                        let mut chunks = bytes.as_bytes().chunks_exact(4);
+                        let outputs = chunks.by_ref().map(|chunk| {
+                            u32::from_le_bytes(chunk.try_into().unwrap())
+                        }).collect::<Vec<_>>();
+                        assert!(chunks.remainder().is_empty());
+                        assert_eq!(outputs.len(), values.len());
+                        for (input, output) in values.iter().zip(&outputs) {
+                            assert_eq!(
+                                *output, input.wrapping_mul(*input).wrapping_add(constant),
+                                "source-derived GPU result mismatch for {input}"
+                            );
+                        }
+                        break;
+                    }
+                    gpu::GpuReadbackStatus::Failed(failure) =>
+                        panic!("GPU readback failed: {failure:?}"),
+                    _ => {}
+                }
+                if let gpu::GpuSubmissionStatus::Failed(failure) = submission.status() {
+                    panic!("GPU submission failed: {failure:?}");
+                }
+                assert!(Instant::now() < deadline, "GPU proof timed out");
+                std::thread::yield_now();
+            }
+        }
+    }
+}

@@ -12,6 +12,8 @@ runen-core-ir = { path = "../runen-core-ir" }
 runen-core-lowering = { path = "../runen-core-lowering" }
 runen-hir = { path = "../runen-hir" }
 runen-syntax = { path = "../runen-syntax" }
+runen-gpu = { git = "https://github.com/dornglut/runen-gpu", rev = "b11c5c665ee4e9d13adc20cb6b0b03a8467800ea", default-features = false }
+pollster = "=0.4.0"
 
 [lints]
 workspace = true
