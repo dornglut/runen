@@ -255,7 +255,13 @@ mod tests {
 mod gpu_contract_tests {
     use super::*;
     use runen_core_lowering::lower;
+    use runen_core_wasm::{ExecutionOutcome, ExecutionValue};
+    use runen_core_wasm_driver::{ExternalProviderBinding, ExternalScalarValue, RealizedCompilation};
     use runen_gpu as gpu;
+    use std::sync::{
+        Arc,
+        atomic::{AtomicU32, Ordering},
+    };
     use runen_hir::{ModuleId, SourceUnit, build_typed_hir};
     use runen_syntax::parse_source;
 
@@ -431,6 +437,46 @@ mod gpu_contract_tests {
         ));
     }
 
+
+    fn cpu_outputs_from_same_runen_source(source: &str, inputs: &[u32]) -> Vec<u32> {
+        let parsed = parse_source(source.as_bytes()).expect("Runen source must be UTF-8");
+        assert!(parsed.errors().is_empty());
+        let compilation = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
+            .expect("Runen CPU source must be valid");
+        let input = compilation
+            .functions
+            .iter()
+            .find(|function| function.name == "input" && function.is_external())
+            .expect("external input must exist")
+            .id;
+        let entry = compilation
+            .functions
+            .iter()
+            .find(|function| function.name == "cpu_entry" && !function.is_external())
+            .expect("zero-parameter ordinary CPU wrapper must exist")
+            .id;
+        let slot = Arc::new(AtomicU32::new(0));
+        let provider_slot = Arc::clone(&slot);
+        let realized = RealizedCompilation::new_with_external_providers(
+            &compilation,
+            vec![ExternalProviderBinding::scalar_result(input, move |args| {
+                assert!(args.is_empty());
+                ExternalScalarValue::U32(provider_slot.load(Ordering::Relaxed))
+            })],
+        )
+        .expect("Runen Core-Wasm must realize the same selected source program");
+        inputs
+            .iter()
+            .map(|&input| {
+                slot.store(input, Ordering::Relaxed);
+                match realized.execute(entry).expect("Runen Core-Wasm execution") {
+                    ExecutionOutcome::Returned(Some(ExecutionValue::U32(value))) => value,
+                    other => panic!("expected observed U32 return, got {other:?}"),
+                }
+            })
+            .collect()
+    }
+
     /// Run with software Vulkan in conformance CI. On a separate physical GPU
     /// executor, set RUNEN_GPU_REQUIRE_HARDWARE=1 to forbid fallback. Only the
     /// second mode can establish independently recorded hardware evidence.
@@ -438,10 +484,8 @@ mod gpu_contract_tests {
     #[ignore = "requires native Vulkan execution and actual GPU API dispatch/readback"]
     fn native_runen_source_derived_u32_kernel_executes_and_reads_back() {
         use std::time::{Duration, Instant};
-        let hardware_required = std::env::var("RUNEN_GPU_REQUIRE_HARDWARE")
-            .ok()
-            .as_deref()
-            == Some("1");
+        let hardware_required =
+            std::env::var("RUNEN_GPU_REQUIRE_HARDWARE").ok().as_deref() == Some("1");
         let mut reqs = gpu::GpuCapabilityRequirements::new();
         for feature in [
             gpu::GpuCapabilityFeature::Compute,
@@ -461,7 +505,10 @@ mod gpu_contract_tests {
             .with_label("Runen U32 source-to-device conformance");
         let context = pollster::block_on(gpu::GpuContext::request(descriptor))
             .expect("selected Vulkan conformance adapter must be available");
-        println!("Runen U32 GPU conformance adapter: {:#?}", context.adapter_facts());
+        println!(
+            "Runen U32 GPU conformance adapter: {:#?}",
+            context.adapter_facts()
+        );
         if hardware_required {
             assert_eq!(
                 context.adapter_facts().software(),
@@ -480,15 +527,16 @@ mod gpu_contract_tests {
         }
         for (source, constant) in [
             (
-                "fn transform(value: U32) -> U32 { return value * value + 2; }",
+                "external fn input() -> U32;                  fn transform(value: U32) -> U32 { return value * value + 2; }                  fn cpu_entry() -> U32 { return transform(input()); }",
                 2_u32,
             ),
             (
-                "fn transform(value: U32) -> U32 { return value * value + 7; }",
+                "external fn input() -> U32;                  fn transform(value: U32) -> U32 { return value * value + 7; }                  fn cpu_entry() -> U32 { return transform(input()); }",
                 7_u32,
             ),
         ] {
             let values = inputs();
+            let cpu_results = cpu_outputs_from_same_runen_source(source, &values);
             let kernel = generated(source);
             let (graph, read_id) = graph(admitted_pipeline(&kernel), &values).unwrap().unwrap();
             let prepared = pollster::block_on(context.prepare_submission(graph))
@@ -509,11 +557,15 @@ mod gpu_contract_tests {
                             .collect::<Vec<_>>();
                         assert!(remainder.is_empty());
                         assert_eq!(outputs.len(), values.len());
-                        for (input, output) in values.iter().zip(&outputs) {
+                        for ((input, output), cpu) in values.iter().zip(&outputs).zip(&cpu_results) {
                             assert_eq!(
-                                *output,
+                                *cpu,
                                 input.wrapping_mul(*input).wrapping_add(constant),
-                                "source-derived GPU result mismatch for {input}"
+                                "Runen Core-Wasm disagrees with independent U32 arithmetic for {input}"
+                            );
+                            assert_eq!(
+                                output, cpu,
+                                "source-derived GPU readback differs from Core-Wasm for {input}"
                             );
                         }
                         break;
