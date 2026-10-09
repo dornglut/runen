@@ -112,6 +112,17 @@ Future consumers and realizations must add the strongest applicable integrated e
 
 **Gate:** integrated proving does not require ordinary source to expose implementation machinery merely to preserve the intended semantics.
 
+## Post-P0 — Workload-first sequencing
+
+The represented P0-A through P0-F semantic foundations and bounded Core-Wasm execution do not establish a complete production CPU/GPU/Model realization or a general-purpose Runen runtime. The next **selected work is a bounded workload-and-feasibility investigation**, not an already-selected implementation. The strategic order below follows the accepted [workload-first decision](https://github.com/dornglut/runen/issues/869); it is not a release schedule or a mandate to serialize otherwise independent justified work.
+
+1. **Establish one representative numerical workload.** Begin with a useful caller-visible computation, explicit input/output observations, numeric contract and comparison requirements. Check actual source, Core and Exec producers before choosing a workload; the existing Rust F32 scalar-provider/result example and Exec oracle reduction fixtures establish bounded evidence, not a source-to-GPU application or independently proven demand. If no coherent current workload is justified, record that blocker rather than inventing syntax or consumer intent.
+2. **Determine the smallest heterogeneous execution/refinement path.** For the selected workload, investigate source/HIR/Core/Exec correspondence, resource and Buffer transfer, target admission, numeric preservation and the evidence needed to compare scalar CPU, parallel CPU and GPU realizations. This is a feasibility/ownership decision first, not a commitment to implement a GPU backend, stable ABI, or Core-Wasm-to-Exec adapter.
+3. **Deliver only a decision-complete vertical slice.** Select the first independently useful implementation from the accepted workload and feasibility evidence, with an owning issue, normative boundaries, producer/consumer, excluded scope and exact validation/conformance plan. Its form may be host invocation, source/Exec composition, a resource/realization bridge or something smaller; no one interface is preauthorized.
+4. **Expand usability and coverage on demonstrated demand.** Direct Rust entry arguments, source runner/module selection, cross-activation safe-reference transport, richer provider/storage interfaces, Model production and other language/backend/tooling work remain consumer-gated. They may proceed earlier or concurrently when independent accepted needs justify them; the existing scalar external-provider mechanism already supplies host numeric input without entry parameters.
+
+This sequence prioritizes establishing a useful heterogeneous computation **before** selecting convenience APIs or broad runtime work. It neither changes the normative semantics in `spec/` nor infers a language-level `main`, physical reference identity, persistent session, stable layout, external ABI, backend choice, or cross-repository adoption. No post-P0 production implementation frontier is selected by this roadmap revision.
+
 ## Deferred until evidence requires them
 
 Graph/path algebra, Datalog recursion, CRDT semantics, universal replication/network syntax, mandatory information-flow labels, full hard-realtime syntax, live schema migration, stable serialized logical IR, rendering/ECS/UI/field language semantics, and broad package/ecosystem work are not on the P0 critical path.
