@@ -44,7 +44,7 @@ It MUST NOT depend on the reference machine, a production backend, host platform
 
 Owns a narrowly admitted private WGSL translation from one caller-selected function in an already validated Core program. Its first implementation covers only a straight-line, single-parameter and single-result U32 scalar function with supported scalar local operations. It enforces target-coverage admission, not Core language validity, and consumes canonical Core identities and semantic types without inspecting source text, reconstructing HIR, or treating generated WGSL as a Runen ABI.
 
-Its production Runen dependency is only `runen-core-ir`. Tests may use `runen-syntax`, `runen-hir`, `runen-core-lowering`, `runen-core-wasm`, and `runen-core-wasm-driver` to verify selected-source identity and compare results with the established Core-Wasm execution path; these edges must not become production dependencies. The package currently emits WGSL in production and has a test-only exact-revision integration with RunenGPU for canonical WGSL admission and private device resource/compute/readback conformance. It has no production GPU execution API or stable Runen ABI and is not yet a production GPU backend. Later physical realization must be separately reviewed against the accepted RunenGPU public contracts without transferring Runen language semantics or RunenGPU's execution authority.
+Its production Runen dependency is only `runen-core-ir`. Tests may use `runen-syntax`, `runen-hir`, `runen-core-lowering`, `runen-reference`, `runen-core-wasm`, and `runen-core-wasm-driver` to verify selected-source identity and compare the canonical Core reference result, Core-Wasm result, and actual RunenGPU device readback; these edges must not become production dependencies. The package currently emits WGSL in production and has a test-only exact-revision integration with RunenGPU for canonical WGSL admission and private device resource/compute/readback conformance. It has no production GPU execution API or stable Runen ABI and is not yet a production GPU backend. Later physical realization must be separately reviewed against the accepted RunenGPU public contracts without transferring Runen language semantics or RunenGPU's execution authority.
 
 ### `crates/runen-core-wasm`
 
@@ -134,6 +134,9 @@ runen-hir ───────────────────────�
 runen-core-lowering ─────────────────────────────────────▶ runen-core-wasm-driver
 runen-core-ir ───────────────────────────────────────────▶ runen-core-wasm-driver
 runen-core-wasm ─────────────────────────────────────────▶ runen-core-wasm-driver
+
+runen-core-ir ──[production target translation]─────────▶ runen-core-gpu
+runen-core-gpu ──[test-only differential evidence]──────▶ runen-reference
 
 runen-core-lowering ──[test-only end-to-end evidence]──▶ runen-reference
 runen-core-lowering ──[test-only end-to-end evidence]──▶ runen-core-wasm

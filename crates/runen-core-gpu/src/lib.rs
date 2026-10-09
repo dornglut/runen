@@ -17,6 +17,7 @@ pub enum CoverageError {
     UnknownFunction,
     UnsupportedSignature,
     UnsupportedLocal,
+    UnsupportedLoans,
     UnsupportedControlFlow,
     UnsupportedStatement,
     UnsupportedOperand,
@@ -85,6 +86,10 @@ pub fn compile_u32_kernel(
         || !function.result.is_some_and(is_u32)
     {
         return Err(CoverageError::UnsupportedSignature);
+    }
+    if !function.body.loans.is_empty() {
+        // Loan declarations are not part of this target's admitted representation.
+        return Err(CoverageError::UnsupportedLoans);
     }
     if function.body.blocks.len() != 1 || function.body.entry != BasicBlockId(0) {
         return Err(CoverageError::UnsupportedControlFlow);
@@ -228,6 +233,35 @@ mod tests {
         )
         .unwrap();
         assert_eq!(a.wgsl(), b.wgsl());
+    }
+
+    #[test]
+    fn unused_core_loan_declarations_are_rejected_after_canonical_validation() {
+        let parsed = parse_source(b"fn transform(value: U32) -> U32 { return value + 2; }")
+            .expect("valid Runen source");
+        let compilation = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
+            .expect("typed Runen source");
+        let selected = compilation
+            .functions
+            .iter()
+            .find(|function| function.name == "transform")
+            .expect("transform function")
+            .id;
+        let lowered = lower(&compilation).expect("source lowers to validated Core");
+        let selected_core = lowered.core_function(selected).expect("exact Core function");
+        let mut program = lowered.program().as_program().clone();
+        let function = &mut program.functions[selected_core.0 as usize];
+        let parameter_ty = function.parameter_type(0).expect("U32 argument");
+        function
+            .body
+            .loans
+            .push(runen_core_ir::LoanDecl::new("unused", parameter_ty));
+        let validated = runen_core_ir::validate_program(program)
+            .expect("unused Core loan declaration remains language-valid");
+        assert_eq!(
+            compile_u32_kernel(&validated, selected_core),
+            Err(CoverageError::UnsupportedLoans),
+        );
     }
 
     #[test]

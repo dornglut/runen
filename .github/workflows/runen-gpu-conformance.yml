@@ -6,6 +6,14 @@ on:
       - main
     paths:
       - "crates/runen-core-gpu/**"
+      - "crates/runen-core-ir/**"
+      - "crates/runen-core-lowering/**"
+      - "crates/runen-hir/**"
+      - "crates/runen-syntax/**"
+      - "crates/runen-reference/**"
+      - "crates/runen-core-wasm/**"
+      - "crates/runen-core-wasm-driver/**"
+      - "rust-toolchain.toml"
       - "Cargo.toml"
       - "Cargo.lock"
       - "ARCHITECTURE.md"
@@ -15,6 +23,14 @@ on:
       - main
     paths:
       - "crates/runen-core-gpu/**"
+      - "crates/runen-core-ir/**"
+      - "crates/runen-core-lowering/**"
+      - "crates/runen-hir/**"
+      - "crates/runen-syntax/**"
+      - "crates/runen-reference/**"
+      - "crates/runen-core-wasm/**"
+      - "crates/runen-core-wasm-driver/**"
+      - "rust-toolchain.toml"
       - "Cargo.toml"
       - "Cargo.lock"
       - "ARCHITECTURE.md"
