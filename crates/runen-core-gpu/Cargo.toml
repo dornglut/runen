@@ -10,6 +10,7 @@ runen-core-ir = { path = "../runen-core-ir" }
 
 [dev-dependencies]
 runen-core-lowering = { path = "../runen-core-lowering" }
+runen-reference = { path = "../runen-reference" }
 runen-core-wasm = { path = "../runen-core-wasm" }
 runen-core-wasm-driver = { path = "../runen-core-wasm-driver" }
 runen-hir = { path = "../runen-hir" }

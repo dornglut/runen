@@ -1190,6 +1190,7 @@ dependencies = [
  "runen-core-ir",
  "runen-core-lowering",
  "runen-core-wasm",
+ "runen-reference",
  "runen-core-wasm-driver",
  "runen-gpu",
  "runen-hir",

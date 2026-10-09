@@ -411,6 +411,70 @@ mod gpu_contract_tests {
         Ok(Some((graph, readback_id)))
     }
 
+
+    fn reference_outputs_from_same_runen_source(source: &str, inputs: &[u32]) -> Vec<u32> {
+        let parsed = parse_source(source.as_bytes()).expect("Runen source must be UTF-8");
+        assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
+        let compilation = build_typed_hir(&[SourceUnit::new(ModuleId::new(1), &parsed, &[])])
+            .expect("Runen reference source must be valid");
+        let external = compilation
+            .functions
+            .iter()
+            .find(|function| function.name == "input" && function.is_external())
+            .expect("source external input")
+            .id;
+        let entry = compilation
+            .functions
+            .iter()
+            .find(|function| function.name == "cpu_entry" && !function.is_external())
+            .expect("source CPU entry")
+            .id;
+        let lowered = lower(&compilation).expect("source must lower to validated Core");
+        let external_id = lowered
+            .core_external_callable(external)
+            .expect("exact HIR-to-Core external identity");
+        let entry_id = lowered
+            .core_function(entry)
+            .expect("exact HIR-to-Core ordinary identity");
+        let interface = lowered
+            .program()
+            .as_program()
+            .external_callables
+            .get(external_id.0 as usize)
+            .expect("validated external declaration")
+            .interface
+            .clone();
+        let validated = lowered.into_program();
+
+        inputs
+            .iter()
+            .map(|&input| {
+                let report = runen_reference::Machine::new_with_external_providers(
+                    validated.clone(),
+                    entry_id,
+                    vec![runen_reference::ExternalProviderBinding::scalar_result(
+                        external_id,
+                        interface.clone(),
+                        move |arguments| {
+                            assert!(arguments.is_empty());
+                            runen_reference::ExternalScalarValue::U32(input)
+                        },
+                    )],
+                )
+                .expect("canonical Core reference provider admission")
+                .execute()
+                .expect("canonical Core reference execution");
+                match (report.terminal, report.result) {
+                    (
+                        runen_reference::TerminalStatus::Returned,
+                        Some(runen_reference::ObservedValue::U32(value)),
+                    ) => value,
+                    other => panic!("expected returned reference U32 for {input}, got {other:?}"),
+                }
+            })
+            .collect()
+    }
+
     fn inputs() -> Vec<u32> {
         let mut values = vec![0, 1, 65536, u32::MAX, 2, 3, 65535];
         for i in 0_u32..72 {
@@ -489,6 +553,30 @@ mod gpu_contract_tests {
             .collect()
     }
 
+
+    #[test]
+    fn canonical_core_reference_and_core_wasm_agree_for_both_source_variants() {
+        let values = inputs();
+        for (source, constant) in [(SOURCE_TWO, 2_u32), (SOURCE_SEVEN, 7_u32)] {
+            let reference = reference_outputs_from_same_runen_source(source, &values);
+            let wasm = cpu_outputs_from_same_runen_source(source, &values);
+            assert_eq!(reference.len(), values.len());
+            for ((input, reference_value), wasm_value) in
+                values.iter().zip(&reference).zip(&wasm)
+            {
+                assert_eq!(
+                    *reference_value,
+                    input.wrapping_mul(*input).wrapping_add(constant),
+                    "canonical Core reference disagrees with U32 semantics for {input}"
+                );
+                assert_eq!(
+                    reference_value, wasm_value,
+                    "Core-Wasm differs from canonical Core reference for {input}"
+                );
+            }
+        }
+    }
+
     /// Software Vulkan and macOS Metal API jobs are execution tests only, not
     /// confirmed hardware qualification. RUNEN_GPU_REQUIRE_HARDWARE=1 separately
     /// forbids unqualified/virtual adapters and requires non-software Metal.
@@ -560,6 +648,7 @@ mod gpu_contract_tests {
         for (source, constant) in [(SOURCE_TWO, 2_u32), (SOURCE_SEVEN, 7_u32)] {
             let values = inputs();
             let cpu_results = cpu_outputs_from_same_runen_source(source, &values);
+            let reference_results = reference_outputs_from_same_runen_source(source, &values);
             let kernel = generated(source);
             let (graph, read_id) = graph(admitted_pipeline(&kernel), &values).unwrap().unwrap();
             let prepared = pollster::block_on(context.prepare_submission(graph))
@@ -580,8 +669,16 @@ mod gpu_contract_tests {
                             .collect::<Vec<_>>();
                         assert!(remainder.is_empty());
                         assert_eq!(outputs.len(), values.len());
-                        for ((input, output), cpu) in values.iter().zip(&outputs).zip(&cpu_results)
+                        for (((input, output), cpu), reference) in values
+                            .iter()
+                            .zip(&outputs)
+                            .zip(&cpu_results)
+                            .zip(&reference_results)
                         {
+                            assert_eq!(
+                                cpu, reference,
+                                "Core-Wasm differs from canonical Core reference for {input}"
+                            );
                             assert_eq!(
                                 *cpu,
                                 input.wrapping_mul(*input).wrapping_add(constant),
