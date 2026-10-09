@@ -431,12 +431,17 @@ mod gpu_contract_tests {
         ));
     }
 
-    /// This is intentionally separate from normal CI. Successful hardware GPU
-    /// evidence requires an admitted non-software adapter and exact readback.
+    /// Run with software Vulkan in conformance CI. On a separate physical GPU
+    /// executor, set RUNEN_GPU_REQUIRE_HARDWARE=1 to forbid fallback. Only the
+    /// second mode can establish independently recorded hardware evidence.
     #[test]
-    #[ignore = "requires a Vulkan software-fallback adapter and actual GPU API dispatch/readback"]
+    #[ignore = "requires native Vulkan execution and actual GPU API dispatch/readback"]
     fn native_runen_source_derived_u32_kernel_executes_and_reads_back() {
         use std::time::{Duration, Instant};
+        let hardware_required = std::env::var("RUNEN_GPU_REQUIRE_HARDWARE")
+            .ok()
+            .as_deref()
+            == Some("1");
         let mut reqs = gpu::GpuCapabilityRequirements::new();
         for feature in [
             gpu::GpuCapabilityFeature::Compute,
@@ -445,16 +450,34 @@ mod gpu_contract_tests {
             reqs.insert(gpu::GpuCapabilityRequirement::Required(feature))
                 .unwrap();
         }
+        let fallback_policy = if hardware_required {
+            gpu::GpuSoftwareFallbackPolicy::Forbid
+        } else {
+            gpu::GpuSoftwareFallbackPolicy::Require
+        };
         let descriptor = gpu::GpuContextDescriptor::new(reqs)
-            .with_fallback_policy(gpu::GpuSoftwareFallbackPolicy::Require)
+            .with_fallback_policy(fallback_policy)
             .with_allowed_backends([gpu::GpuBackendFamily::Vulkan])
             .with_label("Runen U32 source-to-device conformance");
         let context = pollster::block_on(gpu::GpuContext::request(descriptor))
-            .expect("the selected native test environment must supply a fallback adapter");
-        assert_eq!(
-            context.adapter_facts().fallback(),
-            gpu::GpuFallbackStatus::ConfirmedFallback
-        );
+            .expect("selected Vulkan conformance adapter must be available");
+        println!("Runen U32 GPU conformance adapter: {:#?}", context.adapter_facts());
+        if hardware_required {
+            assert_eq!(
+                context.adapter_facts().software(),
+                gpu::GpuSoftwareStatus::Hardware,
+                "hardware qualification must not accept an unknown/software adapter"
+            );
+            assert_eq!(
+                context.adapter_facts().fallback(),
+                gpu::GpuFallbackStatus::ConfirmedNotFallback
+            );
+        } else {
+            assert_eq!(
+                context.adapter_facts().fallback(),
+                gpu::GpuFallbackStatus::ConfirmedFallback
+            );
+        }
         for (source, constant) in [
             (
                 "fn transform(value: U32) -> U32 { return value * value + 2; }",
