@@ -248,7 +248,9 @@ mod tests {
             .expect("transform function")
             .id;
         let lowered = lower(&compilation).expect("source lowers to validated Core");
-        let selected_core = lowered.core_function(selected).expect("exact Core function");
+        let selected_core = lowered
+            .core_function(selected)
+            .expect("exact Core function");
         let mut program = lowered.program().as_program().clone();
         let function = &mut program.functions[selected_core.0 as usize];
         let parameter_ty = function.parameter_type(0).expect("U32 argument");
