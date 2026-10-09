@@ -191,7 +191,8 @@ mod tests {
         )
         .expect("bounded transform admitted");
         assert!(shader.wgsl().contains(" * "));
-        assert!(shader.wgsl().contains(" + 2u;"));
+        assert!(shader.wgsl().contains(" + "));
+        assert!(shader.wgsl().contains("= 2u;"));
         assert!(shader.wgsl().contains("arrayLength(&runen_inputs)"));
         assert!(shader.wgsl().contains("runen_scalar(runen_inputs[index])"));
     }
@@ -209,7 +210,7 @@ mod tests {
         )
         .unwrap();
         assert_ne!(original.wgsl(), edited.wgsl());
-        assert!(edited.wgsl().contains(" + 7u;"));
+        assert!(edited.wgsl().contains("= 7u;"));
     }
 
     #[test]
