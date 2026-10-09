@@ -303,10 +303,7 @@ mod gpu_contract_tests {
             .expect("generated Runen WGSL must pass RunenGPU's canonical program admission")
     }
 
-    fn input_buffer(
-        scope: &mut gpu::GpuResourceScope,
-        inputs: &[u32],
-    ) -> gpu::GpuBufferHandle {
+    fn input_buffer(scope: &mut gpu::GpuResourceScope, inputs: &[u32]) -> gpu::GpuBufferHandle {
         let prepared = gpu::PreparedGpuData::<gpu::TransferData>::ordinary_pod_transfer(
             "runen U32 scalar-map inputs",
             inputs,
@@ -319,7 +316,10 @@ mod gpu_contract_tests {
                     gpu::GpuResourceLifetime::Transient,
                     gpu::GpuReconstruction::SourceBacked,
                     prepared.layout().byte_len(),
-                    [gpu::GpuBufferUsage::Storage, gpu::GpuBufferUsage::CopyDestination],
+                    [
+                        gpu::GpuBufferUsage::Storage,
+                        gpu::GpuBufferUsage::CopyDestination,
+                    ],
                     gpu::GpuBufferInitialization::Prepared(prepared),
                 )
                 .unwrap(),
@@ -327,10 +327,7 @@ mod gpu_contract_tests {
             .unwrap()
     }
 
-    fn output_buffer(
-        scope: &mut gpu::GpuResourceScope,
-        count: usize,
-    ) -> gpu::GpuBufferHandle {
+    fn output_buffer(scope: &mut gpu::GpuResourceScope, count: usize) -> gpu::GpuBufferHandle {
         scope
             .buffer(
                 gpu::GpuBufferDescriptor::ordinary_owned(
@@ -338,7 +335,10 @@ mod gpu_contract_tests {
                     gpu::GpuResourceLifetime::Transient,
                     gpu::GpuReconstruction::SourceBacked,
                     u64::try_from(count).unwrap() * 4,
-                    [gpu::GpuBufferUsage::Storage, gpu::GpuBufferUsage::CopySource],
+                    [
+                        gpu::GpuBufferUsage::Storage,
+                        gpu::GpuBufferUsage::CopySource,
+                    ],
                     gpu::GpuBufferInitialization::Zeroed,
                 )
                 .unwrap(),
@@ -350,8 +350,14 @@ mod gpu_contract_tests {
         pipeline: gpu::GpuComputePipelineDescriptor,
         values: &[u32],
     ) -> (gpu::GpuPreparedWorkGraph, gpu::GpuReadbackId) {
-        assert!(!values.is_empty(), "empty host map must not create GPU storage");
-        assert!(values.len() <= 4097, "the first proof is deliberately bounded");
+        assert!(
+            !values.is_empty(),
+            "empty host map must not create GPU storage"
+        );
+        assert!(
+            values.len() <= 4097,
+            "the first proof is deliberately bounded"
+        );
 
         let mut scope = gpu::GpuResourceScope::new();
         let inputs = input_buffer(&mut scope, values);
@@ -377,15 +383,13 @@ mod gpu_contract_tests {
         )
         .unwrap();
         let readback_id = read.id();
-        let fragment = gpu::GpuWorkFragment::build(
-            "runen source-derived scalar-map proof",
-            |work| {
+        let fragment =
+            gpu::GpuWorkFragment::build("runen source-derived scalar-map proof", |work| {
                 work.operation("runen selected source computation", compute)?;
                 work.operation("observe Runen computed buffer", read)?;
                 Ok(())
-            },
-        )
-        .unwrap();
+            })
+            .unwrap();
         let graph = gpu::GpuPreparedWorkGraph::prepare(
             gpu::GpuResourceLabel::new("runen source-derived U32 scalar map").unwrap(),
             [fragment],
@@ -404,9 +408,7 @@ mod gpu_contract_tests {
 
     #[test]
     fn runen_gpu_admits_the_generated_source_and_its_compute_graph() {
-        let kernel = generated(
-            "fn transform(value: U32) -> U32 { return value * value + 2; }",
-        );
+        let kernel = generated("fn transform(value: U32) -> U32 { return value * value + 2; }");
         let pipeline = admitted_pipeline(&kernel);
         let (graph, _) = graph(pipeline, &inputs());
         assert_eq!(graph.nodes().len(), 2);
@@ -438,8 +440,14 @@ mod gpu_contract_tests {
             gpu::GpuFallbackStatus::ConfirmedFallback
         );
         for (source, constant) in [
-            ("fn transform(value: U32) -> U32 { return value * value + 2; }", 2_u32),
-            ("fn transform(value: U32) -> U32 { return value * value + 7; }", 7_u32),
+            (
+                "fn transform(value: U32) -> U32 { return value * value + 2; }",
+                2_u32,
+            ),
+            (
+                "fn transform(value: U32) -> U32 { return value * value + 7; }",
+                7_u32,
+            ),
         ] {
             let values = inputs();
             let kernel = generated(source);
@@ -456,21 +464,24 @@ mod gpu_contract_tests {
                         if matches!(submission.status(), gpu::GpuSubmissionStatus::Completed) =>
                     {
                         let mut chunks = bytes.as_bytes().chunks_exact(4);
-                        let outputs = chunks.by_ref().map(|chunk| {
-                            u32::from_le_bytes(chunk.try_into().unwrap())
-                        }).collect::<Vec<_>>();
+                        let outputs = chunks
+                            .by_ref()
+                            .map(|chunk| u32::from_le_bytes(chunk.try_into().unwrap()))
+                            .collect::<Vec<_>>();
                         assert!(chunks.remainder().is_empty());
                         assert_eq!(outputs.len(), values.len());
                         for (input, output) in values.iter().zip(&outputs) {
                             assert_eq!(
-                                *output, input.wrapping_mul(*input).wrapping_add(constant),
+                                *output,
+                                input.wrapping_mul(*input).wrapping_add(constant),
                                 "source-derived GPU result mismatch for {input}"
                             );
                         }
                         break;
                     }
-                    gpu::GpuReadbackStatus::Failed(failure) =>
-                        panic!("GPU readback failed: {failure:?}"),
+                    gpu::GpuReadbackStatus::Failed(failure) => {
+                        panic!("GPU readback failed: {failure:?}")
+                    }
                     _ => {}
                 }
                 if let gpu::GpuSubmissionStatus::Failed(failure) = submission.status() {
