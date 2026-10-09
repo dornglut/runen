@@ -10,6 +10,8 @@ runen-core-ir = { path = "../runen-core-ir" }
 
 [dev-dependencies]
 runen-core-lowering = { path = "../runen-core-lowering" }
+runen-core-wasm = { path = "../runen-core-wasm" }
+runen-core-wasm-driver = { path = "../runen-core-wasm-driver" }
 runen-hir = { path = "../runen-hir" }
 runen-syntax = { path = "../runen-syntax" }
 runen-gpu = { git = "https://github.com/dornglut/runen-gpu", rev = "b11c5c665ee4e9d13adc20cb6b0b03a8467800ea", default-features = false }

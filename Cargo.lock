@@ -1189,9 +1189,11 @@ dependencies = [
  "pollster",
  "runen-core-ir",
  "runen-core-lowering",
+ "runen-core-wasm",
+ "runen-core-wasm-driver",
  "runen-gpu",
  "runen-hir",
- "runen-syntax",
+ "runen-syntax"
 ]
 
 [[package]]
