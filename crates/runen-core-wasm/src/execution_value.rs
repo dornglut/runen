@@ -126,14 +126,13 @@ mod tests {
             let mut types = TypeTable::new();
             let ty = types.push(TypeDef::scalar("Floating", scalar));
             let significand = 1_u64
-                << kind.float_format().expect("floating format").fraction_bits();
+                << kind
+                    .float_format()
+                    .expect("floating format")
+                    .fraction_bits();
             let values = [
-                FloatingScalarValue::Represented(BinaryFloatValue::Zero(
-                    BinaryFloatSign::Positive,
-                )),
-                FloatingScalarValue::Represented(BinaryFloatValue::Zero(
-                    BinaryFloatSign::Negative,
-                )),
+                FloatingScalarValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Positive)),
+                FloatingScalarValue::Represented(BinaryFloatValue::Zero(BinaryFloatSign::Negative)),
                 FloatingScalarValue::Represented(BinaryFloatValue::Subnormal {
                     sign: BinaryFloatSign::Negative,
                     significand: 1,
@@ -152,7 +151,9 @@ mod tests {
                 FloatingScalarValue::NaNClass,
             ];
             for value in values {
-                let bits = kind.floating_residue(value).expect("valid floating carrier");
+                let bits = kind
+                    .floating_residue(value)
+                    .expect("valid floating carrier");
                 let expected = match kind {
                     ScalarKind::F16 => ExecutionValue::F16(value),
                     ScalarKind::F32 => ExecutionValue::F32(value),
@@ -188,15 +189,18 @@ mod tests {
             decode_result(&types, outer, &payload),
             Ok(ExecutionValue::Struct(vec![
                 ExecutionValue::Struct(vec![
-                    ExecutionValue::F32(FloatingScalarValue::Represented(
-                        BinaryFloatValue::Zero(BinaryFloatSign::Positive),
-                    )),
+                    ExecutionValue::F32(FloatingScalarValue::Represented(BinaryFloatValue::Zero(
+                        BinaryFloatSign::Positive
+                    ),)),
                     ExecutionValue::Struct(vec![]),
                 ]),
                 ExecutionValue::I8(7),
             ]))
         );
-        assert_eq!(decode_result(&types, empty, &[]), Ok(ExecutionValue::Struct(vec![])));
+        assert_eq!(
+            decode_result(&types, empty, &[]),
+            Ok(ExecutionValue::Struct(vec![]))
+        );
         assert!(matches!(
             decode_result(&types, outer, &payload[..1]),
             Err(RealizationError::BackendInvariant(_))

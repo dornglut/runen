@@ -474,9 +474,8 @@ fn public_float_bearing_aggregate_entry_results_are_observed_recursively_for_all
             "Outer",
             vec![Field::new("inner", inner_ty)],
         ));
-        let expected = support::from_core_constant(Value::Struct(vec![
-            Value::Struct(vec![value.clone()]),
-        ]));
+        let expected =
+            support::from_core_constant(Value::Struct(vec![Value::Struct(vec![value.clone()])]));
         let program = validated(
             types,
             Vec::new(),

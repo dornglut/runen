@@ -41,7 +41,6 @@ fn validate(types: TypeTable, entry: Function) -> ValidatedProgram {
     .expect("raw-pointer target-identity fixture must be valid Core")
 }
 
-
 fn assert_differential(validated: ValidatedProgram) -> ExecutionOutcome {
     let reference = Machine::new(validated.clone(), FunctionId(0))
         .expect("target-identity entry must be admitted")
@@ -152,6 +151,9 @@ fn aggregate_raw_move_preserves_the_complete_carrier_sequence_before_replacement
 
     assert_eq!(
         assert_differential(validate(types, entry)),
-        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![Value::I64(1), Value::I64(2)]))))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![
+            Value::I64(1),
+            Value::I64(2)
+        ]))))
     );
 }

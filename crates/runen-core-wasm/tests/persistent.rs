@@ -41,7 +41,6 @@ fn validated(
     .expect("persistent realization fixture must be valid Core")
 }
 
-
 fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(validated, entry)
         .expect("persistent differential entry must be admitted by reference machine")

@@ -20,10 +20,12 @@ pub fn from_core_constant(value: Value) -> ExecutionValue {
         Value::F16(value) => ExecutionValue::F16(FloatingScalarValue::Represented(value)),
         Value::F32(value) => ExecutionValue::F32(FloatingScalarValue::Represented(value)),
         Value::F64(value) => ExecutionValue::F64(FloatingScalarValue::Represented(value)),
-        Value::Struct(fields) => ExecutionValue::Struct(
-            fields.into_iter().map(from_core_constant).collect(),
-        ),
-        Value::TrackedFixture(_) => panic!("tracked fixtures cannot cross the Core-Wasm observation boundary"),
+        Value::Struct(fields) => {
+            ExecutionValue::Struct(fields.into_iter().map(from_core_constant).collect())
+        }
+        Value::TrackedFixture(_) => {
+            panic!("tracked fixtures cannot cross the Core-Wasm observation boundary")
+        }
     }
 }
 
@@ -49,9 +51,9 @@ pub fn from_reference_observation(value: ObservedValue) -> ExecutionValue {
         ObservedValue::F16(value) => ExecutionValue::F16(floating(value)),
         ObservedValue::F32(value) => ExecutionValue::F32(floating(value)),
         ObservedValue::F64(value) => ExecutionValue::F64(floating(value)),
-        ObservedValue::Struct(fields) => ExecutionValue::Struct(
-            fields.into_iter().map(from_reference_observation).collect(),
-        ),
+        ObservedValue::Struct(fields) => {
+            ExecutionValue::Struct(fields.into_iter().map(from_reference_observation).collect())
+        }
         ObservedValue::Function(_) | ObservedValue::TrackedFixture(_) => {
             panic!("oracle-only value cannot cross the Core-Wasm observation boundary")
         }

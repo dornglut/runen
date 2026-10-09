@@ -64,7 +64,10 @@ fn selected_ordinary_function_may_call_another_ordinary_function() {
         "entry",
     );
 
-    assert_eq!(outcome, ExecutionOutcome::Returned(Some(ExecutionValue::I64(42))));
+    assert_eq!(
+        outcome,
+        ExecutionOutcome::Returned(Some(ExecutionValue::I64(42)))
+    );
 }
 
 #[test]
@@ -129,13 +132,11 @@ fn parameterized_entry_rejection_remains_owned_by_core_wasm() {
 
 #[test]
 fn floating_result_observations_are_owned_by_core_wasm() {
-    let one = ExecutionValue::F32(FloatingScalarValue::Represented(
-        BinaryFloatValue::Normal {
-            sign: BinaryFloatSign::Positive,
-            significand: 1_u64 << 23,
-            exponent: 0,
-        },
-    ));
+    let one = ExecutionValue::F32(FloatingScalarValue::Represented(BinaryFloatValue::Normal {
+        sign: BinaryFloatSign::Positive,
+        significand: 1_u64 << 23,
+        exponent: 0,
+    }));
     let scalar = compilation("fn selected() -> F32 { return 1.0; }");
     let scalar_selected = function(&scalar, "selected");
     let scalar_realized = RealizedCompilation::new(&scalar).expect("scalar program must realize");
@@ -153,8 +154,8 @@ fn floating_result_observations_are_owned_by_core_wasm() {
         RealizedCompilation::new(&aggregate).expect("aggregate program must realize");
     assert_eq!(
         aggregate_realized.execute(aggregate_selected),
-        Ok(ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![
-            one,
-        ]))))
+        Ok(ExecutionOutcome::Returned(Some(ExecutionValue::Struct(
+            vec![one,]
+        ))))
     );
 }

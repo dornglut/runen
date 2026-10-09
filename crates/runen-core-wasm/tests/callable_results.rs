@@ -51,7 +51,6 @@ fn callable_type(
     ))
 }
 
-
 fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(program, entry)
         .expect("callable-result entry must be admitted by reference machine")

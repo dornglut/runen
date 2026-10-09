@@ -28,7 +28,6 @@ fn validate(types: TypeTable, functions: Vec<Function>) -> ValidatedProgram {
     .expect("raw-pointer realization fixture must be valid Core")
 }
 
-
 fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(validated, entry)
         .expect("raw-pointer differential entry must be admitted")
@@ -312,7 +311,10 @@ fn aggregate_raw_move_then_replace_matches_reference_semantics() {
 
     assert_eq!(
         assert_differential(validate(types, vec![entry]), FunctionId(0)),
-        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![Value::I64(7), Value::I64(8)]))))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![
+            Value::I64(7),
+            Value::I64(8)
+        ]))))
     );
 }
 

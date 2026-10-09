@@ -39,7 +39,6 @@ fn validated(types: TypeTable, functions: Vec<Function>) -> ValidatedProgram {
     .expect("callable realization fixture must be valid Core")
 }
 
-
 fn reference_outcome(validated: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(validated, entry)
         .expect("callable differential entry must be admitted by reference machine")

@@ -1,10 +1,10 @@
 mod support;
 
 use runen_core_ir::{
-    BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function,
-    FunctionId, LocalDecl, LocalId, NumericContract, Operand, Place, Program,
-    SafeReferenceResultContract, ScalarType, Statement, Terminator, TypeDef, TypeId,
-    TypeTable, ValidatedProgram, Value, validate_program,
+    BasicBlock, BasicBlockId, BinaryFloatSign, BinaryFloatValue, Body, Field, Function, FunctionId,
+    LocalDecl, LocalId, NumericContract, Operand, Place, Program, SafeReferenceResultContract,
+    ScalarType, Statement, Terminator, TypeDef, TypeId, TypeTable, ValidatedProgram, Value,
+    validate_program,
 };
 use runen_core_wasm::{ExecutionOutcome, ExecutionValue, FloatingScalarValue, RealizedProgram};
 use runen_reference::{Machine, TerminalStatus};
@@ -43,9 +43,8 @@ fn compare_once_validated_core(program: ValidatedProgram) -> ExecutionOutcome {
         .execute()
         .expect("reference execution succeeds");
     assert_eq!(reference.terminal, TerminalStatus::Returned);
-    let expected = ExecutionOutcome::Returned(
-        reference.result.map(support::from_reference_observation),
-    );
+    let expected =
+        ExecutionOutcome::Returned(reference.result.map(support::from_reference_observation));
     let actual = RealizedProgram::new(&program)
         .expect("Core-Wasm realizes exactly the same Core program")
         .execute(FunctionId(0))
@@ -57,9 +56,21 @@ fn compare_once_validated_core(program: ValidatedProgram) -> ExecutionOutcome {
 #[test]
 fn direct_and_nested_floating_observations_match_reference_without_carrier_bits() {
     for (scalar, make_value, precision) in [
-        (ScalarType::F16, Value::F16 as fn(BinaryFloatValue) -> Value, 11),
-        (ScalarType::F32, Value::F32 as fn(BinaryFloatValue) -> Value, 24),
-        (ScalarType::F64, Value::F64 as fn(BinaryFloatValue) -> Value, 53),
+        (
+            ScalarType::F16,
+            Value::F16 as fn(BinaryFloatValue) -> Value,
+            11,
+        ),
+        (
+            ScalarType::F32,
+            Value::F32 as fn(BinaryFloatValue) -> Value,
+            24,
+        ),
+        (
+            ScalarType::F64,
+            Value::F64 as fn(BinaryFloatValue) -> Value,
+            53,
+        ),
     ] {
         let values = [
             BinaryFloatValue::Zero(BinaryFloatSign::Positive),
@@ -100,11 +111,7 @@ fn direct_and_nested_floating_observations_match_reference_without_carrier_bits(
                 Value::Struct(vec![]),
                 make_value(value),
             ])]);
-            compare_once_validated_core(validated(
-                nested_types,
-                outer_ty,
-                constant_result(nested),
-            ));
+            compare_once_validated_core(validated(nested_types, outer_ty, constant_result(nested)));
         }
     }
 }

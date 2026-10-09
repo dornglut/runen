@@ -139,15 +139,18 @@ fn all_formats_preserve_host_supplied_represented_floating_results() {
             let represented = FloatingScalarValue::Represented(value);
             let realized = RealizedCompilation::new_with_external_providers(
                 &compilation,
-                vec![ExternalProviderBinding::scalar_result(input, move |arguments| {
-                    assert!(arguments.is_empty());
-                    match ty {
-                        "F16" => ExternalScalarValue::F16(represented),
-                        "F32" => ExternalScalarValue::F32(represented),
-                        "F64" => ExternalScalarValue::F64(represented),
-                        _ => unreachable!(),
-                    }
-                })],
+                vec![ExternalProviderBinding::scalar_result(
+                    input,
+                    move |arguments| {
+                        assert!(arguments.is_empty());
+                        match ty {
+                            "F16" => ExternalScalarValue::F16(represented),
+                            "F32" => ExternalScalarValue::F32(represented),
+                            "F64" => ExternalScalarValue::F64(represented),
+                            _ => unreachable!(),
+                        }
+                    },
+                )],
             )
             .expect("represented provider must realize");
             let expected = match ty {
@@ -195,12 +198,15 @@ fn every_format_observes_provider_and_arithmetic_nan_class_directly_and_nested()
 
         let nan_provider = RealizedCompilation::new_with_external_providers(
             &compilation,
-            vec![ExternalProviderBinding::scalar_result(input, move |_| match ty {
-                "F16" => ExternalScalarValue::F16(FloatingScalarValue::NaNClass),
-                "F32" => ExternalScalarValue::F32(FloatingScalarValue::NaNClass),
-                "F64" => ExternalScalarValue::F64(FloatingScalarValue::NaNClass),
-                _ => unreachable!(),
-            })],
+            vec![ExternalProviderBinding::scalar_result(
+                input,
+                move |_| match ty {
+                    "F16" => ExternalScalarValue::F16(FloatingScalarValue::NaNClass),
+                    "F32" => ExternalScalarValue::F32(FloatingScalarValue::NaNClass),
+                    "F64" => ExternalScalarValue::F64(FloatingScalarValue::NaNClass),
+                    _ => unreachable!(),
+                },
+            )],
         )
         .expect("NaN class provider must realize");
         assert_eq!(
@@ -209,9 +215,9 @@ fn every_format_observes_provider_and_arithmetic_nan_class_directly_and_nested()
         );
         assert_eq!(
             nan_provider.execute(nested).unwrap(),
-            ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![
-                wrap(FloatingScalarValue::NaNClass),
-            ])))
+            ExecutionOutcome::Returned(Some(ExecutionValue::Struct(vec![wrap(
+                FloatingScalarValue::NaNClass
+            ),])))
         );
 
         let zero_provider = RealizedCompilation::new_with_external_providers(

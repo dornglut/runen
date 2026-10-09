@@ -116,5 +116,8 @@ fn callable_copy_assignment_then_indirect_invocation_matches_reference() {
         .expect("callable copy/assignment fixture must be inside realization coverage")
         .execute(FunctionId(0))
         .expect("callable copy/assignment fixture must execute");
-    assert_eq!(realized, ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42)))));
+    assert_eq!(
+        realized,
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::I64(42))))
+    );
 }

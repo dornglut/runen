@@ -39,7 +39,6 @@ fn validated(types: TypeTable, functions: Vec<Function>) -> ValidatedProgram {
     .expect("aggregate fixture must be valid Core")
 }
 
-
 fn reference_outcome(program: ValidatedProgram, entry: FunctionId) -> ExecutionOutcome {
     let report = Machine::new(program, entry)
         .expect("aggregate differential entry must be admitted by reference machine")
@@ -375,7 +374,10 @@ fn direct_aggregate_parameter_and_result_match_reference() {
     let program = validated(types, vec![entry, identity]);
     assert_eq!(
         assert_differential(program, FunctionId(0)),
-        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![Value::I64(20), Value::I64(22),]))))
+        ExecutionOutcome::Returned(Some(support::from_core_constant(Value::Struct(vec![
+            Value::I64(20),
+            Value::I64(22),
+        ]))))
     );
 }
 
