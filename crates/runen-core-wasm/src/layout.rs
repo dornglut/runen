@@ -1,7 +1,7 @@
 use runen_core_ir::{Projection, ScalarType, TypeId, TypeKind, TypeTable, Value};
 
 use crate::scalar::{ScalarKind, constant_residue};
-use crate::{RealizationError, invalid_backend_result};
+use crate::RealizationError;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct CarrierSpan {

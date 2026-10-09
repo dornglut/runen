@@ -11,7 +11,7 @@ use runen_core_ir::{
 };
 use runen_core_wasm::{
     ExecutionOutcome, ExternalProviderBinding, ExternalScalarValue, FloatingScalarValue,
-    RealizationError, RealizedProgram,
+    RealizedProgram,
 };
 
 fn interface(parameters: Vec<TypeId>, result: Option<TypeId>) -> CallableInterface {
