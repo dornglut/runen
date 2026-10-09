@@ -1,0 +1,71 @@
+name: Runen U32 GPU API Conformance
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "crates/runen-core-gpu/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "ARCHITECTURE.md"
+      - ".github/workflows/runen-gpu-conformance.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runen-u32-gpu-conformance-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lavapipe:
+    name: Source-derived GPU API compute and readback (software Vulkan)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact PR head
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          clean: true
+      - name: Prove exact reviewed revision
+        env:
+          EXPECTED_REVISION: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          actual_revision="$(git rev-parse HEAD)"
+          echo "Expected Runen revision: $EXPECTED_REVISION"
+          echo "Checked-out Runen revision: $actual_revision"
+          test "$actual_revision" = "$EXPECTED_REVISION"
+      - name: Install stable Rust
+        run: rustup toolchain install stable --profile minimal
+      - name: Install Mesa Vulkan fallback
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes mesa-vulkan-drivers vulkan-tools xvfb xauth libxkbcommon-x11-0
+          icd="$(find /usr/share/vulkan/icd.d -maxdepth 1 -type f -name 'lvp_icd*.json' -print -quit)"
+          test -n "$icd"
+          echo "VK_DRIVER_FILES=$icd" >> "$GITHUB_ENV"
+          echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
+          echo "WGPU_BACKEND=vulkan" >> "$GITHUB_ENV"
+          echo "XDG_RUNTIME_DIR=${RUNNER_TEMP}/runen-gpu-xdg" >> "$GITHUB_ENV"
+          mkdir -p "${RUNNER_TEMP}/runen-gpu-xdg"
+          chmod 700 "${RUNNER_TEMP}/runen-gpu-xdg"
+      - name: Identify admitted software Vulkan adapter
+        run: vulkaninfo --summary
+      - name: Execute Runen-generated U32 shader and read back
+        env:
+          RUST_BACKTRACE: "1"
+        run: |
+          set -euo pipefail
+          cargo +stable test --locked -p runen-core-gpu \
+            native_runen_source_derived_u32_kernel_executes_and_reads_back \
+            -- --ignored --nocapture --test-threads=1
+      - name: Record limitation
+        run: |
+          echo "This job proves real RunenGPU API submission/readback using software Vulkan." 
+          echo "It does not qualify a non-software hardware GPU adapter."
