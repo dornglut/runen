@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/runen-core-gpu",
     "crates/runen-core-ir",
     "crates/runen-core-lowering",
     "crates/runen-core-wasm",
