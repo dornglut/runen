@@ -411,7 +411,6 @@ mod gpu_contract_tests {
         Ok(Some((graph, readback_id)))
     }
 
-
     fn reference_outputs_from_same_runen_source(source: &str, inputs: &[u32]) -> Vec<u32> {
         let parsed = parse_source(source.as_bytes()).expect("Runen source must be UTF-8");
         assert!(parsed.errors().is_empty(), "{:?}", parsed.errors());
@@ -553,7 +552,6 @@ mod gpu_contract_tests {
             .collect()
     }
 
-
     #[test]
     fn canonical_core_reference_and_core_wasm_agree_for_both_source_variants() {
         let values = inputs();
@@ -561,9 +559,7 @@ mod gpu_contract_tests {
             let reference = reference_outputs_from_same_runen_source(source, &values);
             let wasm = cpu_outputs_from_same_runen_source(source, &values);
             assert_eq!(reference.len(), values.len());
-            for ((input, reference_value), wasm_value) in
-                values.iter().zip(&reference).zip(&wasm)
-            {
+            for ((input, reference_value), wasm_value) in values.iter().zip(&reference).zip(&wasm) {
                 assert_eq!(
                     *reference_value,
                     input.wrapping_mul(*input).wrapping_add(constant),
