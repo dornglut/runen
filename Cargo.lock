@@ -1180,11 +1180,11 @@ dependencies = [
 name = "runen-core-gpu"
 version = "0.0.0"
 dependencies = [
- "pollster"
- "runen-core-ir"
- "runen-core-lowering"
- "runen-gpu"
- "runen-hir"
+ "pollster",
+ "runen-core-ir",
+ "runen-core-lowering",
+ "runen-gpu",
+ "runen-hir",
  "runen-syntax"
 ]
 
