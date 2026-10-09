@@ -10,6 +10,15 @@ on:
       - "Cargo.lock"
       - "ARCHITECTURE.md"
       - ".github/workflows/runen-gpu-conformance.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "crates/runen-core-gpu/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "ARCHITECTURE.md"
+      - ".github/workflows/runen-gpu-conformance.yml"
   workflow_dispatch:
 
 permissions:
@@ -25,15 +34,30 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - name: Checkout exact PR head
+      - name: Resolve event-specific revision
+        id: revision
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SHA: ${{ github.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request) expected="$PR_HEAD_SHA" ;;
+            push|workflow_dispatch) expected="$EVENT_SHA" ;;
+            *) echo "Unsupported event: $EVENT_NAME" >&2; exit 1 ;;
+          esac
+          test -n "$expected"
+          echo "expected_revision=$expected" >> "$GITHUB_OUTPUT"
+      - name: Checkout exact event revision
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ steps.revision.outputs.expected_revision }}
           persist-credentials: false
           clean: true
       - name: Prove exact reviewed revision
         env:
-          EXPECTED_REVISION: ${{ github.event.pull_request.head.sha }}
+          EXPECTED_REVISION: ${{ steps.revision.outputs.expected_revision }}
         run: |
           set -euo pipefail
           actual_revision="$(git rev-parse HEAD)"

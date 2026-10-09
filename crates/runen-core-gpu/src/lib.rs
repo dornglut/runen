@@ -355,7 +355,9 @@ mod gpu_contract_tests {
         if len > 4097 {
             return Err(HostMapError::TooManyElements);
         }
-        Ok(Some(u32::try_from(len.div_ceil(64)).expect("bounded input")))
+        Ok(Some(
+            u32::try_from(len.div_ceil(64)).expect("bounded input"),
+        ))
     }
 
     fn graph(
@@ -378,11 +380,7 @@ mod gpu_contract_tests {
         let compute = gpu::GpuComputeOperation::new(
             pipeline,
             bindings,
-            gpu::GpuDispatchIntent::direct(gpu::GpuDispatchSize::new(
-                workgroups,
-                1,
-                1,
-            )),
+            gpu::GpuDispatchIntent::direct(gpu::GpuDispatchSize::new(workgroups, 1, 1)),
         )
         .unwrap();
         let read = gpu::GpuReadbackOperation::ordinary(
@@ -469,9 +467,7 @@ mod gpu_contract_tests {
         ] {
             let values = inputs();
             let kernel = generated(source);
-            let (graph, read_id) = graph(admitted_pipeline(&kernel), &values)
-                .unwrap()
-                .unwrap();
+            let (graph, read_id) = graph(admitted_pipeline(&kernel), &values).unwrap().unwrap();
             let prepared = pollster::block_on(context.prepare_submission(graph))
                 .expect("GPU graph must admit");
             let submission = context.submit_prepared(prepared).expect("GPU submission");
